@@ -1,0 +1,68 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Obsidian/VS Code 계열 다크 팔레트 (기획서 §15.1) */
+  --color-surface-0: #161619; /* 앱 배경 (메인 워크스페이스) */
+  --color-surface-1: #1c1c20; /* 사이드바 / AI 패널 */
+  --color-surface-2: #232329; /* hover / 입력 필드 */
+  --color-surface-3: #2b2b33; /* active / 선택 상태 */
+  --color-line: #26262c;
+  --color-line-strong: #34343d;
+  --color-ink: #dcdce2;
+  --color-ink-muted: #94949e;
+  --color-ink-faint: #64646e;
+  --color-accent: #6ea8fe;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background: var(--color-surface-0);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 8px;
+    background-color: var(--color-line-strong);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
