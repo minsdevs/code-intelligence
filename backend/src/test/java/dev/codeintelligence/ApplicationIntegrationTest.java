@@ -10,7 +10,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "app.token-enc-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 @AutoConfigureRestTestClient
 @Import(TestcontainersConfiguration.class)
 class ApplicationIntegrationTest {
@@ -55,5 +57,17 @@ class ApplicationIntegrationTest {
     @Test
     void otherEndpointsRequireAuthentication() {
         restTestClient.get().uri("/api/anything").exchange().expectStatus().isUnauthorized();
+    }
+
+    @Test
+    void openApiSpecIsServedForFrontendCodegen() {
+        restTestClient
+                .get()
+                .uri("/v3/api-docs")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody(String.class)
+                .value(body -> assertThat(body).contains("/api/auth/me").contains("/api/github/repos"));
     }
 }
