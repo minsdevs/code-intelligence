@@ -28,6 +28,8 @@ public class AssistantController {
             Long focusedNodeId,
             String focusedCommitSha,
             Long focusedFindingId,
+            Long focusedNoteId,
+            Long focusedTaskId,
             List<String> selectedAreas) {}
 
     private final AssistantService assistantService;
@@ -77,7 +79,9 @@ public class AssistantController {
     }
 
     private static AssistantService.AskRequest toRequest(AskBody body) {
-        AskBody safe = body == null ? new AskBody(null, null, null, null, null, null, null, null, List.of()) : body;
+        AskBody safe = body == null
+                ? new AskBody(null, null, null, null, null, null, null, null, null, null, List.of())
+                : body;
         return new AssistantService.AskRequest(
                 safe.conversationId(),
                 safe.question(),
@@ -88,6 +92,8 @@ public class AssistantController {
                         safe.focusedNodeId(),
                         safe.focusedCommitSha(),
                         safe.focusedFindingId(),
+                        safe.focusedNoteId(),
+                        safe.focusedTaskId(),
                         safe.selectedAreas() == null ? List.of() : safe.selectedAreas()));
     }
 }

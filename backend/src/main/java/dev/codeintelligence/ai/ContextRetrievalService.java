@@ -20,6 +20,8 @@ public class ContextRetrievalService {
             Long focusedNodeId,
             String focusedCommitSha,
             Long focusedFindingId,
+            Long focusedNoteId,
+            Long focusedTaskId,
             List<String> selectedAreas) {}
 
     public record Retrieved(String text, List<String> fileRefs) {}
@@ -66,6 +68,15 @@ public class ContextRetrievalService {
         }
         if (context.focusedCommitSha() != null) {
             append(out, budget, "FOCUS_COMMIT: " + context.focusedCommitSha());
+        }
+        if (context.focusedNoteId() != null) {
+            appendNote(out, budget, projectId, context.focusedNoteId());
+        }
+        if (context.focusedTaskId() != null) {
+            appendTask(out, budget, projectId, context.focusedTaskId());
+        }
+        if (context.focusedFile() != null && !context.focusedFile().isBlank()) {
+            appendRelatedNotes(out, budget, projectId, context.focusedFile());
         }
         summaryService
                 .similar(snapshotId, question, 5)
@@ -153,6 +164,77 @@ public class ContextRetrievalService {
                     return 0;
                 })
                 .optional();
+    }
+
+    private void appendNote(StringBuilder out, int budget, long projectId, long noteId) {
+        jdbc.sql("""
+                        select title, content_md from notes
+                        where project_id = :projectId and id = :id
+                        """)
+                .param("projectId", projectId)
+                .param("id", noteId)
+                .query((rs, rowNum) -> {
+                    String body = rs.getString("content_md");
+                    if (body != null && body.length() > 800) {
+                        body = body.substring(0, 800);
+                    }
+                    append(out, budget, "FOCUS_NOTE: " + rs.getString("title") + "\n" + SecretMask.redact(body));
+                    return 0;
+                })
+                .optional();
+    }
+
+    private void appendTask(StringBuilder out, int budget, long projectId, long taskId) {
+        jdbc.sql("""
+                        select type, title, description, status from tasks
+                        where project_id = :projectId and id = :id
+                        """)
+                .param("projectId", projectId)
+                .param("id", taskId)
+                .query((rs, rowNum) -> {
+                    append(
+                            out,
+                            budget,
+                            "FOCUS_TASK: %s %s %s — %s"
+                                    .formatted(
+                                            rs.getString("status"),
+                                            rs.getString("type"),
+                                            rs.getString("title"),
+                                            SecretMask.redact(rs.getString("description"))));
+                    return 0;
+                })
+                .optional();
+        jdbc.sql("select content from task_goals where task_id = :id order by seq limit 8")
+                .param("id", taskId)
+                .query((rs, rowNum) -> {
+                    append(out, budget, "TASK_GOAL: " + SecretMask.redact(rs.getString("content")));
+                    return 0;
+                })
+                .list();
+    }
+
+    private void appendRelatedNotes(StringBuilder out, int budget, long projectId, String path) {
+        jdbc.sql("""
+                        select n.title
+                        from notes n
+                        left join note_references r on r.note_id = n.id
+                        where n.project_id = :projectId
+                          and (n.content_md ilike :like escape '\\'
+                               or (r.subject_type = 'FILE' and r.raw_target = :path))
+                        group by n.id, n.title
+                        order by n.updated_at desc
+                        limit 5
+                        """)
+                .param("projectId", projectId)
+                .param("path", path)
+                .param(
+                        "like",
+                        "%" + path.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+                .query((rs, rowNum) -> {
+                    append(out, budget, "RELATED_NOTE: " + rs.getString("title"));
+                    return 0;
+                })
+                .list();
     }
 
     private void appendCommits(StringBuilder out, int budget, long projectId, String path) {

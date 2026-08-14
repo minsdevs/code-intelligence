@@ -126,6 +126,38 @@ class AiAskApiIntegrationTest {
     }
 
     @Test
+    void askAttachesFocusedNoteAndTask() throws Exception {
+        ResponseCookie session = loginWithPat();
+        long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
+        long noteId = jdbcTemplate.queryForObject(
+                "insert into notes (project_id, title, content_md) values (?, 'Auth notes', 'See src/App.java login flow') returning id",
+                Long.class,
+                projectId);
+        long taskId = jdbcTemplate.queryForObject("""
+                insert into tasks (project_id, type, title, description, status, origin)
+                values (?, 'LEARNING', 'Read App', 'open src/App.java', 'OPEN', 'USER')
+                returning id
+                """, Long.class, projectId);
+        postAsk(
+                session,
+                projectId,
+                Map.of(
+                        "question",
+                        "현재 코드 기준으로 설명해줘",
+                        "focusedFile",
+                        "src/App.java",
+                        "focusedNoteId",
+                        noteId,
+                        "focusedTaskId",
+                        taskId));
+        assertThat(mockAIProvider.lastUser())
+                .contains("FOCUS_NOTE: Auth notes")
+                .contains("FOCUS_TASK:")
+                .contains("Read App")
+                .contains("RELATED_NOTE: Auth notes");
+    }
+
+    @Test
     void askIsOwnerScoped() throws Exception {
         ResponseCookie session = loginWithPat();
         long otherUser = jdbcTemplate.queryForObject(
