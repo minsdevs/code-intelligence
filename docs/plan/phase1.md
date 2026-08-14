@@ -431,20 +431,21 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-9 · be — 설정 분석기 (build/yml/Docker/CI/SQL) `[P7]`
 
+**상태: 완료** — 설정 분석기 5종 + EXTRACTION + GET `/api/projects/{id}/infra`.
 **완료 기준:** fixture 추출 결과 일치
 **패키지:** `dev.codeintelligence.analysis.config`
 
 **구현 체크리스트:**
 
-- [ ] 의존성: `com.github.jsqlparser:jsqlparser` (snakeyaml은 Spring 내장)
-- [ ] `V7__infra_resources.sql` (§3 표)
-- [ ] `BuildFileAnalyzer` — pom.xml(DOM 파싱)·build.gradle(.kts)(정규식+구조) → 의존성 목록(metadata)·프레임워크 시그널 → CONFIG 노드 + DEPENDS_ON
-- [ ] `SqlMigrationAnalyzer` — Flyway/Liquibase 파일 버전순 정렬 → JSqlParser로 CREATE/ALTER TABLE 파싱 → DB_TABLE·MIGRATION 노드 + 최종 스키마 metadata. **파싱 실패 시 파일 수준 MIGRATION 노드로 강등 + evidence 기록**(위험 R8)
-- [ ] `DockerAnalyzer` — Dockerfile(FROM/EXPOSE/CMD)·compose(services/ports/depends_on/environment) → **compose 서비스 = CONTAINER 노드**(Dockerfile은 build 참조 시 해당 노드 evidence), depends_on → DEPLOYED_IN edge
-- [ ] `GithubActionsAnalyzer` — `.github/workflows/*.yml` 트리거/job/step 요약 → CI_PIPELINE 노드
-- [ ] `YamlConfigAnalyzer` — `application*.yml`의 datasource/redis/kafka 설정 → CONFIG 노드 + CONFIGURED_BY evidence
-- [ ] `ExtractionStep`(EXTRACTION) 1차 — CONTAINER/CI_PIPELINE 노드 → `infra_resources` 투영
-- [ ] `InfraController` — 인프라 리소스 API
+- [x] 의존성: `com.github.jsqlparser:jsqlparser` (snakeyaml은 Spring 내장)
+- [x] `V7__infra_resources.sql` (§3 표)
+- [x] `BuildFileAnalyzer` — pom.xml(DOM 파싱)·build.gradle(.kts)(정규식+구조) → 의존성 목록(metadata)·프레임워크 시그널 → CONFIG 노드 + DEPENDS_ON
+- [x] `SqlMigrationAnalyzer` — Flyway/Liquibase 파일 버전순 정렬 → JSqlParser로 CREATE/ALTER TABLE 파싱 → DB_TABLE·MIGRATION 노드 + 최종 스키마 metadata. **파싱 실패 시 파일 수준 MIGRATION 노드로 강등 + evidence 기록**(위험 R8)
+- [x] `DockerAnalyzer` — Dockerfile(FROM/EXPOSE/CMD)·compose(services/ports/depends_on/environment) → **compose 서비스 = CONTAINER 노드**(Dockerfile은 build 참조 시 해당 노드 evidence), depends_on → DEPLOYED_IN edge
+- [x] `GithubActionsAnalyzer` — `.github/workflows/*.yml` 트리거/job/step 요약 → CI_PIPELINE 노드
+- [x] `YamlConfigAnalyzer` — `application*.yml`의 datasource/redis/kafka 설정 → CONFIG 노드 + CONFIGURED_BY evidence
+- [x] `ExtractionStep`(EXTRACTION) 1차 — CONTAINER/CI_PIPELINE 노드 → `infra_resources` 투영
+- [x] `InfraController` — 인프라 리소스 API
 
 **API 계약:**
 
@@ -454,10 +455,10 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 **테스트 체크리스트:**
 
-- [ ] **fixture 골든: spring-mini(DB_TABLE 1·MIGRATION 2), fullstack-mini(CONTAINER 3 + DEPLOYED_IN + CI_PIPELINE 1), infra-mini(CONTAINER 2·CI_PIPELINE 1)** ← 완료 기준
-- [ ] gradle/pom 의존성 추출 단위(버전 표기 변형 포함)
-- [ ] 깨진 SQL → 강등 + evidence, step 성공
-- [ ] compose depends_on → edge 방향 검증
+- [x] **fixture 골든: spring-mini(DB_TABLE 1·MIGRATION 2), fullstack-mini(CONTAINER 3 + DEPLOYED_IN + CI_PIPELINE 1), infra-mini(CONTAINER 2·CI_PIPELINE 1)** ← 완료 기준
+- [x] gradle/pom 의존성 추출 단위(버전 표기 변형 포함)
+- [x] 깨진 SQL → 강등 + evidence, step 성공
+- [x] compose depends_on → edge 방향 검증
 
 ---
 
