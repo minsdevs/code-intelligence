@@ -9,6 +9,12 @@ export default function ProjectsPage() {
       phase={1}
     >
       <Link
+        to="/import"
+        className="mt-1 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 transition-opacity hover:opacity-90"
+      >
+        Import repository
+      </Link>
+      <Link
         to="/projects/demo-project"
         className="mt-1 font-mono text-[12px] text-accent hover:underline"
       >

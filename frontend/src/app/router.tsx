@@ -7,6 +7,7 @@ import WorkspaceTabPage from '../features/projects/WorkspaceTabPage'
 import { workspaceTabs } from '../features/projects/workspaceTabs'
 import SearchPage from '../features/search/SearchPage'
 import SettingsPage from '../features/settings/SettingsPage'
+import ImportWizardPage from '../features/import/ImportWizardPage'
 
 export const routes: RouteObject[] = [
   {
@@ -14,6 +15,7 @@ export const routes: RouteObject[] = [
     element: <AppLayout />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: 'import', element: <ImportWizardPage /> },
       { path: 'projects', element: <ProjectsPage /> },
       {
         path: 'projects/:projectId',
