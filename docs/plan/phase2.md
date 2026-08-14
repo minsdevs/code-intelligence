@@ -114,89 +114,89 @@ Kafka: `@KafkaListener` / `KafkaTemplate.send` 토픽 문자열 → QUEUE_TOPIC 
 
 ### 2-1 ts-analyzer sidecar — be
 
-- [ ] `analyzers/ts-analyzer` NestJS + ts-morph, `POST /analyze`, `GET /health`
-- [ ] React Router `<Route path>` / PascalCase 컴포넌트 / `use*` hook / zustand `create(` / fetch·axios
-- [ ] 상대 import 그래프. generic extractor(`.py`/`.go` 함수·클래스·import, tree-sitter 문법 없이 휴리스틱; 네이티브 바인딩은 CI 부담으로 후속)
-- [ ] vitest: react-mini / fullstack-mini frontend 텍스트
-- [ ] CI job + compose service + Dockerfile. clone 코드 실행 없음
+- [x] `analyzers/ts-analyzer` NestJS + ts-morph, `POST /analyze`, `GET /health`
+- [x] React Router `<Route path>` / PascalCase 컴포넌트 / `use*` hook / zustand `create(` / fetch·axios
+- [x] 상대 import 그래프. generic extractor(`.py`/`.go` 함수·클래스·import, tree-sitter 문법 없이 휴리스틱; 네이티브 바인딩은 CI 부담으로 후속)
+- [x] vitest: react-mini / fullstack-mini frontend 텍스트
+- [x] CI job + compose service + Dockerfile. clone 코드 실행 없음
 
 ### 2-2 TS_PARSING + V9 — be
 
-- [ ] `TsAnalyzerProperties`, `TsAnalyzerClient`, allowlist URL
-- [ ] `TsParsingStep` ORDER 750: URL 공백 → 빈 DONE. URL 설정+다운 → 실패
-- [ ] NaturalKeys `route:` / `component:` / `hook:` / `store:` / `topic:`
-- [ ] EXTRACTION이 `frontend_routes` 프로젝션
-- [ ] FakeTsAnalyzer + react-mini 골든: FE_ROUTE 2, TodoItem COMPONENT, GET `/api/todos` 메타데이터
-- [ ] `ProjectJobApiIntegrationTest` step 목록 갱신
+- [x] `TsAnalyzerProperties`, `TsAnalyzerClient`, allowlist URL
+- [x] `TsParsingStep` ORDER 750: URL 공백 → 빈 DONE. URL 설정+다운 → 실패
+- [x] NaturalKeys `route:` / `component:` / `hook:` / `store:` / `topic:`
+- [x] EXTRACTION이 `frontend_routes` 프로젝션
+- [x] FakeTsAnalyzer + react-mini 골든: FE_ROUTE 2, TodoItem COMPONENT, GET `/api/todos` 메타데이터
+- [x] `ProjectJobApiIntegrationTest` step 목록 갱신
 
 ### 2-3 Cross-domain — be
 
-- [ ] `CrossDomainStep` CONSUMES/MAPS_TO/READS_WRITES (+ CONFIGURED_BY 보강)
-- [ ] `KafkaEventExtractor` (JavaParser, SOURCE_PARSING에 포함)
-- [ ] fullstack-mini: CONSUMES GET `/api/todos` 또는 suffix POSSIBLE; MAPS_TO Todo↔todos
-- [ ] 단위 테스트: exact / `{id}` / suffix
+- [x] `CrossDomainStep` CONSUMES/MAPS_TO/READS_WRITES (+ CONFIGURED_BY 보강)
+- [x] `KafkaEventExtractor` (JavaParser, SOURCE_PARSING에 포함)
+- [x] fullstack-mini: CONSUMES GET `/api/todos` 또는 suffix POSSIBLE; MAPS_TO Todo↔todos
+- [x] 단위 테스트: exact / `{id}` / suffix
 
 ### 2-4 Flow detection — be
 
-- [ ] V10 `flows`/`flow_steps`
-- [ ] Backend: endpoint → CALLS DFS(깊이 제한)
-- [ ] FE_BE: route → component → CONSUMES → backend flow
-- [ ] INFRA/EVENT: DEPLOYED_IN, PUBLISHES/SUBSCRIBES
-- [ ] `GET /api/projects/{id}/flows`, `GET .../flows/{flowId}` (소유권 검사)
+- [x] V10 `flows`/`flow_steps`
+- [x] Backend: endpoint → CALLS DFS(깊이 제한)
+- [x] FE_BE: route → component → CONSUMES → backend flow
+- [x] INFRA/EVENT: DEPLOYED_IN, PUBLISHES/SUBSCRIBES
+- [x] `GET /api/projects/{id}/flows`, `GET .../flows/{flowId}` (소유권 검사)
 
 ### 2-5 Findings + Impact — be
 
-- [ ] V11 `analysis_findings`
-- [ ] 정적 룰: unmatched API call, entity without MAPS_TO, FE route without CONSUMES
-- [ ] `GET /api/projects/{id}/findings` (severity 필터)
-- [ ] `GET /api/projects/{id}/impact?nodeId=&depth=` reverse CTE 기본 5, 위험도
-- [ ] finding/flow evidence_links. IDOR: 타 유저 project 404
+- [x] V11 `analysis_findings`
+- [x] 정적 룰: unmatched API call, entity without MAPS_TO, FE route without CONSUMES
+- [x] `GET /api/projects/{id}/findings` (severity 필터)
+- [x] `GET /api/projects/{id}/impact?nodeId=&depth=` reverse CTE 기본 5, 위험도
+- [x] finding/flow evidence_links. IDOR: 타 유저 project 404
 
 ### 2-6 Features UI — fe
 
-- [ ] Features 탭: 트리 + 상세(links/evidence), Code로 이동
-- [ ] `workspaceTabs.features.phase = 1` (구현됨). fetch 테스트
+- [x] Features 탭: 트리 + 상세(links/evidence), Code로 이동
+- [x] `workspaceTabs.features.phase = 1` (구현됨). fetch 테스트
 
 ### 2-7 Flows UI — fe
 
-- [ ] kind 필터, step 리스트, source location → Code
+- [x] kind 필터, step 리스트, source location → Code
 
 ### 2-8 Analysis + Impact UI — fe
 
-- [ ] findings 테이블(severity·area·evidence)
-- [ ] Impact: 노드 검색/선택, depth, 역방향 의존 + risk
+- [x] findings 테이블(severity·area·evidence)
+- [x] Impact: 노드 검색/선택, depth, 역방향 의존 + risk
 
 ### 2-9 FRONTEND architecture — be+fe
 
-- [ ] `architecture?area=FRONTEND` Page/Component/State/API Client
-- [ ] SYSTEM에 FE_ROUTE/API_ENDPOINT/DB_TABLE + CONSUMES/MAPS_TO
-- [ ] Architecture 탭 Frontend 토글 (FRONTEND area 선택 시)
+- [x] `architecture?area=FRONTEND` Page/Component/State/API Client
+- [x] SYSTEM에 FE_ROUTE/API_ENDPOINT/DB_TABLE + CONSUMES/MAPS_TO
+- [x] Architecture 탭 Frontend 토글 (FRONTEND area 선택 시)
 
 ### 2-10 TerraformAnalyzer — be
 
-- [ ] `.tf` `resource "type" "name"` → CLOUD_RESOURCE, infra_resources 프로젝션
-- [ ] infra-mini 골든: `aws_s3_bucket.data`
+- [x] `.tf` `resource "type" "name"` → CLOUD_RESOURCE, infra_resources 프로젝션
+- [x] infra-mini 골든: `aws_s3_bucket.data`
 
 ### 2-11 Era timeline — be+fe
 
-- [ ] manifest(pom.xml, package.json, docker-compose, build.gradle, *.tf) 변경 commit → era
-- [ ] `GET /api/projects/{id}/eras`
-- [ ] History 탭 era 타임라인. AI 설명 없음
+- [x] manifest(pom.xml, package.json, docker-compose, build.gradle, *.tf) 변경 commit → era
+- [x] `GET /api/projects/{id}/eras`
+- [x] History 탭 era 타임라인. AI 설명 없음
 
 ### 2-12 sc — sc
 
-- [ ] sidecar SSRF, 본문 크기, path traversal
-- [ ] 신규 API IDOR
-- [ ] Dependabot C/H=0
-- [ ] `docs/plan/phase2-security-audit.md`
+- [x] sidecar SSRF, 본문 크기, path traversal
+- [x] 신규 API IDOR
+- [x] Dependabot C/H=0
+- [x] `docs/plan/phase2-security-audit.md`
 
 ### 2-13 verify — verify
 
-- [ ] `./gradlew spotlessCheck build` PASS
-- [ ] frontend lint/typecheck/test/build PASS
-- [ ] sidecar `npm test` + `npm run build` PASS
-- [ ] CI green on merge
-- [ ] **Phase 3 시작 금지**
+- [x] `./gradlew spotlessCheck build` PASS (PR #22)
+- [x] frontend lint/typecheck/test/build PASS
+- [x] sidecar `npm test` + `npm run build` PASS (PR #21)
+- [ ] CI green on merge (this PR)
+- [x] **Phase 3 시작 금지**
 
 ---
 

@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { routes } from '../../app/router'
 import { AI_PANEL_DEFAULT_WIDTH, useUiStore } from '../../stores/uiStore'
 import { COMMIT_PAGE_SIZE } from '../../api/history'
-import type { CommitDetail, CommitDiff, CommitSummary, ProjectArea, PullRequest } from '../../api/types'
+import type { CommitDetail, CommitDiff, CommitSummary, EraView, ProjectArea, PullRequest } from '../../api/types'
 
 vi.mock('@monaco-editor/react', () => ({
   DiffEditor: ({ original, modified }: { original?: string; modified?: string }) => (
@@ -83,6 +83,16 @@ const sampleAreas: ProjectArea[] = [
   },
 ]
 
+const sampleEras: EraView[] = [
+  {
+    label: 'Updated package.json',
+    path: 'frontend/package.json',
+    sha: firstSha,
+    committedAt: '2026-01-01T00:00:00Z',
+    changeType: 'MODIFY',
+  },
+]
+
 const fetchMock = vi.fn()
 
 function installFetch() {
@@ -113,6 +123,9 @@ function installFetch() {
     }
     if (path === '/api/projects/7/areas') {
       return jsonResponse(sampleAreas)
+    }
+    if (path === '/api/projects/7/eras') {
+      return jsonResponse(sampleEras)
     }
     return jsonResponse({ title: 'Not Found', detail: path }, 404)
   })
@@ -187,5 +200,14 @@ describe('HistoryPage', () => {
     expect(await screen.findByRole('article', { name: 'Pull request 상세' })).toHaveTextContent(
       '**not markdown** just text',
     )
+  })
+
+  it('lists structure eras on the Eras pane', async () => {
+    renderHistory()
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Eras' }))
+    const list = await screen.findByRole('list', { name: 'Era 타임라인' })
+    expect(within(list).getByText('Updated package.json')).toBeInTheDocument()
+    expect(await screen.findByRole('article', { name: 'Era 상세' })).toHaveTextContent('frontend/package.json')
   })
 })

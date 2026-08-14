@@ -1,5 +1,5 @@
 import { apiGet } from './client'
-import type { CommitDetail, CommitDiff, CommitSummary, GitRef, PullRequest } from './types'
+import type { CommitDetail, CommitDiff, CommitSummary, EraView, GitRef, PullRequest } from './types'
 
 /** Matches backend HistoryService.PAGE_SIZE */
 export const COMMIT_PAGE_SIZE = 50
@@ -41,4 +41,8 @@ export function listTags(projectId: number): Promise<GitRef[]> {
 export function listPulls(projectId: number, state?: string): Promise<PullRequest[]> {
   const query = state ? `?state=${encodeURIComponent(state)}` : ''
   return apiGet<PullRequest[]>(`/api/projects/${projectId}/pulls${query}`)
+}
+
+export function listEras(projectId: number): Promise<EraView[]> {
+  return apiGet<EraView[]>(`/api/projects/${projectId}/eras`)
 }

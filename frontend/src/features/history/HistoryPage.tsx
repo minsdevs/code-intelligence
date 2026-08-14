@@ -8,13 +8,15 @@ import {
   getCommitDiff,
   listBranches,
   listCommits,
+  listEras,
   listPulls,
 } from '../../api/history'
 import { parseProjectId } from '../../lib/projectId'
+import type { EraView } from '../../api/types'
 import CommitDetail from './CommitDetail'
 import { firstLine, formatWhen, shortSha } from './format'
 
-type HistoryPane = 'commits' | 'pulls'
+type HistoryPane = 'commits' | 'pulls' | 'eras'
 
 export default function HistoryPage() {
   const { projectId: rawId } = useParams()
@@ -24,6 +26,7 @@ export default function HistoryPage() {
   const [selectedSha, setSelectedSha] = useState<string | null>(null)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [selectedPull, setSelectedPull] = useState<number | null>(null)
+  const [selectedEra, setSelectedEra] = useState<string | null>(null)
 
   const commitsQuery = useInfiniteQuery({
     queryKey: ['commits', projectId, branch],
@@ -53,11 +56,24 @@ export default function HistoryPage() {
     enabled: projectId != null,
   })
 
+  const erasQuery = useQuery({
+    queryKey: ['eras', projectId],
+    queryFn: () => listEras(projectId!),
+    enabled: projectId != null,
+  })
+
   const pulls = pullsQuery.data ?? []
   const resolvedPull =
     selectedPull != null && pulls.some((pull) => pull.number === selectedPull)
       ? selectedPull
       : (pulls[0]?.number ?? null)
+
+  const eras = erasQuery.data ?? []
+  const resolvedEraKey =
+    selectedEra != null && eras.some((era) => eraKey(era) === selectedEra)
+      ? selectedEra
+      : (eras[0] ? eraKey(eras[0]) : null)
+  const activeEra = eras.find((era) => eraKey(era) === resolvedEraKey)
 
   const detailQuery = useQuery({
     queryKey: ['commit', projectId, resolvedSha],
@@ -82,6 +98,7 @@ export default function HistoryPage() {
   const activePull = pulls.find((pull) => pull.number === resolvedPull)
   const commitError = queryError(commitsQuery.error)
   const pullsError = queryError(pullsQuery.error)
+  const erasError = queryError(erasQuery.error)
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -94,10 +111,10 @@ export default function HistoryPage() {
             <PaneTab selected={pane === 'pulls'} onClick={() => setPane('pulls')}>
               Pull requests
             </PaneTab>
+            <PaneTab selected={pane === 'eras'} onClick={() => setPane('eras')}>
+              Eras
+            </PaneTab>
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
-            구조 변천(era) 타임라인은 Phase 2에서 제공합니다.
-          </p>
         </div>
 
         {pane === 'commits' ? (
@@ -177,7 +194,7 @@ export default function HistoryPage() {
               </div>
             )}
           </>
-        ) : (
+        ) : pane === 'pulls' ? (
           <>
             {pullsError && (
               <p role="alert" className="px-3 py-2 text-[12px] text-danger">
@@ -214,6 +231,47 @@ export default function HistoryPage() {
               })}
             </ul>
           </>
+        ) : (
+          <>
+            {erasError && (
+              <p role="alert" className="px-3 py-2 text-[12px] text-danger">
+                {erasError}
+              </p>
+            )}
+            {erasQuery.isLoading && <p className="px-3 py-3 text-[13px] text-ink-muted">Era를 불러오는 중…</p>}
+            {!erasQuery.isLoading && eras.length === 0 && !erasError && (
+              <p className="px-3 py-3 text-[13px] text-ink-muted">구조 변천(era)이 없습니다.</p>
+            )}
+            <ol aria-label="Era 타임라인" className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+              {eras.map((era) => {
+                const key = eraKey(era)
+                const active = key === resolvedEraKey
+                return (
+                  <li key={key} className="relative pl-3">
+                    <span
+                      aria-hidden="true"
+                      className={`absolute left-0 top-3 size-1.5 rounded-full ${active ? 'bg-accent' : 'bg-line-strong'}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEra(key)}
+                      aria-current={active ? 'true' : undefined}
+                      className={`mb-0.5 flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left ${
+                        active ? 'bg-surface-3 text-ink' : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
+                      }`}
+                    >
+                      <span className="text-[13px] text-ink">{era.label}</span>
+                      <span className="flex flex-wrap gap-x-2 font-mono text-[11px] text-ink-faint">
+                        <span>{era.path}</span>
+                        <span>{shortSha(era.sha)}</span>
+                        <span>{formatWhen(era.committedAt)}</span>
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ol>
+          </>
         )}
       </section>
 
@@ -232,21 +290,35 @@ export default function HistoryPage() {
             {detailQuery.isLoading ? '커밋 상세를 불러오는 중…' : '왼쪽에서 커밋을 선택하세요.'}
           </p>
         )
-      ) : activePull ? (
-        <article className="min-h-0 flex-1 overflow-y-auto px-5 py-4" aria-label="Pull request 상세">
-          <h2 className="text-[15px] font-semibold text-ink">{activePull.title}</h2>
+      ) : pane === 'pulls' ? (
+        activePull ? (
+          <article className="min-h-0 flex-1 overflow-y-auto px-5 py-4" aria-label="Pull request 상세">
+            <h2 className="text-[15px] font-semibold text-ink">{activePull.title}</h2>
+            <p className="mt-2 flex flex-wrap gap-x-3 font-mono text-[12px] text-ink-faint">
+              <span>#{activePull.number}</span>
+              <span>{activePull.state}</span>
+              <span>{activePull.author}</span>
+              {activePull.mergedAt && <span>merged {formatWhen(activePull.mergedAt)}</span>}
+            </p>
+            <pre className="mt-4 whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-ink-muted">
+              {activePull.body?.trim() ? activePull.body : '본문이 없습니다.'}
+            </pre>
+          </article>
+        ) : (
+          <p className="px-5 py-8 text-[13px] text-ink-muted">왼쪽에서 Pull request를 선택하세요.</p>
+        )
+      ) : activeEra ? (
+        <article className="min-h-0 flex-1 overflow-y-auto px-5 py-4" aria-label="Era 상세">
+          <h2 className="text-[15px] font-semibold text-ink">{activeEra.label}</h2>
           <p className="mt-2 flex flex-wrap gap-x-3 font-mono text-[12px] text-ink-faint">
-            <span>#{activePull.number}</span>
-            <span>{activePull.state}</span>
-            <span>{activePull.author}</span>
-            {activePull.mergedAt && <span>merged {formatWhen(activePull.mergedAt)}</span>}
+            <span>{activeEra.path}</span>
+            <span>{shortSha(activeEra.sha)}</span>
+            <span>{activeEra.changeType}</span>
+            <span>{formatWhen(activeEra.committedAt)}</span>
           </p>
-          <pre className="mt-4 whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-ink-muted">
-            {activePull.body?.trim() ? activePull.body : '본문이 없습니다.'}
-          </pre>
         </article>
       ) : (
-        <p className="px-5 py-8 text-[13px] text-ink-muted">왼쪽에서 Pull request를 선택하세요.</p>
+        <p className="px-5 py-8 text-[13px] text-ink-muted">왼쪽에서 era를 선택하세요.</p>
       )}
     </div>
   )
@@ -274,6 +346,10 @@ function PaneTab({
       {children}
     </button>
   )
+}
+
+function eraKey(era: EraView): string {
+  return `${era.sha}:${era.path}`
 }
 
 function queryError(error: unknown): string | null {

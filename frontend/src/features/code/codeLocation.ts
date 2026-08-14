@@ -8,6 +8,13 @@ export function queryError(error: unknown): string | null {
   return '요청에 실패했습니다.'
 }
 
+export function codeLocationSearch(path: string, line: number | null | undefined): string {
+  const params = new URLSearchParams()
+  params.set('path', path)
+  if (line != null && line > 0) params.set('line', String(line))
+  return `?${params.toString()}`
+}
+
 export function parseLineParam(raw: string | null): number | null {
   if (raw == null || raw === '') return null
   if (!/^[0-9]+$/.test(raw)) return null
