@@ -10,6 +10,7 @@ public final class EvidenceSubjects {
     public static final String FEATURE = "FEATURE";
     public static final String FLOW = "FLOW";
     public static final String FINDING = "FINDING";
+    public static final String AI_MESSAGE = "AI_MESSAGE";
 
     private EvidenceSubjects() {}
 }

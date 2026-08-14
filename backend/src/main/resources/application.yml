@@ -70,6 +70,21 @@ app:
   ts-analyzer:
     base-url: ${TS_ANALYZER_BASE_URL:}
     timeout-seconds: ${TS_ANALYZER_TIMEOUT_SECONDS:30}
+  ai:
+    provider: ${AI_PROVIDER:}
+    max-context-tokens: ${AI_MAX_CONTEXT_TOKENS:8000}
+    daily-token-limit: ${AI_DAILY_TOKEN_LIMIT:500000}
+    focus-line-window: ${AI_FOCUS_LINE_WINDOW:40}
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      chat-model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+      embed-model: ${OPENAI_EMBED_MODEL:text-embedding-3-small}
+    gemini:
+      api-key: ${GEMINI_API_KEY:}
+      base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+      chat-model: ${GEMINI_CHAT_MODEL:gemini-2.0-flash}
+      embed-model: ${GEMINI_EMBED_MODEL:text-embedding-004}
 
 ---
 spring:

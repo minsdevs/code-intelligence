@@ -13,6 +13,7 @@ class SecretMaskTest {
                 .doesNotContain("ghp_abcdefghijklmnopqrstuvwxyz012345");
         assertThat(SecretMask.redact("password: super-secret")).isEqualTo("password: [REDACTED]");
         assertThat(SecretMask.redact("AKIAIOSFODNN7EXAMPLE")).isEqualTo("[REDACTED]");
+        assertThat(SecretMask.redact("sk-abcdefghijklmnopqrstuvwxyz012345")).isEqualTo("[REDACTED]");
         assertThat(SecretMask.redact("class Todo {}")).isEqualTo("class Todo {}");
         assertThat(SecretMask.redact(null)).isNull();
     }
