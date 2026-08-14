@@ -3,8 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef } from 'react'
 import { ApiError } from '../../api/client'
 import { getFileContent } from '../../api/files'
+import { configureMonaco } from '../../lib/monacoSetup'
 import { queryError } from './codeLocation'
 import { monacoLanguage } from './language'
+
+configureMonaco()
 
 type CodeViewerProps = {
   projectId: number

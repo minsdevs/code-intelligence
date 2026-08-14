@@ -714,24 +714,25 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-16 · sc — 토큰·clone 경로·파일 서빙 보안 점검
 
+**상태: 완료** — 리포트 `docs/plan/phase1-security-audit.md`. CRITICAL/HIGH 수정은 본 PR.
 **Mode:** audit-first — findings를 severity와 함께 리포트, 수정은 별도 PR(`feature/phase1-security-fixes`)로.
 
 **Checklist:**
 
-- [ ] §18 이월 TODO 이행 확인: ① TOKEN_ENC_KEY 32바이트 기동 검증·암호문별 고유 nonce·key_version ② Spring Session Redis + CSRF + SameSite=Lax ③ CORS 허용목록(wildcard+credentials 금지) ④ `VITE_*` 번들 내 시크릿 없음(grep 검증)
-- [ ] 토큰 노출 경로 0: API 응답 DTO·로그·에러 메시지·SSE payload 전수 확인
-- [ ] SSRF: `github.com` 외 호스트/스킴 import 전부 거부(테스트 존재 확인)
-- [ ] Path traversal: `file-content`·diff의 path 파라미터 canonical 검증 + 우회 변형(인코딩, 심볼릭 링크) 시도
-- [ ] clone 경로 격리: `${DATA_DIR}/repos/{projectId}` 밖 접근 불가, 삭제 시 경로 재검증
-- [ ] 인증/인가: 모든 `/api/**` 401 기본, **프로젝트 소유자 검증(user_id 스코프, IDOR)** — 조회 API 전수
-- [ ] clone 코드 비실행 원칙: 빌드/실행 코드 경로 없음 확인(파서만)
-- [ ] 신규 public 표면 위협 모델: OAuth 콜백, PAT 등록, SSE, 파일 서빙
-- [ ] 의존성 감사: `npm audit` / gradle 의존성 리포트 — critical 0
-- [ ] findings를 severity(critical/high/medium/low)로 리포트, critical/high 0이 될 때까지 수정 반복
-- [ ] P1 조기 점검(1-1) 이월 LOW 3건 재평가: PAT 등록 rate-limit 부재(GitHub API 대리 호출), springdoc `/v3/api-docs`·swagger 공개 유지 여부, 토큰 로그 미출력의 로그 캡처 테스트 부재(서버 루프백 바인딩은 P1에서 반영 완료)
-- [ ] P2 조기 점검(1-2·1-3) 이월 LOW 4건 재평가: retry의 트랜잭션 내 guard 순서, 프로젝트 삭제 TOCTOU 고아 디렉터리 가능성, RepoRef `.` 단독 세그먼트·대소문자 중복 import 하드닝, SSE emitter 잔존 정리
-- [ ] P3 조기 점검(1-4·1-5) 이월: evidence excerpt가 설정 파일 앞 80자를 그대로 저장(시크릿 마스킹은 LLM 연동 전/1-16), file-content symlink 탈출 통합 테스트 부재, PUT `/area-selections` IDOR 테스트 부재(코드는 user_id 스코프)
-- [ ] P11: History DiffViewer가 Monaco를 CDN에서 로드함 — 오프라인/공급망 재평가(번들 vs CDN)
+- [x] §18 이월 TODO 이행 확인: ① TOKEN_ENC_KEY 32바이트 기동 검증·암호문별 고유 nonce·key_version ② Spring Session Redis + CSRF + SameSite=Lax ③ CORS 허용목록(wildcard+credentials 금지) ④ `VITE_*` 번들 내 시크릿 없음(grep 검증)
+- [x] 토큰 노출 경로 0: API 응답 DTO·로그·에러 메시지·SSE payload 전수 확인
+- [x] SSRF: `github.com` 외 호스트/스킴 import 전부 거부(테스트 존재 확인)
+- [x] Path traversal: `file-content`·diff의 path 파라미터 canonical 검증 + 우회 변형(인코딩, 심볼릭 링크) 시도
+- [x] clone 경로 격리: `${DATA_DIR}/repos/{projectId}` 밖 접근 불가, 삭제 시 경로 재검증
+- [x] 인증/인가: 모든 `/api/**` 401 기본, **프로젝트 소유자 검증(user_id 스코프, IDOR)** — 조회 API 전수
+- [x] clone 코드 비실행 원칙: 빌드/실행 코드 경로 없음 확인(파서만)
+- [x] 신규 public 표면 위협 모델: OAuth 콜백, PAT 등록, SSE, 파일 서빙
+- [x] 의존성 감사: `npm audit` / gradle 의존성 리포트 — critical 0
+- [x] findings를 severity(critical/high/medium/low)로 리포트, critical/high 0이 될 때까지 수정 반복
+- [x] P1 조기 점검(1-1) 이월 LOW 3건 재평가: PAT 등록 rate-limit 부재(GitHub API 대리 호출), springdoc `/v3/api-docs`·swagger 공개 유지 여부, 토큰 로그 미출력의 로그 캡처 테스트 부재(서버 루프백 바인딩은 P1에서 반영 완료)
+- [x] P2 조기 점검(1-2·1-3) 이월 LOW 4건 재평가: retry의 트랜잭션 내 guard 순서, 프로젝트 삭제 TOCTOU 고아 디렉터리 가능성, RepoRef `.` 단독 세그먼트·대소문자 중복 import 하드닝, SSE emitter 잔존 정리
+- [x] P3 조기 점검(1-4·1-5) 이월: evidence excerpt가 설정 파일 앞 80자를 그대로 저장(시크릿 마스킹은 LLM 연동 전/1-16), file-content symlink 탈출 통합 테스트 부재, PUT `/area-selections` IDOR 테스트 부재(코드는 user_id 스코프)
+- [x] P11: History DiffViewer가 Monaco를 CDN에서 로드함 — 오프라인/공급망 재평가(번들 vs CDN)
 
 ### 1-17 · verify — Phase 1 최종 검증 (DoD)
 

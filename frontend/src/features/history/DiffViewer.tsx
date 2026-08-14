@@ -1,4 +1,7 @@
 import { DiffEditor } from '@monaco-editor/react'
+import { configureMonaco } from '../../lib/monacoSetup'
+
+configureMonaco()
 
 function languageFromPath(path: string): string {
   const name = path.toLowerCase()

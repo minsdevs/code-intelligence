@@ -26,7 +26,7 @@ public class EvidenceService {
                 .param("filePath", evidence.filePath())
                 .param("lineStart", evidence.lineStart())
                 .param("lineEnd", evidence.lineEnd())
-                .param("excerpt", evidence.excerpt())
+                .param("excerpt", SecretMask.redact(evidence.excerpt()))
                 .query(Long.class)
                 .single();
     }

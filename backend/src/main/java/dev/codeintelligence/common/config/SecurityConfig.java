@@ -1,6 +1,8 @@
 package dev.codeintelligence.common.config;
 
+import dev.codeintelligence.auth.AuthProperties;
 import dev.codeintelligence.auth.GithubOAuth2UserService;
+import dev.codeintelligence.auth.PatLoginRateLimitFilter;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -33,6 +35,7 @@ import org.springframework.security.web.authentication.www.BasicAuthenticationFi
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
@@ -62,6 +65,7 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             CorsProperties corsProperties,
+            AuthProperties authProperties,
             SecurityContextRepository securityContextRepository,
             GithubOAuth2UserService githubOAuth2UserService,
             ObjectProvider<ClientRegistrationRepository> clientRegistrations)
@@ -73,6 +77,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
+                .addFilterAfter(new PatLoginRateLimitFilter(authProperties), CsrfFilter.class)
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
