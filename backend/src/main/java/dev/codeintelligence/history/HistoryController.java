@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class HistoryController {
 
     private final HistoryService historyService;
+    private final EraService eraService;
 
-    public HistoryController(HistoryService historyService) {
+    public HistoryController(HistoryService historyService, EraService eraService) {
         this.historyService = historyService;
+        this.eraService = eraService;
     }
 
     @GetMapping("/{projectId}/commits")
@@ -51,6 +53,12 @@ public class HistoryController {
     @GetMapping("/{projectId}/tags")
     public List<RefView> tags(@PathVariable long projectId, @AuthenticationPrincipal AuthenticatedUser user) {
         return historyService.tags(projectId, user.userId());
+    }
+
+    @GetMapping("/{projectId}/eras")
+    public List<EraService.EraView> eras(
+            @PathVariable long projectId, @AuthenticationPrincipal AuthenticatedUser user) {
+        return eraService.list(projectId, user.userId());
     }
 
     @GetMapping("/{projectId}/pulls")

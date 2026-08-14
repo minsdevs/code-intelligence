@@ -88,10 +88,13 @@ public class ArchitectureService {
         if ("BACKEND".equals(normalized)) {
             return backend(resolved);
         }
+        if ("FRONTEND".equals(normalized)) {
+            return frontend(resolved);
+        }
         if ("SYSTEM".equals(normalized)) {
             return system(resolved);
         }
-        throw new InvalidGraphQueryException("area must be BACKEND or SYSTEM.");
+        throw new InvalidGraphQueryException("area must be BACKEND, FRONTEND, or SYSTEM.");
     }
 
     private ArchitectureView backend(long snapshotId) {
@@ -154,14 +157,92 @@ public class ArchitectureService {
         return new ArchitectureView("BACKEND", groups, edges);
     }
 
-    private ArchitectureView system(long snapshotId) {
+    private ArchitectureView frontend(long snapshotId) {
         List<NodeRow> rows = jdbc.sql("""
                         select n.id, n.name, n.node_type, f.path as file_path, n.line_start,
-                               case n.node_type when 'CI_PIPELINE' then 'CI' else n.node_type end as layer
+                               case
+                                   when n.node_type = 'FE_ROUTE' then 'PAGE'
+                                   when n.node_type = 'STORE' then 'STATE'
+                                   when n.node_type = 'HOOK' then 'STATE'
+                                   when jsonb_exists(n.metadata, 'apiCalls') then 'API_CLIENT'
+                                   else 'COMPONENT'
+                               end as layer
                         from graph_nodes n
                         left join files f on f.id = n.file_id
                         where n.snapshot_id = :snapshotId
-                          and n.node_type in ('CONTAINER', 'CI_PIPELINE')
+                          and n.node_type in ('FE_ROUTE', 'COMPONENT', 'HOOK', 'STORE')
+                        order by layer, n.name
+                        """)
+                .param("snapshotId", snapshotId)
+                .query((rs, rowNum) -> new NodeRow(
+                        rs.getLong("id"),
+                        rs.getString("name"),
+                        rs.getString("node_type"),
+                        rs.getString("file_path"),
+                        (Integer) rs.getObject("line_start"),
+                        rs.getString("layer")))
+                .list();
+        List<String> layers = List.of("PAGE", "COMPONENT", "STATE", "API_CLIENT");
+        Map<String, List<ArchitectureNodeView>> grouped = new LinkedHashMap<>();
+        for (String layer : layers) {
+            grouped.put(layer, new ArrayList<>());
+        }
+        for (NodeRow row : rows) {
+            grouped.computeIfAbsent(row.layer(), key -> new ArrayList<>())
+                    .add(new ArchitectureNodeView(row.id(), row.name(), row.nodeType(), row.filePath(), row.line()));
+        }
+        List<ArchitectureGroupView> groups = new ArrayList<>();
+        for (String layer : layers) {
+            List<ArchitectureNodeView> nodes = grouped.getOrDefault(layer, List.of());
+            if (!nodes.isEmpty()) {
+                groups.add(new ArchitectureGroupView(layer, List.copyOf(nodes)));
+            }
+        }
+        List<ArchitectureEdgeView> edges = jdbc.sql("""
+                        select
+                            case s.node_type when 'FE_ROUTE' then 'PAGE' when 'STORE' then 'STATE' when 'HOOK' then 'STATE'
+                                 else case when jsonb_exists(s.metadata, 'apiCalls') then 'API_CLIENT' else 'COMPONENT' end end
+                                as source_group,
+                            case t.node_type when 'FE_ROUTE' then 'PAGE' when 'STORE' then 'STATE' when 'HOOK' then 'STATE'
+                                 else case when jsonb_exists(t.metadata, 'apiCalls') then 'API_CLIENT' else 'COMPONENT' end end
+                                as target_group,
+                            e.source_node_id, e.target_node_id, 1 as cnt
+                        from graph_edges e
+                        join graph_nodes s on s.id = e.source_node_id
+                        join graph_nodes t on t.id = e.target_node_id
+                        where e.snapshot_id = :snapshotId
+                          and e.edge_type in ('CONTAINS', 'CONSUMES', 'IMPORTS')
+                          and s.node_type in ('FE_ROUTE', 'COMPONENT', 'HOOK', 'STORE')
+                          and t.node_type in ('FE_ROUTE', 'COMPONENT', 'HOOK', 'STORE', 'API_ENDPOINT')
+                        """)
+                .param("snapshotId", snapshotId)
+                .query((rs, rowNum) -> new ArchitectureEdgeView(
+                        rs.getString("source_group"),
+                        rs.getString("target_group"),
+                        rs.getLong("source_node_id"),
+                        rs.getLong("target_node_id"),
+                        rs.getInt("cnt")))
+                .list();
+        return new ArchitectureView("FRONTEND", groups, edges);
+    }
+
+    private ArchitectureView system(long snapshotId) {
+        List<NodeRow> rows = jdbc.sql("""
+                        select n.id, n.name, n.node_type, f.path as file_path, n.line_start,
+                               case n.node_type
+                                   when 'CI_PIPELINE' then 'CI'
+                                   when 'CLOUD_RESOURCE' then 'CLOUD'
+                                   when 'FE_ROUTE' then 'FRONTEND'
+                                   when 'API_ENDPOINT' then 'BACKEND'
+                                   when 'DB_TABLE' then 'DATABASE'
+                                   else n.node_type
+                               end as layer
+                        from graph_nodes n
+                        left join files f on f.id = n.file_id
+                        where n.snapshot_id = :snapshotId
+                          and n.node_type in (
+                              'CONTAINER', 'CI_PIPELINE', 'CLOUD_RESOURCE',
+                              'FE_ROUTE', 'API_ENDPOINT', 'DB_TABLE')
                         order by layer, n.name
                         """)
                 .param("snapshotId", snapshotId)
@@ -174,14 +255,16 @@ public class ArchitectureService {
                         rs.getString("layer")))
                 .list();
         Map<String, List<ArchitectureNodeView>> grouped = new LinkedHashMap<>();
-        grouped.put("CONTAINER", new ArrayList<>());
-        grouped.put("CI", new ArrayList<>());
+        List<String> layers = List.of("FRONTEND", "BACKEND", "DATABASE", "CONTAINER", "CLOUD", "CI");
+        for (String layer : layers) {
+            grouped.put(layer, new ArrayList<>());
+        }
         for (NodeRow row : rows) {
             grouped.computeIfAbsent(row.layer(), key -> new ArrayList<>())
                     .add(new ArchitectureNodeView(row.id(), row.name(), row.nodeType(), row.filePath(), row.line()));
         }
         List<ArchitectureGroupView> groups = new ArrayList<>();
-        for (String layer : List.of("CONTAINER", "CI")) {
+        for (String layer : layers) {
             List<ArchitectureNodeView> nodes = grouped.getOrDefault(layer, List.of());
             if (!nodes.isEmpty()) {
                 groups.add(new ArchitectureGroupView(layer, List.copyOf(nodes)));
@@ -197,13 +280,25 @@ public class ArchitectureService {
                         join graph_nodes s on s.id = e.source_node_id
                         join graph_nodes t on t.id = e.target_node_id
                         join lateral (
-                            select case s.node_type when 'CI_PIPELINE' then 'CI' else s.node_type end as layer
+                            select case s.node_type
+                                when 'CI_PIPELINE' then 'CI'
+                                when 'CLOUD_RESOURCE' then 'CLOUD'
+                                when 'FE_ROUTE' then 'FRONTEND'
+                                when 'API_ENDPOINT' then 'BACKEND'
+                                when 'DB_TABLE' then 'DATABASE'
+                                else s.node_type end as layer
                         ) src_layer on true
                         join lateral (
-                            select case t.node_type when 'CI_PIPELINE' then 'CI' else t.node_type end as layer
+                            select case t.node_type
+                                when 'CI_PIPELINE' then 'CI'
+                                when 'CLOUD_RESOURCE' then 'CLOUD'
+                                when 'FE_ROUTE' then 'FRONTEND'
+                                when 'API_ENDPOINT' then 'BACKEND'
+                                when 'DB_TABLE' then 'DATABASE'
+                                else t.node_type end as layer
                         ) tgt_layer on true
                         where e.snapshot_id = :snapshotId
-                          and e.edge_type = 'DEPLOYED_IN'
+                          and e.edge_type in ('DEPLOYED_IN', 'CONSUMES', 'MAPS_TO', 'CONFIGURED_BY')
                         order by e.source_node_id, e.target_node_id
                         """)
                 .param("snapshotId", snapshotId)

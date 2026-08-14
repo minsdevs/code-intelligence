@@ -80,6 +80,7 @@ final class FeatureLinkBuilder {
         }
         walkCalls(methods, included);
         expandOwnersAndEntities(included);
+        expandUi(included);
         List<Link> links = new ArrayList<>();
         Set<Long> seen = new HashSet<>();
         for (Long id : included) {
@@ -163,6 +164,18 @@ final class FeatureLinkBuilder {
         }
     }
 
+    private void expandUi(Set<Long> included) {
+        Set<Long> extra = new HashSet<>();
+        for (Long id : Set.copyOf(included)) {
+            for (GraphEdge edge : in.getOrDefault(id, List.of())) {
+                if ("CONSUMES".equals(edge.edgeType())) {
+                    extra.add(edge.sourceId());
+                }
+            }
+        }
+        included.addAll(extra);
+    }
+
     private static boolean isData(GraphNode node) {
         return "DB_ENTITY".equals(node.nodeType())
                 || "ENTITY".equals(node.layer())
@@ -172,6 +185,12 @@ final class FeatureLinkBuilder {
     private static String roleOf(GraphNode node) {
         if ("API_ENDPOINT".equals(node.nodeType()) || "CONTROLLER".equals(node.layer())) {
             return "API";
+        }
+        if ("FE_ROUTE".equals(node.nodeType())
+                || "COMPONENT".equals(node.nodeType())
+                || "HOOK".equals(node.nodeType())
+                || "STORE".equals(node.nodeType())) {
+            return "UI";
         }
         if ("SERVICE".equals(node.layer())) {
             return "SERVICE";

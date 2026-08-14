@@ -164,7 +164,7 @@ class ArchitectureApiIntegrationTest {
                         && "SERVICE".equals(edge.get("targetGroup"))
                         && ((Number) edge.get("count")).intValue() >= 1);
 
-        getAs(session, "/api/projects/" + projectId + "/architecture?area=FRONTEND", HttpStatus.BAD_REQUEST);
+        getAs(session, "/api/projects/" + projectId + "/architecture?area=FRONTEND", HttpStatus.OK);
 
         List<Map<String, Object>> features = jsonMapper.readValue(
                 getAs(session, "/api/projects/" + projectId + "/features", HttpStatus.OK), List.class);
