@@ -415,5 +415,22 @@ function quickQuestions(
   if (view === 'notes') {
     return [{ label: '노트 설명', question: '이 노트와 연결된 코드를 설명해줘', intent: 'EXPLAIN' }]
   }
+  if (view === 'review') {
+    return [{ label: 'PR 리뷰', question: '이 PR 변경의 위험을 설명해줘', intent: 'EXPLAIN' }]
+  }
+  if (view === 'playground') {
+    return [
+      { label: '가설 설명', question: '이 가설 변경이 무엇을 깨뜨릴 수 있어?', intent: 'EXPLAIN' },
+    ]
+  }
+  if (view === 'growth') {
+    return [
+      {
+        label: '학습 요약',
+        question: '최근 학습 기록을 코드와 연결해 설명해줘',
+        intent: 'EXPLAIN',
+      },
+    ]
+  }
   return []
 }
