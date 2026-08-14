@@ -14,6 +14,7 @@ export {
   listTags,
 } from './history'
 export { getFileContent, listFiles } from './files'
+export { getArchitecture } from './architecture'
 export { GRAPH_NODE_PAGE_SIZE, getGraphNode, getGraphRelations, listGraphNodes } from './graph'
 export type {
   AreaSelection,
@@ -30,6 +31,7 @@ export type {
   GraphNodeSummary,
   GraphRelation,
   GraphRelationsResponse,
+  ArchitectureView,
   JobDetail,
   MeResponse,
   Project,

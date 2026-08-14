@@ -549,22 +549,23 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-13 · fe — Architecture 뷰 (React Flow, Backend/System) `[P10]`
 
+**상태: 완료** — `@xyflow/react`+elkjs lazy chunk, Backend/System 탭, 노드 클릭→code `?path=&line=`.
 **완료 기준:** 노드 클릭→코드 이동
 **위치:** `frontend/src/features/architecture/`
 
 **구현 체크리스트:**
 
-- [ ] 의존성: `@xyflow/react` + `elkjs` — lazy chunk
-- [ ] `ArchitecturePage` — workspaceTabs `architecture` 탭 교체. 영역 탭: Backend(레이어 뷰) | System(CONTAINER/CI 토폴로지). **선택 영역(§9.3) 반영 — 미선택 영역 탭 숨김**
-- [ ] `GET architecture?area=` → elkjs 레이아웃 계산 → React Flow 노드(레이어 그룹 컨테이너) + edge(집계 count 라벨)
-- [ ] **노드 클릭 → code 탭 `?path=&line=` 이동** ← 완료 기준
-- [ ] 분석 전/빈 그래프 empty state
+- [x] 의존성: `@xyflow/react` + `elkjs` — lazy chunk
+- [x] `ArchitecturePage` — workspaceTabs `architecture` 탭 교체. 영역 탭: Backend(레이어 뷰) | System(CONTAINER/CI 토폴로지). **선택 영역(§9.3) 반영 — 미선택 영역 탭 숨김**
+- [x] `GET architecture?area=` → elkjs 레이아웃 계산 → React Flow 노드(레이어 그룹 컨테이너) + edge(집계 count 라벨)
+- [x] **노드 클릭 → code 탭 `?path=&line=` 이동** ← 완료 기준
+- [x] 분석 전/빈 그래프 empty state
 
 **테스트 체크리스트:**
 
-- [ ] projection mock 렌더(그룹·노드 수)
-- [ ] 노드 클릭 → 라우팅 assert ← 완료 기준
-- [ ] 영역 미선택 시 탭 숨김
+- [x] projection mock 렌더(그룹·노드 수)
+- [x] 노드 클릭 → 라우팅 assert ← 완료 기준
+- [x] 영역 미선택 시 탭 숨김
 
 ---
 
