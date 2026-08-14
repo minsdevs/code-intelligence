@@ -30,6 +30,10 @@ public final class NaturalKeys {
         return "endpoint:" + require(httpMethod, "method").toUpperCase(Locale.ROOT) + ":" + require(path, "path");
     }
 
+    public static String entity(String fqcn) {
+        return "entity:" + require(fqcn, "fqcn");
+    }
+
     public static String table(String name) {
         return "table:" + require(name, "table");
     }

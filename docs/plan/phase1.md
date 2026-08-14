@@ -464,17 +464,18 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-10 · be — API endpoint + JPA entity 추출, 레이어 태깅 `[P8]`
 
+**상태: 구현** — V8 + SpringEndpointExtractor/JpaEntityExtractor/LayerTagger + architecture 프로젝션 API.
 **완료 기준:** endpoint 목록 정확도 검증
 **패키지:** `dev.codeintelligence.analysis.java`(Spring 특화), `dev.codeintelligence.analysis.graph`
 
 **구현 체크리스트:**
 
-- [ ] `V8__endpoints_entities_features.sql` (§3 표 — 1-11과 공유)
-- [ ] `SpringEndpointExtractor` — `@RestController`(+`@Controller`+`@ResponseBody`), 클래스 `@RequestMapping` prefix × 메서드 `@Get/Post/Put/Delete/Patch/RequestMapping` → **경로 합성·정규화(경로변수 `{}` 유지)** → API_ENDPOINT 노드 + EXPOSES edge + `api_endpoints` row(http_method, path, handler_key)
-- [ ] `JpaEntityExtractor` — `@Entity`/`@Table(name)`(없으면 클래스명 snake_case 기본 전략, 규칙 주석 명시) → DB_ENTITY 노드 + `db_entities` row(source=JPA). migration 테이블과의 MAPS_TO 매칭은 Phase 2(§11.2)
-- [ ] `LayerTagger` — `@RestController`→CONTROLLER, `@Service`→SERVICE, `@Repository`/JpaRepository 상속→REPOSITORY, `@Entity`→ENTITY, `@Configuration`→CONFIG를 `graph_nodes.metadata.layer`에 기록
-- [ ] `ExtractionStep` 완성 — endpoint/entity 투영 추가
-- [ ] `ArchitectureController` — **그래프 프로젝션(저장 없음, §12.2)**: 레이어 그룹핑 + 그룹 간 CALLS 집계. `area=SYSTEM`은 CONTAINER/CI 토폴로지(Phase 1 한정 — cross-domain edge는 Phase 2)
+- [x] `V8__endpoints_entities_features.sql` (§3 표 — 1-11과 공유)
+- [x] `SpringEndpointExtractor` — `@RestController`(+`@Controller`+`@ResponseBody`), 클래스 `@RequestMapping` prefix × 메서드 `@Get/Post/Put/Delete/Patch/RequestMapping` → **경로 합성·정규화(경로변수 `{}` 유지)** → API_ENDPOINT 노드 + EXPOSES edge + `api_endpoints` row(http_method, path, handler_key)
+- [x] `JpaEntityExtractor` — `@Entity`/`@Table(name)`(없으면 클래스명 snake_case 기본 전략, 규칙 주석 명시) → DB_ENTITY 노드 + `db_entities` row(source=JPA). migration 테이블과의 MAPS_TO 매칭은 Phase 2(§11.2)
+- [x] `LayerTagger` — `@RestController`→CONTROLLER, `@Service`→SERVICE, `@Repository`/JpaRepository 상속→REPOSITORY, `@Entity`→ENTITY, `@Configuration`→CONFIG를 `graph_nodes.metadata.layer`에 기록
+- [x] `ExtractionStep` 완성 — endpoint/entity 투영 추가
+- [x] `ArchitectureController` — **그래프 프로젝션(저장 없음, §12.2)**: 레이어 그룹핑 + 그룹 간 CALLS 집계. `area=SYSTEM`은 CONTAINER/CI 토폴로지(Phase 1 한정 — cross-domain edge는 Phase 2)
 
 **API 계약:**
 
@@ -486,25 +487,26 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 **테스트 체크리스트:**
 
-- [ ] **spring-mini 골든: endpoint 5건 메서드/경로 정확 일치** ← 완료 기준
-- [ ] 클래스 prefix 합성·경로변수·중복 슬래시 정규화 케이스
-- [ ] `@Table` 생략 entity의 snake_case 기본 전략
-- [ ] architecture 프로젝션: BACKEND 레이어 그룹 4종 + 집계 edge 수
+- [x] **spring-mini 골든: endpoint 5건 메서드/경로 정확 일치** ← 완료 기준
+- [x] 클래스 prefix 합성·경로변수·중복 슬래시 정규화 케이스
+- [x] `@Table` 생략 entity의 snake_case 기본 전략
+- [x] architecture 프로젝션: BACKEND 레이어 그룹 4종 + 집계 edge 수
 
 ---
 
 ### 1-11 · be — Feature 기본 추출 (경로 prefix + 패키지 군집) `[P8]`
 
+**상태: 구현** — FeatureDetectionStep + GET /features. Features 화면은 Phase 2.
 **완료 기준:** fixture에서 기대 feature 생성
 **패키지:** `dev.codeintelligence.analysis.feature`
 
 **구현 체크리스트:**
 
-- [ ] `FeatureDetectionStep`(FEATURE_DETECTION) — 시드 군집(§12.1, **전부 정적**): ① endpoint 경로 1세그먼트 prefix(`/auth/*`, `/todos/*`) ② 최상위 패키지/디렉터리 군집
-- [ ] 병합 규칙: 두 시드의 노드 중복률 ≥ 임계값(설정, 기본 0.5) → 병합, 이름은 endpoint prefix 우선
-- [ ] `FeatureLinkBuilder` — 군집 endpoint → EXPOSES 역추적 → controller → CALLS(depth ≤ 3) → service/repository/entity, role은 API/SERVICE/DATA 부여(UI role은 Phase 2)
-- [ ] `features`(detection=STATIC, confidence)·`feature_links` 저장 + evidence 연결
-- [ ] `FeatureController` — 조회 API (Features 화면은 Phase 2, API만 노출)
+- [x] `FeatureDetectionStep`(FEATURE_DETECTION) — 시드 군집(§12.1, **전부 정적**): ① endpoint 경로 1세그먼트 prefix(`/auth/*`, `/todos/*`) ② 최상위 패키지/디렉터리 군집
+- [x] 병합 규칙: 두 시드의 노드 중복률 ≥ 임계값(설정, 기본 0.5) → 병합, 이름은 endpoint prefix 우선
+- [x] `FeatureLinkBuilder` — 군집 endpoint → EXPOSES 역추적 → controller → CALLS(depth ≤ 3) → service/repository/entity, role은 API/SERVICE/DATA 부여(UI role은 Phase 2)
+- [x] `features`(detection=STATIC, confidence)·`feature_links` 저장 + evidence 연결
+- [x] `FeatureController` — 조회 API (Features 화면은 Phase 2, API만 노출)
 
 **API 계약:**
 
@@ -515,9 +517,9 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 **테스트 체크리스트:**
 
-- [ ] **spring-mini 골든: feature 2건(auth, todos), todos의 links에 Controller/Service/Repository/Entity 포함** ← 완료 기준
-- [ ] fullstack-mini: BE 군집 정상(FE 군집은 Phase 2 명시)
-- [ ] 병합 규칙 단위(중복률 경계값)
+- [x] **spring-mini 골든: feature 2건(auth, todos), todos의 links에 Controller/Service/Repository/Entity 포함** ← 완료 기준
+- [x] fullstack-mini: BE 군집 정상(FE 군집은 Phase 2 명시)
+- [x] 병합 규칙 단위(중복률 경계값)
 
 ---
 

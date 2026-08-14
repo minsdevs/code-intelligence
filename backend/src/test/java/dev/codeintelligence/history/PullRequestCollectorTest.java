@@ -156,7 +156,7 @@ class PullRequestCollectorTest {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GithubApiClient client = new GithubApiClient(builder, new GithubProperties(BASE_URL, "https://github.com"));
-        AnalysisProperties properties = new AnalysisProperties(20_000, 1_048_576, 10_000, retries, 1000);
+        AnalysisProperties properties = new AnalysisProperties(20_000, 1_048_576, 10_000, retries, 1000, 0.5);
         return new CollectorFixture(server, new PullRequestCollector(client, properties, sleeper));
     }
 

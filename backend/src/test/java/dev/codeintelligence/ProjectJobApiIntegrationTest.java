@@ -146,6 +146,7 @@ class ProjectJobApiIntegrationTest {
                         "SOURCE_PARSING",
                         "GRAPH_BUILD",
                         "EXTRACTION",
+                        "FEATURE_DETECTION",
                         "T_GATE",
                         "FINALIZE");
         assertThat(steps).allSatisfy(step -> {
@@ -453,7 +454,7 @@ class ProjectJobApiIntegrationTest {
             Map<String, Object> snapshot = readJson(first.data());
             assertThat(((Number) snapshot.get("id")).longValue()).isEqualTo(created.jobId());
             assertThat(snapshot.get("status")).isEqualTo("RUNNING");
-            assertThat(asList(snapshot.get("steps"))).hasSize(10);
+            assertThat(asList(snapshot.get("steps"))).hasSize(11);
 
             gateStep.release();
 

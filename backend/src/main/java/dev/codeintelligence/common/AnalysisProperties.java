@@ -9,7 +9,8 @@ public record AnalysisProperties(
         @DefaultValue("1048576") long maxFileSize,
         @DefaultValue("10000") int maxCommits,
         @DefaultValue("5") int githubRateLimitRetries,
-        @DefaultValue("1000") long githubBackoffBaseMs) {
+        @DefaultValue("1000") long githubBackoffBaseMs,
+        @DefaultValue("0.5") double featureMergeThreshold) {
 
     public AnalysisProperties {
         if (maxFiles < 1) {
@@ -26,6 +27,9 @@ public record AnalysisProperties(
         }
         if (githubBackoffBaseMs < 1) {
             throw new IllegalStateException("app.analysis.github-backoff-base-ms must be at least 1");
+        }
+        if (featureMergeThreshold < 0 || featureMergeThreshold > 1) {
+            throw new IllegalStateException("app.analysis.feature-merge-threshold must be between 0 and 1");
         }
     }
 }
