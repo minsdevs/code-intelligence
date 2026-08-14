@@ -162,9 +162,7 @@ public class SourceParsingStep implements JobStep {
         void add(AnalysisResult result) {
             for (GraphNodeDraft node : result.nodes()) {
                 GraphNodeDraft existing = nodes.get(node.naturalKey());
-                if (existing == null || (node.lineStart() != null && existing.lineStart() == null)) {
-                    nodes.put(node.naturalKey(), node);
-                }
+                nodes.put(node.naturalKey(), existing == null ? node : merge(existing, node));
             }
             edges.addAll(result.edges());
             for (AnalyzerEvidence evidence : result.evidences()) {
@@ -187,6 +185,23 @@ public class SourceParsingStep implements JobStep {
 
         AnalysisResult toResult() {
             return new AnalysisResult(List.copyOf(nodes.values()), List.copyOf(edges), List.copyOf(evidences));
+        }
+
+        private static GraphNodeDraft merge(GraphNodeDraft existing, GraphNodeDraft incoming) {
+            boolean incomingRicher = incoming.lineStart() != null && existing.lineStart() == null;
+            GraphNodeDraft base = incomingRicher ? incoming : existing;
+            GraphNodeDraft other = incomingRicher ? existing : incoming;
+            Map<String, Object> metadata = new LinkedHashMap<>(other.metadata());
+            metadata.putAll(base.metadata());
+            return new GraphNodeDraft(
+                    base.nodeType(),
+                    base.naturalKey(),
+                    base.name(),
+                    base.filePath() != null ? base.filePath() : other.filePath(),
+                    base.lineStart() != null ? base.lineStart() : other.lineStart(),
+                    base.lineEnd() != null ? base.lineEnd() : other.lineEnd(),
+                    base.areaType() != null ? base.areaType() : other.areaType(),
+                    metadata);
         }
     }
 }

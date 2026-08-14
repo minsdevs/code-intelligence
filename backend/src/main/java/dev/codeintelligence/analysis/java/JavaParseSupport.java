@@ -1,0 +1,117 @@
+package dev.codeintelligence.analysis.java;
+
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ParseResult;
+import com.github.javaparser.ParserConfiguration;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
+import dev.codeintelligence.analysis.core.AnalysisContext;
+import dev.codeintelligence.analysis.core.InventoriedFile;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/** Lightweight JavaParser (no SymbolSolver) for Spring/JPA annotation walks. */
+final class JavaParseSupport {
+
+    private static final Logger log = LoggerFactory.getLogger(JavaParseSupport.class);
+
+    private JavaParseSupport() {}
+
+    static List<ParsedJavaFile> parseJavaFiles(AnalysisContext ctx) {
+        JavaParser parser = parser();
+        List<ParsedJavaFile> units = new ArrayList<>();
+        for (InventoriedFile file : ctx.inventory().files()) {
+            if (!isJava(file)) {
+                continue;
+            }
+            Path absolute = ctx.clonePath().resolve(file.path()).normalize();
+            if (!Files.isRegularFile(absolute)) {
+                continue;
+            }
+            try {
+                ParseResult<CompilationUnit> parsed = parser.parse(absolute);
+                if (!parsed.isSuccessful() || parsed.getResult().isEmpty()) {
+                    continue;
+                }
+                CompilationUnit cu = parsed.getResult().get();
+                String pkg = cu.getPackageDeclaration()
+                        .map(decl -> decl.getNameAsString())
+                        .orElse("");
+                units.add(new ParsedJavaFile(file, cu, pkg));
+            } catch (Exception e) {
+                log.warn("Skipping Java file {}: {}", file.path(), e.toString());
+            }
+        }
+        return units;
+    }
+
+    static boolean isJava(InventoriedFile file) {
+        return "java".equalsIgnoreCase(file.language())
+                || file.path().toLowerCase(Locale.ROOT).endsWith(".java");
+    }
+
+    static String fqcn(String pkg, TypeDeclaration<?> type) {
+        return type.getFullyQualifiedName().orElseGet(() -> {
+            if (pkg == null || pkg.isBlank()) {
+                return type.getNameAsString();
+            }
+            return pkg + "." + type.getNameAsString();
+        });
+    }
+
+    static Integer lineStart(com.github.javaparser.ast.Node node) {
+        return node.getBegin().map(pos -> pos.line).orElse(null);
+    }
+
+    static Integer lineEnd(com.github.javaparser.ast.Node node) {
+        return node.getEnd().map(pos -> pos.line).orElse(null);
+    }
+
+    static String simpleName(AnnotationExpr annotation) {
+        return annotation.getName().getIdentifier();
+    }
+
+    static boolean hasAnnotation(NodeWithAnnotations<?> node, String... simpleNames) {
+        return findAnnotation(node, simpleNames).isPresent();
+    }
+
+    static Optional<AnnotationExpr> findAnnotation(NodeWithAnnotations<?> node, String... simpleNames) {
+        for (AnnotationExpr annotation : node.getAnnotations()) {
+            String simple = simpleName(annotation);
+            for (String expected : simpleNames) {
+                if (expected.equals(simple)) {
+                    return Optional.of(annotation);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    static String excerpt(com.github.javaparser.ast.Node node) {
+        String text = node.toString().strip();
+        int nl = text.indexOf('\n');
+        if (nl >= 0) {
+            text = text.substring(0, nl).strip();
+        }
+        if (text.length() > 80) {
+            return text.substring(0, 80);
+        }
+        return text;
+    }
+
+    private static JavaParser parser() {
+        ParserConfiguration configuration = new ParserConfiguration();
+        configuration.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
+        return new JavaParser(configuration);
+    }
+
+    record ParsedJavaFile(InventoriedFile file, CompilationUnit cu, String pkg) {}
+}

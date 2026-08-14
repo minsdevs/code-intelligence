@@ -18,6 +18,7 @@ class NaturalKeysTest {
         assertThat(NaturalKeys.javaField("com.example.todo.domain.Todo", "title"))
                 .isEqualTo("java:com.example.todo.domain.Todo#title");
         assertThat(NaturalKeys.endpoint("post", "/todos")).isEqualTo("endpoint:POST:/todos");
+        assertThat(NaturalKeys.entity("com.example.todo.domain.Todo")).isEqualTo("entity:com.example.todo.domain.Todo");
         assertThat(NaturalKeys.table("todos")).isEqualTo("table:todos");
         assertThat(NaturalKeys.container("backend")).isEqualTo("container:backend");
         assertThat(NaturalKeys.ci("ci.yml", "build")).isEqualTo("ci:ci.yml:build");

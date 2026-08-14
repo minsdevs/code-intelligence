@@ -69,10 +69,7 @@ public class GraphPersistenceService {
                             line_start = coalesce(excluded.line_start, graph_nodes.line_start),
                             line_end = coalesce(excluded.line_end, graph_nodes.line_end),
                             area_type = coalesce(excluded.area_type, graph_nodes.area_type),
-                            metadata = case
-                                when excluded.metadata = '{}'::jsonb then graph_nodes.metadata
-                                else excluded.metadata
-                            end
+                            metadata = graph_nodes.metadata || excluded.metadata
                         returning id
                         """)
                 .param("snapshotId", snapshotId)

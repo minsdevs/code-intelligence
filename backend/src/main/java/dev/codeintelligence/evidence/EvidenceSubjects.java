@@ -7,6 +7,7 @@ public final class EvidenceSubjects {
     public static final String GIT_METADATA = "GIT_METADATA";
     public static final String GRAPH_NODE = "GRAPH_NODE";
     public static final String SOURCE_PARSING = "SOURCE_PARSING";
+    public static final String FEATURE = "FEATURE";
 
     private EvidenceSubjects() {}
 }

@@ -127,7 +127,9 @@ public class GraphBuildStep implements JobStep {
                          and fnode.node_type = 'FILE'
                          and fnode.natural_key = 'file:' || f.path
                         where tnode.snapshot_id = :snapshotId
-                          and tnode.node_type in ('CLASS', 'INTERFACE', 'ENUM', 'ANNOTATION', 'PACKAGE')
+                          and tnode.node_type in (
+                                'CLASS', 'INTERFACE', 'ENUM', 'ANNOTATION', 'PACKAGE',
+                                'API_ENDPOINT', 'DB_ENTITY')
                         on conflict (snapshot_id, source_node_id, target_node_id, edge_type) do nothing
                         """).param("snapshotId", snapshotId).update();
     }
