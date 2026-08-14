@@ -15,7 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -35,12 +35,12 @@ public class AssistantService {
             List<AIProvider.Claim> claims,
             List<AIProvider.Alternative> alternatives) {}
 
-    public record AiStatus(boolean configured, String provider) {}
+    public record AiStatus(boolean configured, String provider, String model) {}
 
     private final ProjectRepository projectRepository;
     private final SnapshotRepository snapshotRepository;
     private final JdbcClient jdbc;
-    private final AIProvider aiProvider;
+    private final AIProviderResolver providerResolver;
     private final AiUsageService usage;
     private final ContextRetrievalService retrieval;
     private final EvidenceValidator validator;
@@ -51,12 +51,13 @@ public class AssistantService {
     private final AlternativeAnalysisService alternativeAnalysisService;
     private final ArchitectureAnalysisService architectureAnalysisService;
     private final ProjectAreaAnalysisService projectAreaAnalysisService;
+    private final TransactionTemplate transactions;
 
     public AssistantService(
             ProjectRepository projectRepository,
             SnapshotRepository snapshotRepository,
             JdbcClient jdbc,
-            AIProvider aiProvider,
+            AIProviderResolver providerResolver,
             AiUsageService usage,
             ContextRetrievalService retrieval,
             EvidenceValidator validator,
@@ -66,11 +67,12 @@ public class AssistantService {
             WhyAnalysisService whyAnalysisService,
             AlternativeAnalysisService alternativeAnalysisService,
             ArchitectureAnalysisService architectureAnalysisService,
-            ProjectAreaAnalysisService projectAreaAnalysisService) {
+            ProjectAreaAnalysisService projectAreaAnalysisService,
+            TransactionTemplate transactions) {
         this.projectRepository = projectRepository;
         this.snapshotRepository = snapshotRepository;
         this.jdbc = jdbc;
-        this.aiProvider = aiProvider;
+        this.providerResolver = providerResolver;
         this.usage = usage;
         this.retrieval = retrieval;
         this.validator = validator;
@@ -81,23 +83,28 @@ public class AssistantService {
         this.alternativeAnalysisService = alternativeAnalysisService;
         this.architectureAnalysisService = architectureAnalysisService;
         this.projectAreaAnalysisService = projectAreaAnalysisService;
+        this.transactions = transactions;
     }
 
-    public AiStatus status() {
-        return new AiStatus(aiProvider.enabled(), aiProvider.enabled() ? aiProvider.name() : null);
+    public AiStatus status(long userId) {
+        AIProvider provider = providerResolver.resolve(userId);
+        return new AiStatus(
+                provider.enabled(),
+                provider.enabled() ? provider.name() : null,
+                provider.enabled() ? provider.model() : null);
     }
 
-    @Transactional
     public AskResponse ask(long projectId, long userId, AskRequest request) {
-        if (!aiProvider.enabled()) {
-            throw new AiNotConfiguredException();
-        }
         String question = request.question() == null ? "" : request.question().strip();
         if (!StringUtils.hasText(question) || question.length() > QUESTION_MAX) {
             throw new InvalidAiQuestionException();
         }
-        usage.enforceBudget(userId);
         Project project = requireOwned(projectId, userId);
+        AIProvider provider = providerResolver.resolve(userId);
+        if (!provider.enabled()) {
+            throw new AiNotConfiguredException();
+        }
+        usage.enforceBudget(userId);
         long snapshotId = requireSnapshot(project, null);
         AiIntent intent = request.intent() == null || request.intent().isBlank()
                 ? AiIntent.infer(question)
@@ -106,18 +113,19 @@ public class AssistantService {
                 ? new ContextRetrievalService.AskContext(null, null, null, null, null, null, null, List.of())
                 : request.context();
         ContextRetrievalService.Retrieved retrieved =
-                retrieval.retrieve(projectId, snapshotId, project.getClonePath(), ctx, question);
+                retrieval.retrieve(userId, projectId, snapshotId, project.getClonePath(), ctx, question);
         String userPrompt = SecretMask.redact(PromptBuilder.user(question, retrieved.text()));
-        AIProvider.ChatResponse raw =
-                aiProvider.chat(new AIProvider.ChatRequest(systemPrompt(intent), userPrompt, true));
+        AIProvider.ChatResponse raw = provider.chat(new AIProvider.ChatRequest(systemPrompt(intent), userPrompt, true));
         AIProvider.ChatResponse validated = validator.validate(projectId, snapshotId, raw);
-        long conversationId = resolveConversation(projectId, snapshotId, userId, request.conversationId());
-        persistUserMessage(conversationId, question, ctx);
-        long messageId = persistAssistant(conversationId, validated);
-        linkEvidence(projectId, messageId, validated);
-        usage.log(userId, projectId, intent.name(), validated);
-        return new AskResponse(
-                conversationId, messageId, validated.explanation(), validated.claims(), validated.alternatives());
+        return transactions.execute(status -> {
+            long conversationId = resolveConversation(projectId, snapshotId, userId, request.conversationId());
+            persistUserMessage(conversationId, question, ctx);
+            long messageId = persistAssistant(conversationId, validated);
+            linkEvidence(projectId, messageId, validated);
+            usage.log(userId, projectId, provider, intent.name(), validated);
+            return new AskResponse(
+                    conversationId, messageId, validated.explanation(), validated.claims(), validated.alternatives());
+        });
     }
 
     public void stream(long projectId, long userId, AskRequest request, AIProvider.TokenConsumer consumer) {

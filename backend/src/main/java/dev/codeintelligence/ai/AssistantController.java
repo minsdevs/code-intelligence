@@ -42,8 +42,8 @@ public class AssistantController {
     }
 
     @GetMapping("/api/ai/status")
-    public AssistantService.AiStatus status() {
-        return assistantService.status();
+    public AssistantService.AiStatus status(@AuthenticationPrincipal AuthenticatedUser user) {
+        return assistantService.status(user.userId());
     }
 
     @PostMapping("/api/projects/{projectId}/ai/ask")

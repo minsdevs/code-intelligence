@@ -320,7 +320,7 @@ describe('ImportWizardPage', () => {
     )
 
     expect(await screen.findByRole('button', { name: '다시 시도' })).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('FILE_INVENTORY failed')
+    expect(screen.getByText('FILE_INVENTORY failed').closest('[role="alert"]')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
     await waitFor(() => {

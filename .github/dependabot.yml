@@ -8,6 +8,14 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+  - package-ecosystem: npm
+    directory: /analyzers/ts-analyzer
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /analyzers/tree-analyzer
+    schedule:
+      interval: weekly
   - package-ecosystem: github-actions
     directory: /
     schedule:

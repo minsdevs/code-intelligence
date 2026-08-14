@@ -372,6 +372,7 @@ export type EraView = {
 export type AiStatus = {
   configured: boolean
   provider: string | null
+  model: string | null
 }
 
 export type AiClaim = {

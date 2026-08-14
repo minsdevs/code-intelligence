@@ -12,6 +12,7 @@ import java.util.Locale;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -44,26 +45,29 @@ public class CodeReviewService {
     private final ProjectRepository projectRepository;
     private final SnapshotRepository snapshotRepository;
     private final JdbcClient jdbc;
-    private final AIProvider aiProvider;
+    private final AIProviderResolver providerResolver;
     private final AiUsageService usage;
     private final EvidenceValidator validator;
     private final JsonMapper json;
+    private final TransactionTemplate transactions;
 
     public CodeReviewService(
             ProjectRepository projectRepository,
             SnapshotRepository snapshotRepository,
             JdbcClient jdbc,
-            AIProvider aiProvider,
+            AIProviderResolver providerResolver,
             AiUsageService usage,
             EvidenceValidator validator,
-            JsonMapper json) {
+            JsonMapper json,
+            TransactionTemplate transactions) {
         this.projectRepository = projectRepository;
         this.snapshotRepository = snapshotRepository;
         this.jdbc = jdbc;
-        this.aiProvider = aiProvider;
+        this.providerResolver = providerResolver;
         this.usage = usage;
         this.validator = validator;
         this.json = json;
+        this.transactions = transactions;
     }
 
     @Transactional(readOnly = true)
@@ -84,13 +88,13 @@ public class CodeReviewService {
         return load(reviewId, pullNumber);
     }
 
-    @Transactional
     public ReviewView generate(long projectId, long userId, int pullNumber) {
-        if (!aiProvider.enabled()) {
+        Project project = requireOwned(projectId, userId);
+        AIProvider provider = providerResolver.resolve(userId);
+        if (!provider.enabled()) {
             throw new AiNotConfiguredException();
         }
         usage.enforceBudget(userId);
-        Project project = requireOwned(projectId, userId);
         long snapshotId = requireSnapshot(project);
         PullRow pull = requirePull(projectId, pullNumber);
         String context = buildContext(projectId, snapshotId, pull);
@@ -98,7 +102,7 @@ public class CodeReviewService {
                 + "\n\n---BEGIN CONTEXT---\n"
                 + context
                 + "\n---END CONTEXT---");
-        AIProvider.ChatResponse raw = aiProvider.chat(new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
+        AIProvider.ChatResponse raw = provider.chat(new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
         Parsed parsed = parse(raw);
         List<AIProvider.Claim> asClaims = parsed.comments.stream()
                 .map(comment -> new AIProvider.Claim(comment.body(), comment.confidence(), comment.evidence()))
@@ -109,35 +113,37 @@ public class CodeReviewService {
                 new AIProvider.ChatResponse(
                         raw.raw(), asClaims, parsed.summary, List.of(), raw.promptTokens(), raw.completionTokens()));
         List<DraftComment> comments = mergeValidated(parsed.comments, validated.claims());
-        long reviewId = jdbc.sql("""
-                        insert into pr_reviews (project_id, pull_request_id, summary, origin)
-                        values (:projectId, :pullId, :summary, 'AI')
-                        returning id
-                        """)
-                .param("projectId", projectId)
-                .param("pullId", pull.id())
-                .param("summary", SecretMask.redact(validated.explanation()))
-                .query(Long.class)
-                .single();
-        int seq = 0;
-        for (DraftComment comment : comments) {
-            seq++;
-            jdbc.sql("""
-                            insert into pr_review_comments (review_id, seq, file_path, line, severity, body, confidence, evidence)
-                            values (:reviewId, :seq, :filePath, :line, :severity, :body, :confidence, cast(:evidence as jsonb))
+        return transactions.execute(status -> {
+            long reviewId = jdbc.sql("""
+                            insert into pr_reviews (project_id, pull_request_id, summary, origin)
+                            values (:projectId, :pullId, :summary, 'AI')
+                            returning id
                             """)
-                    .param("reviewId", reviewId)
-                    .param("seq", seq)
-                    .param("filePath", comment.filePath())
-                    .param("line", comment.line())
-                    .param("severity", comment.severity())
-                    .param("body", SecretMask.redact(comment.body()))
-                    .param("confidence", comment.confidence())
-                    .param("evidence", json.writeValueAsString(comment.evidence()))
-                    .update();
-        }
-        usage.log(userId, projectId, "review", validated);
-        return load(reviewId, pullNumber);
+                    .param("projectId", projectId)
+                    .param("pullId", pull.id())
+                    .param("summary", SecretMask.redact(validated.explanation()))
+                    .query(Long.class)
+                    .single();
+            int seq = 0;
+            for (DraftComment comment : comments) {
+                seq++;
+                jdbc.sql("""
+                                insert into pr_review_comments (review_id, seq, file_path, line, severity, body, confidence, evidence)
+                                values (:reviewId, :seq, :filePath, :line, :severity, :body, :confidence, cast(:evidence as jsonb))
+                                """)
+                        .param("reviewId", reviewId)
+                        .param("seq", seq)
+                        .param("filePath", comment.filePath())
+                        .param("line", comment.line())
+                        .param("severity", comment.severity())
+                        .param("body", SecretMask.redact(comment.body()))
+                        .param("confidence", comment.confidence())
+                        .param("evidence", json.writeValueAsString(comment.evidence()))
+                        .update();
+            }
+            usage.log(userId, projectId, provider, "review", validated);
+            return load(reviewId, pullNumber);
+        });
     }
 
     private ReviewView load(long reviewId, int pullNumber) {

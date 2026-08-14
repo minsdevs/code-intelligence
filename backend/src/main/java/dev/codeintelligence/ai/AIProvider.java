@@ -8,6 +8,12 @@ public interface AIProvider {
 
     String name();
 
+    String model();
+
+    String embeddingModel();
+
+    void testConnection();
+
     ChatResponse chat(ChatRequest request);
 
     void stream(ChatRequest request, TokenConsumer consumer);

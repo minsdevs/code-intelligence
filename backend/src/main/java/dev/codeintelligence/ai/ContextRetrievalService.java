@@ -39,7 +39,8 @@ public class ContextRetrievalService {
         this.summaryService = summaryService;
     }
 
-    public Retrieved retrieve(long projectId, long snapshotId, String clonePath, AskContext context, String question) {
+    public Retrieved retrieve(
+            long userId, long projectId, long snapshotId, String clonePath, AskContext context, String question) {
         StringBuilder out = new StringBuilder();
         List<String> fileRefs = new ArrayList<>();
         int budget = aiProperties.maxContextTokens() * 4;
@@ -56,7 +57,7 @@ public class ContextRetrievalService {
                 fileRefs.add("file:" + path + ":1");
             }
             summaryService
-                    .ensureFileSummary(snapshotId, path, source)
+                    .ensureFileSummary(userId, snapshotId, path, source)
                     .ifPresent(summary -> append(out, budget, "FILE_SUMMARY: " + summary));
             appendCommits(out, budget, projectId, path);
         }
@@ -79,7 +80,7 @@ public class ContextRetrievalService {
             appendRelatedNotes(out, budget, projectId, context.focusedFile());
         }
         summaryService
-                .similar(snapshotId, question, 5)
+                .similar(userId, snapshotId, question, 5)
                 .forEach(summary -> append(out, budget, "RELATED_SUMMARY: " + summary));
         return new Retrieved(out.toString(), List.copyOf(fileRefs));
     }

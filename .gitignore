@@ -19,3 +19,5 @@ Thumbs.db
 
 # Local agent tooling state
 .omc/
+.codebase-memory/
+.freebuff/

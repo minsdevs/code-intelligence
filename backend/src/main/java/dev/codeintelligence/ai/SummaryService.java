@@ -5,21 +5,22 @@ import java.util.Locale;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class SummaryService {
 
     private final JdbcClient jdbc;
-    private final AIProvider aiProvider;
+    private final AIProviderResolver providerResolver;
+    private final TransactionTemplate transactions;
 
-    public SummaryService(JdbcClient jdbc, AIProvider aiProvider) {
+    public SummaryService(JdbcClient jdbc, AIProviderResolver providerResolver, TransactionTemplate transactions) {
         this.jdbc = jdbc;
-        this.aiProvider = aiProvider;
+        this.providerResolver = providerResolver;
+        this.transactions = transactions;
     }
 
-    @Transactional
-    public Optional<String> ensureFileSummary(long snapshotId, String path, String source) {
+    public Optional<String> ensureFileSummary(long userId, long snapshotId, String path, String source) {
         FileRow file = jdbc.sql("""
                         select id, content_hash from files
                         where snapshot_id = :snapshotId and path = :path
@@ -32,8 +33,8 @@ public class SummaryService {
         if (file == null) {
             return Optional.empty();
         }
-        Optional<String> existing = jdbc.sql("""
-                        select content from summaries
+        SummaryRow existing = jdbc.sql("""
+                        select content, embedding_model from summaries
                         where snapshot_id = :snapshotId
                           and subject_type = 'FILE'
                           and subject_id = :fileId
@@ -43,15 +44,36 @@ public class SummaryService {
                 .param("snapshotId", snapshotId)
                 .param("fileId", file.id())
                 .param("hash", file.hash())
-                .query(String.class)
-                .optional();
-        if (existing.isPresent()) {
-            return existing;
+                .query((rs, rowNum) -> new SummaryRow(rs.getString("content"), rs.getString("embedding_model")))
+                .optional()
+                .orElse(null);
+        AIProvider provider = providerResolver.resolve(userId);
+        if (existing != null) {
+            if (provider.enabled()) {
+                String embeddingModel = embeddingModel(provider);
+                if (!embeddingModel.equals(existing.embeddingModel())) {
+                    float[] embedding = provider.embed(existing.content());
+                    transactions.execute(status -> jdbc.sql("""
+                                    update summaries
+                                    set embedding = :embedding::vector, embedding_model = :embeddingModel
+                                    where snapshot_id = :snapshotId
+                                      and subject_type = 'FILE'
+                                      and subject_id = :fileId
+                                      and level = 'FILE'
+                                    """)
+                            .param("embedding", toVectorLiteral(embedding))
+                            .param("embeddingModel", embeddingModel)
+                            .param("snapshotId", snapshotId)
+                            .param("fileId", file.id())
+                            .update());
+                }
+            }
+            return Optional.of(existing.content());
         }
-        if (!aiProvider.enabled() || source == null || source.isBlank()) {
+        if (!provider.enabled() || source == null || source.isBlank()) {
             return Optional.empty();
         }
-        AIProvider.ChatResponse response = aiProvider.chat(new AIProvider.ChatRequest(
+        AIProvider.ChatResponse response = provider.chat(new AIProvider.ChatRequest(
                 PromptBuilder.SYSTEM,
                 "Summarize this file in at most two sentences. JSON claims may be empty.\n" + trim(source, 4000),
                 true));
@@ -59,38 +81,44 @@ public class SummaryService {
         if (content.isBlank()) {
             return Optional.empty();
         }
-        float[] embedding = aiProvider.embed(content);
-        jdbc.sql("""
-                        insert into summaries (snapshot_id, subject_type, subject_id, level, content, embedding, model, token_count, content_hash)
-                        values (:snapshotId, 'FILE', :fileId, 'FILE', :content, :embedding::vector, :model, :tokens, :hash)
+        float[] embedding = provider.embed(content);
+        transactions.execute(status -> jdbc.sql("""
+                        insert into summaries (snapshot_id, subject_type, subject_id, level, content, embedding, model, embedding_model, token_count, content_hash)
+                        values (:snapshotId, 'FILE', :fileId, 'FILE', :content, :embedding::vector, :model, :embeddingModel, :tokens, :hash)
                         on conflict (snapshot_id, subject_type, subject_id, level)
                         do update set content = excluded.content, embedding = excluded.embedding,
-                                      model = excluded.model, token_count = excluded.token_count,
+                                      model = excluded.model, embedding_model = excluded.embedding_model,
+                                      token_count = excluded.token_count,
                                       content_hash = excluded.content_hash
                         """)
                 .param("snapshotId", snapshotId)
                 .param("fileId", file.id())
                 .param("content", trim(content, 2000))
                 .param("embedding", toVectorLiteral(embedding))
-                .param("model", aiProvider.name())
+                .param("model", provider.model())
+                .param("embeddingModel", embeddingModel(provider))
                 .param("tokens", response.promptTokens() + response.completionTokens())
                 .param("hash", file.hash())
-                .update();
+                .update());
         return Optional.of(trim(content, 2000));
     }
 
-    public List<String> similar(long snapshotId, String query, int limit) {
-        if (!aiProvider.enabled() || query == null || query.isBlank()) {
+    public List<String> similar(long userId, long snapshotId, String query, int limit) {
+        AIProvider provider = providerResolver.resolve(userId);
+        if (!provider.enabled() || query == null || query.isBlank()) {
             return List.of();
         }
-        float[] embedding = aiProvider.embed(query);
+        float[] embedding = provider.embed(query);
         return jdbc.sql("""
                         select content from summaries
-                        where snapshot_id = :snapshotId and embedding is not null
+                        where snapshot_id = :snapshotId
+                          and embedding is not null
+                          and embedding_model = :embeddingModel
                         order by embedding <=> :query::vector
                         limit :limit
                         """)
                 .param("snapshotId", snapshotId)
+                .param("embeddingModel", embeddingModel(provider))
                 .param("query", toVectorLiteral(embedding))
                 .param("limit", limit)
                 .query(String.class)
@@ -111,6 +139,10 @@ public class SummaryService {
         return out.toString();
     }
 
+    private static String embeddingModel(AIProvider provider) {
+        return provider.name() + ":" + provider.embeddingModel();
+    }
+
     private static String trim(String text, int max) {
         if (text.length() <= max) {
             return text;
@@ -119,4 +151,6 @@ public class SummaryService {
     }
 
     private record FileRow(long id, String hash) {}
+
+    private record SummaryRow(String content, String embeddingModel) {}
 }

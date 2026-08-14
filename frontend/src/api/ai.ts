@@ -64,6 +64,13 @@ async function readSseResult(
     }
     if (done) break
   }
+  if (buffer.trim()) {
+    const parsed = parseSseBlock(buffer)
+    if (parsed.event === 'token' && parsed.data) onToken(parsed.data)
+    if (parsed.event === 'result' && parsed.data) {
+      result = JSON.parse(parsed.data) as AiAskResponse
+    }
+  }
   if (!result) throw new ApiError(502, 'AI stream ended without a result.')
   return result
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { routes } from '../../app/router'
 import { AI_PANEL_DEFAULT_WIDTH, useUiStore } from '../../stores/uiStore'
@@ -43,6 +43,7 @@ const asked: PlaygroundSessionView = {
 }
 
 const fetchMock = vi.fn()
+let askStatus = 200
 
 function installFetch() {
   fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -59,7 +60,11 @@ function installFetch() {
         201,
       )
     }
-    if (path === '/api/projects/7/playground/sessions/3/ask') return jsonResponse(asked)
+    if (path === '/api/projects/7/playground/sessions/3/ask') {
+      return askStatus === 200
+        ? jsonResponse(asked)
+        : jsonResponse({ title: 'Service Unavailable', detail: 'AI is not configured.' }, askStatus)
+    }
     return jsonResponse({ title: 'Not Found', detail: path }, 404)
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -78,6 +83,7 @@ beforeEach(() => {
     selectedAreas: [],
   })
   fetchMock.mockReset()
+  askStatus = 200
   installFetch()
 })
 
@@ -104,5 +110,20 @@ describe('PlaygroundPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '질문하기' }))
     expect(await screen.findByText('App is a placeholder class.')).toBeInTheDocument()
     expect(screen.getByText('The focused file exists in the snapshot.')).toBeInTheDocument()
+  })
+
+  it('opens Settings when a playground question needs AI configuration', async () => {
+    askStatus = 503
+    const router = createMemoryRouter(routes, { initialEntries: ['/projects/7/playground'] })
+    render(<RouterProvider router={router} />)
+
+    fireEvent.click(await screen.findByRole('checkbox'))
+    fireEvent.change(screen.getByRole('textbox', { name: '질문' }), {
+      target: { value: 'what does this do?' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '질문하기' }))
+    fireEvent.click(await screen.findByRole('button', { name: '설정 열기' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
   })
 })

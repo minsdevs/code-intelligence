@@ -87,6 +87,7 @@ const nodes: GraphNodePage = {
 }
 
 const fetchMock = vi.fn()
+let draftStatus = 201
 
 function installFetch() {
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
@@ -98,6 +99,9 @@ function installFetch() {
     if (path === '/api/ai/status') return jsonResponse({ configured: true, provider: 'mock' })
     if (path === '/api/csrf') return new Response(null, { status: 204 })
     if (path === '/api/projects/7/findings/5/task-draft') {
+      if (draftStatus !== 201) {
+        return jsonResponse({ title: 'Service Unavailable', detail: 'AI is not configured.' }, draftStatus)
+      }
       return jsonResponse(
         {
           id: 4,
@@ -144,6 +148,7 @@ beforeEach(() => {
     selectedAreas: [],
   })
   fetchMock.mockReset()
+  draftStatus = 201
   installFetch()
 })
 
@@ -197,6 +202,17 @@ describe('AnalysisPage', () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/projects/7/tasks')
     })
+  })
+
+  it('opens Settings when task draft generation needs AI configuration', async () => {
+    draftStatus = 503
+    const { router } = renderAnalysis()
+
+    await screen.findByText('Unmatched GET /api/missing')
+    fireEvent.click(screen.getByRole('button', { name: '초안 생성' }))
+    fireEvent.click(await screen.findByRole('button', { name: '설정 열기' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
   })
 
   it('runs a static what-if explanation from impact', async () => {

@@ -1,8 +1,9 @@
 package dev.codeintelligence.ai;
 
-import java.net.InetAddress;
 import java.net.URI;
-import java.net.UnknownHostException;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -59,15 +60,37 @@ public record AiProperties(
         return "";
     }
 
+    public List<String> models(String provider) {
+        return switch (provider == null ? "" : provider.strip().toLowerCase(Locale.ROOT)) {
+            case "openai" -> openai.supportedChatModels();
+            case "gemini" -> gemini.supportedChatModels();
+            default -> List.of();
+        };
+    }
+
+    public boolean supportsModel(String provider, String model) {
+        return model != null && models(provider).contains(model.strip());
+    }
+
     public record OpenAi(
             @DefaultValue("") String apiKey,
             @DefaultValue("https://api.openai.com") String baseUrl,
             @DefaultValue("gpt-4o-mini") String chatModel,
-            @DefaultValue("text-embedding-3-small") String embedModel) {
+            @DefaultValue("text-embedding-3-small") String embedModel,
+            @DefaultValue("") String chatModels) {
+        public OpenAi(String apiKey, String baseUrl, String chatModel, String embedModel) {
+            this(apiKey, baseUrl, chatModel, embedModel, "");
+        }
+
         void validate() {
-            if (StringUtils.hasText(apiKey)) {
+            if (StringUtils.hasText(baseUrl)) {
                 AiHostAllowlist.validate(baseUrl);
             }
+            validateModels(supportedChatModels());
+        }
+
+        List<String> supportedChatModels() {
+            return modelList(chatModels, chatModel);
         }
     }
 
@@ -77,18 +100,48 @@ public record AiProperties(
             @DefaultValue("https://generativelanguage.googleapis.com")
             String baseUrl,
 
-            @DefaultValue("gemini-2.0-flash") String chatModel,
-            @DefaultValue("text-embedding-004") String embedModel) {
+            @DefaultValue("gemini-2.5-flash") String chatModel,
+            @DefaultValue("gemini-embedding-001") String embedModel,
+            @DefaultValue("") String chatModels) {
+        public Gemini(String apiKey, String baseUrl, String chatModel, String embedModel) {
+            this(apiKey, baseUrl, chatModel, embedModel, "");
+        }
+
         void validate() {
-            if (StringUtils.hasText(apiKey)) {
+            if (StringUtils.hasText(baseUrl)) {
                 AiHostAllowlist.validate(baseUrl);
             }
+            validateModels(supportedChatModels());
+        }
+
+        List<String> supportedChatModels() {
+            return modelList(chatModels, chatModel);
+        }
+    }
+
+    private static List<String> modelList(String configured, String defaultModel) {
+        LinkedHashSet<String> models = new LinkedHashSet<>();
+        if (configured != null) {
+            Arrays.stream(configured.split(","))
+                    .map(String::strip)
+                    .filter(StringUtils::hasText)
+                    .forEach(models::add);
+        }
+        if (StringUtils.hasText(defaultModel)) {
+            models.add(defaultModel.strip());
+        }
+        return List.copyOf(models);
+    }
+
+    private static void validateModels(List<String> models) {
+        if (models.stream().anyMatch(model -> !model.matches("[A-Za-z0-9._:-]{1,200}"))) {
+            throw new IllegalStateException("app.ai chat model ids must contain only safe model characters");
         }
     }
 
     static final class AiHostAllowlist {
-        private static final Set<String> ALLOWED =
-                Set.of("api.openai.com", "generativelanguage.googleapis.com", "localhost", "127.0.0.1", "::1");
+        private static final Set<String> REMOTE_HOSTS = Set.of("api.openai.com", "generativelanguage.googleapis.com");
+        private static final Set<String> LOOPBACK_HOSTS = Set.of("localhost", "127.0.0.1", "::1", "[::1]");
 
         private AiHostAllowlist() {}
 
@@ -110,15 +163,15 @@ public record AiProperties(
             if (host == null || host.isBlank()) {
                 throw new IllegalStateException("app.ai base-url must include a host");
             }
-            if (ALLOWED.contains(host.toLowerCase(Locale.ROOT))) {
+            String normalizedHost = host.toLowerCase(Locale.ROOT);
+            if (LOOPBACK_HOSTS.contains(normalizedHost)) {
                 return;
             }
-            try {
-                if (InetAddress.getByName(host).isLoopbackAddress()) {
-                    return;
+            if (REMOTE_HOSTS.contains(normalizedHost)) {
+                if (!"https".equals(scheme)) {
+                    throw new IllegalStateException("app.ai remote base-url must use https");
                 }
-            } catch (UnknownHostException e) {
-                throw new IllegalStateException("app.ai base-url host is not allowed");
+                return;
             }
             throw new IllegalStateException("app.ai base-url host is not allowed");
         }

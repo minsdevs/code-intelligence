@@ -326,7 +326,7 @@ public class SearchService {
             if (project == null) {
                 continue;
             }
-            for (String content : summaryService.similar(snapshotId, query, 3)) {
+            for (String content : summaryService.similar(userId, snapshotId, query, 3)) {
                 hits.add(new SearchHit("SUMMARY", project, snapshotId, "Summary", content, null));
                 if (hits.size() >= PER_TYPE) {
                     break;

@@ -11,7 +11,6 @@ import dev.codeintelligence.project.SnapshotRepository;
 import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class WhatIfService {
@@ -32,7 +31,7 @@ public class WhatIfService {
     private final SnapshotRepository snapshotRepository;
     private final ImpactService impactService;
     private final JdbcClient jdbc;
-    private final AIProvider aiProvider;
+    private final AIProviderResolver providerResolver;
     private final AiUsageService usage;
     private final EvidenceValidator validator;
 
@@ -41,37 +40,37 @@ public class WhatIfService {
             SnapshotRepository snapshotRepository,
             ImpactService impactService,
             JdbcClient jdbc,
-            AIProvider aiProvider,
+            AIProviderResolver providerResolver,
             AiUsageService usage,
             EvidenceValidator validator) {
         this.projectRepository = projectRepository;
         this.snapshotRepository = snapshotRepository;
         this.impactService = impactService;
         this.jdbc = jdbc;
-        this.aiProvider = aiProvider;
+        this.providerResolver = providerResolver;
         this.usage = usage;
         this.validator = validator;
     }
 
-    @Transactional
     public WhatIfView simulate(long projectId, long userId, WhatIfRequest request) {
-        if (!aiProvider.enabled()) {
-            throw new AiNotConfiguredException();
-        }
         if (request == null || request.nodeId() == null) {
             throw new InvalidGraphQueryException("nodeId is required.");
         }
-        usage.enforceBudget(userId);
         Project project = requireOwned(projectId, userId);
+        AIProvider provider = providerResolver.resolve(userId);
+        if (!provider.enabled()) {
+            throw new AiNotConfiguredException();
+        }
+        usage.enforceBudget(userId);
         long snapshotId = requireSnapshot(project);
         ImpactService.ImpactView impact =
                 impactService.impact(projectId, userId, request.nodeId(), null, request.depth());
         String context = buildContext(snapshotId, impact);
         String userPrompt =
                 SecretMask.redact(PromptBuilder.user("If this node changes, what breaks in production?", context));
-        AIProvider.ChatResponse raw = aiProvider.chat(new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
+        AIProvider.ChatResponse raw = provider.chat(new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
         AIProvider.ChatResponse validated = validator.validate(projectId, snapshotId, raw);
-        usage.log(userId, projectId, "what-if", validated);
+        usage.log(userId, projectId, provider, "what-if", validated);
         return new WhatIfView(impact, validated.explanation(), validated.claims());
     }
 

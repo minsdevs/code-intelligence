@@ -25,30 +25,28 @@ final class JavaSourceRoots {
             return roots;
         }
         Path normalized = clonePath.toAbsolutePath().normalize();
+        Set<Path> inferredRoots = new LinkedHashSet<>();
         try (Stream<Path> walk = Files.walk(normalized)) {
-            walk.filter(Files::isDirectory).forEach(dir -> {
-                if (isStandardSourceRoot(dir)) {
-                    roots.add(dir.toAbsolutePath().normalize());
+            walk.forEach(path -> {
+                if (Files.isDirectory(path) && isStandardSourceRoot(path)) {
+                    roots.add(path.toAbsolutePath().normalize());
+                }
+
+                if (Files.isRegularFile(path)
+                        && path.getFileName()
+                                .toString()
+                                .toLowerCase(Locale.ROOT)
+                                .endsWith(".java")) {
+                    Path root = inferRoot(normalized, path);
+                    if (root != null) {
+                        inferredRoots.add(root);
+                    }
                 }
             });
         } catch (IOException ignored) {
-            // Fall through to path inference below.
+            // Skip unreadable paths.
         }
-        try (Stream<Path> walk = Files.walk(normalized)) {
-            walk.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName()
-                            .toString()
-                            .toLowerCase(Locale.ROOT)
-                            .endsWith(".java"))
-                    .forEach(javaFile -> {
-                        Path root = inferRoot(normalized, javaFile);
-                        if (root != null) {
-                            roots.add(root);
-                        }
-                    });
-        } catch (IOException ignored) {
-            return roots;
-        }
+        roots.addAll(inferredRoots);
         return roots;
     }
 

@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { askAi, askAiStream, getAiStatus, parseEvidenceRef } from '../api/ai'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { askAiStream, getAiStatus, parseEvidenceRef } from '../api/ai'
 import { ApiError } from '../api/client'
 import type { AiAlternative, AiAskBody, AiAskResponse, AiClaim } from '../api/types'
 import { projectIdFromPath, workspaceViewFromPath } from '../lib/projectId'
@@ -119,18 +119,13 @@ export default function AiPanel() {
       )
     }
     try {
-      let response: AiAskResponse
-      try {
-        response = await askAiStream(projectId, body, (token) => {
-          setTurns((prev) =>
-            prev.map((item, i) =>
-              i === prev.length - 1 ? { ...item, streamed: item.streamed + token } : item,
-            ),
-          )
-        })
-      } catch {
-        response = await askAi(projectId, body)
-      }
+      const response = await askAiStream(projectId, body, (token) => {
+        setTurns((prev) =>
+          prev.map((item, i) =>
+            i === prev.length - 1 ? { ...item, streamed: item.streamed + token } : item,
+          ),
+        )
+      })
       setConversationId(response.conversationId)
       patchLast({ response })
     } catch (error) {
@@ -239,8 +234,28 @@ export default function AiPanel() {
           )}
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            {statusQuery.isError && (
+              <div className="text-[13px] text-danger">
+                <p role="alert">{t('ai.statusError')}</p>
+                <button
+                  type="button"
+                  onClick={() => void statusQuery.refetch()}
+                  className="mt-2 rounded-md border border-line-strong px-2 py-1 text-[12px] text-ink hover:bg-surface-2"
+                >
+                  {t('ai.retryStatus')}
+                </button>
+              </div>
+            )}
             {statusQuery.data && !configured && (
-              <p className="text-[13px] text-ink-muted">{t('ai.notConfigured')}</p>
+              <div className="text-[13px] text-ink-muted">
+                <p>{t('ai.notConfigured')}</p>
+                <Link
+                  to="/settings"
+                  className="mt-2 inline-block text-[12px] text-accent hover:underline"
+                >
+                  {t('ai.openSettings')}
+                </Link>
+              </div>
             )}
             {projectId == null && configured && (
               <p className="text-[13px] text-ink-muted">{t('ai.openProjectHint')}</p>
