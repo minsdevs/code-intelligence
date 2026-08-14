@@ -15,20 +15,7 @@ export const PIPELINE_STEPS = [
   { key: 'FINALIZE', label: 'Finalize' },
 ] as const
 
-export const AREA_LABELS: Record<string, string> = {
-  BACKEND: 'Backend',
-  FRONTEND: 'Frontend',
-  MOBILE: 'Mobile',
-  DATABASE: 'Database',
-  INFRASTRUCTURE: 'Infrastructure',
-  DEVOPS: 'DevOps',
-  SECURITY: 'Security',
-  TESTING: 'Testing',
-  AI_ML: 'AI / ML',
-  DOCUMENTATION: 'Documentation',
-  BUILD_TOOLING: 'Build tooling',
-  OTHER: 'Other',
-}
+export { AREA_LABELS } from '../areas/labels'
 
 export function pipelineLabel(stepKey: string): string {
   const known = PIPELINE_STEPS.find((step) => step.key === stepKey)

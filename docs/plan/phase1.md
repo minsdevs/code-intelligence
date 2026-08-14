@@ -565,6 +565,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-14 · fe — History 뷰 (commit/PR 타임라인, diff) `[P11]`
 
+**상태: 완료** — Monaco DiffEditor, RTL 15/15(Home/Areas 포함). 오프라인 번들 없이 CDN 로더(1-16에서 재평가).
 **완료 기준:** diff 렌더 정상
 **위치:** `frontend/src/features/history/`
 
@@ -586,6 +587,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-15 · fe — Home + 프로젝트 카드 + 사이드바 Areas `[P11]`
 
+**상태: 완료** — GET /api/projects summary(영역/기술/최근 commit·PR), Home 카드, Sidebar Areas 토글→PUT.
 **완료 기준:** 요구 정보 표시
 **위치:** `frontend/src/features/home/`, `frontend/src/app/Sidebar.tsx` (+be 보조: 프로젝트 목록 summary 필드)
 
@@ -723,6 +725,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 - [ ] P1 조기 점검(1-1) 이월 LOW 3건 재평가: PAT 등록 rate-limit 부재(GitHub API 대리 호출), springdoc `/v3/api-docs`·swagger 공개 유지 여부, 토큰 로그 미출력의 로그 캡처 테스트 부재(서버 루프백 바인딩은 P1에서 반영 완료)
 - [ ] P2 조기 점검(1-2·1-3) 이월 LOW 4건 재평가: retry의 트랜잭션 내 guard 순서, 프로젝트 삭제 TOCTOU 고아 디렉터리 가능성, RepoRef `.` 단독 세그먼트·대소문자 중복 import 하드닝, SSE emitter 잔존 정리
 - [ ] P3 조기 점검(1-4·1-5) 이월: evidence excerpt가 설정 파일 앞 80자를 그대로 저장(시크릿 마스킹은 LLM 연동 전/1-16), file-content symlink 탈출 통합 테스트 부재, PUT `/area-selections` IDOR 테스트 부재(코드는 user_id 스코프)
+- [ ] P11: History DiffViewer가 Monaco를 CDN에서 로드함 — 오프라인/공급망 재평가(번들 vs CDN)
 
 ### 1-17 · verify — Phase 1 최종 검증 (DoD)
 

@@ -167,6 +167,13 @@ class ProjectJobApiIntegrationTest {
         assertThat(projects).anySatisfy(item -> {
             assertThat(((Number) item.get("id")).longValue()).isEqualTo(created.projectId());
             assertThat(asMap(item.get("currentSnapshot")).get("commitSha")).isEqualTo(sha);
+            assertThat(item.get("selectedAreas")).isInstanceOf(List.class);
+            assertThat(item.get("topTechnologies")).isInstanceOf(List.class);
+            Map<String, Object> latestCommit = asMap(item.get("latestCommit"));
+            assertThat(latestCommit.get("sha")).isEqualTo(sha);
+            assertThat((String) latestCommit.get("message")).contains("initial commit");
+            assertThat(item.containsKey("taskCount")).isFalse();
+            assertThat(item.containsKey("noteCount")).isFalse();
         });
     }
 
