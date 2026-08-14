@@ -20,6 +20,15 @@ public final class AreaPathTagger {
         if (normalized.contains("src/main/java") || lower.endsWith(".java")) {
             return AreaType.BACKEND.name();
         }
+        if (lower.endsWith(".tsx")
+                || lower.endsWith(".jsx")
+                || lower.contains("/frontend/")
+                || lower.contains("src/pages/")
+                || lower.contains("src/components/")
+                || (lower.endsWith(".ts") || lower.endsWith(".js") || lower.endsWith(".mjs"))
+                        && !lower.contains("/backend/")) {
+            return AreaType.FRONTEND.name();
+        }
         if (normalized.contains("db/migration") || lower.endsWith(".sql")) {
             return AreaType.DATABASE.name();
         }

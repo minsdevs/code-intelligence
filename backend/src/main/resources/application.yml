@@ -67,6 +67,9 @@ app:
     oauth:
       client-id: ${GITHUB_CLIENT_ID:}
       client-secret: ${GITHUB_CLIENT_SECRET:}
+  ts-analyzer:
+    base-url: ${TS_ANALYZER_BASE_URL:}
+    timeout-seconds: ${TS_ANALYZER_TIMEOUT_SECONDS:30}
 
 ---
 spring:

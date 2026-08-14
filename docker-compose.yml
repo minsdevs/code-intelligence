@@ -1,4 +1,4 @@
-# Dev infrastructure only — backend/frontend run locally in Phase 0.
+# Dev infrastructure — backend/frontend run locally; ts-analyzer is optional (Phase 2).
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -25,6 +25,18 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  ts-analyzer:
+    image: node:24-alpine
+    working_dir: /app
+    volumes:
+      - ./analyzers/ts-analyzer:/app
+    command: sh -c "npm ci && npm run build && npm start"
+    environment:
+      TS_ANALYZER_HOST: 0.0.0.0
+      TS_ANALYZER_PORT: 3040
+    ports:
+      - "127.0.0.1:3040:3040"
 
 volumes:
   postgres-data:

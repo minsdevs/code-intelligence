@@ -18,5 +18,7 @@ class AreaPathTaggerTest {
         assertThat(AreaPathTagger.tag("docker-compose.yml")).isEqualTo("INFRASTRUCTURE");
         assertThat(AreaPathTagger.tag("README.md")).isEqualTo("DOCUMENTATION");
         assertThat(AreaPathTagger.tag("build.gradle")).isEqualTo("BUILD_TOOLING");
+        assertThat(AreaPathTagger.tag("src/pages/TodosPage.tsx")).isEqualTo("FRONTEND");
+        assertThat(AreaPathTagger.tag("frontend/src/App.tsx")).isEqualTo("FRONTEND");
     }
 }

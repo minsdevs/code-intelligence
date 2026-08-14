@@ -62,6 +62,38 @@ public final class NaturalKeys {
         return "dep:" + group + ":" + name;
     }
 
+    public static String route(String path) {
+        String normalized = require(path, "path");
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        return "route:" + normalized;
+    }
+
+    public static String component(String filePath, String name) {
+        return "component:" + normalizePath(filePath) + "#" + require(name, "name");
+    }
+
+    public static String hook(String filePath, String name) {
+        return "hook:" + normalizePath(filePath) + "#" + require(name, "name");
+    }
+
+    public static String store(String filePath, String name) {
+        return "store:" + normalizePath(filePath) + "#" + require(name, "name");
+    }
+
+    public static String topic(String name) {
+        return "topic:" + require(name, "topic");
+    }
+
+    public static String cloud(String type, String name) {
+        return "cloud:" + require(type, "type") + "." + require(name, "name");
+    }
+
+    public static String genericSymbol(String filePath, String name) {
+        return "sym:" + normalizePath(filePath) + "#" + require(name, "name");
+    }
+
     private static String normalizePath(String path) {
         String normalized = require(path, "path").replace('\\', '/');
         if (normalized.startsWith("./")) {

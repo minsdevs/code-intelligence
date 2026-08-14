@@ -7,9 +7,9 @@ explore its features, architecture, call flows, dependencies, history, design
 rationale, and alternatives — with an evidence-grounded, context-aware AI
 assistant.
 
-> **Status: early development (Phase 0 — Foundation).**
-> The scaffold, schema, and workspace shell exist; analysis features land in
-> later phases. See the full design document (Korean): [기획서.md](./기획서.md).
+> **Status: Phase 2 — Cross-domain Intelligence (in progress).**
+> Phase 1 (import, Java analysis, architecture, history) is on `main`.
+> See [기획서.md](./기획서.md) and [docs/plan/phase2.md](./docs/plan/phase2.md).
 
 ## Principles
 
@@ -40,9 +40,13 @@ toolchain via Foojay).
 ```bash
 cp .env.example .env          # local defaults work out of the box
 
-docker compose up -d          # PostgreSQL (pgvector) + Redis
+docker compose up -d          # PostgreSQL (pgvector) + Redis (+ ts-analyzer)
+
+# Optional TypeScript sidecar — http://127.0.0.1:3040
+cd analyzers/ts-analyzer && npm ci && npm start
 
 # Backend — http://localhost:8080 (health: /actuator/health)
+# Set TS_ANALYZER_BASE_URL=http://127.0.0.1:3040 to enable TS_PARSING
 cd backend && ./gradlew bootRun
 
 # Frontend — http://localhost:5173
@@ -57,6 +61,9 @@ cd backend && ./gradlew spotlessCheck build
 
 # Frontend: lint, typecheck, tests, build
 cd frontend && npm run lint && npm run typecheck && npm test -- --run && npm run build
+
+# ts-analyzer sidecar
+cd analyzers/ts-analyzer && npm ci && npm test && npm run build
 ```
 
 CI runs the same gates on every pull request.
