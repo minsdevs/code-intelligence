@@ -70,15 +70,15 @@
 
 ### 4-7 Notes UI — fe
 
-- [ ] 목록+에디터, 참조 클릭 이동, placeholder 제거
+- [x] 목록+에디터, 참조 클릭 이동, placeholder 제거
 
 ### 4-8 Tasks UI — fe
 
-- [ ] 보드/목록, 체크리스트, Finding에서 초안 생성+승인
+- [x] 보드/목록, 체크리스트, Finding에서 초안 생성+승인
 
 ### 4-9 Search UI + AI 칩 — fe
 
-- [ ] `/search` 입력·그룹 결과. Task 빠른 질문 「현재 코드 기준으로 설명해줘」
+- [x] `/search` 입력·그룹 결과. Task 빠른 질문 「현재 코드 기준으로 설명해줘」
 
 ### 4-10 sc — sc
 

@@ -7,6 +7,8 @@ import ArchitectureTab from '../features/architecture/ArchitectureTab'
 import FeaturesTab from '../features/features/FeaturesTab'
 import FlowsTab from '../features/flows/FlowsTab'
 import AnalysisTab from '../features/analysis/AnalysisTab'
+import NotesTab from '../features/notes/NotesTab'
+import TasksTab from '../features/tasks/TasksTab'
 import ProjectsPage from '../features/projects/ProjectsPage'
 import ProjectWorkspacePage from '../features/projects/ProjectWorkspacePage'
 import WorkspaceTabPage from '../features/projects/WorkspaceTabPage'
@@ -43,6 +45,10 @@ export const routes: RouteObject[] = [
                 <FlowsTab />
               ) : tab.path === 'analysis' ? (
                 <AnalysisTab />
+              ) : tab.path === 'notes' ? (
+                <NotesTab />
+              ) : tab.path === 'tasks' ? (
+                <TasksTab />
               ) : (
                 <WorkspaceTabPage tab={tab} />
               ),

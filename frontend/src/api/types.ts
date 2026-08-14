@@ -404,5 +404,91 @@ export type AiAskBody = {
   focusedNodeId?: number | null
   focusedCommitSha?: string | null
   focusedFindingId?: number | null
+  focusedNoteId?: number | null
+  focusedTaskId?: number | null
   selectedAreas?: string[]
+}
+
+export type NoteRefView = {
+  subjectType: string
+  subjectId: number | null
+  rawTarget: string
+  label: string | null
+  hrefHint: string | null
+}
+
+export type NoteSummary = {
+  id: number
+  title: string
+  updatedAt: string
+}
+
+export type NoteView = {
+  id: number
+  title: string
+  contentMd: string
+  updatedAt: string
+  references: NoteRefView[]
+}
+
+export type TaskType = 'DEVELOPMENT' | 'LEARNING' | 'REVIEW' | 'RESEARCH' | 'REFACTORING'
+
+export type TaskStatus = 'DRAFT' | 'OPEN' | 'DONE' | 'CANCELLED'
+
+export type TaskOrigin = 'USER' | 'AI'
+
+export type TaskGoalView = {
+  id: number
+  seq: number
+  content: string
+  done: boolean
+}
+
+export type LearningRecordView = {
+  id: number
+  note: string
+  createdAt: string
+}
+
+export type TaskView = {
+  id: number
+  type: TaskType
+  title: string
+  description: string
+  status: TaskStatus
+  origin: TaskOrigin
+  sourceFindingId: number | null
+  updatedAt: string
+  goals: TaskGoalView[]
+  records: LearningRecordView[]
+}
+
+export type GeneratedTask = {
+  id: number
+  type: TaskType
+  title: string
+  description: string
+  status: TaskStatus
+  origin: TaskOrigin
+  sourceFindingId: number | null
+  goals: string[]
+}
+
+export type SearchHit = {
+  type: string
+  projectId: number
+  id: number
+  title: string
+  snippet: string | null
+  path: string | null
+}
+
+export type SearchGroup = {
+  type: string
+  hits: SearchHit[]
+}
+
+export type SearchResponse = {
+  query: string
+  groups: SearchGroup[]
 }

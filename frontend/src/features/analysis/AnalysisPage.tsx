@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getImpact, listFindings } from '../../api/analysis'
+import { createTaskDraft } from '../../api/tasks'
 import { listGraphNodes } from '../../api/graph'
+import { ApiError } from '../../api/client'
 import type { FindingView } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
 import { parseProjectId } from '../../lib/projectId'
@@ -24,6 +26,7 @@ export default function AnalysisPage() {
   const [nodeQuery, setNodeQuery] = useState('')
   const [nodeId, setNodeId] = useState<number | null>(null)
   const [depth, setDepth] = useState(5)
+  const [draftMessage, setDraftMessage] = useState<string | null>(null)
 
   const findingsQuery = useQuery({
     queryKey: ['findings', projectId, severity],
@@ -49,6 +52,20 @@ export default function AnalysisPage() {
     queryKey: ['impact', projectId, impactNodeId, depth],
     queryFn: () => getImpact(projectId!, impactNodeId!, depth),
     enabled: projectId != null && impactNodeId != null,
+  })
+
+  const draftMutation = useMutation({
+    mutationFn: () => createTaskDraft(projectId!, activeFinding!.id),
+    onSuccess: () => {
+      navigate(`/projects/${projectId}/tasks`)
+    },
+    onError: (error) => {
+      const message =
+        error instanceof ApiError && error.status === 503
+          ? 'AI가 비활성화되어 초안을 만들 수 없습니다.'
+          : (queryError(error) ?? '초안을 만들지 못했습니다.')
+      setDraftMessage(message)
+    },
   })
 
   if (projectId == null) {
@@ -96,7 +113,9 @@ export default function AnalysisPage() {
             {findingsError}
           </p>
         )}
-        {findingsQuery.isLoading && <p className="px-4 py-3 text-[13px] text-ink-muted">Findings를 불러오는 중…</p>}
+        {findingsQuery.isLoading && (
+          <p className="px-4 py-3 text-[13px] text-ink-muted">Findings를 불러오는 중…</p>
+        )}
         {!findingsQuery.isLoading && findings.length === 0 && !findingsError && (
           <p className="px-4 py-3 text-[13px] text-ink-muted">탐지된 finding이 없습니다.</p>
         )}
@@ -129,12 +148,20 @@ export default function AnalysisPage() {
                       </button>
                     </td>
                     <td className="px-4 py-2">
-                      <button type="button" onClick={() => selectFinding(finding)} className="text-left text-ink">
+                      <button
+                        type="button"
+                        onClick={() => selectFinding(finding)}
+                        className="text-left text-ink"
+                      >
                         {finding.title}
                       </button>
                     </td>
-                    <td className="px-4 py-2 font-mono text-[12px] text-ink-faint">{finding.areaType ?? '—'}</td>
-                    <td className="px-4 py-2 font-mono text-[12px] text-ink-faint">{finding.category}</td>
+                    <td className="px-4 py-2 font-mono text-[12px] text-ink-faint">
+                      {finding.areaType ?? '—'}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-[12px] text-ink-faint">
+                      {finding.category}
+                    </td>
                   </tr>
                 )
               })}
@@ -143,7 +170,9 @@ export default function AnalysisPage() {
         </div>
         {activeFinding && (
           <div className="border-t border-line px-4 py-3">
-            <p className="text-[13px] text-ink-muted">{activeFinding.detail ?? '상세가 없습니다.'}</p>
+            <p className="text-[13px] text-ink-muted">
+              {activeFinding.detail ?? '상세가 없습니다.'}
+            </p>
             {activeFinding.evidences
               .filter((evidence) => evidence.filePath)
               .map((evidence, index) => (
@@ -172,6 +201,22 @@ export default function AnalysisPage() {
             >
               AI에게 확인
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDraftMessage(null)
+                draftMutation.mutate()
+              }}
+              disabled={draftMutation.isPending}
+              className="ml-2 mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
+            >
+              초안 생성
+            </button>
+            {draftMessage && (
+              <p role="alert" className="mt-2 text-[12px] text-danger">
+                {draftMessage}
+              </p>
+            )}
           </div>
         )}
       </section>
@@ -204,7 +249,10 @@ export default function AnalysisPage() {
           </label>
         </div>
         {searchQuery.data && searchQuery.data.items.length > 0 && (
-          <ul aria-label="Impact 노드 검색 결과" className="max-h-40 overflow-y-auto border-b border-line px-2 py-2">
+          <ul
+            aria-label="Impact 노드 검색 결과"
+            className="max-h-40 overflow-y-auto border-b border-line px-2 py-2"
+          >
             {searchQuery.data.items.map((node) => (
               <li key={node.id}>
                 <button
@@ -230,12 +278,20 @@ export default function AnalysisPage() {
             {impactError}
           </p>
         )}
-        {impactNodeId == null && <p className="px-4 py-3 text-[13px] text-ink-muted">finding을 고르거나 노드를 검색하세요.</p>}
-        {impactQuery.isLoading && <p className="px-4 py-3 text-[13px] text-ink-muted">Impact를 불러오는 중…</p>}
+        {impactNodeId == null && (
+          <p className="px-4 py-3 text-[13px] text-ink-muted">
+            finding을 고르거나 노드를 검색하세요.
+          </p>
+        )}
+        {impactQuery.isLoading && (
+          <p className="px-4 py-3 text-[13px] text-ink-muted">Impact를 불러오는 중…</p>
+        )}
         {impactQuery.data && (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
             <p className="flex items-baseline gap-2">
-              <span className={`font-mono text-[12px] ${severityClass(impactQuery.data.riskLevel)}`}>
+              <span
+                className={`font-mono text-[12px] ${severityClass(impactQuery.data.riskLevel)}`}
+              >
                 {impactQuery.data.riskLevel}
               </span>
               <span className="text-[13px] text-ink-muted">score {impactQuery.data.riskScore}</span>
@@ -250,7 +306,9 @@ export default function AnalysisPage() {
                       <button
                         type="button"
                         onClick={() =>
-                          navigate(`/projects/${projectId}/code${codeLocationSearch(dep.filePath!, dep.line)}`)
+                          navigate(
+                            `/projects/${projectId}/code${codeLocationSearch(dep.filePath!, dep.line)}`,
+                          )
                         }
                         className="w-full rounded-md px-1 py-1 text-left hover:bg-surface-2"
                       >

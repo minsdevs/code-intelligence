@@ -25,6 +25,8 @@ export default function AiPanel() {
   const focusedNode = useUiStore((state) => state.focusedNode)
   const focusedCommitSha = useUiStore((state) => state.focusedCommitSha)
   const focusedFindingId = useUiStore((state) => state.focusedFindingId)
+  const focusedNoteId = useUiStore((state) => state.focusedNoteId)
+  const focusedTaskId = useUiStore((state) => state.focusedTaskId)
   const selectedAreas = useUiStore((state) => state.selectedAreas)
   const pendingIntent = useUiStore((state) => state.pendingIntent)
   const setPendingIntent = useUiStore((state) => state.setPendingIntent)
@@ -52,9 +54,20 @@ export default function AiPanel() {
     if (focusedNode) items.push(focusedNode.name)
     if (focusedCommitSha) items.push(focusedCommitSha.slice(0, 10))
     if (focusedFindingId != null) items.push(`finding #${focusedFindingId}`)
+    if (focusedNoteId != null) items.push(`note #${focusedNoteId}`)
+    if (focusedTaskId != null) items.push(`task #${focusedTaskId}`)
     for (const area of selectedAreas) items.push(area)
     return items
-  }, [view, focusedFile, focusedNode, focusedCommitSha, focusedFindingId, selectedAreas])
+  }, [
+    view,
+    focusedFile,
+    focusedNode,
+    focusedCommitSha,
+    focusedFindingId,
+    focusedNoteId,
+    focusedTaskId,
+    selectedAreas,
+  ])
 
   const quick = quickQuestions(view)
   const configured = statusQuery.data?.configured === true
@@ -92,6 +105,8 @@ export default function AiPanel() {
       focusedNodeId: focusedNode?.id ?? null,
       focusedCommitSha,
       focusedFindingId,
+      focusedNoteId,
+      focusedTaskId,
       selectedAreas,
     }
     const turn: ChatTurn = { question: trimmed, streamed: '', response: null, error: null }
@@ -162,7 +177,11 @@ export default function AiPanel() {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       />
-      <aside aria-label="AI Assistant 패널" style={{ width }} className="flex shrink-0 flex-col bg-surface-1">
+      <aside
+        aria-label="AI Assistant 패널"
+        style={{ width }}
+        className="flex shrink-0 flex-col bg-surface-1"
+      >
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-line pl-4 pr-2">
           <div className="flex items-center gap-2">
             <SparkleIcon className="text-accent" />
@@ -180,7 +199,10 @@ export default function AiPanel() {
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex flex-wrap gap-1 border-b border-line px-3 py-2" aria-label="현재 컨텍스트">
+          <div
+            className="flex flex-wrap gap-1 border-b border-line px-3 py-2"
+            aria-label="현재 컨텍스트"
+          >
             {chips.length === 0 ? (
               <span className="text-[12px] text-ink-muted">컨텍스트 없음</span>
             ) : (
@@ -196,7 +218,10 @@ export default function AiPanel() {
           </div>
 
           {quick.length > 0 && (
-            <div className="flex flex-wrap gap-1 border-b border-line px-3 py-2" aria-label="빠른 질문">
+            <div
+              className="flex flex-wrap gap-1 border-b border-line px-3 py-2"
+              aria-label="빠른 질문"
+            >
               {quick.map((item) => (
                 <button
                   key={item.label}
@@ -218,10 +243,14 @@ export default function AiPanel() {
               </p>
             )}
             {projectId == null && configured && (
-              <p className="text-[13px] text-ink-muted">프로젝트를 열면 현재 화면 기준으로 질문할 수 있습니다.</p>
+              <p className="text-[13px] text-ink-muted">
+                프로젝트를 열면 현재 화면 기준으로 질문할 수 있습니다.
+              </p>
             )}
             {turns.length === 0 && configured && projectId != null && (
-              <p className="text-[13px] text-ink-muted">현재 컨텍스트를 근거로 질문하세요. 단정은 evidence와 함께 표시됩니다.</p>
+              <p className="text-[13px] text-ink-muted">
+                현재 컨텍스트를 근거로 질문하세요. 단정은 evidence와 함께 표시됩니다.
+              </p>
             )}
             {turns.map((turn, index) => (
               <article key={`${turn.question}-${index}`} className="mb-4">
@@ -295,11 +324,19 @@ function Answer({
   )
 }
 
-function ClaimBlock({ claim, onOpen }: { claim: AiClaim; onOpen: (path: string, line: number | null) => void }) {
+function ClaimBlock({
+  claim,
+  onOpen,
+}: {
+  claim: AiClaim
+  onOpen: (path: string, line: number | null) => void
+}) {
   return (
     <div className="mt-2 rounded-md border border-line bg-surface-2 px-2 py-1.5">
       <p className="text-[13px] text-ink">{claim.text}</p>
-      <p className={`mt-0.5 font-mono text-[11px] ${confidenceClass(claim.confidence)}`}>{claim.confidence}</p>
+      <p className={`mt-0.5 font-mono text-[11px] ${confidenceClass(claim.confidence)}`}>
+        {claim.confidence}
+      </p>
       <ul className="mt-1 space-y-0.5">
         {claim.evidence.map((ref) => {
           const parsed = parseEvidenceRef(ref)
@@ -346,7 +383,9 @@ function confidenceClass(confidence: string): string {
   return 'text-ink-muted'
 }
 
-function quickQuestions(view: string | null): { label: string; question: string; intent: string }[] {
+function quickQuestions(
+  view: string | null,
+): { label: string; question: string; intent: string }[] {
   if (view === 'features') {
     return [{ label: '기능 흐름', question: '이 기능 전체 흐름 설명해줘', intent: 'EXPLAIN' }]
   }
@@ -369,6 +408,12 @@ function quickQuestions(view: string | null): { label: string; question: string;
   }
   if (view === 'flows') {
     return [{ label: '흐름 설명', question: '이 흐름을 설명해줘', intent: 'EXPLAIN' }]
+  }
+  if (view === 'tasks') {
+    return [{ label: '현재 코드 기준', question: '현재 코드 기준으로 설명해줘', intent: 'EXPLAIN' }]
+  }
+  if (view === 'notes') {
+    return [{ label: '노트 설명', question: '이 노트와 연결된 코드를 설명해줘', intent: 'EXPLAIN' }]
   }
   return []
 }

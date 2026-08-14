@@ -22,6 +22,8 @@ type UiState = {
   focusedNode: FocusedNode | null
   focusedCommitSha: string | null
   focusedFindingId: number | null
+  focusedNoteId: number | null
+  focusedTaskId: number | null
   pendingIntent: string | null
   toggleAiPanel: () => void
   setAiPanelOpen: (open: boolean) => void
@@ -31,6 +33,8 @@ type UiState = {
   setFocusedNode: (node: FocusedNode | null) => void
   setFocusedCommitSha: (sha: string | null) => void
   setFocusedFindingId: (id: number | null) => void
+  setFocusedNoteId: (id: number | null) => void
+  setFocusedTaskId: (id: number | null) => void
   setPendingIntent: (intent: string | null) => void
 }
 
@@ -47,6 +51,8 @@ export const useUiStore = create<UiState>()(
       focusedNode: null,
       focusedCommitSha: null,
       focusedFindingId: null,
+      focusedNoteId: null,
+      focusedTaskId: null,
       pendingIntent: null,
       toggleAiPanel: () => set((state) => ({ aiPanelOpen: !state.aiPanelOpen })),
       setAiPanelOpen: (aiPanelOpen) => set({ aiPanelOpen }),
@@ -56,6 +62,8 @@ export const useUiStore = create<UiState>()(
       setFocusedNode: (focusedNode) => set({ focusedNode }),
       setFocusedCommitSha: (focusedCommitSha) => set({ focusedCommitSha }),
       setFocusedFindingId: (focusedFindingId) => set({ focusedFindingId }),
+      setFocusedNoteId: (focusedNoteId) => set({ focusedNoteId }),
+      setFocusedTaskId: (focusedTaskId) => set({ focusedTaskId }),
       setPendingIntent: (pendingIntent) => set({ pendingIntent }),
     }),
     {
