@@ -56,6 +56,21 @@ public class FinalizeStep implements JobStep {
                     .param("projectId", ctx.projectId())
                     .param("keep", appProperties.snapshotRetention())
                     .update();
+            jdbc.sql("""
+                            delete from evidence_links
+                            where subject_type = 'PROJECT_AREA'
+                              and not exists (select 1 from project_areas a where a.id = subject_id)
+                            """).update();
+            jdbc.sql("""
+                            delete from evidence_links
+                            where subject_type = 'SNAPSHOT'
+                              and not exists (select 1 from snapshots s where s.id = subject_id)
+                            """).update();
+            jdbc.sql("""
+                            delete from evidences e
+                            where e.project_id = :projectId
+                              and not exists (select 1 from evidence_links l where l.evidence_id = e.id)
+                            """).param("projectId", ctx.projectId()).update();
         });
     }
 }

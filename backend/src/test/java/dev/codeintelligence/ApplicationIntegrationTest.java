@@ -29,13 +29,17 @@ class ApplicationIntegrationTest {
                 select count(*) from information_schema.tables
                 where table_schema = 'public'
                   and table_name in ('users', 'github_credentials', 'projects', 'snapshots',
-                                     'project_area_selections', 'analysis_jobs', 'analysis_job_steps')
+                                     'project_area_selections', 'analysis_jobs', 'analysis_job_steps',
+                                     'files', 'project_areas', 'area_technologies', 'evidences', 'evidence_links')
                 """, Integer.class);
-        assertThat(coreTables).isEqualTo(7);
+        assertThat(coreTables).isEqualTo(12);
 
-        Boolean migrationSucceeded = jdbcTemplate.queryForObject(
+        Boolean v1 = jdbcTemplate.queryForObject(
                 "select success from flyway_schema_history where version = '1'", Boolean.class);
-        assertThat(migrationSucceeded).isTrue();
+        assertThat(v1).isTrue();
+        Boolean v4 = jdbcTemplate.queryForObject(
+                "select success from flyway_schema_history where version = '4'", Boolean.class);
+        assertThat(v4).isTrue();
 
         Integer vectorExtension = jdbcTemplate.queryForObject(
                 "select count(*) from pg_extension where extname = 'vector'", Integer.class);

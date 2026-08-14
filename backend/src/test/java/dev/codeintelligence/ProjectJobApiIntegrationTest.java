@@ -135,7 +135,10 @@ class ProjectJobApiIntegrationTest {
         assertThat(job.get("startedAt")).isNotNull();
         assertThat(job.get("finishedAt")).isNotNull();
         List<Map<String, Object>> steps = asList(job.get("steps"));
-        assertThat(steps).extracting(step -> step.get("stepKey")).containsExactly("IMPORT", "T_GATE", "FINALIZE");
+        assertThat(steps)
+                .extracting(step -> step.get("stepKey"))
+                .containsExactly(
+                        "IMPORT", "FILE_INVENTORY", "LANGUAGE_FRAMEWORK", "AREA_DETECTION", "T_GATE", "FINALIZE");
         assertThat(steps).allSatisfy(step -> {
             assertThat(step.get("status")).isEqualTo("DONE");
             assertThat(step.get("attempt")).isEqualTo(1);
@@ -261,10 +264,10 @@ class ProjectJobApiIntegrationTest {
         Map<String, Object> failed = readJson(getAs(session, "/api/jobs/" + created.jobId(), HttpStatus.OK));
         assertThat((String) failed.get("error")).contains("T_GATE");
         List<Map<String, Object>> steps = asList(failed.get("steps"));
-        assertThat(steps.get(0).get("status")).isEqualTo("DONE");
-        assertThat(steps.get(1).get("status")).isEqualTo("FAILED");
-        assertThat((String) steps.get(1).get("error")).contains("simulated failure");
-        assertThat(steps.get(2).get("status")).isEqualTo("PENDING");
+        assertThat(stepByKey(steps, "IMPORT").get("status")).isEqualTo("DONE");
+        assertThat(stepByKey(steps, "T_GATE").get("status")).isEqualTo("FAILED");
+        assertThat((String) stepByKey(steps, "T_GATE").get("error")).contains("simulated failure");
+        assertThat(stepByKey(steps, "FINALIZE").get("status")).isEqualTo("PENDING");
 
         postEmpty(session, "/api/jobs/" + created.jobId() + "/retry", HttpStatus.ACCEPTED);
         awaitJobDone(created.jobId());
@@ -272,12 +275,12 @@ class ProjectJobApiIntegrationTest {
         List<Map<String, Object>> retried =
                 asList(readJson(getAs(session, "/api/jobs/" + created.jobId(), HttpStatus.OK))
                         .get("steps"));
-        assertThat(retried.get(0).get("attempt"))
+        assertThat(stepByKey(retried, "IMPORT").get("attempt"))
                 .as("checkpoint: IMPORT must not run again")
                 .isEqualTo(1);
-        assertThat(retried.get(1).get("attempt")).isEqualTo(2);
-        assertThat(retried.get(1).get("error")).isNull();
-        assertThat(retried.get(2).get("attempt")).isEqualTo(1);
+        assertThat(stepByKey(retried, "T_GATE").get("attempt")).isEqualTo(2);
+        assertThat(stepByKey(retried, "T_GATE").get("error")).isNull();
+        assertThat(stepByKey(retried, "FINALIZE").get("attempt")).isEqualTo(1);
         assertThat(gateStep.runCount()).isEqualTo(2);
 
         Map<String, Object> project = readJson(getAs(session, "/api/projects/" + created.projectId(), HttpStatus.OK));
@@ -304,9 +307,9 @@ class ProjectJobApiIntegrationTest {
 
         List<Map<String, Object>> steps = asList(readJson(getAs(session, "/api/jobs/" + created.jobId(), HttpStatus.OK))
                 .get("steps"));
-        assertThat(steps.get(0).get("status")).isEqualTo("DONE");
-        assertThat(steps.get(1).get("status")).isEqualTo("DONE");
-        assertThat(steps.get(2).get("status")).isEqualTo("PENDING");
+        assertThat(stepByKey(steps, "IMPORT").get("status")).isEqualTo("DONE");
+        assertThat(stepByKey(steps, "T_GATE").get("status")).isEqualTo("DONE");
+        assertThat(stepByKey(steps, "FINALIZE").get("status")).isEqualTo("PENDING");
         assertThat(jdbcTemplate.queryForObject(
                         "select current_snapshot_id from projects where id = ?", Long.class, created.projectId()))
                 .as("cancelled run must not promote a snapshot")
@@ -434,7 +437,7 @@ class ProjectJobApiIntegrationTest {
             Map<String, Object> snapshot = readJson(first.data());
             assertThat(((Number) snapshot.get("id")).longValue()).isEqualTo(created.jobId());
             assertThat(snapshot.get("status")).isEqualTo("RUNNING");
-            assertThat(asList(snapshot.get("steps"))).hasSize(3);
+            assertThat(asList(snapshot.get("steps"))).hasSize(6);
 
             gateStep.release();
 
@@ -549,6 +552,13 @@ class ProjectJobApiIntegrationTest {
                     jdbcTemplate.queryForObject("select error from analysis_jobs where id = ?", String.class, jobId);
             Assertions.fail("job " + jobId + " ended " + status + " (error: " + error + ")");
         }
+    }
+
+    private static Map<String, Object> stepByKey(List<Map<String, Object>> steps, String stepKey) {
+        return steps.stream()
+                .filter(step -> stepKey.equals(step.get("stepKey")))
+                .findFirst()
+                .orElseThrow();
     }
 
     private String jobStatus(long jobId) {
