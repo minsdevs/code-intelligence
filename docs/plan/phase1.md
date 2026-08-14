@@ -358,6 +358,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-7 · be — Git metadata 수집 (commits/branches/tags/PR) `[P5]`
 
+**상태: 완료** — 테스트 151/151. MockRestServiceServer로 403 백오프·Retry-After·초과 FAILED 고정. diff path traversal 400.
 **완료 기준:** rate limit 백오프 동작
 **패키지:** `dev.codeintelligence.history`
 
