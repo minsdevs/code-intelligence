@@ -80,11 +80,11 @@
 
 ### 5-10 sc — sc
 
-- [ ] IDOR, SecretMask, playground 비실행, 키 env-only
-- [ ] Dependabot C/H=0
-- [ ] `docs/plan/phase5-security-audit.md`
+- [x] IDOR, SecretMask, playground 비실행, 키 env-only
+- [x] Dependabot C/H=0
+- [x] `docs/plan/phase5-security-audit.md`
 
 ### 5-11 verify — verify
 
-- [ ] gradle / frontend / sidecar CI green
-- [ ] **Phase 6 시작 금지**
+- [x] gradle / frontend / sidecar CI green
+- [x] **Phase 6 시작 금지**
