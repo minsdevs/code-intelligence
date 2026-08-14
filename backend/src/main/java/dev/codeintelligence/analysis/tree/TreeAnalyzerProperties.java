@@ -19,8 +19,7 @@ public record TreeAnalyzerProperties(
         @DefaultValue("") String baseUrl,
         @DefaultValue("30") int timeoutSeconds) {
 
-    private static final Set<String> ALLOWED_HOSTS =
-            Set.of("localhost", "127.0.0.1", "::1", "tree-analyzer");
+    private static final Set<String> ALLOWED_HOSTS = Set.of("localhost", "127.0.0.1", "::1", "tree-analyzer");
 
     public TreeAnalyzerProperties {
         if (timeoutSeconds < 1) {

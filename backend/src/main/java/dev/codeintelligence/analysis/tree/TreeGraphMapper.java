@@ -163,11 +163,12 @@ final class TreeGraphMapper {
         if (symbol.name() == null || symbol.filePath() == null) {
             return;
         }
-        String key = switch (type) {
-            case HOOK -> NaturalKeys.hook(symbol.filePath(), symbol.name());
-            case STORE -> NaturalKeys.store(symbol.filePath(), symbol.name());
-            default -> NaturalKeys.component(symbol.filePath(), symbol.name());
-        };
+        String key =
+                switch (type) {
+                    case HOOK -> NaturalKeys.hook(symbol.filePath(), symbol.name());
+                    case STORE -> NaturalKeys.store(symbol.filePath(), symbol.name());
+                    default -> NaturalKeys.component(symbol.filePath(), symbol.name());
+                };
         Map<String, Object> metadata = new LinkedHashMap<>();
         if (calls != null && !calls.isEmpty()) {
             metadata.put(
@@ -175,7 +176,9 @@ final class TreeGraphMapper {
                     calls.stream()
                             .map(call -> Map.of(
                                     "method",
-                                    call.method() == null ? "GET" : call.method().toUpperCase(Locale.ROOT),
+                                    call.method() == null
+                                            ? "GET"
+                                            : call.method().toUpperCase(Locale.ROOT),
                                     "url",
                                     call.url() == null ? "" : call.url(),
                                     "lineStart",

@@ -19,8 +19,13 @@ public final class TsAnalyzeDtos {
     public record ImportHit(String fromPath, String toPath, String imported) {}
 
     public record EndpointHit(
-            String method, String path, String handlerKey, String handler, String filePath,
-            Integer lineStart, Integer lineEnd) {}
+            String method,
+            String path,
+            String handlerKey,
+            String handler,
+            String filePath,
+            Integer lineStart,
+            Integer lineEnd) {}
 
     public record Response(
             List<RouteHit> routes,
@@ -32,8 +37,8 @@ public final class TsAnalyzeDtos {
             List<SymbolHit> symbols,
             List<EndpointHit> endpoints) {
 
-        public static final Response EMPTY = new Response(
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        public static final Response EMPTY =
+                new Response(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
 
         public Response {
             routes = routes == null ? List.of() : List.copyOf(routes);

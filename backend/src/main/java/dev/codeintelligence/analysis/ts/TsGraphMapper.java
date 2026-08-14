@@ -88,10 +88,7 @@ final class TsGraphMapper {
                     metadata));
             if (endpoint.filePath() != null) {
                 edges.add(GraphEdgeDraft.of(
-                        NaturalKeys.file(endpoint.filePath()),
-                        key,
-                        GraphEdgeType.EXPOSES,
-                        EdgeConfidence.CONFIRMED));
+                        NaturalKeys.file(endpoint.filePath()), key, GraphEdgeType.EXPOSES, EdgeConfidence.CONFIRMED));
             }
             evidences.add(evidence(
                     key,

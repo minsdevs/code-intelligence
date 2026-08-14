@@ -35,9 +35,13 @@ class EndpointPathMatcherTest {
 
     @Test
     void anyMethodEndpointMatchesEveryCallMethod() {
-        assertThat(EndpointPathMatcher.match("POST", "/api/items/", "ANY", "/api/items/")).isEqualTo(EdgeConfidence.CONFIRMED);
-        assertThat(EndpointPathMatcher.match("GET", "/api/items/", "ANY", "/api/items/")).isEqualTo(EdgeConfidence.CONFIRMED);
-        assertThat(EndpointPathMatcher.match("DELETE", "/api/items/", "ANY", "/api/items/")).isEqualTo(EdgeConfidence.CONFIRMED);
-        assertThat(EndpointPathMatcher.match("GET", "/api/items", "ANY", "/api/items/")).isEqualTo(EdgeConfidence.CONFIRMED);
+        assertThat(EndpointPathMatcher.match("POST", "/api/items/", "ANY", "/api/items/"))
+                .isEqualTo(EdgeConfidence.CONFIRMED);
+        assertThat(EndpointPathMatcher.match("GET", "/api/items/", "ANY", "/api/items/"))
+                .isEqualTo(EdgeConfidence.CONFIRMED);
+        assertThat(EndpointPathMatcher.match("DELETE", "/api/items/", "ANY", "/api/items/"))
+                .isEqualTo(EdgeConfidence.CONFIRMED);
+        assertThat(EndpointPathMatcher.match("GET", "/api/items", "ANY", "/api/items/"))
+                .isEqualTo(EdgeConfidence.CONFIRMED);
     }
 }

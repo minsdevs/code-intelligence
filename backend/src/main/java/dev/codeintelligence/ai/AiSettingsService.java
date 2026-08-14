@@ -22,17 +22,22 @@ public class AiSettingsService {
 
     @Transactional(readOnly = true)
     public Optional<SettingView> get(long userId) {
-        return repository.findByUserId(userId).map(setting -> new SettingView(
-                setting.getProvider(), mask(crypto.decrypt(
-                        setting.getKeyVersion(), setting.getNonce(), setting.getEncryptedKey())), true));
+        return repository
+                .findByUserId(userId)
+                .map(setting -> new SettingView(
+                        setting.getProvider(),
+                        mask(crypto.decrypt(setting.getKeyVersion(), setting.getNonce(), setting.getEncryptedKey())),
+                        true));
     }
 
     /** Returns the decrypted key (server-side only; never serialized to responses). */
     @Transactional(readOnly = true)
     public Optional<StoredKey> getKey(long userId) {
-        return repository.findByUserId(userId).map(setting -> new StoredKey(
-                setting.getProvider(),
-                crypto.decrypt(setting.getKeyVersion(), setting.getNonce(), setting.getEncryptedKey())));
+        return repository
+                .findByUserId(userId)
+                .map(setting -> new StoredKey(
+                        setting.getProvider(),
+                        crypto.decrypt(setting.getKeyVersion(), setting.getNonce(), setting.getEncryptedKey())));
     }
 
     /**

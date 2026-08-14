@@ -29,10 +29,7 @@ public class AIProviderConfig {
         private final JsonMapper json;
 
         RuntimeAIProvider(
-                AiProperties env,
-                AiSettingsService settings,
-                RestClient.Builder restClientBuilder,
-                JsonMapper json) {
+                AiProperties env, AiSettingsService settings, RestClient.Builder restClientBuilder, JsonMapper json) {
             this.env = env;
             this.settings = settings;
             this.restClientBuilder = restClientBuilder;
@@ -57,10 +54,14 @@ public class AIProviderConfig {
                 }
             }
             return switch (env.resolvedProvider()) {
-                case "openai" -> env.configured() ? new OpenAIProvider(env.openai(), restClientBuilder, json, null)
-                        : new NoOpAIProvider();
-                case "gemini" -> env.configured() ? new GeminiProvider(env.gemini(), restClientBuilder, json, null)
-                        : new NoOpAIProvider();
+                case "openai" ->
+                    env.configured()
+                            ? new OpenAIProvider(env.openai(), restClientBuilder, json, null)
+                            : new NoOpAIProvider();
+                case "gemini" ->
+                    env.configured()
+                            ? new GeminiProvider(env.gemini(), restClientBuilder, json, null)
+                            : new NoOpAIProvider();
                 default -> new NoOpAIProvider();
             };
         }

@@ -19,8 +19,13 @@ public final class TreeAnalyzeDtos {
     public record ImportHit(String fromPath, String toPath, String imported) {}
 
     public record EndpointHit(
-            String method, String path, String handlerKey, String handler, String filePath,
-            Integer lineStart, Integer lineEnd) {}
+            String method,
+            String path,
+            String handlerKey,
+            String handler,
+            String filePath,
+            Integer lineStart,
+            Integer lineEnd) {}
 
     public record EntityHit(String name, String tableName, String source, String filePath, Integer lineStart) {}
 

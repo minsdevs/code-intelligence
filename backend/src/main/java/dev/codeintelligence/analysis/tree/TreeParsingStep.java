@@ -90,7 +90,8 @@ public class TreeParsingStep implements JobStep {
     }
 
     private List<InventoriedFile> loadFiles(long snapshotId) {
-        return jdbc.sql("""
+        return jdbc
+                .sql("""
                         select path, language, size, line_count, content_hash
                         from files where snapshot_id = :snapshotId order by path
                         """)
@@ -129,9 +130,6 @@ public class TreeParsingStep implements JobStep {
 
     static boolean isTargetSource(InventoriedFile file) {
         String path = file.path().toLowerCase(Locale.ROOT);
-        return path.endsWith(".py")
-                || path.endsWith(".go")
-                || path.endsWith(".vue")
-                || path.endsWith(".svelte");
+        return path.endsWith(".py") || path.endsWith(".go") || path.endsWith(".vue") || path.endsWith(".svelte");
     }
 }
