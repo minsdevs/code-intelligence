@@ -8,6 +8,8 @@ public final class EvidenceSubjects {
     public static final String GRAPH_NODE = "GRAPH_NODE";
     public static final String SOURCE_PARSING = "SOURCE_PARSING";
     public static final String FEATURE = "FEATURE";
+    public static final String FLOW = "FLOW";
+    public static final String FINDING = "FINDING";
 
     private EvidenceSubjects() {}
 }

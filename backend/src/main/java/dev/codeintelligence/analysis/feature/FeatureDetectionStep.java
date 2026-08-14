@@ -60,6 +60,7 @@ public class FeatureDetectionStep implements JobStep {
         List<TypeRow> types = loadBackendTypes(snapshotId);
         List<FeatureMerger.Seed> seeds = new ArrayList<>();
         seeds.addAll(endpointSeeds(endpoints));
+        seeds.addAll(routeSeeds(snapshotId));
         seeds.addAll(packageSeeds(types));
         List<FeatureMerger.Seed> merged = FeatureMerger.dropUnmergedPackageSeeds(
                 FeatureMerger.merge(seeds, analysisProperties.featureMergeThreshold()));
@@ -142,6 +143,25 @@ public class FeatureDetectionStep implements JobStep {
             seeds.add(new FeatureMerger.Seed(entry.getKey(), entry.getValue(), true));
         }
         return seeds;
+    }
+
+    private List<FeatureMerger.Seed> routeSeeds(long snapshotId) {
+        List<EndpointRow> routes = jdbc.sql("""
+                        select n.natural_key, n.name, 'GET' as http_method, r.path, f.path as file_path, n.line_start
+                        from frontend_routes r
+                        join graph_nodes n on n.id = r.node_id
+                        left join files f on f.id = n.file_id
+                        where r.snapshot_id = :snapshotId
+                        """)
+                .param("snapshotId", snapshotId)
+                .query((rs, rowNum) -> new EndpointRow(
+                        rs.getString("natural_key"),
+                        rs.getString("http_method"),
+                        rs.getString("path"),
+                        rs.getString("file_path"),
+                        (Integer) rs.getObject("line_start")))
+                .list();
+        return endpointSeeds(routes);
     }
 
     private List<FeatureMerger.Seed> packageSeeds(List<TypeRow> types) {
@@ -259,7 +279,7 @@ public class FeatureDetectionStep implements JobStep {
                         select source_node_id, target_node_id, edge_type
                         from graph_edges
                         where snapshot_id = :snapshotId
-                          and edge_type in ('CALLS', 'EXPOSES', 'DECLARES', 'USES_TYPE')
+                          and edge_type in ('CALLS', 'EXPOSES', 'DECLARES', 'USES_TYPE', 'CONSUMES', 'MAPS_TO')
                         """)
                 .param("snapshotId", snapshotId)
                 .query((rs, rowNum) -> new FeatureLinkBuilder.GraphEdge(

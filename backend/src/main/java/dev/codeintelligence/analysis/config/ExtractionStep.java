@@ -50,13 +50,17 @@ public class ExtractionStep implements JobStep {
                         insert into infra_resources (snapshot_id, node_id, kind, name, source_path)
                         select n.snapshot_id,
                                n.id,
-                               case n.node_type when 'CI_PIPELINE' then 'CI' else n.node_type end,
+                               case n.node_type
+                                   when 'CI_PIPELINE' then 'CI'
+                                   when 'CLOUD_RESOURCE' then 'CLOUD'
+                                   else n.node_type
+                               end,
                                n.name,
                                f.path
                         from graph_nodes n
                         left join files f on f.id = n.file_id
                         where n.snapshot_id = :snapshotId
-                          and n.node_type in ('CONTAINER', 'CI_PIPELINE')
+                          and n.node_type in ('CONTAINER', 'CI_PIPELINE', 'CLOUD_RESOURCE')
                         on conflict (node_id) do update set
                             kind = excluded.kind,
                             name = excluded.name,
@@ -68,7 +72,7 @@ public class ExtractionStep implements JobStep {
                           and not exists (
                               select 1 from graph_nodes n
                               where n.id = ir.node_id
-                                and n.node_type in ('CONTAINER', 'CI_PIPELINE')
+                                and n.node_type in ('CONTAINER', 'CI_PIPELINE', 'CLOUD_RESOURCE')
                           )
                         """).param("snapshotId", snapshotId).update();
     }

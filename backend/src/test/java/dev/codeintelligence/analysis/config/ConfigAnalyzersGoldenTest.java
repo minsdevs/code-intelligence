@@ -103,7 +103,8 @@ class ConfigAnalyzersGoldenTest {
                     """, Integer.class, run.snapshotId());
             assertThat(dockerfileEvidence).isEqualTo(1);
             assertThat(infraKinds(run.snapshotId()))
-                    .containsExactlyInAnyOrder("CONTAINER:app", "CONTAINER:postgres", "CI:deploy");
+                    .containsExactlyInAnyOrder(
+                            "CONTAINER:app", "CONTAINER:postgres", "CI:deploy", "CLOUD:aws_s3_bucket.data");
         } finally {
             FileSystemUtils.deleteRecursively(run.clonePath());
         }
