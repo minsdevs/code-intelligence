@@ -55,4 +55,22 @@ export const workspaceTabs: WorkspaceTab[] = [
     phase: 4,
     description: '분석 결과와 연결된 Task를 관리합니다.',
   },
+  {
+    path: 'review',
+    label: 'Review',
+    phase: 5,
+    description: 'Pull request의 정적 findings와 AI 리뷰 코멘트를 함께 봅니다.',
+  },
+  {
+    path: 'playground',
+    label: 'Playground',
+    phase: 5,
+    description: '파일을 골라 가설을 묻습니다. clone 코드는 실행하지 않습니다.',
+  },
+  {
+    path: 'growth',
+    label: 'Growth',
+    phase: 5,
+    description: '학습 기록과 Task 진행을 리포트로 봅니다.',
+  },
 ]

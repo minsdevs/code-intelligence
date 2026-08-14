@@ -112,6 +112,19 @@ function installFetch() {
         201,
       )
     }
+    if (path === '/api/projects/7/what-if') {
+      return jsonResponse({
+        impact,
+        explanation: 'Changing TodosPage would break HomePage.load.',
+        claims: [
+          {
+            text: 'HomePage.load calls TodosPage.',
+            confidence: 'CONFIRMED',
+            evidence: ['file:src/pages/HomePage.tsx:8'],
+          },
+        ],
+      })
+    }
     if (path === '/api/projects/7/tasks') return jsonResponse([])
     return jsonResponse({ title: 'Not Found', detail: path }, 404)
   })
@@ -184,5 +197,15 @@ describe('AnalysisPage', () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/projects/7/tasks')
     })
+  })
+
+  it('runs a static what-if explanation from impact', async () => {
+    renderAnalysis()
+    await screen.findByText('HomePage.load')
+    fireEvent.click(screen.getByRole('button', { name: 'What-if' }))
+    expect(
+      await screen.findByText('Changing TodosPage would break HomePage.load.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('HomePage.load calls TodosPage.')).toBeInTheDocument()
   })
 })

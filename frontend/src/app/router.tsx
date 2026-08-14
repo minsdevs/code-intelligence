@@ -9,6 +9,9 @@ import FlowsTab from '../features/flows/FlowsTab'
 import AnalysisTab from '../features/analysis/AnalysisTab'
 import NotesTab from '../features/notes/NotesTab'
 import TasksTab from '../features/tasks/TasksTab'
+import ReviewTab from '../features/review/ReviewTab'
+import PlaygroundTab from '../features/playground/PlaygroundTab'
+import GrowthTab from '../features/growth/GrowthTab'
 import ProjectsPage from '../features/projects/ProjectsPage'
 import ProjectWorkspacePage from '../features/projects/ProjectWorkspacePage'
 import WorkspaceTabPage from '../features/projects/WorkspaceTabPage'
@@ -49,6 +52,12 @@ export const routes: RouteObject[] = [
                 <NotesTab />
               ) : tab.path === 'tasks' ? (
                 <TasksTab />
+              ) : tab.path === 'review' ? (
+                <ReviewTab />
+              ) : tab.path === 'playground' ? (
+                <PlaygroundTab />
+              ) : tab.path === 'growth' ? (
+                <GrowthTab />
               ) : (
                 <WorkspaceTabPage tab={tab} />
               ),

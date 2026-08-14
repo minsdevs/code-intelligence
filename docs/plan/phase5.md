@@ -64,19 +64,19 @@
 
 ### 5-6 Review UI — fe
 
-- [ ] 워크스페이스 Review 탭: PR 목록, 리뷰 생성, claim/evidence → 코드 이동
+- [x] 워크스페이스 Review 탭: PR 목록, 리뷰 생성, claim/evidence → 코드 이동
 
 ### 5-7 Playground UI — fe
 
-- [ ] 파일 다중 선택, 스니펫 textarea, ask, claims. 실행 버튼 없음
+- [x] 파일 다중 선택, 스니펫 textarea, ask, claims. 실행 버튼 없음
 
 ### 5-8 Growth UI — fe
 
-- [ ] 카운트·주간·최근 학습 기록. 차트 라이브러리 추가 금지
+- [x] 카운트·주간·최근 학습 기록. 차트 라이브러리 추가 금지
 
 ### 5-9 What-if UI + AI 칩 — fe
 
-- [ ] Analysis Impact 패널에서 What-if. Review/Playground/Growth 빠른 질문
+- [x] Analysis Impact 패널에서 What-if. Review/Playground/Growth 빠른 질문
 
 ### 5-10 sc — sc
 

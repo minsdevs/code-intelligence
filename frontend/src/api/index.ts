@@ -18,7 +18,7 @@ export { getFileContent, listFiles } from './files'
 export { getArchitecture } from './architecture'
 export { listFeatures, getFeature } from './features'
 export { listFlows, getFlow } from './flows'
-export { listFindings, getImpact } from './analysis'
+export { listFindings, getImpact, runWhatIf } from './analysis'
 export { GRAPH_NODE_PAGE_SIZE, getGraphNode, getGraphRelations, listGraphNodes } from './graph'
 export { askAi, askAiStream, getAiStatus, parseEvidenceRef } from './ai'
 export { listNotes, getNote, createNote, updateNote, deleteNote } from './notes'
@@ -33,6 +33,16 @@ export {
   createTaskDraft,
 } from './tasks'
 export { searchWorkspace } from './search'
+export { getPullReview, generatePullReview } from './review'
+export {
+  listPlaygroundSessions,
+  getPlaygroundSession,
+  createPlaygroundSession,
+  updatePlaygroundSession,
+  deletePlaygroundSession,
+  askPlayground,
+} from './playground'
+export { getGrowth } from './growth'
 export type {
   AreaSelection,
   AreaType,
@@ -64,4 +74,8 @@ export type {
   PullRequest,
   SearchResponse,
   TaskView,
+  ReviewView,
+  PlaygroundSessionView,
+  GrowthView,
+  WhatIfView,
 } from './types'

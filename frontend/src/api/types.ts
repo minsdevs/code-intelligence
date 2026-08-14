@@ -492,3 +492,77 @@ export type SearchResponse = {
   query: string
   groups: SearchGroup[]
 }
+
+export type ReviewComment = {
+  id: number
+  seq: number
+  filePath: string | null
+  line: number | null
+  severity: string
+  body: string
+  confidence: string
+  evidence: string[]
+}
+
+export type ReviewView = {
+  id: number
+  pullNumber: number
+  summary: string
+  origin: string
+  createdAt: string
+  comments: ReviewComment[]
+}
+
+export type PlaygroundSessionSummary = {
+  id: number
+  title: string
+  updatedAt: string
+}
+
+export type PlaygroundSessionView = {
+  id: number
+  title: string
+  selectedPaths: string[]
+  proposedSnippet: string
+  lastQuestion: string | null
+  lastExplanation: string | null
+  lastClaims: AiClaim[]
+  updatedAt: string
+}
+
+export type GrowthTypeCounts = {
+  type: string
+  open: number
+  done: number
+  draft: number
+  cancelled: number
+}
+
+export type GrowthWeeklyBucket = {
+  weekStart: string
+  learningRecords: number
+  tasksDone: number
+}
+
+export type GrowthRecentRecord = {
+  taskId: number
+  taskTitle: string
+  note: string
+  createdAt: string
+}
+
+export type GrowthView = {
+  notesCount: number
+  learningRecords: number
+  findingsOpen: number
+  findingsDismissed: number
+  tasksByType: GrowthTypeCounts[]
+  weekly: GrowthWeeklyBucket[]
+  recentRecords: GrowthRecentRecord[]
+}
+
+export type WhatIfView = {
+  impact: ImpactView
+  explanation: string
+  claims: AiClaim[]
+}

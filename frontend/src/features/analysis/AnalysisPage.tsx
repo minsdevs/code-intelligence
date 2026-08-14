@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getImpact, listFindings } from '../../api/analysis'
+import { getImpact, listFindings, runWhatIf } from '../../api/analysis'
 import { createTaskDraft } from '../../api/tasks'
 import { listGraphNodes } from '../../api/graph'
+import { parseEvidenceRef } from '../../api/ai'
 import { ApiError } from '../../api/client'
 import type { FindingView } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
@@ -27,6 +28,7 @@ export default function AnalysisPage() {
   const [nodeId, setNodeId] = useState<number | null>(null)
   const [depth, setDepth] = useState(5)
   const [draftMessage, setDraftMessage] = useState<string | null>(null)
+  const [whatIfError, setWhatIfError] = useState<string | null>(null)
 
   const findingsQuery = useQuery({
     queryKey: ['findings', projectId, severity],
@@ -66,6 +68,18 @@ export default function AnalysisPage() {
           : (queryError(error) ?? '초안을 만들지 못했습니다.')
       setDraftMessage(message)
     },
+  })
+
+  const whatIfMutation = useMutation({
+    mutationFn: () => runWhatIf(projectId!, { nodeId: impactNodeId!, depth }),
+    onError: (error) => {
+      const message =
+        error instanceof ApiError && error.status === 503
+          ? 'AI가 비활성화되어 What-if를 실행할 수 없습니다.'
+          : (queryError(error) ?? 'What-if를 실행하지 못했습니다.')
+      setWhatIfError(message)
+    },
+    onSuccess: () => setWhatIfError(null),
   })
 
   if (projectId == null) {
@@ -329,6 +343,54 @@ export default function AnalysisPage() {
                   </li>
                 ))}
               </ol>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setWhatIfError(null)
+                whatIfMutation.mutate()
+              }}
+              disabled={whatIfMutation.isPending}
+              className="mt-4 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
+            >
+              What-if
+            </button>
+            {whatIfError && (
+              <p role="alert" className="mt-2 text-[12px] text-danger">
+                {whatIfError}
+              </p>
+            )}
+            {whatIfMutation.data && (
+              <div className="mt-3 border-t border-line pt-3">
+                <h3 className="text-[12px] font-semibold text-ink">What-if</h3>
+                <p className="mt-1 text-[13px] text-ink">{whatIfMutation.data.explanation}</p>
+                <ul aria-label="What-if claims" className="mt-2 space-y-1">
+                  {whatIfMutation.data.claims.map((claim, index) => (
+                    <li key={`${claim.text}-${index}`}>
+                      <span className="font-mono text-[11px] text-ok">{claim.confidence}</span>
+                      <p className="text-[12px] text-ink">{claim.text}</p>
+                      {claim.evidence.map((ref) => {
+                        const parsed = parseEvidenceRef(ref)
+                        if (!parsed) return null
+                        return (
+                          <button
+                            key={ref}
+                            type="button"
+                            onClick={() =>
+                              navigate(
+                                `/projects/${projectId}/code${codeLocationSearch(parsed.path, parsed.line)}`,
+                              )
+                            }
+                            className="mr-2 font-mono text-[11px] text-accent hover:underline"
+                          >
+                            {parsed.path}:{parsed.line}
+                          </button>
+                        )
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         )}
