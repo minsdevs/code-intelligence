@@ -394,21 +394,22 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-8 · be — CodeAnalyzer SPI + JavaAnalyzer `[P6]`
 
+**상태: 완료** — 테스트 160/160. spring-mini 골든 CLASS 7 · METHOD 24 · CALLS 8(CONFIRMED 5 Controller→Service / POSSIBLE 3 JpaRepository).
 **완료 기준:** spring-mini 골든 그래프 일치
 **패키지:** `dev.codeintelligence.analysis.core`(SPI), `dev.codeintelligence.analysis.java`, `dev.codeintelligence.analysis.graph`
 
 **구현 체크리스트:**
 
-- [ ] 의존성: `com.github.javaparser:javaparser-symbol-solver-core`
-- [ ] `V6__code_graph.sql` (§3 표)
-- [ ] SPI(§10.1): `CodeAnalyzer { boolean supports(FileInventory); AnalysisResult analyze(AnalysisContext); }` — `AnalysisResult`는 nodes/edges/evidences. **registry 패턴(빈 목록 주입), 언어 추가 시 구현체만 추가**
-- [ ] `SourceParsingStep`(SOURCE_PARSING) — supports 매칭 분석기 실행. **파일 단위 예외 격리**: 한 파일 파싱 실패는 기록 후 계속, step은 성공
-- [ ] natural_key 규약(§8.3 idempotent 기반) 상수화: `file:{path}` / `java:{fqcn}` / `java:{fqcn}#{method(paramTypes)}` / `endpoint:{METHOD}:{path}` / `table:{name}` / `container:{service}` / `ci:{workflow}:{job}`
-- [ ] `graph/GraphPersistenceService` — `(snapshot_id, natural_key)` upsert, edge는 양끝 natural_key 해석 후 저장
-- [ ] `JavaAnalyzer` — JavaSymbolSolver(소스 루트 + ReflectionTypeSolver). 노드: PACKAGE/CLASS/INTERFACE/ENUM/ANNOTATION/METHOD/FIELD(+라인 범위). edge: IMPORTS/DECLARES/EXTENDS/IMPLEMENTS/ANNOTATED_BY/CALLS/USES_TYPE
-- [ ] 호출 해석: SymbolSolver 성공 → CALLS(CONFIRMED). **실패 → 이름 기반 후보 CALLS(POSSIBLE, metadata에 후보 시그니처)**(§10.2)
-- [ ] `GraphBuildStep`(GRAPH_BUILD) — DIRECTORY/FILE CONTAINS 체인 정리, 파일 경로 기반 area_type 태깅(예: `src/test` → TESTING)
-- [ ] `graph/GraphController` — 노드 조회/관계 API
+- [x] 의존성: `com.github.javaparser:javaparser-symbol-solver-core`
+- [x] `V6__code_graph.sql` (§3 표)
+- [x] SPI(§10.1): `CodeAnalyzer { boolean supports(FileInventory); AnalysisResult analyze(AnalysisContext); }` — `AnalysisResult`는 nodes/edges/evidences. **registry 패턴(빈 목록 주입), 언어 추가 시 구현체만 추가**
+- [x] `SourceParsingStep`(SOURCE_PARSING) — supports 매칭 분석기 실행. **파일 단위 예외 격리**: 한 파일 파싱 실패는 기록 후 계속, step은 성공
+- [x] natural_key 규약(§8.3 idempotent 기반) 상수화: `file:{path}` / `java:{fqcn}` / `java:{fqcn}#{method(paramTypes)}` / `endpoint:{METHOD}:{path}` / `table:{name}` / `container:{service}` / `ci:{workflow}:{job}`
+- [x] `graph/GraphPersistenceService` — `(snapshot_id, natural_key)` upsert, edge는 양끝 natural_key 해석 후 저장
+- [x] `JavaAnalyzer` — JavaSymbolSolver(소스 루트 + ReflectionTypeSolver). 노드: PACKAGE/CLASS/INTERFACE/ENUM/ANNOTATION/METHOD/FIELD(+라인 범위). edge: IMPORTS/DECLARES/EXTENDS/IMPLEMENTS/ANNOTATED_BY/CALLS/USES_TYPE
+- [x] 호출 해석: SymbolSolver 성공 → CALLS(CONFIRMED). **실패 → 이름 기반 후보 CALLS(POSSIBLE, metadata에 후보 시그니처)**(§10.2)
+- [x] `GraphBuildStep`(GRAPH_BUILD) — DIRECTORY/FILE CONTAINS 체인 정리, 파일 경로 기반 area_type 태깅(예: `src/test` → TESTING)
+- [x] `graph/GraphController` — 노드 조회/관계 API
 
 **API 계약:**
 
@@ -420,11 +421,11 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 **테스트 체크리스트:**
 
-- [ ] **spring-mini 골든: 노드 타입별 수·natural_key 목록·EXTENDS/CALLS edge 집합 일치** ← 완료 기준
-- [ ] Controller→Service CALLS=CONFIRMED, JpaRepository 상속 메서드 호출=POSSIBLE 검증
-- [ ] 문법 오류 파일 1개 포함 → 해당 파일만 격리, step 성공
-- [ ] 같은 snapshot 재실행 → 중복 0(멱등)
-- [ ] relations depth=2 응답 구조
+- [x] **spring-mini 골든: 노드 타입별 수·natural_key 목록·EXTENDS/CALLS edge 집합 일치** ← 완료 기준
+- [x] Controller→Service CALLS=CONFIRMED, JpaRepository 상속 메서드 호출=POSSIBLE 검증
+- [x] 문법 오류 파일 1개 포함 → 해당 파일만 격리, step 성공
+- [x] 같은 snapshot 재실행 → 중복 0(멱등)
+- [x] relations depth=2 응답 구조
 
 ---
 

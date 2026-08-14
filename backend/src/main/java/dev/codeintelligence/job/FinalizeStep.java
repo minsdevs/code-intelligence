@@ -72,6 +72,16 @@ public class FinalizeStep implements JobStep {
                               and not exists (select 1 from snapshots s where s.id = subject_id)
                             """).update();
             jdbc.sql("""
+                            delete from evidence_links
+                            where subject_type = 'SOURCE_PARSING'
+                              and not exists (select 1 from snapshots s where s.id = subject_id)
+                            """).update();
+            jdbc.sql("""
+                            delete from evidence_links
+                            where subject_type = 'GRAPH_NODE'
+                              and not exists (select 1 from graph_nodes n where n.id = subject_id)
+                            """).update();
+            jdbc.sql("""
                             delete from evidences e
                             where e.project_id = :projectId
                               and not exists (select 1 from evidence_links l where l.evidence_id = e.id)
