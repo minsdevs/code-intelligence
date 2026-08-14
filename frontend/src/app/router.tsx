@@ -3,6 +3,7 @@ import AppLayout from './AppLayout'
 import HomePage from '../features/home/HomePage'
 import HistoryPage from '../features/history/HistoryPage'
 import CodeTab from '../features/code/CodeTab'
+import ArchitectureTab from '../features/architecture/ArchitectureTab'
 import ProjectsPage from '../features/projects/ProjectsPage'
 import ProjectWorkspacePage from '../features/projects/ProjectWorkspacePage'
 import WorkspaceTabPage from '../features/projects/WorkspaceTabPage'
@@ -31,6 +32,8 @@ export const routes: RouteObject[] = [
                 <HistoryPage />
               ) : tab.path === 'code' ? (
                 <CodeTab />
+              ) : tab.path === 'architecture' ? (
+                <ArchitectureTab />
               ) : (
                 <WorkspaceTabPage tab={tab} />
               ),

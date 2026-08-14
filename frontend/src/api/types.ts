@@ -246,3 +246,30 @@ export type GraphRelationsResponse = {
   depth: number
   relations: GraphRelation[]
 }
+
+export type ArchitectureNodeView = {
+  id: number
+  name: string
+  nodeType: string
+  filePath: string | null
+  line: number | null
+}
+
+export type ArchitectureGroupView = {
+  layer: string
+  nodes: ArchitectureNodeView[]
+}
+
+export type ArchitectureEdgeView = {
+  sourceGroup: string
+  targetGroup: string
+  sourceNodeId: number | null
+  targetNodeId: number | null
+  count: number
+}
+
+export type ArchitectureView = {
+  area: 'BACKEND' | 'SYSTEM'
+  groups: ArchitectureGroupView[]
+  edges: ArchitectureEdgeView[]
+}

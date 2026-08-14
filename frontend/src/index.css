@@ -72,3 +72,24 @@
 .code-explorer-line {
   background: color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
+
+.architecture-flow {
+  min-height: 0;
+}
+
+.architecture-flow .react-flow {
+  background: var(--color-surface-0);
+}
+
+.architecture-flow .react-flow__controls {
+  box-shadow: none;
+  border: 1px solid var(--color-line-strong);
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.architecture-flow .react-flow__controls-button {
+  background: var(--color-surface-1);
+  border-bottom-color: var(--color-line);
+  fill: var(--color-ink-muted);
+}
