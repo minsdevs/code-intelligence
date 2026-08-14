@@ -13,7 +13,9 @@ public final class SecretMask {
             Pattern.compile("AKIA[0-9A-Z]{16}"),
             Pattern.compile("(?i)bearer\\s+[A-Za-z0-9._\\-+/=]{8,}"),
             Pattern.compile("-----BEGIN [A-Z ]*PRIVATE KEY-----"),
-            Pattern.compile("(?i)((?:password|secret|token|api[_-]?key)\\s*[:=]\\s*)\\S+"));
+            Pattern.compile("(?i)((?:password|secret|token|api[_-]?key)\\s*[:=]\\s*)\\S+"),
+            Pattern.compile("(?i)sk-[A-Za-z0-9_-]{20,}"),
+            Pattern.compile("AIza[0-9A-Za-z_-]{20,}"));
 
     private SecretMask() {}
 

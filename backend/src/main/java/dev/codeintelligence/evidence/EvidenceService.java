@@ -16,9 +16,18 @@ public class EvidenceService {
 
     @Transactional
     public long insertStatic(long projectId, NewEvidence evidence) {
+        return insert(projectId, evidence, "STATIC");
+    }
+
+    @Transactional
+    public long insertAi(long projectId, NewEvidence evidence) {
+        return insert(projectId, evidence, "AI");
+    }
+
+    private long insert(long projectId, NewEvidence evidence, String createdBy) {
         return jdbc.sql("""
                         insert into evidences (project_id, kind, file_path, line_start, line_end, excerpt, created_by)
-                        values (:projectId, :kind, :filePath, :lineStart, :lineEnd, :excerpt, 'STATIC')
+                        values (:projectId, :kind, :filePath, :lineStart, :lineEnd, :excerpt, :createdBy)
                         returning id
                         """)
                 .param("projectId", projectId)
@@ -27,6 +36,7 @@ public class EvidenceService {
                 .param("lineStart", evidence.lineStart())
                 .param("lineEnd", evidence.lineEnd())
                 .param("excerpt", SecretMask.redact(evidence.excerpt()))
+                .param("createdBy", createdBy)
                 .query(Long.class)
                 .single();
     }

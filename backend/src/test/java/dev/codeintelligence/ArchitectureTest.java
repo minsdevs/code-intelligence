@@ -41,4 +41,16 @@ class ArchitectureTest {
                 .beFreeOfCycles()
                 .check(CLASSES);
     }
+
+    @Test
+    void aiProviderMustStayInsideAiPackage() {
+        ArchRuleDefinition.noClasses()
+                .that()
+                .resideOutsideOfPackage("dev.codeintelligence.ai..")
+                .should()
+                .dependOnClassesThat()
+                .areAssignableTo(dev.codeintelligence.ai.AIProvider.class)
+                .because("AIProvider is only used inside the ai package")
+                .check(CLASSES);
+    }
 }
