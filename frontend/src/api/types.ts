@@ -55,11 +55,34 @@ export type JobDetail = {
   steps: JobStep[]
 }
 
+export type JobSummary = {
+  id: number
+  type: string
+  status: JobStatus
+  error: string | null
+  createdAt: string | null
+  startedAt: string | null
+  finishedAt: string | null
+}
+
 export type ProjectSnapshotView = {
   id: number
   commitSha: string
   status: string
   analyzedAt: string | null
+}
+
+export type LatestCommit = {
+  sha: string
+  message: string
+}
+
+export type LatestPull = {
+  number: number
+  title: string
+  state: string
+  author: string
+  mergedAt: string | null
 }
 
 export type Project = {
@@ -69,7 +92,11 @@ export type Project = {
   repoName: string
   defaultBranch: string
   currentSnapshot: ProjectSnapshotView | null
-  latestJob: unknown
+  latestJob: JobSummary | null
+  selectedAreas: AreaType[]
+  topTechnologies: string[]
+  latestCommit: LatestCommit | null
+  latestPull: LatestPull | null
   createdAt: string
   updatedAt: string
 }
@@ -114,4 +141,50 @@ export type AreaSelection = {
 
 export type AreaSelectionsRequest = {
   selections: AreaSelection[]
+}
+
+export type CommitSummary = {
+  sha: string
+  author: string
+  message: string
+  committedAt: string | null
+  additions: number
+  deletions: number
+}
+
+export type CommitFile = {
+  path: string
+  changeType: string
+}
+
+export type CommitDetail = {
+  sha: string
+  author: string
+  message: string
+  committedAt: string | null
+  additions: number
+  deletions: number
+  files: CommitFile[]
+}
+
+export type CommitDiff = {
+  changeType: string
+  oldContent: string | null
+  newContent: string | null
+}
+
+export type GitRef = {
+  name: string
+  headSha: string
+}
+
+export type PullRequest = {
+  number: number
+  title: string
+  body: string | null
+  state: string
+  author: string
+  mergedAt: string | null
+  headSha: string | null
+  baseSha: string | null
 }

@@ -27,7 +27,7 @@ describe('project workspace', () => {
       'page',
     )
 
-    // 프로젝트 안에서는 사이드바에 Areas 자리 표시가 보인다 (기획서 §15.1)
-    expect(screen.getByText(/영역 감지 후 이곳에 표시됩니다/)).toBeInTheDocument()
+    // 숫자 id가 아닌 미리보기에서는 Areas 자리 표시가 보인다
+    expect(screen.getByText(/저장소를 import한 뒤 이곳에 표시됩니다/)).toBeInTheDocument()
   })
 })

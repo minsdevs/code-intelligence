@@ -15,7 +15,9 @@
     "gen:api": "npx --yes openapi-typescript http://127.0.0.1:8080/v3/api-docs -o src/api/generated.ts"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@tanstack/react-query": "^5.101.4",
+    "monaco-editor": "^0.56.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
