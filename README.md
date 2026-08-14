@@ -7,11 +7,13 @@ explore its features, architecture, call flows, dependencies, history, design
 rationale, and alternatives — with an evidence-grounded, context-aware AI
 assistant.
 
-> **Status: Phase 2 — Cross-domain Intelligence (complete).**
-> Phase 1 (import, Java analysis, architecture, history) and Phase 2
-> (TypeScript sidecar, FE↔BE matching, flows, findings, impact, era) are on `main`.
-> Phase 3 has not started.
-> See [기획서.md](./기획서.md) and [docs/plan/phase2.md](./docs/plan/phase2.md).
+> **Status: Phase 3 — AI (complete).**
+> Phase 1 (import, Java analysis, architecture, history), Phase 2
+> (TypeScript sidecar, FE↔BE matching, flows, findings, impact, era), and
+> Phase 3 (provider-abstracted assistant, summaries + pgvector, evidence-grounded
+> Why/Alternative answers) are on `main`.
+> Phase 4 has not started.
+> See [기획서.md](./기획서.md) and [docs/plan/phase3.md](./docs/plan/phase3.md).
 
 ## Principles
 
@@ -32,7 +34,7 @@ assistant.
 | Data | PostgreSQL 16 + pgvector, Redis 7 |
 | Frontend | React 19, TypeScript (strict), Vite, Tailwind CSS v4, TanStack Query, Zustand, React Flow |
 | Analyzer sidecar (Phase 2) | NestJS, ts-morph (TypeScript Compiler API), tree-sitter |
-| AI (Phase 3) | Provider-abstracted (OpenAI / Gemini), pgvector embeddings |
+| AI (Phase 3) | Provider-abstracted (OpenAI / Gemini), pgvector embeddings, evidence-grounded assistant |
 
 ## Getting started
 
@@ -41,6 +43,7 @@ toolchain via Foojay).
 
 ```bash
 cp .env.example .env          # local defaults work out of the box
+                              # optional: OPENAI_API_KEY or GEMINI_API_KEY (never in the UI)
 
 docker compose up -d          # PostgreSQL (pgvector) + Redis (+ ts-analyzer)
 

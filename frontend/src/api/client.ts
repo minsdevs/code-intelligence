@@ -33,7 +33,7 @@ export async function primeCsrf(): Promise<void> {
   await fetch('/api/csrf', { method: 'GET', credentials: 'include' })
 }
 
-async function errorMessage(response: Response): Promise<string> {
+export async function readApiError(response: Response): Promise<string> {
   try {
     const body: unknown = await response.json()
     if (body && typeof body === 'object') {
@@ -74,7 +74,7 @@ async function request<T>(path: string, init: { method: string; body?: unknown }
     throw new UnauthorizedError()
   }
   if (!response.ok) {
-    throw new ApiError(response.status, await errorMessage(response))
+    throw new ApiError(response.status, await readApiError(response))
   }
   if (response.status === 204 || response.status === 202) {
     const text = await response.text()

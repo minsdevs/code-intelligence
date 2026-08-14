@@ -95,6 +95,7 @@ function installFetch() {
     if (path === '/api/projects/7/findings') return jsonResponse(findings)
     if (path === '/api/projects/7/impact') return jsonResponse(impact)
     if (path === '/api/projects/7/graph/nodes') return jsonResponse(nodes)
+    if (path === '/api/ai/status') return jsonResponse({ configured: true, provider: 'mock' })
     return jsonResponse({ title: 'Not Found', detail: path }, 404)
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -124,6 +125,16 @@ describe('AnalysisPage', () => {
     expect(screen.getByRole('button', { name: 'HIGH' })).toBeInTheDocument()
     expect(await screen.findByText('HomePage.load')).toBeInTheDocument()
     expect(screen.getByText(/score 9/)).toBeInTheDocument()
+  })
+
+  it('opens the AI panel with FINDING intent from a finding', async () => {
+    useUiStore.setState({ aiPanelOpen: false, focusedFindingId: null, pendingIntent: null })
+    renderAnalysis()
+    await screen.findByText('Unmatched GET /api/missing')
+    fireEvent.click(screen.getByRole('button', { name: 'AI에게 확인' }))
+    expect(useUiStore.getState().aiPanelOpen).toBe(true)
+    expect(useUiStore.getState().focusedFindingId).toBe(5)
+    expect(useUiStore.getState().pendingIntent).toBe('FINDING')
   })
 
   it('searches graph nodes for impact', async () => {

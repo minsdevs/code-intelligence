@@ -20,6 +20,7 @@ export { listFeatures, getFeature } from './features'
 export { listFlows, getFlow } from './flows'
 export { listFindings, getImpact } from './analysis'
 export { GRAPH_NODE_PAGE_SIZE, getGraphNode, getGraphRelations, listGraphNodes } from './graph'
+export { askAi, askAiStream, getAiStatus, parseEvidenceRef } from './ai'
 export type {
   AreaSelection,
   AreaType,

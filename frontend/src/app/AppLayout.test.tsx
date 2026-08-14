@@ -31,6 +31,9 @@ beforeEach(() => {
       if (path === '/api/projects') {
         return jsonResponse([])
       }
+      if (path === '/api/ai/status') {
+        return jsonResponse({ configured: false, provider: null })
+      }
       return jsonResponse({ title: 'Not Found' }, 404)
     }),
   )
@@ -55,14 +58,14 @@ describe('AppLayout', () => {
   it('collapses and expands the AI panel', () => {
     renderApp('/')
 
-    expect(screen.getByText('AI Assistant — Phase 3에서 활성화됩니다')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'AI 질문 입력' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'AI 패널 접기' }))
     expect(useUiStore.getState().aiPanelOpen).toBe(false)
-    expect(screen.queryByText('AI Assistant — Phase 3에서 활성화됩니다')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'AI 질문 입력' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'AI 패널 펼치기' }))
     expect(useUiStore.getState().aiPanelOpen).toBe(true)
-    expect(screen.getByText('AI Assistant — Phase 3에서 활성화됩니다')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'AI 질문 입력' })).toBeInTheDocument()
   })
 })

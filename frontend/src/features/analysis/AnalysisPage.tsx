@@ -6,6 +6,7 @@ import { listGraphNodes } from '../../api/graph'
 import type { FindingView } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
 import { parseProjectId } from '../../lib/projectId'
+import { useUiStore } from '../../stores/uiStore'
 import { codeLocationSearch, queryError } from '../code/codeLocation'
 
 const SEVERITIES = ['', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const
@@ -15,6 +16,9 @@ export default function AnalysisPage() {
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const navigate = useNavigate()
+  const setFocusedFindingId = useUiStore((state) => state.setFocusedFindingId)
+  const setPendingIntent = useUiStore((state) => state.setPendingIntent)
+  const setAiPanelOpen = useUiStore((state) => state.setAiPanelOpen)
   const [severity, setSeverity] = useState('')
   const [selectedFindingId, setSelectedFindingId] = useState<number | null>(null)
   const [nodeQuery, setNodeQuery] = useState('')
@@ -157,6 +161,17 @@ export default function AnalysisPage() {
                   {evidence.lineStart != null ? `:${evidence.lineStart}` : ''}
                 </button>
               ))}
+            <button
+              type="button"
+              onClick={() => {
+                setFocusedFindingId(activeFinding.id)
+                setPendingIntent('FINDING')
+                setAiPanelOpen(true)
+              }}
+              className="mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3"
+            >
+              AI에게 확인
+            </button>
           </div>
         )}
       </section>

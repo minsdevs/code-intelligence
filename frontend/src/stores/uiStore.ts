@@ -20,11 +20,18 @@ type UiState = {
   selectedAreas: AreaType[]
   focusedFile: string | null
   focusedNode: FocusedNode | null
+  focusedCommitSha: string | null
+  focusedFindingId: number | null
+  pendingIntent: string | null
   toggleAiPanel: () => void
+  setAiPanelOpen: (open: boolean) => void
   setAiPanelWidth: (width: number) => void
   setSelectedAreas: (areas: AreaType[]) => void
   setFocusedFile: (file: string | null) => void
   setFocusedNode: (node: FocusedNode | null) => void
+  setFocusedCommitSha: (sha: string | null) => void
+  setFocusedFindingId: (id: number | null) => void
+  setPendingIntent: (intent: string | null) => void
 }
 
 const clampWidth = (width: number) =>
@@ -38,11 +45,18 @@ export const useUiStore = create<UiState>()(
       selectedAreas: [],
       focusedFile: null,
       focusedNode: null,
+      focusedCommitSha: null,
+      focusedFindingId: null,
+      pendingIntent: null,
       toggleAiPanel: () => set((state) => ({ aiPanelOpen: !state.aiPanelOpen })),
+      setAiPanelOpen: (aiPanelOpen) => set({ aiPanelOpen }),
       setAiPanelWidth: (width) => set({ aiPanelWidth: clampWidth(width) }),
       setSelectedAreas: (selectedAreas) => set({ selectedAreas }),
       setFocusedFile: (focusedFile) => set({ focusedFile }),
       setFocusedNode: (focusedNode) => set({ focusedNode }),
+      setFocusedCommitSha: (focusedCommitSha) => set({ focusedCommitSha }),
+      setFocusedFindingId: (focusedFindingId) => set({ focusedFindingId }),
+      setPendingIntent: (pendingIntent) => set({ pendingIntent }),
     }),
     {
       name: 'code-intelligence.ui',
