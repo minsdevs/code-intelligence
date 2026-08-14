@@ -82,11 +82,11 @@
 
 ### 4-10 sc — sc
 
-- [ ] IDOR, XSS(노트 HTML 미렌더), SecretMask, 검색 스코프
-- [ ] Dependabot C/H=0
-- [ ] `docs/plan/phase4-security-audit.md`
+- [x] IDOR, XSS(노트 HTML 미렌더), SecretMask, 검색 스코프
+- [x] Dependabot C/H=0
+- [x] `docs/plan/phase4-security-audit.md`
 
 ### 4-11 verify — verify
 
-- [ ] gradle / frontend / sidecar CI green
-- [ ] **Phase 5 시작 금지**
+- [x] gradle / frontend / sidecar CI green
+- [x] **Phase 5 시작 금지**
