@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMe } from '../../api/auth'
+import { useT } from '../../lib/i18n'
 import type { MeResponse } from '../../api/types'
 import AreasStep from './AreasStep'
 import ConnectStep from './ConnectStep'
@@ -9,6 +10,7 @@ import RepoStep from './RepoStep'
 import { WIZARD_STEPS, type WizardStepId } from './wizard'
 
 export default function ImportWizardPage() {
+  const t = useT()
   const navigate = useNavigate()
   const [step, setStep] = useState<WizardStepId>('connect')
   const [me, setMe] = useState<MeResponse | null>(null)
@@ -71,7 +73,7 @@ export default function ImportWizardPage() {
         <h1 className="mt-0.5 text-[15px] font-semibold text-ink">Import repository</h1>
       </header>
 
-      <ol aria-label="Import 단계" className="mb-6 flex gap-1">
+      <ol aria-label="Import steps" className="mb-6 flex gap-1">
         {WIZARD_STEPS.map((item, index) => {
           const current = item.id === step
           const currentIndex = WIZARD_STEPS.findIndex((entry) => entry.id === step)
@@ -96,7 +98,7 @@ export default function ImportWizardPage() {
       </ol>
 
       {bootstrapping ? (
-        <p className="text-[13px] text-ink-muted">세션을 확인하는 중…</p>
+        <p className="text-[13px] text-ink-muted">{t('workspace.checking')}</p>
       ) : (
         <>
           {step === 'connect' && <ConnectStep me={me} onConnected={handleConnected} />}

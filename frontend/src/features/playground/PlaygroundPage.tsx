@@ -10,10 +10,12 @@ import { listFiles } from '../../api/files'
 import { parseEvidenceRef } from '../../api/ai'
 import { ApiError } from '../../api/client'
 import EmptyState from '../../components/EmptyState'
+import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { codeLocationSearch, queryError } from '../code/codeLocation'
 
 export default function PlaygroundPage() {
+  const t = useT()
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const navigate = useNavigate()
@@ -73,12 +75,7 @@ export default function PlaygroundPage() {
   })
 
   if (projectId == null) {
-    return (
-      <EmptyState
-        title="Playground"
-        description="파일을 골라 가설을 묻습니다. clone 코드는 실행하지 않습니다."
-      />
-    )
+    return <EmptyState title="Playground" description={t('playground.desc')} />
   }
 
   const sessions = sessionsQuery.data ?? []
@@ -90,7 +87,7 @@ export default function PlaygroundPage() {
   const sessionError = queryError(sessionsQuery.error)
   const askError =
     askMutation.error instanceof ApiError && askMutation.error.status === 503
-      ? 'AI가 비활성화되어 질문할 수 없습니다.'
+      ? t('playground.aiDisabled')
       : queryError(askMutation.error)
   const result = askMutation.data
 
@@ -116,7 +113,7 @@ export default function PlaygroundPage() {
             onClick={() => createMutation.mutate()}
             className="rounded-md border border-line-strong bg-surface-2 px-2 py-1 text-[12px] text-ink hover:bg-surface-3"
           >
-            새 세션
+            {t('playground.new')}
           </button>
         </div>
         {sessionError && (
@@ -125,12 +122,12 @@ export default function PlaygroundPage() {
           </p>
         )}
         {sessionsQuery.isLoading && (
-          <p className="px-3 py-3 text-[13px] text-ink-muted">세션을 불러오는 중…</p>
+          <p className="px-3 py-3 text-[13px] text-ink-muted">{t('playground.loading')}</p>
         )}
         {!sessionsQuery.isLoading && sessions.length === 0 && (
-          <p className="px-3 py-3 text-[13px] text-ink-muted">세션이 없습니다.</p>
+          <p className="px-3 py-3 text-[13px] text-ink-muted">{t('playground.empty')}</p>
         )}
-        <ul aria-label="Playground 세션" className="min-h-0 flex-1 overflow-auto">
+        <ul aria-label={t('playground.sessionsLabel')} className="min-h-0 flex-1 overflow-auto">
           {sessions.map((session) => (
             <li key={session.id}>
               <button
@@ -155,12 +152,12 @@ export default function PlaygroundPage() {
           <input
             value={fileFilter}
             onChange={(event) => setFileFilter(event.target.value)}
-            placeholder="경로 필터"
-            aria-label="파일 필터"
+            placeholder={t('playground.filterPlaceholder')}
+            aria-label={t('playground.filterLabel')}
             className="mt-2 w-full rounded-md border border-line bg-surface-2 px-2 py-1 font-mono text-[12px] text-ink"
           />
         </div>
-        <ul aria-label="Playground 파일" className="min-h-0 flex-1 overflow-auto px-2 py-2">
+        <ul aria-label={t('playground.filesLabel')} className="min-h-0 flex-1 overflow-auto px-2 py-2">
           {filteredFiles.map((file) => (
             <li key={file.path}>
               <label className="flex items-center gap-2 rounded-md px-2 py-1 text-[12px] text-ink hover:bg-surface-2">
@@ -177,25 +174,25 @@ export default function PlaygroundPage() {
       </section>
       <section className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         <p className="border-b border-line px-4 py-2 text-[12px] text-ink-muted">
-          가설 스니펫은 텍스트로만 전달됩니다. clone 코드는 빌드하거나 실행하지 않습니다.
+          {t('playground.hint')}
         </p>
         <form onSubmit={onAsk} className="border-b border-line px-4 py-3">
           <label className="block text-[12px] text-ink-muted">
-            가설 스니펫
+            {t('playground.snippetLabel')}
             <textarea
               value={snippet}
               onChange={(event) => setSnippet(event.target.value)}
-              aria-label="가설 스니펫"
+              aria-label={t('playground.snippetLabel')}
               rows={6}
               className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1 font-mono text-[12px] text-ink"
             />
           </label>
           <label className="mt-3 block text-[12px] text-ink-muted">
-            질문
+            {t('playground.questionLabel')}
             <input
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
-              aria-label="Playground 질문"
+              aria-label={t('playground.questionLabel')}
               className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1 text-[13px] text-ink"
             />
           </label>
@@ -204,7 +201,7 @@ export default function PlaygroundPage() {
             disabled={askMutation.isPending || question.trim() === ''}
             className="mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
           >
-            질문하기
+            {t('playground.ask')}
           </button>
         </form>
         {askError && (

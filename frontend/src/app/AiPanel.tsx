@@ -5,6 +5,7 @@ import { askAi, askAiStream, getAiStatus, parseEvidenceRef } from '../api/ai'
 import { ApiError } from '../api/client'
 import type { AiAlternative, AiAskBody, AiAskResponse, AiClaim } from '../api/types'
 import { projectIdFromPath, workspaceViewFromPath } from '../lib/projectId'
+import { useT } from '../lib/i18n'
 import { useUiStore } from '../stores/uiStore'
 import { PanelRightIcon, SparkleIcon } from '../components/icons'
 import { codeLocationSearch } from '../features/code/codeLocation'
@@ -17,6 +18,7 @@ type ChatTurn = {
 }
 
 export default function AiPanel() {
+  const t = useT()
   const open = useUiStore((state) => state.aiPanelOpen)
   const width = useUiStore((state) => state.aiPanelWidth)
   const toggle = useUiStore((state) => state.toggleAiPanel)
@@ -69,7 +71,7 @@ export default function AiPanel() {
     selectedAreas,
   ])
 
-  const quick = quickQuestions(view)
+  const quick = quickQuestions(view, t)
   const configured = statusQuery.data?.configured === true
   const canAsk = projectId != null && configured && !sending
 
@@ -132,7 +134,7 @@ export default function AiPanel() {
       setConversationId(response.conversationId)
       patchLast({ response })
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : '질문을 처리하지 못했습니다.'
+      const message = error instanceof ApiError ? error.message : t('ai.questionError')
       patchLast({ error: message })
     } finally {
       setSending(false)
@@ -147,12 +149,12 @@ export default function AiPanel() {
   if (!open) {
     return (
       <aside
-        aria-label="AI Assistant 패널"
+        aria-label={t('ai.panelLabel')}
         className="flex w-10 shrink-0 flex-col items-center gap-3 border-l border-line bg-surface-1 py-2"
       >
         <button
           type="button"
-          aria-label="AI 패널 펼치기"
+          aria-label={t('ai.panelOpen')}
           aria-expanded={false}
           onClick={toggle}
           className="rounded-md p-1.5 text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
@@ -171,14 +173,14 @@ export default function AiPanel() {
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label="AI 패널 너비 조절"
+        aria-label={t('ai.panelResize')}
         className="w-[3px] shrink-0 cursor-col-resize touch-none bg-line transition-colors hover:bg-accent/70 active:bg-accent"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       />
       <aside
-        aria-label="AI Assistant 패널"
+        aria-label={t('ai.panelLabel')}
         style={{ width }}
         className="flex shrink-0 flex-col bg-surface-1"
       >
@@ -189,7 +191,7 @@ export default function AiPanel() {
           </div>
           <button
             type="button"
-            aria-label="AI 패널 접기"
+            aria-label={t('ai.panelClose')}
             aria-expanded={true}
             onClick={toggle}
             className="rounded-md p-1.5 text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
@@ -201,10 +203,10 @@ export default function AiPanel() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div
             className="flex flex-wrap gap-1 border-b border-line px-3 py-2"
-            aria-label="현재 컨텍스트"
+            aria-label={t('ai.context')}
           >
             {chips.length === 0 ? (
-              <span className="text-[12px] text-ink-muted">컨텍스트 없음</span>
+              <span className="text-[12px] text-ink-muted">{t('ai.noContext')}</span>
             ) : (
               chips.map((chip) => (
                 <span
@@ -220,7 +222,7 @@ export default function AiPanel() {
           {quick.length > 0 && (
             <div
               className="flex flex-wrap gap-1 border-b border-line px-3 py-2"
-              aria-label="빠른 질문"
+              aria-label={t('ai.quick')}
             >
               {quick.map((item) => (
                 <button
@@ -238,19 +240,13 @@ export default function AiPanel() {
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
             {statusQuery.data && !configured && (
-              <p className="text-[13px] text-ink-muted">
-                AI provider가 설정되지 않았습니다. 키는 환경 변수로만 넣습니다.
-              </p>
+              <p className="text-[13px] text-ink-muted">{t('ai.notConfigured')}</p>
             )}
             {projectId == null && configured && (
-              <p className="text-[13px] text-ink-muted">
-                프로젝트를 열면 현재 화면 기준으로 질문할 수 있습니다.
-              </p>
+              <p className="text-[13px] text-ink-muted">{t('ai.openProjectHint')}</p>
             )}
             {turns.length === 0 && configured && projectId != null && (
-              <p className="text-[13px] text-ink-muted">
-                현재 컨텍스트를 근거로 질문하세요. 단정은 evidence와 함께 표시됩니다.
-              </p>
+              <p className="text-[13px] text-ink-muted">{t('ai.askHint')}</p>
             )}
             {turns.map((turn, index) => (
               <article key={`${turn.question}-${index}`} className="mb-4">
@@ -262,7 +258,7 @@ export default function AiPanel() {
                 )}
                 {!turn.response && !turn.error && (
                   <p className="mt-1 whitespace-pre-wrap text-[13px] text-ink-muted">
-                    {turn.streamed || '답변을 생성하는 중…'}
+                    {turn.streamed || t('ai.generating')}
                   </p>
                 )}
                 {turn.response && (
@@ -286,8 +282,8 @@ export default function AiPanel() {
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               disabled={!canAsk}
-              aria-label="AI 질문 입력"
-              placeholder={configured ? '질문 입력…' : 'AI가 비활성화되어 있습니다'}
+              aria-label={t('ai.inputLabel')}
+              placeholder={configured ? t('ai.placeholder') : t('ai.placeholderDisabled')}
               className="min-w-0 flex-1 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-ink placeholder:text-ink-faint disabled:cursor-not-allowed disabled:opacity-60"
             />
             <button
@@ -295,7 +291,7 @@ export default function AiPanel() {
               disabled={!canAsk || question.trim().length === 0}
               className="rounded-md border border-line-strong bg-surface-3 px-3 py-1.5 text-ink disabled:cursor-not-allowed disabled:text-ink-muted disabled:opacity-60"
             >
-              전송
+              {t('ai.send')}
             </button>
           </div>
         </form>
@@ -365,12 +361,13 @@ function ClaimBlock({
 }
 
 function AlternativeBlock({ alternative }: { alternative: AiAlternative }) {
+  const t = useT()
   return (
     <div className="mt-2 rounded-md border border-line px-2 py-1.5">
       <p className="text-[13px] font-medium text-ink">{alternative.name}</p>
-      <p className="mt-1 text-[12px] text-ink-muted">장점: {alternative.pros.join(', ') || '—'}</p>
-      <p className="text-[12px] text-ink-muted">단점: {alternative.cons.join(', ') || '—'}</p>
-      <p className="text-[12px] text-ink-muted">적합도: {alternative.fitForThisProject || '—'}</p>
+      <p className="mt-1 text-[12px] text-ink-muted">{t('ai.pros')}: {alternative.pros.join(', ') || '—'}</p>
+      <p className="text-[12px] text-ink-muted">{t('ai.cons')}: {alternative.cons.join(', ') || '—'}</p>
+      <p className="text-[12px] text-ink-muted">{t('ai.fit')}: {alternative.fitForThisProject || '—'}</p>
     </div>
   )
 }
@@ -385,49 +382,56 @@ function confidenceClass(confidence: string): string {
 
 function quickQuestions(
   view: string | null,
+  t: (key: string) => string,
 ): { label: string; question: string; intent: string }[] {
   if (view === 'features') {
-    return [{ label: '기능 흐름', question: '이 기능 전체 흐름 설명해줘', intent: 'EXPLAIN' }]
+    return [
+      { label: t('ai.qq.featureFlow'), question: t('ai.qq.featureFlowQ'), intent: 'EXPLAIN' },
+    ]
   }
   if (view === 'architecture') {
-    return [{ label: '왜 필요해?', question: '이 컴포넌트가 왜 필요해?', intent: 'WHY' }]
+    return [{ label: t('ai.qq.whyNeeded'), question: t('ai.qq.whyNeededQ'), intent: 'WHY' }]
   }
   if (view === 'code') {
     return [
-      { label: '쉽게 설명', question: '이 메서드 쉽게 설명', intent: 'EXPLAIN' },
-      { label: '왜 이렇게?', question: '왜 이렇게 구현?', intent: 'WHY' },
-      { label: '대안', question: '대안은?', intent: 'ALTERNATIVE' },
-      { label: '문제점', question: '문제점 찾아줘', intent: 'FINDING' },
+      { label: t('ai.qq.explainSimply'), question: t('ai.qq.explainSimplyQ'), intent: 'EXPLAIN' },
+      { label: t('ai.qq.whyThisWay'), question: t('ai.qq.whyThisWayQ'), intent: 'WHY' },
+      { label: t('ai.qq.alternatives'), question: t('ai.qq.alternativesQ'), intent: 'ALTERNATIVE' },
+      { label: t('ai.qq.problems'), question: t('ai.qq.problemsQ'), intent: 'FINDING' },
     ]
   }
   if (view === 'history') {
-    return [{ label: '왜 바뀌었어?', question: '이 변경이 왜 발생했어?', intent: 'WHY' }]
+    return [{ label: t('ai.qq.whyChanged'), question: t('ai.qq.whyChangedQ'), intent: 'WHY' }]
   }
   if (view === 'analysis') {
-    return [{ label: '실제 문제?', question: '실제 문제인지 확인해줘', intent: 'FINDING' }]
+    return [{ label: t('ai.qq.realIssue'), question: t('ai.qq.realIssueQ'), intent: 'FINDING' }]
   }
   if (view === 'flows') {
-    return [{ label: '흐름 설명', question: '이 흐름을 설명해줘', intent: 'EXPLAIN' }]
+    return [{ label: t('ai.qq.explainFlow'), question: t('ai.qq.explainFlowQ'), intent: 'EXPLAIN' }]
   }
   if (view === 'tasks') {
-    return [{ label: '현재 코드 기준', question: '현재 코드 기준으로 설명해줘', intent: 'EXPLAIN' }]
+    return [{ label: t('ai.qq.currentCode'), question: t('ai.qq.currentCodeQ'), intent: 'EXPLAIN' }]
   }
   if (view === 'notes') {
-    return [{ label: '노트 설명', question: '이 노트와 연결된 코드를 설명해줘', intent: 'EXPLAIN' }]
+    return [{ label: t('ai.qq.explainNote'), question: t('ai.qq.explainNoteQ'), intent: 'EXPLAIN' }]
   }
   if (view === 'review') {
-    return [{ label: 'PR 리뷰', question: '이 PR 변경의 위험을 설명해줘', intent: 'EXPLAIN' }]
+    return [{ label: t('ai.qq.prReview'), question: t('ai.qq.prReviewQ'), intent: 'EXPLAIN' }]
   }
   if (view === 'playground') {
     return [
-      { label: '가설 설명', question: '이 가설 변경이 무엇을 깨뜨릴 수 있어?', intent: 'EXPLAIN' },
+      {
+        label: t('ai.qq.explainHypothesis'),
+        question: t('ai.qq.explainHypothesisQ'),
+        intent: 'EXPLAIN',
+      },
     ]
   }
   if (view === 'growth') {
     return [
       {
-        label: '학습 요약',
-        question: '최근 학습 기록을 코드와 연결해 설명해줘',
+        label: t('ai.qq.learningSummary'),
+        question: t('ai.qq.learningSummaryQ'),
         intent: 'EXPLAIN',
       },
     ]

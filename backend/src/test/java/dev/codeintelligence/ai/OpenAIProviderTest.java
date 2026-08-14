@@ -33,7 +33,8 @@ class OpenAIProviderTest {
         provider = new OpenAIProvider(
                 new AiProperties.OpenAi("sk-test-key", base, "gpt-4o-mini", "text-embedding-3-small"),
                 RestClient.builder(),
-                JsonMapper.builder().build());
+                JsonMapper.builder().build(),
+                null);
     }
 
     @AfterEach

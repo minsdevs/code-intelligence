@@ -7,10 +7,12 @@ import { parseEvidenceRef } from '../../api/ai'
 import { ApiError } from '../../api/client'
 import type { PullRequest, ReviewView } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
+import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { codeLocationSearch, queryError } from '../code/codeLocation'
 
 export default function ReviewPage() {
+  const t = useT()
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const navigate = useNavigate()
@@ -48,12 +50,7 @@ export default function ReviewPage() {
   })
 
   if (projectId == null) {
-    return (
-      <EmptyState
-        title="Review"
-        description="Pull request의 정적 findings와 AI 리뷰 코멘트를 함께 봅니다."
-      />
-    )
+    return <EmptyState title="Review" description={t('review.desc')} />
   }
 
   const pullsError = queryError(pullsQuery.error)
@@ -63,7 +60,7 @@ export default function ReviewPage() {
       : queryError(reviewQuery.error)
   const generateError =
     generateMutation.error instanceof ApiError && generateMutation.error.status === 503
-      ? 'AI가 비활성화되어 리뷰를 만들 수 없습니다.'
+      ? t('review.aiDisabled')
       : queryError(generateMutation.error)
 
   return (
@@ -78,12 +75,12 @@ export default function ReviewPage() {
           </p>
         )}
         {pullsQuery.isLoading && (
-          <p className="px-4 py-3 text-[13px] text-ink-muted">PR을 불러오는 중…</p>
+          <p className="px-4 py-3 text-[13px] text-ink-muted">{t('review.pullsLoading')}</p>
         )}
         {!pullsQuery.isLoading && pulls.length === 0 && !pullsError && (
-          <p className="px-4 py-3 text-[13px] text-ink-muted">Pull request가 없습니다.</p>
+          <p className="px-4 py-3 text-[13px] text-ink-muted">{t('review.noPulls')}</p>
         )}
-        <ul aria-label="Pull request 목록" className="min-h-0 flex-1 overflow-auto">
+        <ul aria-label={t('review.pullsLabel')} className="min-h-0 flex-1 overflow-auto">
           {pulls.map((pull) => (
             <li key={pull.number}>
               <button
@@ -107,7 +104,7 @@ export default function ReviewPage() {
       </section>
       <section className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
         {activePull == null ? (
-          <p className="text-[13px] text-ink-muted">리뷰할 PR을 선택하세요.</p>
+          <p className="text-[13px] text-ink-muted">{t('review.select')}</p>
         ) : (
           <ReviewDetail
             pull={activePull}
@@ -146,6 +143,7 @@ function ReviewDetail({
   onGenerate: () => void
   onOpenEvidence: (path: string, line: number | null) => void
 }) {
+  const t = useT()
   return (
     <div>
       <div className="flex items-start justify-between gap-3">
@@ -161,7 +159,7 @@ function ReviewDetail({
           disabled={generating}
           className="rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
         >
-          {review ? '다시 리뷰' : '리뷰 생성'}
+          {review ? t('review.regenerate') : t('review.generate')}
         </button>
       </div>
       {pull.body && (
@@ -177,9 +175,9 @@ function ReviewDetail({
           {error}
         </p>
       )}
-      {loading && <p className="mt-4 text-[13px] text-ink-muted">리뷰를 불러오는 중…</p>}
+      {loading && <p className="mt-4 text-[13px] text-ink-muted">{t('review.loading')}</p>}
       {!loading && review == null && (
-        <p className="mt-4 text-[13px] text-ink-muted">아직 생성된 리뷰가 없습니다.</p>
+        <p className="mt-4 text-[13px] text-ink-muted">{t('review.none')}</p>
       )}
       {review && (
         <div className="mt-4">
@@ -187,7 +185,7 @@ function ReviewDetail({
             origin {review.origin}
           </p>
           <p className="mt-2 text-[13px] text-ink">{review.summary}</p>
-          <ol aria-label="리뷰 코멘트" className="mt-4 space-y-3">
+          <ol aria-label={t('review.commentsLabel')} className="mt-4 space-y-3">
             {review.comments.map((comment) => (
               <li key={comment.id} className="rounded-md border border-line bg-surface-1 px-3 py-2">
                 <p className="flex flex-wrap items-baseline gap-2">

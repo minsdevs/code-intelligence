@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ApiError, UnauthorizedError } from '../../api/client'
 import { listRepos } from '../../api/github'
 import { createProject } from '../../api/projects'
+import { useT } from '../../lib/i18n'
 import type { GithubRepo, GithubRepoList } from '../../api/types'
 
 type RepoStepProps = {
@@ -10,6 +11,7 @@ type RepoStepProps = {
 }
 
 export default function RepoStep({ onImported, onUnauthorized }: RepoStepProps) {
+  const t = useT()
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [page, setPage] = useState(1)
@@ -42,13 +44,13 @@ export default function RepoStep({ onImported, onUnauthorized }: RepoStepProps) 
           onUnauthorized()
           return
         }
-        setError(err instanceof ApiError ? err.message : '저장소 목록을 불러오지 못했습니다.')
+        setError(err instanceof ApiError ? err.message : t('repo.listError'))
         setLoadedKey(requestKey)
       })
     return () => {
       cancelled = true
     }
-  }, [page, debouncedQuery, requestKey, onUnauthorized])
+  }, [page, debouncedQuery, requestKey, onUnauthorized, t])
 
   const handleImport = async () => {
     if (!selected) return
@@ -62,7 +64,7 @@ export default function RepoStep({ onImported, onUnauthorized }: RepoStepProps) 
         onUnauthorized()
         return
       }
-      setError(err instanceof ApiError ? err.message : '저장소를 가져오지 못했습니다.')
+      setError(err instanceof ApiError ? err.message : t('repo.importError'))
     } finally {
       setImporting(false)
     }
@@ -71,14 +73,12 @@ export default function RepoStep({ onImported, onUnauthorized }: RepoStepProps) 
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <div>
-        <h2 className="text-[15px] font-semibold text-ink">저장소 선택</h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
-          접근 가능한 GitHub 저장소를 고른 뒤 분석을 시작합니다.
-        </p>
+        <h2 className="text-[15px] font-semibold text-ink">{t('repo.title')}</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{t('repo.description')}</p>
       </div>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-[12px] text-ink-muted">검색</span>
+        <span className="text-[12px] text-ink-muted">{t('repo.search')}</span>
         <input
           type="search"
           value={query}
@@ -86,7 +86,7 @@ export default function RepoStep({ onImported, onUnauthorized }: RepoStepProps) 
             setQuery(event.target.value)
             setPage(1)
           }}
-          placeholder="owner/name"
+          placeholder={t('repo.placeholder')}
           className="rounded-md border border-line bg-surface-2 px-3 py-1.5 font-mono text-[13px] text-ink placeholder:text-ink-faint"
         />
       </label>
@@ -97,15 +97,13 @@ export default function RepoStep({ onImported, onUnauthorized }: RepoStepProps) 
         </p>
       )}
 
-      <div className="overflow-hidden rounded-md border border-line">
-        {loading && (
-          <p className="px-3 py-4 text-[13px] text-ink-muted">저장소를 불러오는 중…</p>
-        )}
+      <div className="max-h-[42vh] overflow-y-auto rounded-md border border-line">
+        {loading && <p className="px-3 py-4 text-[13px] text-ink-muted">{t('repo.loading')}</p>}
         {!loading && list && list.items.length === 0 && (
-          <p className="px-3 py-4 text-[13px] text-ink-muted">일치하는 저장소가 없습니다.</p>
+          <p className="px-3 py-4 text-[13px] text-ink-muted">{t('repo.empty')}</p>
         )}
         {!loading && list && list.items.length > 0 && (
-          <ul role="listbox" aria-label="GitHub 저장소" className="divide-y divide-line">
+          <ul role="listbox" aria-label={t('repo.listLabel')} className="divide-y divide-line">
             {list.items.map((repo) => {
               const isSelected = selected?.fullName === repo.fullName
               return (
@@ -123,7 +121,7 @@ export default function RepoStep({ onImported, onUnauthorized }: RepoStepProps) 
                       {repo.fullName}
                       {repo.private && (
                         <span className="rounded border border-line-strong px-1.5 py-px font-sans text-[10px] uppercase tracking-wide text-ink-faint">
-                          private
+                          {t('repo.private')}
                         </span>
                       )}
                     </span>
@@ -146,7 +144,7 @@ export default function RepoStep({ onImported, onUnauthorized }: RepoStepProps) 
             onClick={() => setPage((current) => Math.max(1, current - 1))}
             className="rounded-md border border-line px-2.5 py-1 text-[12px] text-ink-muted disabled:opacity-40"
           >
-            이전
+            {t('repo.prev')}
           </button>
           <button
             type="button"
@@ -154,7 +152,7 @@ export default function RepoStep({ onImported, onUnauthorized }: RepoStepProps) 
             onClick={() => setPage((current) => current + 1)}
             className="rounded-md border border-line px-2.5 py-1 text-[12px] text-ink-muted disabled:opacity-40"
           >
-            다음
+            {t('repo.next')}
           </button>
         </div>
         <button
@@ -163,7 +161,7 @@ export default function RepoStep({ onImported, onUnauthorized }: RepoStepProps) 
           onClick={() => void handleImport()}
           className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 disabled:opacity-60"
         >
-          {importing ? '가져오는 중…' : '저장소 가져오기'}
+          {importing ? t('repo.importing') : t('repo.import')}
         </button>
       </div>
     </div>

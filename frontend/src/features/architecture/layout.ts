@@ -15,6 +15,41 @@ export type ArchitectureNodeData = {
   nodeType: string | null
 }
 
+/** Learnable color coding for common node types (falls back to a neutral tint). */
+export const NODE_TYPE_COLORS: Record<string, string> = {
+  // backend
+  CONTROLLER: '#d97757',
+  SERVICE: '#5b8def',
+  REPOSITORY: '#8b5cf6',
+  ENTITY: '#e879f9',
+  CONFIG: '#f59e0b',
+  // frontend
+  COMPONENT: '#34d399',
+  HOOK: '#2dd4bf',
+  STORE: '#f472b6',
+  API_CLIENT: '#60a5fa',
+  FE_ROUTE: '#a3e635',
+  // system
+  INFRA: '#94a3b8',
+  CI_PIPELINE: '#facc15',
+  DOCKER: '#38bdf8',
+  DB: '#22d3ee',
+  // generic
+  FILE: '#94a3b8',
+  CLASS: '#c084fc',
+  INTERFACE: '#a78bfa',
+  ENUM: '#f0abfc',
+  FUNCTION: '#7dd3fc',
+  METHOD: '#67e8f9',
+}
+
+export function nodeColor(nodeType: string | null): string {
+  if (!nodeType) return '#64748b'
+  const exact = NODE_TYPE_COLORS[nodeType.toUpperCase()]
+  if (exact) return exact
+  return '#64748b'
+}
+
 function groupId(layer: string): string {
   return `group:${layer}`
 }
@@ -103,7 +138,7 @@ function toFlow(
           width: NODE_WIDTH,
           height: NODE_HEIGHT,
           background: 'var(--color-surface-2)',
-          border: '1px solid var(--color-line-strong)',
+          border: `1.5px solid ${nodeColor(source?.nodeType ?? null)}`,
           borderRadius: 6,
           color: 'var(--color-ink)',
           fontSize: 12,
@@ -116,8 +151,9 @@ function toFlow(
     source: edge.sourceNodeId != null ? nodeId(edge.sourceNodeId) : groupId(edge.sourceGroup),
     target: edge.targetNodeId != null ? nodeId(edge.targetNodeId) : groupId(edge.targetGroup),
     label: String(edge.count),
-    style: { stroke: 'var(--color-ink-muted)' },
+    style: { stroke: 'var(--color-ink-muted)', strokeWidth: 1.5 },
     labelStyle: { fill: 'var(--color-ink-muted)', fontSize: 11 },
+    markerEnd: { type: 'arrowclosed', color: 'var(--color-ink-muted)', width: 14, height: 14 },
   }))
   return { nodes, edges }
 }

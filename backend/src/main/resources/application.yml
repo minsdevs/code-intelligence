@@ -61,7 +61,7 @@ app:
     pat-login-max-attempts: ${PAT_LOGIN_MAX_ATTEMPTS:20}
     pat-login-window-seconds: ${PAT_LOGIN_WINDOW_SECONDS:60}
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   github:
     base-url: https://api.github.com
     oauth:
@@ -70,6 +70,9 @@ app:
   ts-analyzer:
     base-url: ${TS_ANALYZER_BASE_URL:}
     timeout-seconds: ${TS_ANALYZER_TIMEOUT_SECONDS:30}
+  tree-analyzer:
+    base-url: ${TREE_ANALYZER_BASE_URL:}
+    timeout-seconds: ${TREE_ANALYZER_TIMEOUT_SECONDS:30}
   ai:
     provider: ${AI_PROVIDER:}
     max-context-tokens: ${AI_MAX_CONTEXT_TOKENS:8000}

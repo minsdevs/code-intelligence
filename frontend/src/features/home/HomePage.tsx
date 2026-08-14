@@ -1,52 +1,67 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { listProjects } from '../../api/projects'
+import { UnauthorizedError } from '../../api/client'
 import type { Project } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
 import { areaLabel } from '../areas/labels'
+import { useT } from '../../lib/i18n'
 import { firstLine, formatWhen, shortSha } from '../history/format'
 
 export default function HomePage() {
+  const t = useT()
   const projectsQuery = useQuery({
     queryKey: ['projects'],
     queryFn: listProjects,
   })
 
   const projects = projectsQuery.data ?? []
+  const unauthorized = projectsQuery.error instanceof UnauthorizedError
 
   return (
     <div className="flex flex-1 flex-col px-6 py-5">
       <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[15px] font-semibold text-ink">Projects</h1>
-          <p className="mt-0.5 text-[13px] text-ink-muted">가져온 저장소의 영역·분석 상태·최근 이력을 봅니다.</p>
+          <h1 className="text-[15px] font-semibold text-ink">{t('home.title')}</h1>
+          <p className="mt-0.5 text-[13px] text-ink-muted">{t('home.description')}</p>
         </div>
         <Link
           to="/import"
           className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 transition-opacity hover:opacity-90"
         >
-          Import repository
+          {t('home.import')}
         </Link>
       </header>
 
-      {projectsQuery.isLoading && <p className="text-[13px] text-ink-muted">프로젝트를 불러오는 중…</p>}
+      {projectsQuery.isLoading && <p className="text-[13px] text-ink-muted">{t('home.loading')}</p>}
 
-      {projectsQuery.isError && (
+      {unauthorized && (
+        <EmptyState title={t('home.loginPrompt')}>
+          <Link
+            to="/import"
+            className="mt-1 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 transition-opacity hover:opacity-90"
+          >
+            {t('home.login')}
+          </Link>
+        </EmptyState>
+      )}
+
+      {projectsQuery.isError && !unauthorized && (
         <p role="alert" className="text-[12px] text-danger">
-          프로젝트 목록을 불러오지 못했습니다.
+          {t('home.loadError')}
         </p>
       )}
 
       {!projectsQuery.isLoading && !projectsQuery.isError && projects.length === 0 && (
         <EmptyState
-          title="프로젝트를 연결하면 여기에 표시됩니다"
-          description="GitHub 저장소를 import하면 영역·기술·최근 커밋이 카드로 나타납니다."
+          title={t('home.emptyTitle')}
+          description={t('home.emptyDesc')}
         >
           <Link
             to="/import"
             className="mt-1 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 transition-opacity hover:opacity-90"
           >
-            Import repository
+            {t('home.import')}
           </Link>
         </EmptyState>
       )}
@@ -65,11 +80,8 @@ export default function HomePage() {
 }
 
 function ProjectCard({ project }: { project: Project }) {
+  const t = useT()
   const analyzing = isAnalyzing(project)
-  const snapshot = project.currentSnapshot
-  const areas = project.selectedAreas ?? []
-  const techs = project.topTechnologies ?? []
-
   return (
     <Link
       to={`/projects/${project.id}`}
@@ -79,50 +91,53 @@ function ProjectCard({ project }: { project: Project }) {
     >
       <div className="flex items-start justify-between gap-2">
         <h2 className="font-mono text-[14px] font-semibold text-ink">
-          {project.repoOwner}/{project.repoName}
+          {project.repoOwner}
+          <span className="text-ink-faint">/</span>
+          {project.repoName}
         </h2>
         {analyzing && (
           <span role="status" className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-accent">
-            분석 중
+            {t('home.analyzing')}
           </span>
         )}
       </div>
-
       <dl className="mt-3 flex flex-col gap-2 text-[12px]">
-        <div>
-          <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">영역</dt>
-          <dd className="mt-0.5 text-ink-muted">
-            {areas.length > 0 ? areas.map((area) => areaLabel(area)).join(', ') : '선택 없음'}
-          </dd>
-        </div>
-        <div>
-          <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">기술</dt>
-          <dd className="mt-0.5 text-ink-muted">{techs.length > 0 ? techs.join(', ') : '—'}</dd>
-        </div>
-        <div>
-          <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">스냅샷</dt>
-          <dd className="mt-0.5 text-ink-muted">
-            {snapshot
-              ? `${snapshot.status}${snapshot.analyzedAt ? ` · ${formatWhen(snapshot.analyzedAt)}` : ''}`
-              : '분석 전'}
-          </dd>
-        </div>
-        <div>
-          <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">최근 커밋</dt>
-          <dd className="mt-0.5 font-mono text-ink-muted">
-            {project.latestCommit
-              ? `${shortSha(project.latestCommit.sha)} ${firstLine(project.latestCommit.message)}`
+        <div className="flex gap-2">
+          <dt className="shrink-0 text-ink-faint">{t('home.areas')}</dt>
+          <dd className="text-ink-muted">
+            {project.selectedAreas.length > 0
+              ? project.selectedAreas.map(areaLabel).join(', ')
               : '—'}
           </dd>
         </div>
-        <div>
-          <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">최근 PR</dt>
-          <dd className="mt-0.5 text-ink-muted">
-            {project.latestPull
-              ? `#${project.latestPull.number} ${project.latestPull.title} (${project.latestPull.state})`
-              : '—'}
-          </dd>
+        <div className="flex gap-2">
+          <dt className="shrink-0 text-ink-faint">{t('home.tech')}</dt>
+          <dd className="text-ink-muted">{project.topTechnologies.join(', ') || '—'}</dd>
         </div>
+        {project.currentSnapshot && (
+          <div className="flex gap-2">
+            <dt className="shrink-0 text-ink-faint">{t('home.snapshot')}</dt>
+            <dd className="text-ink-muted">
+              {project.currentSnapshot.status} · {formatWhen(project.currentSnapshot.analyzedAt)}
+            </dd>
+          </div>
+        )}
+        {project.latestCommit && (
+          <div className="flex gap-2">
+            <dt className="shrink-0 text-ink-faint">{t('home.commit')}</dt>
+            <dd className="min-w-0 truncate text-ink-muted">
+              {shortSha(project.latestCommit.sha)} {firstLine(project.latestCommit.message)}
+            </dd>
+          </div>
+        )}
+        {project.latestPull && (
+          <div className="flex gap-2">
+            <dt className="shrink-0 text-ink-faint">{t('home.pr')}</dt>
+            <dd className="min-w-0 truncate text-ink-muted">
+              #{project.latestPull.number} {project.latestPull.title} ({project.latestPull.state})
+            </dd>
+          </div>
+        )}
       </dl>
     </Link>
   )

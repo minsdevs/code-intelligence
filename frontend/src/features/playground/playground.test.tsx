@@ -98,7 +98,7 @@ describe('PlaygroundPage', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '가설 스니펫' }), {
       target: { value: 'class App {}' },
     })
-    fireEvent.change(screen.getByRole('textbox', { name: 'Playground 질문' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '질문' }), {
       target: { value: 'what does this do?' },
     })
     fireEvent.click(screen.getByRole('button', { name: '질문하기' }))

@@ -83,6 +83,8 @@ public class SqlMigrationAnalyzer implements CodeAnalyzer {
         return path.contains("db/migration")
                 || path.contains("db/changelog")
                 || path.contains("/liquibase/")
+                || path.contains("supabase/migrations")
+                || path.contains("/migrations/")
                 || FLYWAY_VERSION
                         .matcher(ConfigFileSupport.filename(file.path()))
                         .matches();

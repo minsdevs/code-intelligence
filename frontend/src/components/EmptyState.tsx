@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 type EmptyStateProps = {
   title: string
   description?: string
-  /** 이 기능이 실제로 구현되는 Phase (기획서 §21) */
+  /** The phase in which this feature is actually implemented (spec §21). */
   phase?: number
   children?: ReactNode
 }

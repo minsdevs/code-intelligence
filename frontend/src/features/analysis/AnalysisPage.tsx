@@ -8,6 +8,7 @@ import { parseEvidenceRef } from '../../api/ai'
 import { ApiError } from '../../api/client'
 import type { FindingView } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
+import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { useUiStore } from '../../stores/uiStore'
 import { codeLocationSearch, queryError } from '../code/codeLocation'
@@ -16,6 +17,7 @@ const SEVERITIES = ['', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const
 const DEPTHS = [1, 2, 3, 4, 5, 6, 7, 8]
 
 export default function AnalysisPage() {
+  const t = useT()
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const navigate = useNavigate()
@@ -64,8 +66,8 @@ export default function AnalysisPage() {
     onError: (error) => {
       const message =
         error instanceof ApiError && error.status === 503
-          ? 'AI가 비활성화되어 초안을 만들 수 없습니다.'
-          : (queryError(error) ?? '초안을 만들지 못했습니다.')
+          ? t('analysis.draftAiDisabled')
+          : (queryError(error) ?? t('analysis.draftFailed'))
       setDraftMessage(message)
     },
   })
@@ -75,8 +77,8 @@ export default function AnalysisPage() {
     onError: (error) => {
       const message =
         error instanceof ApiError && error.status === 503
-          ? 'AI가 비활성화되어 What-if를 실행할 수 없습니다.'
-          : (queryError(error) ?? 'What-if를 실행하지 못했습니다.')
+          ? t('analysis.whatIfAiDisabled')
+          : (queryError(error) ?? t('analysis.whatIfFailed'))
       setWhatIfError(message)
     },
     onSuccess: () => setWhatIfError(null),
@@ -84,10 +86,7 @@ export default function AnalysisPage() {
 
   if (projectId == null) {
     return (
-      <EmptyState
-        title="Analysis"
-        description="영역별 findings와 선택한 노드의 Impact(역방향 의존)를 확인합니다."
-      />
+      <EmptyState title="Analysis" description={t('analysis.desc')} />
     )
   }
 
@@ -116,7 +115,7 @@ export default function AnalysisPage() {
             >
               {SEVERITIES.map((value) => (
                 <option key={value || 'all'} value={value}>
-                  {value || '전체'}
+                  {value || t('analysis.all')}
                 </option>
               ))}
             </select>
@@ -128,10 +127,10 @@ export default function AnalysisPage() {
           </p>
         )}
         {findingsQuery.isLoading && (
-          <p className="px-4 py-3 text-[13px] text-ink-muted">Findings를 불러오는 중…</p>
+          <p className="px-4 py-3 text-[13px] text-ink-muted">{t('analysis.loading')}</p>
         )}
         {!findingsQuery.isLoading && findings.length === 0 && !findingsError && (
-          <p className="px-4 py-3 text-[13px] text-ink-muted">탐지된 finding이 없습니다.</p>
+          <p className="px-4 py-3 text-[13px] text-ink-muted">{t('analysis.noFindings')}</p>
         )}
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full text-left text-[13px]">
@@ -185,7 +184,7 @@ export default function AnalysisPage() {
         {activeFinding && (
           <div className="border-t border-line px-4 py-3">
             <p className="text-[13px] text-ink-muted">
-              {activeFinding.detail ?? '상세가 없습니다.'}
+              {activeFinding.detail ?? t('analysis.noDetail')}
             </p>
             {activeFinding.evidences
               .filter((evidence) => evidence.filePath)
@@ -213,7 +212,7 @@ export default function AnalysisPage() {
               }}
               className="mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3"
             >
-              AI에게 확인
+              {t('analysis.verifyAi')}
             </button>
             <button
               type="button"
@@ -224,7 +223,7 @@ export default function AnalysisPage() {
               disabled={draftMutation.isPending}
               className="ml-2 mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
             >
-              초안 생성
+              {t('analysis.createDraft')}
             </button>
             {draftMessage && (
               <p role="alert" className="mt-2 text-[12px] text-danger">
@@ -239,11 +238,11 @@ export default function AnalysisPage() {
         <div className="border-b border-line px-4 py-3">
           <h2 className="text-[13px] font-semibold text-ink">Impact</h2>
           <label className="mt-2 block text-[12px] text-ink-muted">
-            노드 검색
+            {t('analysis.nodeSearch')}
             <input
               value={nodeQuery}
               onChange={(event) => setNodeQuery(event.target.value)}
-              placeholder="이름 또는 경로"
+              placeholder={t('analysis.nodeSearchPlaceholder')}
               className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1 font-mono text-[12px] text-ink"
             />
           </label>
@@ -264,7 +263,7 @@ export default function AnalysisPage() {
         </div>
         {searchQuery.data && searchQuery.data.items.length > 0 && (
           <ul
-            aria-label="Impact 노드 검색 결과"
+            aria-label={t('analysis.searchResultsLabel')}
             className="max-h-40 overflow-y-auto border-b border-line px-2 py-2"
           >
             {searchQuery.data.items.map((node) => (
@@ -293,12 +292,10 @@ export default function AnalysisPage() {
           </p>
         )}
         {impactNodeId == null && (
-          <p className="px-4 py-3 text-[13px] text-ink-muted">
-            finding을 고르거나 노드를 검색하세요.
-          </p>
+          <p className="px-4 py-3 text-[13px] text-ink-muted">{t('analysis.pickNode')}</p>
         )}
         {impactQuery.isLoading && (
-          <p className="px-4 py-3 text-[13px] text-ink-muted">Impact를 불러오는 중…</p>
+          <p className="px-4 py-3 text-[13px] text-ink-muted">{t('analysis.impactLoading')}</p>
         )}
         {impactQuery.data && (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
@@ -311,7 +308,7 @@ export default function AnalysisPage() {
               <span className="text-[13px] text-ink-muted">score {impactQuery.data.riskScore}</span>
             </p>
             {impactQuery.data.dependents.length === 0 ? (
-              <p className="mt-3 text-[13px] text-ink-muted">역방향 의존이 없습니다.</p>
+              <p className="mt-3 text-[13px] text-ink-muted">{t('analysis.noReverseDeps')}</p>
             ) : (
               <ol aria-label="Impact dependents" className="mt-3 space-y-1">
                 {impactQuery.data.dependents.map((dep) => (
@@ -353,7 +350,7 @@ export default function AnalysisPage() {
               disabled={whatIfMutation.isPending}
               className="mt-4 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
             >
-              What-if
+              {t('analysis.whatIf')}
             </button>
             {whatIfError && (
               <p role="alert" className="mt-2 text-[12px] text-danger">

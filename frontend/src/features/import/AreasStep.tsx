@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, UnauthorizedError } from '../../api/client'
 import { listAreas, updateAreaSelections } from '../../api/areas'
+import { useT } from '../../lib/i18n'
 import type { ProjectArea } from '../../api/types'
 import { AREA_LABELS } from './wizard'
 
@@ -11,6 +12,7 @@ type AreasStepProps = {
 }
 
 export default function AreasStep({ projectId, onSaved, onUnauthorized }: AreasStepProps) {
+  const t = useT()
   const [areas, setAreas] = useState<ProjectArea[] | null>(null)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [loadedProjectId, setLoadedProjectId] = useState<number | null>(null)
@@ -37,13 +39,13 @@ export default function AreasStep({ projectId, onSaved, onUnauthorized }: AreasS
           onUnauthorized()
           return
         }
-        setError(err instanceof ApiError ? err.message : '영역 목록을 불러오지 못했습니다.')
+        setError(err instanceof ApiError ? err.message : t('areas.listError'))
         setLoadedProjectId(projectId)
       })
     return () => {
       cancelled = true
     }
-  }, [projectId, onUnauthorized])
+  }, [projectId, onUnauthorized, t])
 
   const handleSave = async () => {
     if (!areas) return
@@ -62,7 +64,7 @@ export default function AreasStep({ projectId, onSaved, onUnauthorized }: AreasS
         onUnauthorized()
         return
       }
-      setError(err instanceof ApiError ? err.message : '영역 선택을 저장하지 못했습니다.')
+      setError(err instanceof ApiError ? err.message : t('areas.saveError'))
     } finally {
       setSaving(false)
     }
@@ -71,11 +73,8 @@ export default function AreasStep({ projectId, onSaved, onUnauthorized }: AreasS
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <div>
-        <h2 className="text-[15px] font-semibold text-ink">영역 선택</h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
-          감지된 Project Area를 확인한 뒤 워크스페이스에 반영할 영역을 고르세요. 재분석 없이 바로
-          저장됩니다.
-        </p>
+        <h2 className="text-[15px] font-semibold text-ink">{t('areas.title')}</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{t('areas.description')}</p>
       </div>
 
       {error && (
@@ -84,14 +83,14 @@ export default function AreasStep({ projectId, onSaved, onUnauthorized }: AreasS
         </p>
       )}
 
-      {loading && <p className="text-[13px] text-ink-muted">영역을 불러오는 중…</p>}
+      {loading && <p className="text-[13px] text-ink-muted">{t('areas.loading')}</p>}
 
       {!loading && areas && areas.length === 0 && (
-        <p className="text-[13px] text-ink-muted">감지된 영역이 없습니다. 워크스페이스로 이동할 수 있습니다.</p>
+        <p className="text-[13px] text-ink-muted">{t('areas.empty')}</p>
       )}
 
       {!loading && areas && areas.length > 0 && (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex max-h-[46vh] flex-col gap-2 overflow-y-auto">
           {areas.map((area) => {
             const checked = selected[area.areaType] ?? false
             const pct = Math.round(Math.min(1, Math.max(0, area.confidence)) * 100)
@@ -160,7 +159,7 @@ export default function AreasStep({ projectId, onSaved, onUnauthorized }: AreasS
         onClick={() => void handleSave()}
         className="w-fit rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 disabled:opacity-60"
       >
-        {saving ? '저장 중…' : '워크스페이스로 이동'}
+        {saving ? t('areas.saving') : t('areas.save')}
       </button>
     </div>
   )

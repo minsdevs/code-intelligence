@@ -2,10 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getGrowth } from '../../api/growth'
 import EmptyState from '../../components/EmptyState'
+import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { queryError } from '../code/codeLocation'
 
 export default function GrowthPage() {
+  const t = useT()
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const navigate = useNavigate()
@@ -17,7 +19,7 @@ export default function GrowthPage() {
   })
 
   if (projectId == null) {
-    return <EmptyState title="Growth" description="학습 기록과 Task 진행을 리포트로 봅니다." />
+    return <EmptyState title="Growth" description={t('growth.desc')} />
   }
 
   const error = queryError(growthQuery.error)
@@ -26,20 +28,20 @@ export default function GrowthPage() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
       <h2 className="text-[15px] font-semibold text-ink">Growth</h2>
-      <p className="mt-1 text-[13px] text-ink-muted">학습 기록과 Task 상태를 정적 집계합니다.</p>
+      <p className="mt-1 text-[13px] text-ink-muted">{t('growth.subtitle')}</p>
       {error && (
         <p role="alert" className="mt-3 text-[12px] text-danger">
           {error}
         </p>
       )}
       {growthQuery.isLoading && (
-        <p className="mt-4 text-[13px] text-ink-muted">리포트를 불러오는 중…</p>
+        <p className="mt-4 text-[13px] text-ink-muted">{t('growth.loading')}</p>
       )}
       {data && (
         <>
           <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Notes" value={data.notesCount} />
-            <Stat label="학습 기록" value={data.learningRecords} />
+            <Stat label={t('growth.learningRecords')} value={data.learningRecords} />
             <Stat label="Findings open" value={data.findingsOpen} />
             <Stat label="Findings dismissed" value={data.findingsDismissed} />
           </dl>
@@ -64,11 +66,11 @@ export default function GrowthPage() {
               ))}
             </tbody>
           </table>
-          <h3 className="mt-8 text-[13px] font-semibold text-ink">Weekly</h3>
+          <h3 className="mt-8 text-[13px] font-semibold text-ink">{t('growth.weeklyLabel')}</h3>
           {data.weekly.length === 0 ? (
-            <p className="mt-2 text-[13px] text-ink-muted">주간 기록이 없습니다.</p>
+            <p className="mt-2 text-[13px] text-ink-muted">{t('growth.noWeekly')}</p>
           ) : (
-            <ul aria-label="주간 학습" className="mt-2 space-y-1">
+            <ul aria-label="Weekly learning" className="mt-2 space-y-1">
               {data.weekly.map((week) => (
                 <li
                   key={week.weekStart}
@@ -81,11 +83,11 @@ export default function GrowthPage() {
               ))}
             </ul>
           )}
-          <h3 className="mt-8 text-[13px] font-semibold text-ink">Recent learning</h3>
+          <h3 className="mt-8 text-[13px] font-semibold text-ink">{t('growth.recentLabel')}</h3>
           {data.recentRecords.length === 0 ? (
-            <p className="mt-2 text-[13px] text-ink-muted">학습 기록이 없습니다.</p>
+            <p className="mt-2 text-[13px] text-ink-muted">{t('growth.noRecent')}</p>
           ) : (
-            <ul aria-label="최근 학습 기록" className="mt-2 space-y-2">
+            <ul aria-label="Recent learning records" className="mt-2 space-y-2">
               {data.recentRecords.map((record) => (
                 <li key={`${record.taskId}-${record.createdAt}`}>
                   <button

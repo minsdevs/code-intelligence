@@ -3,6 +3,10 @@ export function firstLine(message: string): string {
   return line && line.length > 0 ? line : '(no message)'
 }
 
+export function formatList(value: string[] | undefined, fallback: string): string {
+  return value && value.length > 0 ? value.join(', ') : fallback
+}
+
 export function shortSha(sha: string): string {
   return sha.slice(0, 7)
 }

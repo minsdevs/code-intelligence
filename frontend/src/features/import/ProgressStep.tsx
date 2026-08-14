@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, UnauthorizedError } from '../../api/client'
 import { getJob, retryJob, subscribeJobEvents } from '../../api/jobs'
+import { useT } from '../../lib/i18n'
 import type { JobDetail, JobStep, StepStatus } from '../../api/types'
 import { PIPELINE_STEPS, pipelineLabel } from './wizard'
 
@@ -21,7 +22,7 @@ function displaySteps(job: JobDetail | null): JobStep[] {
   return PIPELINE_STEPS.map((step, index) => ({
     stepKey: step.key,
     seq: index + 1,
-    status: 'PENDING',
+    status: 'PENDING' as const,
     progressPct: null,
     attempt: 0,
     error: null,
@@ -30,22 +31,23 @@ function displaySteps(job: JobDetail | null): JobStep[] {
   }))
 }
 
-function statusLabel(status: StepStatus): string {
+function statusLabel(status: StepStatus, t: (key: string) => string): string {
   switch (status) {
     case 'DONE':
-      return '완료'
+      return t('progress.status.done')
     case 'RUNNING':
-      return '진행 중'
+      return t('progress.status.running')
     case 'FAILED':
-      return '실패'
+      return t('progress.status.failed')
     case 'SKIPPED':
-      return '건너뜀'
+      return t('progress.status.skipped')
     default:
-      return '대기'
+      return t('progress.status.pending')
   }
 }
 
 export default function ProgressStep({ jobId, onDone, onUnauthorized }: ProgressStepProps) {
+  const t = useT()
   const [job, setJob] = useState<JobDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [retrying, setRetrying] = useState(false)
@@ -62,7 +64,7 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
 
     const apply = (next: JobDetail) => {
       setJob(next)
-      setError(next.status === 'FAILED' ? (next.error ?? '분석 작업이 실패했습니다.') : null)
+      setError(next.status === 'FAILED' ? (next.error ?? t('progress.failed')) : null)
       if (next.status === 'DONE') {
         onDoneRef.current()
       }
@@ -83,7 +85,7 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
             onUnauthorized()
             return
           }
-          setError(err instanceof ApiError ? err.message : '작업 상태를 복구하지 못했습니다.')
+          setError(err instanceof ApiError ? err.message : t('progress.recoverError'))
         })
     }
 
@@ -114,7 +116,7 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
           onUnauthorized()
           return
         }
-        setError(err instanceof ApiError ? err.message : '작업 상태를 불러오지 못했습니다.')
+        setError(err instanceof ApiError ? err.message : t('progress.loadError'))
       }
     }
 
@@ -123,7 +125,7 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
       cancelled = true
       unsubscribe?.()
     }
-  }, [jobId, streamEpoch, onUnauthorized])
+  }, [jobId, streamEpoch, onUnauthorized, t])
 
   const handleRetry = async () => {
     setRetrying(true)
@@ -140,7 +142,7 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
         onUnauthorized()
         return
       }
-      setError(err instanceof ApiError ? err.message : '재시도에 실패했습니다.')
+      setError(err instanceof ApiError ? err.message : t('progress.retryError'))
     } finally {
       setRetrying(false)
     }
@@ -151,13 +153,11 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
   return (
     <div className="flex max-w-xl flex-col gap-4">
       <div>
-        <h2 className="text-[15px] font-semibold text-ink">분석 진행</h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
-          clone부터 영역 감지까지 파이프라인 단계를 순서대로 실행합니다.
-        </p>
+        <h2 className="text-[15px] font-semibold text-ink">{t('progress.title')}</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{t('progress.description')}</p>
       </div>
 
-      <ol aria-label="분석 파이프라인" className="flex flex-col gap-1.5">
+      <ol aria-label={t('progress.pipelineLabel')} className="flex flex-col gap-1.5">
         {steps.map((step) => (
           <li
             key={step.stepKey}
@@ -171,14 +171,14 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
                 {step.progressPct != null ? ` · ${step.progressPct}%` : ''}
               </p>
             </div>
-            <span className="text-[11px] text-ink-muted">{statusLabel(step.status)}</span>
+            <span className="text-[11px] text-ink-muted">{statusLabel(step.status, t)}</span>
           </li>
         ))}
       </ol>
 
       {(error || job?.status === 'FAILED') && (
         <div role="alert" className="rounded-md border border-danger/40 bg-surface-1 px-3 py-2.5">
-          <p className="text-[13px] text-danger">{error ?? job?.error ?? '분석 작업이 실패했습니다.'}</p>
+          <p className="text-[13px] text-danger">{error ?? job?.error ?? t('progress.failed')}</p>
           {job?.status === 'FAILED' && (
             <button
               type="button"
@@ -186,7 +186,7 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
               disabled={retrying}
               className="mt-2 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[13px] text-ink disabled:opacity-60"
             >
-              {retrying ? '재시도 중…' : '다시 시도'}
+              {retrying ? t('progress.retrying') : t('progress.retry')}
             </button>
           )}
         </div>

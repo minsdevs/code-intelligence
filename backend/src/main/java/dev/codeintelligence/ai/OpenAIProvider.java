@@ -15,10 +15,16 @@ public class OpenAIProvider implements AIProvider {
     private final AiProperties.OpenAi properties;
     private final RestClient restClient;
     private final JsonMapper json;
+    private final String apiKey;
 
-    public OpenAIProvider(AiProperties.OpenAi properties, RestClient.Builder restClientBuilder, JsonMapper json) {
+    /**
+     * @param apiKey explicit key (from Settings) or null to fall back to the env-configured key.
+     */
+    public OpenAIProvider(
+            AiProperties.OpenAi properties, RestClient.Builder restClientBuilder, JsonMapper json, String apiKey) {
         this.properties = properties;
         this.json = json;
+        this.apiKey = apiKey == null || apiKey.isBlank() ? properties.apiKey() : apiKey;
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -30,6 +36,10 @@ public class OpenAIProvider implements AIProvider {
                 .baseUrl(stripSlash(properties.baseUrl()))
                 .requestFactory(factory)
                 .build();
+    }
+
+    boolean hasKey() {
+        return apiKey != null && !apiKey.isBlank();
     }
 
     @Override
@@ -59,7 +69,7 @@ public class OpenAIProvider implements AIProvider {
                     .post()
                     .uri("/v1/chat/completions")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header("Authorization", "Bearer " + properties.apiKey())
+                    .header("Authorization", "Bearer " + apiKey)
                     .body(body)
                     .retrieve()
                     .body(Map.class);
@@ -84,7 +94,7 @@ public class OpenAIProvider implements AIProvider {
                     .post()
                     .uri("/v1/embeddings")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header("Authorization", "Bearer " + properties.apiKey())
+                    .header("Authorization", "Bearer " + apiKey)
                     .body(body)
                     .retrieve()
                     .body(Map.class);

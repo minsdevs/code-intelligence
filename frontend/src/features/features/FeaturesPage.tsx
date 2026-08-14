@@ -5,10 +5,12 @@ import { getFeature, listFeatures } from '../../api/features'
 import type { FeatureChildView } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
 import EvidenceList from '../../components/EvidenceList'
+import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { codeLocationSearch, queryError } from '../code/codeLocation'
 
 export default function FeaturesPage() {
+  const t = useT()
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const navigate = useNavigate()
@@ -32,10 +34,7 @@ export default function FeaturesPage() {
 
   if (projectId == null) {
     return (
-      <EmptyState
-        title="Features"
-        description="Feature 트리와 연결된 UI·API·코드·DB·Infra를 탐색합니다."
-      />
+      <EmptyState title="Features" description={t('features.desc')} />
     )
   }
 
@@ -53,11 +52,11 @@ export default function FeaturesPage() {
             {treeError}
           </p>
         )}
-        {treeQuery.isLoading && <p className="px-3 py-3 text-[13px] text-ink-muted">Feature를 불러오는 중…</p>}
+        {treeQuery.isLoading && <p className="px-3 py-3 text-[13px] text-ink-muted">{t('features.loading')}</p>}
         {!treeQuery.isLoading && tree.length === 0 && !treeError && (
-          <p className="px-3 py-3 text-[13px] text-ink-muted">탐지된 Feature가 없습니다.</p>
+          <p className="px-3 py-3 text-[13px] text-ink-muted">{t('features.empty')}</p>
         )}
-        <ul aria-label="Feature 트리" className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        <ul aria-label={t('features.treeLabel')} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
           {tree.map((node) => (
             <FeatureNode key={node.id} node={node} selectedId={resolvedId} onSelect={setSelectedId} />
           ))}
@@ -65,15 +64,15 @@ export default function FeaturesPage() {
       </section>
 
       {detail ? (
-        <article className="min-h-0 flex-1 overflow-y-auto px-5 py-4" aria-label="Feature 상세">
+        <article className="min-h-0 flex-1 overflow-y-auto px-5 py-4" aria-label="Feature detail">
           <h3 className="text-[15px] font-semibold text-ink">{detail.name}</h3>
           <p className="mt-1 flex flex-wrap gap-x-3 font-mono text-[12px] text-ink-faint">
             <span>{detail.detection}</span>
             <span>{Math.round(detail.confidence * 100)}%</span>
           </p>
-          <h4 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">연결</h4>
+          <h4 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">{t('features.links')}</h4>
           {detail.links.length === 0 ? (
-            <p className="mt-2 text-[13px] text-ink-muted">연결된 노드가 없습니다.</p>
+            <p className="mt-2 text-[13px] text-ink-muted">{t('features.noLinks')}</p>
           ) : (
             <ul className="mt-2 space-y-1">
               {detail.links.map((link) => (
@@ -110,7 +109,7 @@ export default function FeaturesPage() {
         </article>
       ) : (
         <p className="px-5 py-8 text-[13px] text-ink-muted">
-          {detailQuery.isLoading ? 'Feature 상세를 불러오는 중…' : '왼쪽에서 Feature를 선택하세요.'}
+          {detailQuery.isLoading ? t('features.loadingDetail') : t('features.select')}
         </p>
       )}
     </div>
