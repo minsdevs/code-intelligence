@@ -98,6 +98,25 @@ const backendView: ArchitectureView = {
   ],
 }
 
+const frontendView: ArchitectureView = {
+  area: 'FRONTEND',
+  groups: [
+    {
+      layer: 'PAGE',
+      nodes: [
+        {
+          id: 20,
+          name: 'TodosPage',
+          nodeType: 'FE_ROUTE',
+          filePath: 'src/pages/TodosPage.tsx',
+          line: 1,
+        },
+      ],
+    },
+  ],
+  edges: [],
+}
+
 const systemView: ArchitectureView = {
   area: 'SYSTEM',
   groups: [
@@ -129,6 +148,7 @@ function installFetch(areas: ProjectArea[]) {
     if (path === '/api/projects/7/architecture') {
       const requested = url.searchParams.get('area')
       if (requested === 'BACKEND') return jsonResponse(backendView)
+      if (requested === 'FRONTEND') return jsonResponse(frontendView)
       if (requested === 'SYSTEM') return jsonResponse(systemView)
     }
     return jsonResponse({ title: 'Not Found', detail: path }, 404)
@@ -213,15 +233,38 @@ describe('ArchitecturePage', () => {
     })
   })
 
-  it('shows an empty state when no architecture area is selected', async () => {
+  it('shows the Frontend tab when frontend is selected', async () => {
     installFetch([
       area({ areaType: 'BACKEND', selected: false }),
       area({ areaType: 'FRONTEND', selected: true }),
     ])
     renderArchitecture()
 
+    expect(await screen.findByRole('tab', { name: 'Frontend' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Backend' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'TodosPage' })).toBeInTheDocument()
+    await waitFor(() => {
+      const architectureCalls = fetchMock.mock.calls.filter((call) => {
+        const url = requestUrl(call[0] as RequestInfo | URL)
+        return url.pathname === '/api/projects/7/architecture'
+      })
+      expect(architectureCalls.length).toBeGreaterThan(0)
+      expect(requestUrl(architectureCalls[0]![0] as RequestInfo | URL).searchParams.get('area')).toBe(
+        'FRONTEND',
+      )
+    })
+  })
+
+  it('shows an empty state when no architecture area is selected', async () => {
+    installFetch([
+      area({ areaType: 'BACKEND', selected: false }),
+      area({ areaType: 'FRONTEND', selected: false }),
+    ])
+    renderArchitecture()
+
     expect(await screen.findByText('표시할 영역이 없습니다')).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Backend' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Frontend' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'System' })).not.toBeInTheDocument()
   })
 })

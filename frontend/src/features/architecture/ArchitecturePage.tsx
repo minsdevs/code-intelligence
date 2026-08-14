@@ -6,10 +6,10 @@ import { listAreas } from '../../api/areas'
 import type { ArchitectureView, AreaType } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
 import { parseProjectId } from '../../lib/projectId'
-import { queryError } from '../code/codeLocation'
+import { codeLocationSearch, queryError } from '../code/codeLocation'
 import ArchitectureCanvas from './ArchitectureCanvas'
 
-type ArchArea = 'BACKEND' | 'SYSTEM'
+type ArchArea = 'BACKEND' | 'FRONTEND' | 'SYSTEM'
 
 function selectedTypes(areas: { areaType: AreaType; selected: boolean }[] | undefined): Set<AreaType> {
   return new Set((areas ?? []).filter((area) => area.selected).map((area) => area.areaType))
@@ -28,15 +28,18 @@ export default function ArchitecturePage() {
   })
   const selected = selectedTypes(areasQuery.data)
   const showBackend = selected.has('BACKEND')
+  const showFrontend = selected.has('FRONTEND')
   const showSystem = selected.has('INFRASTRUCTURE') || selected.has('DEVOPS')
   const visibleArea: ArchArea | null = useMemo(() => {
     const requested = areaOverride ?? 'BACKEND'
     if (requested === 'BACKEND' && showBackend) return 'BACKEND'
+    if (requested === 'FRONTEND' && showFrontend) return 'FRONTEND'
     if (requested === 'SYSTEM' && showSystem) return 'SYSTEM'
     if (showBackend) return 'BACKEND'
+    if (showFrontend) return 'FRONTEND'
     if (showSystem) return 'SYSTEM'
     return null
-  }, [areaOverride, showBackend, showSystem])
+  }, [areaOverride, showBackend, showFrontend, showSystem])
 
   const graphQuery = useQuery({
     queryKey: ['architecture', projectId, visibleArea],
@@ -53,10 +56,7 @@ export default function ArchitecturePage() {
   }
 
   function openNode(path: string, line: number | null) {
-    const params = new URLSearchParams()
-    params.set('path', path)
-    if (line != null && line > 0) params.set('line', String(line))
-    navigate(`/projects/${projectId}/code?${params.toString()}`)
+    navigate(`/projects/${projectId}/code${codeLocationSearch(path, line)}`)
   }
 
   return (
@@ -67,6 +67,13 @@ export default function ArchitecturePage() {
             label="Backend"
             selected={visibleArea === 'BACKEND'}
             onSelect={() => setAreaOverride('BACKEND')}
+          />
+        )}
+        {showFrontend && (
+          <AreaTab
+            label="Frontend"
+            selected={visibleArea === 'FRONTEND'}
+            onSelect={() => setAreaOverride('FRONTEND')}
           />
         )}
         {showSystem && (
@@ -135,7 +142,7 @@ function ArchitectureBody({
     return (
       <EmptyState
         title="표시할 영역이 없습니다"
-        description="사이드바 Areas에서 Backend 또는 Infrastructure/DevOps를 선택하면 이 탭에 그래프가 나타납니다."
+        description="사이드바 Areas에서 Frontend, Backend 또는 Infrastructure/DevOps를 선택하면 이 탭에 그래프가 나타납니다."
       />
     )
   }

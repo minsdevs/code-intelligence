@@ -10,8 +10,8 @@ export const workspaceTabs: WorkspaceTab[] = [
   {
     path: 'features',
     label: 'Features',
-    phase: 2,
-    description: 'Feature 트리와 연결된 UI·API·코드·DB·Infra를 탐색합니다. Phase 1은 API만 제공합니다.',
+    phase: 1,
+    description: 'Feature 트리와 연결된 UI·API·코드·DB·Infra를 탐색합니다.',
   },
   {
     path: 'architecture',
@@ -22,7 +22,7 @@ export const workspaceTabs: WorkspaceTab[] = [
   {
     path: 'flows',
     label: 'Flows',
-    phase: 2,
+    phase: 1,
     description: '호출 흐름을 단계별로 추적하고 각 step의 source location을 확인합니다.',
   },
   {
@@ -35,13 +35,13 @@ export const workspaceTabs: WorkspaceTab[] = [
     path: 'history',
     label: 'History',
     phase: 1,
-    description: 'Commit·PR 타임라인을 봅니다. 구조 변천(era)은 Phase 2에서 제공합니다.',
+    description: 'Commit·PR 타임라인과 구조 변천(era)을 봅니다.',
   },
   {
     path: 'analysis',
     label: 'Analysis',
-    phase: 2,
-    description: '영역별 분석 findings를 severity·evidence와 함께 확인합니다.',
+    phase: 1,
+    description: '영역별 findings와 선택한 노드의 Impact(역방향 의존)를 확인합니다.',
   },
   {
     path: 'notes',

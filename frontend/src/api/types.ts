@@ -269,7 +269,102 @@ export type ArchitectureEdgeView = {
 }
 
 export type ArchitectureView = {
-  area: 'BACKEND' | 'SYSTEM'
+  area: 'BACKEND' | 'FRONTEND' | 'SYSTEM'
   groups: ArchitectureGroupView[]
   edges: ArchitectureEdgeView[]
+}
+
+export type FeatureChildView = {
+  id: number
+  name: string
+  detection: string
+  confidence: number
+  children: FeatureChildView[]
+}
+
+export type FeatureLinkView = {
+  role: string
+  nodeId: number
+  name: string
+  filePath: string | null
+}
+
+export type FeatureEvidenceView = {
+  filePath: string | null
+  lineStart: number | null
+  lineEnd: number | null
+  excerpt: string | null
+}
+
+export type FeatureDetailView = {
+  id: number
+  name: string
+  detection: string
+  confidence: number
+  links: FeatureLinkView[]
+  evidences: FeatureEvidenceView[]
+}
+
+export type FlowSummary = {
+  id: number
+  name: string
+  kind: string
+  entryNodeId: number | null
+}
+
+export type FlowStepView = {
+  seq: number
+  nodeId: number | null
+  nodeName: string | null
+  nodeType: string | null
+  filePath: string | null
+  line: number | null
+  description: string | null
+}
+
+export type FlowDetail = {
+  id: number
+  name: string
+  kind: string
+  entryNodeId: number | null
+  steps: FlowStepView[]
+  evidences: FeatureEvidenceView[]
+}
+
+export type FindingView = {
+  id: number
+  areaType: string | null
+  category: string
+  severity: string
+  title: string
+  detail: string | null
+  status: string
+  nodeId: number | null
+  evidences: FeatureEvidenceView[]
+}
+
+export type ImpactNodeView = {
+  depth: number
+  edgeType: string
+  nodeType: string
+  nodeId: number
+  name: string
+  filePath: string | null
+  line: number | null
+}
+
+export type ImpactView = {
+  nodeId: number
+  depth: number
+  riskScore: number
+  riskLevel: string
+  dependents: ImpactNodeView[]
+}
+
+export type EraView = {
+  label: string
+  path: string
+  sha: string
+  committedAt: string | null
+  changeType: string
 }

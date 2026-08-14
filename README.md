@@ -7,8 +7,10 @@ explore its features, architecture, call flows, dependencies, history, design
 rationale, and alternatives — with an evidence-grounded, context-aware AI
 assistant.
 
-> **Status: Phase 2 — Cross-domain Intelligence (in progress).**
-> Phase 1 (import, Java analysis, architecture, history) is on `main`.
+> **Status: Phase 2 — Cross-domain Intelligence (complete).**
+> Phase 1 (import, Java analysis, architecture, history) and Phase 2
+> (TypeScript sidecar, FE↔BE matching, flows, findings, impact, era) are on `main`.
+> Phase 3 has not started.
 > See [기획서.md](./기획서.md) and [docs/plan/phase2.md](./docs/plan/phase2.md).
 
 ## Principles

@@ -10,11 +10,15 @@ export {
   getCommitDiff,
   listBranches,
   listCommits,
+  listEras,
   listPulls,
   listTags,
 } from './history'
 export { getFileContent, listFiles } from './files'
 export { getArchitecture } from './architecture'
+export { listFeatures, getFeature } from './features'
+export { listFlows, getFlow } from './flows'
+export { listFindings, getImpact } from './analysis'
 export { GRAPH_NODE_PAGE_SIZE, getGraphNode, getGraphRelations, listGraphNodes } from './graph'
 export type {
   AreaSelection,
@@ -23,8 +27,14 @@ export type {
   CommitDiff,
   CommitSummary,
   CreateProjectResponse,
+  EraView,
+  FeatureChildView,
+  FeatureDetailView,
   FileContent,
   FileListItem,
+  FindingView,
+  FlowDetail,
+  FlowSummary,
   GithubRepo,
   GraphNodeDetail,
   GraphNodePage,
@@ -32,6 +42,7 @@ export type {
   GraphRelation,
   GraphRelationsResponse,
   ArchitectureView,
+  ImpactView,
   JobDetail,
   MeResponse,
   Project,
