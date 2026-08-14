@@ -12,6 +12,8 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import dev.codeintelligence.common.security.AuthenticatedUser;
+import dev.codeintelligence.common.security.CredentialKind;
 import dev.codeintelligence.github.GithubApiClient;
 import dev.codeintelligence.github.GithubProperties;
 import dev.codeintelligence.github.InvalidGithubTokenException;
@@ -39,7 +41,8 @@ class PatAuthServiceTest {
     private final RestClient.Builder builder = RestClient.builder();
     private final MockRestServiceServer server =
             MockRestServiceServer.bindTo(builder).build();
-    private final GithubApiClient githubApiClient = new GithubApiClient(builder, new GithubProperties(BASE_URL));
+    private final GithubApiClient githubApiClient =
+            new GithubApiClient(builder, new GithubProperties(BASE_URL, "https://github.com"));
 
     private final UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
     private final GithubCredentialRepository credentialRepository = mock(GithubCredentialRepository.class);

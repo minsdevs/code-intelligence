@@ -1,7 +1,7 @@
 package dev.codeintelligence.github;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import dev.codeintelligence.auth.AuthenticatedUser;
+import dev.codeintelligence.common.security.AuthenticatedUser;
 import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -23,7 +23,8 @@ class GithubApiClientTest {
     private final RestClient.Builder builder = RestClient.builder();
     private final MockRestServiceServer server =
             MockRestServiceServer.bindTo(builder).build();
-    private final GithubApiClient client = new GithubApiClient(builder, new GithubProperties(BASE_URL));
+    private final GithubApiClient client =
+            new GithubApiClient(builder, new GithubProperties(BASE_URL, "https://github.com"));
 
     @Test
     void getUserParsesProfileAndScopesHeader() {

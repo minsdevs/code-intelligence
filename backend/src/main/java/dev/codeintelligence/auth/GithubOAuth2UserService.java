@@ -1,5 +1,7 @@
 package dev.codeintelligence.auth;
 
+import dev.codeintelligence.common.security.AuthenticatedUser;
+import dev.codeintelligence.common.security.CredentialKind;
 import dev.codeintelligence.github.GithubUserInfo;
 import java.util.Map;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;

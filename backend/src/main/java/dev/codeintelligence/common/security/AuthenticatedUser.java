@@ -1,4 +1,4 @@
-package dev.codeintelligence.auth;
+package dev.codeintelligence.common.security;
 
 import java.io.Serializable;
 import java.util.Collection;
@@ -11,6 +11,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 /**
  * Session principal shared by both login paths (OAuth2 login and PAT registration). Implements
  * OAuth2User so oauth2Login can use it directly; must stay Serializable for Spring Session Redis.
+ * Lives in common.security because every API package needs it for owner scoping.
  */
 public record AuthenticatedUser(
         long userId, long githubId, String login, String name, String avatarUrl, CredentialKind credentialKind)

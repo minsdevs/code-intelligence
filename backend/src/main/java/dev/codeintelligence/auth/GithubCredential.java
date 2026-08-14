@@ -1,5 +1,6 @@
 package dev.codeintelligence.auth;
 
+import dev.codeintelligence.common.security.CredentialKind;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

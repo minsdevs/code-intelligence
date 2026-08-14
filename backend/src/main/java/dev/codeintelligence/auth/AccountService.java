@@ -1,5 +1,6 @@
 package dev.codeintelligence.auth;
 
+import dev.codeintelligence.common.security.CredentialKind;
 import dev.codeintelligence.github.GithubUserInfo;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -1,5 +1,6 @@
 package dev.codeintelligence.auth;
 
+import dev.codeintelligence.common.security.AuthenticatedUser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.constraints.NotBlank;
