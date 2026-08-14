@@ -188,3 +188,61 @@ export type PullRequest = {
   headSha: string | null
   baseSha: string | null
 }
+
+export type FileListItem = {
+  path: string
+  language: string | null
+  size: number
+  lineCount: number | null
+}
+
+export type FileContent = {
+  path: string
+  language: string | null
+  content: string
+}
+
+export type GraphNodeSummary = {
+  id: number
+  nodeType: string
+  naturalKey: string
+  name: string
+  filePath: string | null
+  lineStart: number | null
+  lineEnd: number | null
+  areaType: string | null
+}
+
+export type GraphNodePage = {
+  items: GraphNodeSummary[]
+  page: number
+  size: number
+  total: number
+}
+
+export type GraphEvidenceView = {
+  filePath: string | null
+  lineStart: number | null
+  lineEnd: number | null
+  excerpt: string | null
+}
+
+export type GraphNodeDetail = GraphNodeSummary & {
+  metadata: Record<string, unknown>
+  evidences: GraphEvidenceView[]
+}
+
+export type GraphRelation = {
+  depth: number
+  direction: string
+  edgeType: string
+  confidence: string
+  node: GraphNodeSummary
+}
+
+export type GraphRelationsResponse = {
+  nodeId: number
+  direction: string
+  depth: number
+  relations: GraphRelation[]
+}

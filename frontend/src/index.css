@@ -68,3 +68,7 @@
     }
   }
 }
+
+.code-explorer-line {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
