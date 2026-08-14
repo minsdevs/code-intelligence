@@ -11,7 +11,6 @@ import dev.codeintelligence.project.ProjectNotFoundException;
 import dev.codeintelligence.project.ProjectRepository;
 import dev.codeintelligence.project.SnapshotRepository;
 import java.util.List;
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -42,7 +41,7 @@ public class AssistantService {
     private final SnapshotRepository snapshotRepository;
     private final JdbcClient jdbc;
     private final AIProvider aiProvider;
-    private final AiProperties aiProperties;
+    private final AiUsageService usage;
     private final ContextRetrievalService retrieval;
     private final EvidenceValidator validator;
     private final EvidenceService evidenceService;
@@ -58,7 +57,7 @@ public class AssistantService {
             SnapshotRepository snapshotRepository,
             JdbcClient jdbc,
             AIProvider aiProvider,
-            AiProperties aiProperties,
+            AiUsageService usage,
             ContextRetrievalService retrieval,
             EvidenceValidator validator,
             EvidenceService evidenceService,
@@ -72,7 +71,7 @@ public class AssistantService {
         this.snapshotRepository = snapshotRepository;
         this.jdbc = jdbc;
         this.aiProvider = aiProvider;
-        this.aiProperties = aiProperties;
+        this.usage = usage;
         this.retrieval = retrieval;
         this.validator = validator;
         this.evidenceService = evidenceService;
@@ -97,7 +96,7 @@ public class AssistantService {
         if (!StringUtils.hasText(question) || question.length() > QUESTION_MAX) {
             throw new InvalidAiQuestionException();
         }
-        enforceBudget(userId);
+        usage.enforceBudget(userId);
         Project project = requireOwned(projectId, userId);
         long snapshotId = requireSnapshot(project, null);
         AiIntent intent = request.intent() == null || request.intent().isBlank()
@@ -116,7 +115,7 @@ public class AssistantService {
         persistUserMessage(conversationId, question, ctx);
         long messageId = persistAssistant(conversationId, validated);
         linkEvidence(projectId, messageId, validated);
-        logUsage(userId, projectId, intent, validated);
+        usage.log(userId, projectId, intent.name(), validated);
         return new AskResponse(
                 conversationId, messageId, validated.explanation(), validated.claims(), validated.alternatives());
     }
@@ -136,17 +135,6 @@ public class AssistantService {
                 codeExplanationService.systemPrompt()
                         + (intent == AiIntent.FINDING ? "\n" + PromptBuilder.system(AiIntent.FINDING) : "");
         };
-    }
-
-    private void enforceBudget(long userId) {
-        Long used = jdbc.sql("""
-                        select coalesce(sum(prompt_tokens + completion_tokens), 0)
-                        from ai_usage_logs
-                        where user_id = :userId and created_at >= date_trunc('day', now())
-                        """).param("userId", userId).query(Long.class).single();
-        if (used != null && used >= aiProperties.dailyTokenLimit()) {
-            throw new AiBudgetExceededException();
-        }
     }
 
     private long resolveConversation(long projectId, long snapshotId, long userId, Long conversationId) {
@@ -221,21 +209,6 @@ public class AssistantService {
                             ref));
             evidenceService.link(evidenceId, EvidenceSubjects.AI_MESSAGE, messageId);
         }
-    }
-
-    private void logUsage(long userId, long projectId, AiIntent intent, AIProvider.ChatResponse response) {
-        jdbc.sql("""
-                        insert into ai_usage_logs (user_id, project_id, provider, model, purpose, prompt_tokens, completion_tokens)
-                        values (:userId, :projectId, :provider, :model, :purpose, :prompt, :completion)
-                        """)
-                .param("userId", userId)
-                .param("projectId", projectId)
-                .param("provider", aiProvider.name())
-                .param("model", aiProvider.name())
-                .param("purpose", intent.name().toLowerCase(Locale.ROOT))
-                .param("prompt", response.promptTokens())
-                .param("completion", response.completionTokens())
-                .update();
     }
 
     private Project requireOwned(long projectId, long userId) {
