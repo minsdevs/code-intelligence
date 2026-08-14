@@ -1,11 +1,12 @@
 import { ApiError } from '../../api/client'
+import { tt } from '../../lib/i18n-core'
 import type { GraphNodeSummary } from '../../api/types'
 import type { FocusedNode } from '../../stores/uiStore'
 
 export function queryError(error: unknown): string | null {
   if (!error) return null
   if (error instanceof ApiError) return error.message
-  return '요청에 실패했습니다.'
+  return tt('common.requestFailed')
 }
 
 export function codeLocationSearch(path: string, line: number | null | undefined): string {

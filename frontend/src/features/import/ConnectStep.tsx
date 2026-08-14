@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { ApiError } from '../../api/client'
 import { registerPat } from '../../api/auth'
+import { useT } from '../../lib/i18n'
 import type { MeResponse } from '../../api/types'
 import { GithubIcon } from '../../components/icons'
 
@@ -12,6 +13,7 @@ type ConnectStepProps = {
 }
 
 export default function ConnectStep({ me, onConnected }: ConnectStepProps) {
+  const t = useT()
   const [token, setToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -20,7 +22,7 @@ export default function ConnectStep({ me, onConnected }: ConnectStepProps) {
     event.preventDefault()
     const value = token.trim()
     if (!value) {
-      setError('Personal access token을 입력하세요.')
+      setError(t('connect.errorEmpty'))
       return
     }
     setSubmitting(true)
@@ -30,7 +32,7 @@ export default function ConnectStep({ me, onConnected }: ConnectStepProps) {
       setToken('')
       await onConnected()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'PAT 연결에 실패했습니다.')
+      setError(err instanceof ApiError ? err.message : t('connect.errorEmpty'))
     } finally {
       setSubmitting(false)
     }
@@ -39,11 +41,8 @@ export default function ConnectStep({ me, onConnected }: ConnectStepProps) {
   return (
     <div className="flex max-w-lg flex-col gap-5">
       <div>
-        <h2 className="text-[15px] font-semibold text-ink">GitHub 계정 연결</h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
-          저장소 목록을 가져오려면 GitHub에 로그인하세요. 토큰은 서버에만 저장되며 프론트엔드 번들에
-          포함되지 않습니다.
-        </p>
+        <h2 className="text-[15px] font-semibold text-ink">{t('connect.title')}</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{t('connect.description')}</p>
       </div>
 
       {me?.oauthAvailable && (
@@ -52,24 +51,24 @@ export default function ConnectStep({ me, onConnected }: ConnectStepProps) {
           className="inline-flex w-fit items-center gap-2 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[13px] font-medium text-ink transition-colors hover:bg-surface-3"
         >
           <GithubIcon />
-          GitHub로 계속
+          {t('connect.continue')}
         </a>
       )}
 
       {me?.oauthAvailable && (
-        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint">또는 PAT</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint">{t('connect.or')}</p>
       )}
 
       <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-3">
         <label className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-ink-muted">Personal access token</span>
+          <span className="text-[12px] text-ink-muted">{t('connect.tokenLabel')}</span>
           <input
             type="password"
             name="token"
             autoComplete="off"
             value={token}
             onChange={(event) => setToken(event.target.value)}
-            placeholder="ghp_…"
+            placeholder={t('connect.placeholder')}
             className="rounded-md border border-line bg-surface-2 px-3 py-1.5 font-mono text-[13px] text-ink placeholder:text-ink-faint"
           />
         </label>
@@ -83,7 +82,7 @@ export default function ConnectStep({ me, onConnected }: ConnectStepProps) {
           disabled={submitting}
           className="w-fit rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 disabled:opacity-60"
         >
-          {submitting ? '연결 중…' : 'PAT로 연결'}
+          {submitting ? t('connect.submitting') : t('connect.submit')}
         </button>
       </form>
     </div>

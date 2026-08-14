@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { FileListItem } from '../../api/types'
 import { FileIcon, FolderIcon } from '../../components/icons'
+import { useT } from '../../lib/i18n'
 import { ancestorDirs, buildFileTree, type FileTreeNode } from './fileTree'
 import { languageTint } from './language'
 
@@ -19,6 +20,7 @@ export default function FileTreePanel({
   error,
   onSelectFile,
 }: FileTreePanelProps) {
+  const t = useT()
   const tree = useMemo(() => buildFileTree(files), [files])
   const forcedOpen = useMemo(
     () => new Set(selectedPath ? ancestorDirs(selectedPath) : []),
@@ -44,19 +46,19 @@ export default function FileTreePanel({
     <section className="flex w-[18rem] shrink-0 flex-col border-r border-line bg-surface-1">
       <header className="border-b border-line px-3 py-3">
         <h2 className="text-[13px] font-medium text-ink">Files</h2>
-        <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">저장소 인벤토리 기준으로 탐색합니다.</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">{t('code.filesHint')}</p>
       </header>
       {error && (
         <p role="alert" className="px-3 py-2 text-[12px] text-danger">
           {error}
         </p>
       )}
-      {loading && <p className="px-3 py-3 text-[13px] text-ink-muted">파일 목록을 불러오는 중…</p>}
+      {loading && <p className="px-3 py-3 text-[13px] text-ink-muted">{t('code.loadingFiles')}</p>}
       {!loading && files.length === 0 && !error && (
-        <p className="px-3 py-3 text-[13px] text-ink-muted">분석된 파일이 없습니다.</p>
+        <p className="px-3 py-3 text-[13px] text-ink-muted">{t('code.noFiles')}</p>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
-        <ul role="tree" aria-label="파일 트리" className="flex flex-col">
+        <ul role="tree" aria-label="Files" className="flex flex-col">
           {tree.map((node) => (
             <TreeRow
               key={node.path}

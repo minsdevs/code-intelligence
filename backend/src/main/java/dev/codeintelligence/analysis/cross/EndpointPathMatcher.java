@@ -15,7 +15,9 @@ public final class EndpointPathMatcher {
         if (callMethod == null || callUrl == null || endpointMethod == null || endpointPath == null) {
             return null;
         }
-        if (!callMethod.trim().equalsIgnoreCase(endpointMethod.trim())) {
+        // "ANY" endpoints (Django urlpatterns, net/http HandleFunc) match any call method.
+        if (!"ANY".equalsIgnoreCase(endpointMethod.trim())
+                && !callMethod.trim().equalsIgnoreCase(endpointMethod.trim())) {
             return null;
         }
         String callPath = pathOnly(callUrl);

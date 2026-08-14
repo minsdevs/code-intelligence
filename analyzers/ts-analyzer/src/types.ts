@@ -17,7 +17,7 @@ export type RouteHit = {
 
 export type SymbolHit = {
   name: string
-  kind: 'COMPONENT' | 'HOOK' | 'STORE' | 'FUNCTION' | 'CLASS'
+  kind: 'COMPONENT' | 'HOOK' | 'STORE' | 'FUNCTION' | 'CLASS' | 'METHOD'
   filePath: string
   lineStart: number
   lineEnd: number
@@ -37,6 +37,16 @@ export type ImportHit = {
   imported: string
 }
 
+export type EndpointHit = {
+  method: string
+  path: string
+  handlerKey: string
+  handler: string | null
+  filePath: string
+  lineStart: number
+  lineEnd: number
+}
+
 export type AnalyzeResponse = {
   routes: RouteHit[]
   components: SymbolHit[]
@@ -45,4 +55,5 @@ export type AnalyzeResponse = {
   apiCalls: ApiCallHit[]
   imports: ImportHit[]
   symbols: SymbolHit[]
+  endpoints: EndpointHit[]
 }

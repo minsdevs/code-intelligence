@@ -47,7 +47,7 @@ describe('AppLayout', () => {
   it('renders the sidebar navigation and the home empty state', async () => {
     renderApp('/')
 
-    const nav = screen.getByRole('navigation', { name: '주 메뉴' })
+    const nav = screen.getByRole('navigation', { name: 'Main menu' })
     for (const label of ['Home', 'Projects', 'Search', 'Settings']) {
       expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument()
     }

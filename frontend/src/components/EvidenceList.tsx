@@ -1,4 +1,5 @@
 import type { FeatureEvidenceView } from '../api/types'
+import { useT } from '../lib/i18n'
 
 export default function EvidenceList({
   evidences,
@@ -7,11 +8,12 @@ export default function EvidenceList({
   evidences: FeatureEvidenceView[]
   onOpen: (path: string, line: number | null) => void
 }) {
+  const t = useT()
   return (
     <>
       <h4 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">Evidence</h4>
       {evidences.length === 0 ? (
-        <p className="mt-2 text-[13px] text-ink-muted">evidence가 없습니다.</p>
+        <p className="mt-2 text-[13px] text-ink-muted">{t('evidence.none')}</p>
       ) : (
         <ul className="mt-2 space-y-1">
           {evidences.map((evidence, index) => (

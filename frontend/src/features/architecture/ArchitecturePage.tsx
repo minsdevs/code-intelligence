@@ -5,6 +5,8 @@ import { getArchitecture } from '../../api/architecture'
 import { listAreas } from '../../api/areas'
 import type { ArchitectureView, AreaType } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
+import { tt } from '../../lib/i18n-core'
+import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { codeLocationSearch, queryError } from '../code/codeLocation'
 import ArchitectureCanvas from './ArchitectureCanvas'
@@ -16,6 +18,7 @@ function selectedTypes(areas: { areaType: AreaType; selected: boolean }[] | unde
 }
 
 export default function ArchitecturePage() {
+  const t = useT()
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const navigate = useNavigate()
@@ -48,11 +51,7 @@ export default function ArchitecturePage() {
   })
 
   if (projectId == null) {
-    return (
-      <p className="px-5 py-8 text-[13px] text-ink-muted">
-        Architecture는 import한 프로젝트에서 사용할 수 있습니다.
-      </p>
-    )
+    return <p className="px-5 py-8 text-[13px] text-ink-muted">{t('arch.noProject')}</p>
   }
 
   function openNode(path: string, line: number | null) {
@@ -61,7 +60,7 @@ export default function ArchitecturePage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1 border-b border-line px-4 py-2" role="tablist" aria-label="아키텍처 영역">
+      <div className="flex items-center gap-1 border-b border-line px-4 py-2" role="tablist" aria-label={t('arch.tablist')}>
         {showBackend && (
           <AreaTab
             label="Backend"
@@ -133,25 +132,19 @@ function ArchitectureBody({
   onOpenNode: (path: string, line: number | null) => void
 }) {
   if (loading) {
-    return <p className="px-5 py-8 text-[13px] text-ink-muted">아키텍처를 불러오는 중…</p>
+    return <p className="px-5 py-8 text-[13px] text-ink-muted">{tt('arch.loading')}</p>
   }
   if (error) {
     return <p className="px-5 py-8 text-[13px] text-ink-muted">{error}</p>
   }
   if (visibleArea == null) {
     return (
-      <EmptyState
-        title="표시할 영역이 없습니다"
-        description="사이드바 Areas에서 Frontend, Backend 또는 Infrastructure/DevOps를 선택하면 이 탭에 그래프가 나타납니다."
-      />
+      <EmptyState title={tt('arch.noAreaTitle')} description={tt('arch.noAreaDesc')} />
     )
   }
   if (!view || view.groups.length === 0) {
     return (
-      <EmptyState
-        title="아키텍처 그래프가 없습니다"
-        description="분석이 끝나기 전이거나, 이 영역에 표시할 노드가 없습니다."
-      />
+      <EmptyState title={tt('arch.noGraphTitle')} description={tt('arch.noGraphDesc')} />
     )
   }
   return <ArchitectureCanvas view={view} onOpenNode={onOpenNode} />

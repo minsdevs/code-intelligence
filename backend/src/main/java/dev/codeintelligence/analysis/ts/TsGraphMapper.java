@@ -68,6 +68,35 @@ final class TsGraphMapper {
                 edges.add(GraphEdgeDraft.of(key, componentKey, GraphEdgeType.CONTAINS, EdgeConfidence.LIKELY));
             }
         }
+        for (TsAnalyzeDtos.EndpointHit endpoint : response.endpoints()) {
+            if (endpoint.method() == null || endpoint.path() == null || endpoint.handlerKey() == null) {
+                continue;
+            }
+            String key = NaturalKeys.endpoint(endpoint.method(), endpoint.path());
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("httpMethod", endpoint.method());
+            metadata.put("path", endpoint.path());
+            metadata.put("handlerKey", endpoint.handlerKey());
+            nodes.add(new GraphNodeDraft(
+                    GraphNodeType.API_ENDPOINT.name(),
+                    key,
+                    endpoint.method() + " " + endpoint.path(),
+                    endpoint.filePath(),
+                    endpoint.lineStart(),
+                    endpoint.lineEnd(),
+                    "BACKEND",
+                    metadata));
+            if (endpoint.filePath() != null) {
+                edges.add(GraphEdgeDraft.of(
+                        NaturalKeys.file(endpoint.filePath()), key, GraphEdgeType.EXPOSES, EdgeConfidence.CONFIRMED));
+            }
+            evidences.add(evidence(
+                    key,
+                    endpoint.filePath(),
+                    endpoint.lineStart(),
+                    endpoint.lineEnd(),
+                    endpoint.method() + " " + endpoint.path()));
+        }
         for (TsAnalyzeDtos.ImportHit imported : response.imports()) {
             if (imported.fromPath() == null || imported.toPath() == null) {
                 continue;

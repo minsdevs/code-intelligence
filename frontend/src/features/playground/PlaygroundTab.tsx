@@ -1,12 +1,11 @@
 import { lazy, Suspense } from 'react'
+import { tt } from '../../lib/i18n-core'
 
 const PlaygroundPage = lazy(() => import('./PlaygroundPage'))
 
 export default function PlaygroundTab() {
   return (
-    <Suspense
-      fallback={<p className="px-5 py-8 text-[13px] text-ink-muted">Playground를 불러오는 중…</p>}
-    >
+    <Suspense fallback={<p className="px-5 py-8 text-[13px] text-ink-muted">{tt('common.loading')}</p>}>
       <PlaygroundPage />
     </Suspense>
   )

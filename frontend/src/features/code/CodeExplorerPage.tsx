@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { listFiles } from '../../api/files'
 import type { FileListItem } from '../../api/types'
+import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { useUiStore } from '../../stores/uiStore'
 import { parseLineParam, queryError } from './codeLocation'
@@ -13,6 +14,7 @@ const CodeViewer = lazy(() => import('./CodeViewer'))
 const EMPTY_FILES: FileListItem[] = []
 
 export default function CodeExplorerPage() {
+  const t = useT()
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -38,11 +40,7 @@ export default function CodeExplorerPage() {
   }
 
   if (projectId == null) {
-    return (
-      <p className="px-5 py-8 text-[13px] text-ink-muted">
-        Code는 import한 프로젝트에서 사용할 수 있습니다.
-      </p>
-    )
+    return <p className="px-5 py-8 text-[13px] text-ink-muted">{t('code.noProject')}</p>
   }
 
   return (
@@ -54,7 +52,7 @@ export default function CodeExplorerPage() {
         error={queryError(filesQuery.error)}
         onSelectFile={(nextPath) => openLocation(nextPath, null)}
       />
-      <Suspense fallback={<p className="px-5 py-8 text-[13px] text-ink-muted">에디터를 불러오는 중…</p>}>
+      <Suspense fallback={<p className="px-5 py-8 text-[13px] text-ink-muted">{t('code.loadingEditor')}</p>}>
         <CodeViewer projectId={projectId} path={path} line={line} />
       </Suspense>
       <SymbolPanel projectId={projectId} path={path} onOpenLocation={openLocation} />

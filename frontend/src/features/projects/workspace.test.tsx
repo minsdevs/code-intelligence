@@ -18,7 +18,7 @@ describe('project workspace', () => {
     // index route는 features 탭으로 redirect된다
     expect(await screen.findByRole('heading', { level: 2, name: 'Features' })).toBeInTheDocument()
 
-    const tabs = screen.getByRole('navigation', { name: '워크스페이스 탭' })
+    const tabs = screen.getByRole('navigation', { name: 'Workspace tabs' })
     for (const tab of workspaceTabs) {
       expect(within(tabs).getByRole('link', { name: tab.label })).toBeInTheDocument()
     }

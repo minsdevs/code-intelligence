@@ -15,10 +15,16 @@ public class GeminiProvider implements AIProvider {
     private final AiProperties.Gemini properties;
     private final RestClient restClient;
     private final JsonMapper json;
+    private final String apiKey;
 
-    public GeminiProvider(AiProperties.Gemini properties, RestClient.Builder restClientBuilder, JsonMapper json) {
+    /**
+     * @param apiKey explicit key (from Settings) or null to fall back to the env-configured key.
+     */
+    public GeminiProvider(
+            AiProperties.Gemini properties, RestClient.Builder restClientBuilder, JsonMapper json, String apiKey) {
         this.properties = properties;
         this.json = json;
+        this.apiKey = apiKey == null || apiKey.isBlank() ? properties.apiKey() : apiKey;
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -30,6 +36,10 @@ public class GeminiProvider implements AIProvider {
                 .baseUrl(stripSlash(properties.baseUrl()))
                 .requestFactory(factory)
                 .build();
+    }
+
+    boolean hasKey() {
+        return apiKey != null && !apiKey.isBlank();
     }
 
     @Override
@@ -58,7 +68,7 @@ public class GeminiProvider implements AIProvider {
                     .post()
                     .uri(path)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header("x-goog-api-key", properties.apiKey())
+                    .header("x-goog-api-key", apiKey)
                     .body(body)
                     .retrieve()
                     .body(Map.class);
@@ -84,7 +94,7 @@ public class GeminiProvider implements AIProvider {
                     .post()
                     .uri(path)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header("x-goog-api-key", properties.apiKey())
+                    .header("x-goog-api-key", apiKey)
                     .body(body)
                     .retrieve()
                     .body(Map.class);

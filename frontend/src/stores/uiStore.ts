@@ -68,8 +68,8 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: 'code-intelligence.ui',
-      // Node 26이 자체 experimental localStorage 전역을 갖고 있어(jsdom 테스트에서 undefined로 가려짐)
-      // 브라우저/jsdom 모두에서 확실한 window.localStorage를 명시한다.
+      // Node 26 ships its own experimental localStorage global (masked as undefined in jsdom tests),
+      // so reference window.localStorage explicitly for both browser and jsdom.
       storage: createJSONStorage(() => window.localStorage),
       partialize: (state) => ({
         aiPanelOpen: state.aiPanelOpen,

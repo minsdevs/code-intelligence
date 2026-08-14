@@ -18,6 +18,7 @@ class TsGraphMapperTest {
                 List.of(),
                 List.of(new TsAnalyzeDtos.ApiCallHit("GET", "/api/todos", "src/pages/TodosPage.tsx", 4, "TodosPage")),
                 List.of(),
+                List.of(),
                 List.of());
         AnalysisResult result = TsGraphMapper.toGraph(response);
         assertThat(result.nodes()).anyMatch(node -> NaturalKeys.route("/todos").equals(node.naturalKey()));

@@ -38,5 +38,18 @@ services:
     ports:
       - "127.0.0.1:3040:3040"
 
+  tree-analyzer:
+    # tree-sitter needs native build tooling (python3/make/g++), so use the full Debian image.
+    image: node:24
+    working_dir: /app
+    volumes:
+      - ./analyzers/tree-analyzer:/app
+    command: sh -c "npm ci && npm run build && npm start"
+    environment:
+      TREE_ANALYZER_HOST: 0.0.0.0
+      TREE_ANALYZER_PORT: 3041
+    ports:
+      - "127.0.0.1:3041:3041"
+
 volumes:
   postgres-data:

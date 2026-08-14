@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react'
 import type { CommitDetail as CommitDetailData, CommitDiff } from '../../api/types'
+import { useT } from '../../lib/i18n'
 import { firstLine, formatWhen, shortSha } from './format'
 
 const DiffViewer = lazy(() => import('./DiffViewer'))
@@ -21,8 +22,9 @@ export default function CommitDetail({
   diffLoading,
   diffError,
 }: CommitDetailProps) {
+  const t = useT()
   return (
-    <article className="flex min-h-0 flex-1 flex-col overflow-y-auto" aria-label="커밋 상세">
+    <article className="flex min-h-0 flex-1 flex-col overflow-y-auto" aria-label="Commit detail">
       <header className="border-b border-line px-5 py-4">
         <h2 className="text-[15px] font-semibold text-ink">{firstLine(detail.message)}</h2>
         {detail.message.includes('\n') && (
@@ -42,9 +44,9 @@ export default function CommitDetail({
       </header>
 
       <section className="px-5 py-3">
-        <h3 className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">변경 파일</h3>
+        <h3 className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">{t('history.changedFiles')}</h3>
         {detail.files.length === 0 ? (
-          <p className="text-[13px] text-ink-muted">변경된 파일이 없습니다.</p>
+          <p className="text-[13px] text-ink-muted">{t('history.noChangedFiles')}</p>
         ) : (
           <ul className="flex flex-col">
             {detail.files.map((file) => {
@@ -71,14 +73,14 @@ export default function CommitDetail({
 
       {selectedPath && (
         <section className="flex min-h-0 flex-1 flex-col" aria-label={`${selectedPath} diff`}>
-          {diffLoading && <p className="px-5 py-3 text-[13px] text-ink-muted">diff를 불러오는 중…</p>}
+          {diffLoading && <p className="px-5 py-3 text-[13px] text-ink-muted">{t('history.loadingDiff')}</p>}
           {diffError && (
             <p role="alert" className="px-5 py-3 text-[12px] text-danger">
               {diffError}
             </p>
           )}
           {diff && (
-            <Suspense fallback={<p className="px-5 py-3 text-[13px] text-ink-muted">에디터를 불러오는 중…</p>}>
+            <Suspense fallback={<p className="px-5 py-3 text-[13px] text-ink-muted">{t('code.loadingEditor')}</p>}>
               <DiffViewer path={selectedPath} original={diff.oldContent} modified={diff.newContent} />
             </Suspense>
           )}

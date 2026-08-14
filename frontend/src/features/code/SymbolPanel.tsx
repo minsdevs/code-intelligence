@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { getGraphRelations, listGraphNodes } from '../../api/graph'
 import type { GraphNodeSummary, GraphRelation } from '../../api/types'
+import { useT } from '../../lib/i18n'
 import { useUiStore } from '../../stores/uiStore'
 import { isFileSymbol, queryError, toFocusedNode } from './codeLocation'
 
@@ -11,6 +12,7 @@ type SymbolPanelProps = {
 }
 
 export default function SymbolPanel({ projectId, path, onOpenLocation }: SymbolPanelProps) {
+  const t = useT()
   const focusedNode = useUiStore((state) => state.focusedNode)
   const setFocusedNode = useUiStore((state) => state.setFocusedNode)
 
@@ -54,13 +56,11 @@ export default function SymbolPanel({ projectId, path, onOpenLocation }: SymbolP
     <aside className="flex w-[18rem] shrink-0 flex-col border-l border-line bg-surface-1">
       <header className="border-b border-line px-3 py-3">
         <h2 className="text-[13px] font-medium text-ink">Symbols</h2>
-        <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">
-          파일 심볼과 callers/callees로 이동합니다.
-        </p>
+        <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">{t('code.symbolsHint')}</p>
       </header>
 
       {path == null ? (
-        <p className="px-3 py-3 text-[13px] text-ink-muted">파일을 선택하면 심볼이 나타납니다.</p>
+        <p className="px-3 py-3 text-[13px] text-ink-muted">{t('code.selectSymbol')}</p>
       ) : (
         <>
           {queryError(nodesQuery.error) && (
@@ -68,11 +68,11 @@ export default function SymbolPanel({ projectId, path, onOpenLocation }: SymbolP
               {queryError(nodesQuery.error)}
             </p>
           )}
-          {nodesQuery.isLoading && <p className="px-3 py-3 text-[13px] text-ink-muted">심볼을 불러오는 중…</p>}
+          {nodesQuery.isLoading && <p className="px-3 py-3 text-[13px] text-ink-muted">{t('code.symbolsLoading')}</p>}
           {!nodesQuery.isLoading && symbols.length === 0 && !nodesQuery.error && (
-            <p className="px-3 py-3 text-[13px] text-ink-muted">이 파일에 그래프 심볼이 없습니다.</p>
+            <p className="px-3 py-3 text-[13px] text-ink-muted">{t('code.noSymbols')}</p>
           )}
-          <ul aria-label="파일 심볼" className="max-h-[40%] overflow-y-auto px-2 py-2">
+          <ul aria-label="File symbols" className="max-h-[40%] overflow-y-auto px-2 py-2">
             {symbols.map((node) => {
               const active = node.id === selected?.id
               return (
@@ -133,17 +133,18 @@ function RelationList({
   empty: boolean
   onOpen: (node: GraphNodeSummary) => void
 }) {
+  const t = useT()
   return (
     <section className="flex min-h-0 flex-1 flex-col border-t border-line">
       <h3 className="px-3 pt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">{title}</h3>
-      {loading && <p className="px-3 py-2 text-[12px] text-ink-muted">불러오는 중…</p>}
+      {loading && <p className="px-3 py-2 text-[12px] text-ink-muted">{t('code.relationsLoading')}</p>}
       {error && (
         <p role="alert" className="px-3 py-2 text-[12px] text-danger">
           {error}
         </p>
       )}
       {!loading && !error && empty && relations.length === 0 && (
-        <p className="px-3 py-2 text-[12px] text-ink-muted">{title}가 없습니다.</p>
+        <p className="px-3 py-2 text-[12px] text-ink-muted">{t('code.noRelations').replace('{title}', title)}</p>
       )}
       <ul aria-label={title} className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
         {relations.map((relation) => {

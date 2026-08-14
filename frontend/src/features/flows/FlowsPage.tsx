@@ -4,12 +4,22 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getFlow, listFlows } from '../../api/flows'
 import EmptyState from '../../components/EmptyState'
 import EvidenceList from '../../components/EvidenceList'
+import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { codeLocationSearch, queryError } from '../code/codeLocation'
+import { nodeColor } from '../architecture/layout'
 
 const FLOW_KINDS = ['', 'BACKEND', 'FE_BE', 'INFRA', 'EVENT'] as const
 
+const KIND_COLORS: Record<string, string> = {
+  BACKEND: 'text-ok',
+  FE_BE: 'text-accent',
+  INFRA: 'text-warn',
+  EVENT: 'text-danger',
+}
+
 export default function FlowsPage() {
+  const t = useT()
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const navigate = useNavigate()
@@ -34,10 +44,7 @@ export default function FlowsPage() {
 
   if (projectId == null) {
     return (
-      <EmptyState
-        title="Flows"
-        description="호출 흐름을 단계별로 추적하고 각 step의 source location을 확인합니다."
-      />
+      <EmptyState title="Flows" description={t('flows.desc')} />
     )
   }
 
@@ -61,7 +68,7 @@ export default function FlowsPage() {
             >
               {FLOW_KINDS.map((value) => (
                 <option key={value || 'all'} value={value}>
-                  {value || '전체'}
+                  {value || t('flows.all')}
                 </option>
               ))}
             </select>
@@ -72,11 +79,11 @@ export default function FlowsPage() {
             {listError}
           </p>
         )}
-        {listQuery.isLoading && <p className="px-3 py-3 text-[13px] text-ink-muted">Flow를 불러오는 중…</p>}
+        {listQuery.isLoading && <p className="px-3 py-3 text-[13px] text-ink-muted">{t('flows.loading')}</p>}
         {!listQuery.isLoading && flows.length === 0 && !listError && (
-          <p className="px-3 py-3 text-[13px] text-ink-muted">탐지된 Flow가 없습니다.</p>
+          <p className="px-3 py-3 text-[13px] text-ink-muted">{t('flows.empty')}</p>
         )}
-        <ul aria-label="Flow 목록" className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        <ul aria-label={t('flows.listLabel')} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
           {flows.map((flow) => {
             const active = flow.id === resolvedId
             return (
@@ -99,38 +106,84 @@ export default function FlowsPage() {
       </section>
 
       {detail ? (
-        <article className="min-h-0 flex-1 overflow-y-auto px-5 py-4" aria-label="Flow 상세">
-          <h3 className="text-[15px] font-semibold text-ink">{detail.name}</h3>
-          <p className="mt-1 font-mono text-[12px] text-ink-faint">{detail.kind}</p>
-          <ol aria-label="Flow steps" className="mt-5 space-y-1">
-            {detail.steps.map((step) => (
-              <li key={step.seq}>
-                {step.filePath ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate(`/projects/${projectId}/code${codeLocationSearch(step.filePath!, step.line)}`)
-                    }
-                    className="flex w-full items-start gap-3 rounded-md px-2 py-1.5 text-left hover:bg-surface-2"
-                  >
-                    <span className="w-6 shrink-0 font-mono text-[12px] text-ink-faint">{step.seq}</span>
-                    <span className="min-w-0">
-                      <span className="block text-[13px] text-ink">{step.nodeName ?? step.description ?? 'step'}</span>
-                      <span className="font-mono text-[11px] text-ink-faint">
-                        {step.nodeType ?? ''} {step.filePath}
-                        {step.line != null ? `:${step.line}` : ''}
-                      </span>
-                    </span>
-                  </button>
-                ) : (
-                  <div className="flex items-start gap-3 px-2 py-1.5">
-                    <span className="w-6 shrink-0 font-mono text-[12px] text-ink-faint">{step.seq}</span>
-                    <span className="text-[13px] text-ink">{step.nodeName ?? step.description ?? 'step'}</span>
-                  </div>
+        <article className="min-h-0 flex-1 overflow-y-auto px-6 py-5" aria-label="Flow detail">
+          <div className="flex items-center gap-2">
+            <h3 className="text-[16px] font-semibold text-ink">{detail.name}</h3>
+            {detail.kind && (
+              <span
+                className={`rounded-full border border-line-strong px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
+                  KIND_COLORS[detail.kind] ?? 'text-ink-muted'
+                }`}
+              >
+                {detail.kind}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-[12px] text-ink-muted">
+            {t('flows.stepCount').replace('{count}', String(detail.steps.length))}
+          </p>
+
+          <ol aria-label={t('flows.stepsLabel')} className="mt-5 flex flex-col">
+            {detail.steps.map((step, index) => (
+              <li key={step.seq} className="relative flex gap-3 pb-4 pl-8">
+                <span
+                  aria-hidden="true"
+                  className="absolute left-0 top-0 flex size-6 items-center justify-center rounded-full border border-line-strong bg-surface-2 font-mono text-[11px] text-ink"
+                >
+                  {index + 1}
+                </span>
+                {index < detail.steps.length - 1 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute bottom-0 left-[11px] top-7 w-px bg-line-strong"
+                  />
                 )}
+                <div
+                  className={`min-w-0 flex-1 rounded-md border border-line bg-surface-1 px-3 py-2.5 ${
+                    step.filePath ? 'cursor-pointer transition-colors hover:border-line-strong hover:bg-surface-2' : ''
+                  }`}
+                  role={step.filePath ? 'button' : undefined}
+                  tabIndex={step.filePath ? 0 : undefined}
+                  onClick={step.filePath ? () => navigate(`/projects/${projectId}/code${codeLocationSearch(step.filePath!, step.line)}`) : undefined}
+                  onKeyDown={
+                    step.filePath
+                      ? (event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            navigate(`/projects/${projectId}/code${codeLocationSearch(step.filePath!, step.line)}`)
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 truncate text-[13px] font-medium text-ink">
+                      {step.nodeName ?? step.description ?? 'step'}
+                    </span>
+                    {step.nodeType && (
+                      <span className="flex shrink-0 items-center gap-1 rounded-full border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">
+                        <span
+                          className="size-1.5 rounded-full"
+                          style={{ background: nodeColor(step.nodeType) }}
+                        />
+                        {step.nodeType}
+                      </span>
+                    )}
+                  </div>
+                  {step.description && step.nodeName !== step.description && (
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-ink-muted">{step.description}</p>
+                  )}
+                  {step.filePath && (
+                    <p className="mt-1 truncate font-mono text-[11px] text-ink-faint">
+                      {step.filePath}
+                      {step.line != null ? `:${step.line}` : ''}
+                    </p>
+                  )}
+                </div>
               </li>
             ))}
           </ol>
+
           <EvidenceList
             evidences={detail.evidences}
             onOpen={(path, line) =>
@@ -140,7 +193,7 @@ export default function FlowsPage() {
         </article>
       ) : (
         <p className="px-5 py-8 text-[13px] text-ink-muted">
-          {detailQuery.isLoading ? 'Flow 상세를 불러오는 중…' : '왼쪽에서 Flow를 선택하세요.'}
+          {detailQuery.isLoading ? t('flows.loadingDetail') : t('flows.select')}
         </p>
       )}
     </div>

@@ -174,7 +174,7 @@ describe('HistoryPage', () => {
   it('shows commit detail when a commit is selected', async () => {
     renderHistory()
 
-    const detail = await screen.findByRole('article', { name: '커밋 상세' })
+    const detail = await screen.findByRole('article', { name: 'Commit detail' })
     expect(within(detail).getByText('Ada Lovelace')).toBeInTheDocument()
     expect(within(detail).getByRole('button', { name: /src\/App.java/ })).toBeInTheDocument()
     expect(within(detail).getByText('+4')).toBeInTheDocument()
@@ -197,7 +197,7 @@ describe('HistoryPage', () => {
     const list = await screen.findByRole('list', { name: 'Pull request 목록' })
     expect(within(list).getByText('Add login')).toBeInTheDocument()
     expect(within(list).getByText('octocat')).toBeInTheDocument()
-    expect(await screen.findByRole('article', { name: 'Pull request 상세' })).toHaveTextContent(
+    expect(await screen.findByRole('article', { name: 'Pull request 목록' })).toHaveTextContent(
       '**not markdown** just text',
     )
   })
