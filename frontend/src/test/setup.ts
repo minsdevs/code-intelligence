@@ -1,6 +1,10 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
-import { afterEach } from 'vitest'
+import { afterEach, vi } from 'vitest'
+
+vi.mock('../lib/monacoSetup', () => ({
+  configureMonaco: () => {},
+}))
 
 // Node 26의 experimental localStorage 전역(--localstorage-file 미지정 시 undefined)이
 // vitest jsdom 환경의 localStorage를 가리므로, 테스트에서는 결정적인 in-memory Storage를 사용한다.

@@ -57,6 +57,9 @@ app:
     github-rate-limit-retries: ${ANALYSIS_GITHUB_RATE_LIMIT_RETRIES:5}
     github-backoff-base-ms: ${ANALYSIS_GITHUB_BACKOFF_BASE_MS:1000}
     feature-merge-threshold: ${ANALYSIS_FEATURE_MERGE_THRESHOLD:0.5}
+  auth:
+    pat-login-max-attempts: ${PAT_LOGIN_MAX_ATTEMPTS:20}
+    pat-login-window-seconds: ${PAT_LOGIN_WINDOW_SECONDS:60}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   github:

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.codeintelligence.TestcontainersConfiguration;
 import dev.codeintelligence.testsupport.FakeGithubApi;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -66,6 +67,29 @@ class FileApiIntegrationTest {
         getAs(session, "/api/projects/" + projectId + "/file-content?path=../secret", HttpStatus.BAD_REQUEST);
         getAs(session, "/api/projects/" + projectId + "/file-content?path=/etc/passwd", HttpStatus.BAD_REQUEST);
         getAs(session, "/api/projects/" + projectId + "/file-content?path=%2e%2e%2fsecret", HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void fileContentRejectsSymlinkEscape() throws Exception {
+        ResponseCookie session = loginWithPat();
+        long projectId = seedOwnedProject(session, "readme.md", "hello\n");
+        Path clone = root.resolve("data").resolve("repos").resolve(String.valueOf(projectId));
+        Path outside = root.resolve("outside-secret.txt");
+        Files.writeString(outside, "leaked-token\n");
+        Path link = clone.resolve("escaped.md");
+        try {
+            Files.createSymbolicLink(link, outside);
+        } catch (UnsupportedOperationException | IOException ignored) {
+            return;
+        }
+        org.junit.jupiter.api.Assumptions.assumeTrue(Files.isSymbolicLink(link));
+        long snapshotId = jdbcTemplate.queryForObject(
+                "select current_snapshot_id from projects where id = ?", Long.class, projectId);
+        jdbcTemplate.update("""
+                insert into files (snapshot_id, path, language, size, line_count, content_hash)
+                values (?, 'escaped.md', 'markdown', 13, 1, 'sy')
+                """, snapshotId);
+        getAs(session, "/api/projects/" + projectId + "/file-content?path=escaped.md", HttpStatus.BAD_REQUEST);
     }
 
     @Test
@@ -153,6 +177,35 @@ class FileApiIntegrationTest {
                 where project_id = ? and area_type = 'BACKEND'
                 """, Boolean.class, projectId);
         assertThat(selected).isTrue();
+    }
+
+    @Test
+    void putAreaSelectionsIsOwnerScoped() throws Exception {
+        ResponseCookie session = loginWithPat();
+        long otherUser = jdbcTemplate.queryForObject(
+                "insert into users (github_id, login) values (?, ?) returning id",
+                Long.class,
+                System.nanoTime(),
+                "other-" + System.nanoTime());
+        long projectId = jdbcTemplate.queryForObject("""
+                insert into projects (user_id, name, repo_owner, repo_name)
+                values (?, 'x', 'acme', 'x') returning id
+                """, Long.class, otherUser);
+        ResponseCookie csrf = primeCsrfToken();
+        restTestClient
+                .put()
+                .uri("/api/projects/" + projectId + "/area-selections")
+                .contentType(MediaType.APPLICATION_JSON)
+                .cookie("SESSION", session.getValue())
+                .cookie("XSRF-TOKEN", csrf.getValue())
+                .header("X-XSRF-TOKEN", csrf.getValue())
+                .body(Map.of("selections", List.of(Map.of("areaType", "BACKEND", "selected", true))))
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+        Integer rows = jdbcTemplate.queryForObject(
+                "select count(*) from project_area_selections where project_id = ?", Integer.class, projectId);
+        assertThat(rows).isZero();
     }
 
     private long seedOwnedProject(ResponseCookie session, String path, String content) throws Exception {
