@@ -34,6 +34,29 @@ public class MockAIProvider implements AIProvider {
                     "{\"type\":\"LEARNING\",\"title\":\"Review unmatched API call\",\"description\":\"Confirm the finding in code.\",\"goals\":[\"Open the evidence file\",\"Decide fix or dismiss\"]}";
             return new ChatResponse(taskJson, List.of(), taskJson, List.of(), 12, 8);
         }
+        if (request.system() != null && request.system().contains("Review this pull request")) {
+            List<String> evidence = evidenceFrom(lastUser);
+            if (lastUser.contains("pr:")) {
+                int prStart = lastUser.indexOf("pr:");
+                int prEnd = prStart + 3;
+                while (prEnd < lastUser.length() && Character.isDigit(lastUser.charAt(prEnd))) {
+                    prEnd++;
+                }
+                evidence = new ArrayList<>(evidence);
+                evidence.add(lastUser.substring(prStart, prEnd));
+            }
+            String path = "src/App.java";
+            Matcher changed = Pattern.compile("CHANGED_FILE: (\\S+)").matcher(lastUser);
+            if (changed.find()) {
+                path = changed.group(1);
+            }
+            String reviewJson = "{\"summary\":\"mock review\",\"comments\":[{\"filePath\":\""
+                    + path
+                    + "\",\"line\":1,\"severity\":\"WARNING\",\"body\":\"Check this change.\",\"confidence\":\"CONFIRMED\",\"evidence\":"
+                    + toJsonArray(evidence.isEmpty() ? List.of("file:" + path + ":1") : evidence)
+                    + "}]}";
+            return new ChatResponse(reviewJson, List.of(), reviewJson, List.of(), 12, 8);
+        }
         String explanation = "mock explanation";
         List<Claim> claims = new ArrayList<>();
         if (lastUser.contains("broken-ref")) {
@@ -73,6 +96,23 @@ public class MockAIProvider implements AIProvider {
         if (focus.find()) {
             return List.of("file:" + focus.group(1) + ":1");
         }
+        Matcher nodeFile = Pattern.compile("file:(\\S+):(\\d+)").matcher(user);
+        if (nodeFile.find()) {
+            return List.of("file:" + nodeFile.group(1) + ":" + nodeFile.group(2));
+        }
         return List.of();
+    }
+
+    private static String toJsonArray(List<String> values) {
+        StringBuilder out = new StringBuilder("[");
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                out.append(',');
+            }
+            out.append('"')
+                    .append(values.get(i).replace("\\", "\\\\").replace("\"", "\\\""))
+                    .append('"');
+        }
+        return out.append(']').toString();
     }
 }
