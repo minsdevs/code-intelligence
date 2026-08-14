@@ -368,3 +368,41 @@ export type EraView = {
   committedAt: string | null
   changeType: string
 }
+
+export type AiStatus = {
+  configured: boolean
+  provider: string | null
+}
+
+export type AiClaim = {
+  text: string
+  confidence: string
+  evidence: string[]
+}
+
+export type AiAlternative = {
+  name: string
+  pros: string[]
+  cons: string[]
+  fitForThisProject: string
+}
+
+export type AiAskResponse = {
+  conversationId: number
+  messageId: number
+  explanation: string
+  claims: AiClaim[]
+  alternatives: AiAlternative[]
+}
+
+export type AiAskBody = {
+  conversationId?: number | null
+  question: string
+  intent?: string | null
+  view?: string | null
+  focusedFile?: string | null
+  focusedNodeId?: number | null
+  focusedCommitSha?: string | null
+  focusedFindingId?: number | null
+  selectedAreas?: string[]
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { ApiError } from '../../api/client'
@@ -12,6 +12,7 @@ import {
   listPulls,
 } from '../../api/history'
 import { parseProjectId } from '../../lib/projectId'
+import { useUiStore } from '../../stores/uiStore'
 import type { EraView } from '../../api/types'
 import CommitDetail from './CommitDetail'
 import { firstLine, formatWhen, shortSha } from './format'
@@ -43,6 +44,12 @@ export default function HistoryPage() {
     selectedSha != null && commits.some((commit) => commit.sha === selectedSha)
       ? selectedSha
       : (commits[0]?.sha ?? null)
+  const setFocusedCommitSha = useUiStore((state) => state.setFocusedCommitSha)
+
+  useEffect(() => {
+    setFocusedCommitSha(resolvedSha)
+    return () => setFocusedCommitSha(null)
+  }, [resolvedSha, setFocusedCommitSha])
 
   const branchesQuery = useQuery({
     queryKey: ['branches', projectId],

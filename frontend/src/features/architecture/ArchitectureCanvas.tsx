@@ -8,6 +8,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { ArchitectureView } from '../../api/types'
+import { useUiStore } from '../../stores/uiStore'
 import { layoutArchitecture, type ArchitectureNodeData } from './layout'
 
 type ArchitectureCanvasProps = {
@@ -16,14 +17,28 @@ type ArchitectureCanvasProps = {
 }
 
 export default function ArchitectureCanvas({ view, onOpenNode }: ArchitectureCanvasProps) {
+  const setFocusedFile = useUiStore((state) => state.setFocusedFile)
+  const setFocusedNode = useUiStore((state) => state.setFocusedNode)
   const layoutQuery = useQuery({
     queryKey: ['architecture-layout', view],
     queryFn: () => layoutArchitecture(view),
   })
 
   const onNodeClick: NodeMouseHandler<Node<ArchitectureNodeData>> = (_event, node) => {
-    if (node.data.kind !== 'node' || !node.data.filePath) return
-    onOpenNode(node.data.filePath, node.data.line)
+    if (node.data.kind !== 'node') return
+    if (node.data.nodeId != null) {
+      setFocusedNode({
+        id: node.data.nodeId,
+        name: node.data.label,
+        nodeType: node.data.nodeType ?? 'NODE',
+        filePath: node.data.filePath,
+        lineStart: node.data.line,
+      })
+    }
+    if (node.data.filePath) {
+      setFocusedFile(node.data.filePath)
+      onOpenNode(node.data.filePath, node.data.line)
+    }
   }
 
   if (layoutQuery.isLoading) {

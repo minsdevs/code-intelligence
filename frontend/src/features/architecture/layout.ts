@@ -11,6 +11,8 @@ export type ArchitectureNodeData = {
   filePath: string | null
   line: number | null
   kind: 'node' | 'group'
+  nodeId: number | null
+  nodeType: string | null
 }
 
 function groupId(layer: string): string {
@@ -73,7 +75,7 @@ function toFlow(
       id: group.id,
       type: 'group',
       position: { x: group.x ?? 0, y: group.y ?? 0 },
-      data: { label: layer, filePath: null, line: null, kind: 'group' },
+      data: { label: layer, filePath: null, line: null, kind: 'group', nodeId: null, nodeType: null },
       style: {
         width: group.width ?? 220,
         height: group.height ?? 80,
@@ -94,6 +96,8 @@ function toFlow(
           filePath: source?.filePath ?? null,
           line: source?.line ?? null,
           kind: 'node',
+          nodeId: source?.id ?? null,
+          nodeType: source?.nodeType ?? null,
         },
         style: {
           width: NODE_WIDTH,
