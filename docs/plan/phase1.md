@@ -522,24 +522,25 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-12 · fe — Code explorer (파일트리 + Monaco + 심볼 패널) `[P9]`
 
+**상태: 완료** — Code 탭 파일트리 + Monaco + callers/callees 네비게이션. RTL 21/21.
 **완료 기준:** 노드→코드 라인 이동 동작
 **위치:** `frontend/src/features/code/`
 
 **구현 체크리스트:**
 
-- [ ] 의존성: `@monaco-editor/react` — **lazy route chunk로 분리**(번들 영향 최소화)
-- [ ] `CodeExplorerPage` — workspaceTabs `code` 탭의 placeholder element 교체, URL 상태 `?path=&line=`
-- [ ] `FileTreePanel` — `GET files` → 디렉터리 트리(접기/펼치기, 언어 아이콘)
-- [ ] `CodeViewer` — `GET file-content` → Monaco read-only. `?line=` 진입 시 revealLineInCenter + 라인 decoration. 바이너리/상한 초과(413/415)는 안내 UI
-- [ ] `SymbolPanel` — 파일 내 심볼(`GET graph/nodes?path=`), 선택 심볼의 callers/callees(`relations` API) 목록. **항목 클릭 → 대상 파일·라인으로 네비게이트** ← 완료 기준
-- [ ] `uiContextStore` 확장 — `{ focusedFile, focusedNode }` 유지(§15.3, Phase 3 AI 컨텍스트 대비 저장만)
+- [x] 의존성: `@monaco-editor/react` — **lazy route chunk로 분리**(번들 영향 최소화)
+- [x] `CodeExplorerPage` — workspaceTabs `code` 탭의 placeholder element 교체, URL 상태 `?path=&line=`
+- [x] `FileTreePanel` — `GET files` → 디렉터리 트리(접기/펼치기, 언어 아이콘)
+- [x] `CodeViewer` — `GET file-content` → Monaco read-only. `?line=` 진입 시 revealLineInCenter + 라인 decoration. 바이너리/상한 초과(413/415)는 안내 UI
+- [x] `SymbolPanel` — 파일 내 심볼(`GET graph/nodes?path=`), 선택 심볼의 callers/callees(`relations` API) 목록. **항목 클릭 → 대상 파일·라인으로 네비게이트** ← 완료 기준
+- [x] `uiContextStore` 확장 — `{ focusedFile, focusedNode }` 유지(§15.3, Phase 3 AI 컨텍스트 대비 저장만)
 
 **테스트 체크리스트:**
 
-- [ ] 트리 렌더·탐색 → 파일 선택 시 content fetch
-- [ ] `?path=&line=` 진입 → 해당 위치 표시(Monaco mock)
-- [ ] callers 항목 클릭 → URL(path/line) 변경 assert ← 완료 기준
-- [ ] 대형/바이너리 파일 안내 상태
+- [x] 트리 렌더·탐색 → 파일 선택 시 content fetch
+- [x] `?path=&line=` 진입 → 해당 위치 표시(Monaco mock)
+- [x] callers 항목 클릭 → URL(path/line) 변경 assert ← 완료 기준
+- [x] 대형/바이너리 파일 안내 상태
 
 ---
 

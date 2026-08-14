@@ -6,13 +6,25 @@ export const AI_PANEL_MIN_WIDTH = 280
 export const AI_PANEL_MAX_WIDTH = 560
 export const AI_PANEL_DEFAULT_WIDTH = 340
 
+export type FocusedNode = {
+  id: number
+  name: string
+  nodeType: string
+  filePath: string | null
+  lineStart: number | null
+}
+
 type UiState = {
   aiPanelOpen: boolean
   aiPanelWidth: number
   selectedAreas: AreaType[]
+  focusedFile: string | null
+  focusedNode: FocusedNode | null
   toggleAiPanel: () => void
   setAiPanelWidth: (width: number) => void
   setSelectedAreas: (areas: AreaType[]) => void
+  setFocusedFile: (file: string | null) => void
+  setFocusedNode: (node: FocusedNode | null) => void
 }
 
 const clampWidth = (width: number) =>
@@ -24,9 +36,13 @@ export const useUiStore = create<UiState>()(
       aiPanelOpen: true,
       aiPanelWidth: AI_PANEL_DEFAULT_WIDTH,
       selectedAreas: [],
+      focusedFile: null,
+      focusedNode: null,
       toggleAiPanel: () => set((state) => ({ aiPanelOpen: !state.aiPanelOpen })),
       setAiPanelWidth: (width) => set({ aiPanelWidth: clampWidth(width) }),
       setSelectedAreas: (selectedAreas) => set({ selectedAreas }),
+      setFocusedFile: (focusedFile) => set({ focusedFile }),
+      setFocusedNode: (focusedNode) => set({ focusedNode }),
     }),
     {
       name: 'code-intelligence.ui',

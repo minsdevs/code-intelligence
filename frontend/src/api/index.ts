@@ -13,6 +13,8 @@ export {
   listPulls,
   listTags,
 } from './history'
+export { getFileContent, listFiles } from './files'
+export { GRAPH_NODE_PAGE_SIZE, getGraphNode, getGraphRelations, listGraphNodes } from './graph'
 export type {
   AreaSelection,
   AreaType,
@@ -20,7 +22,14 @@ export type {
   CommitDiff,
   CommitSummary,
   CreateProjectResponse,
+  FileContent,
+  FileListItem,
   GithubRepo,
+  GraphNodeDetail,
+  GraphNodePage,
+  GraphNodeSummary,
+  GraphRelation,
+  GraphRelationsResponse,
   JobDetail,
   MeResponse,
   Project,
