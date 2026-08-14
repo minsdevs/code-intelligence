@@ -7,13 +7,14 @@ explore its features, architecture, call flows, dependencies, history, design
 rationale, and alternatives — with an evidence-grounded, context-aware AI
 assistant.
 
-> **Status: Phase 3 — AI (complete).**
+> **Status: Phase 4 — Learning & Productivity (complete).**
 > Phase 1 (import, Java analysis, architecture, history), Phase 2
-> (TypeScript sidecar, FE↔BE matching, flows, findings, impact, era), and
+> (TypeScript sidecar, FE↔BE matching, flows, findings, impact, era),
 > Phase 3 (provider-abstracted assistant, summaries + pgvector, evidence-grounded
-> Why/Alternative answers) are on `main`.
-> Phase 4 has not started.
-> See [기획서.md](./기획서.md) and [docs/plan/phase3.md](./docs/plan/phase3.md).
+> Why/Alternative answers), and Phase 4 (notes, tasks, AI learning-task drafts,
+> unified search) are on `main`.
+> Phase 5 has not started.
+> See [기획서.md](./기획서.md) and [docs/plan/phase4.md](./docs/plan/phase4.md).
 
 ## Principles
 
@@ -35,6 +36,7 @@ assistant.
 | Frontend | React 19, TypeScript (strict), Vite, Tailwind CSS v4, TanStack Query, Zustand, React Flow |
 | Analyzer sidecar (Phase 2) | NestJS, ts-morph (TypeScript Compiler API), tree-sitter |
 | AI (Phase 3) | Provider-abstracted (OpenAI / Gemini), pgvector embeddings, evidence-grounded assistant |
+| Learning (Phase 4) | Notes with code refs, tasks + AI DRAFT approval, FTS/`pg_trgm`/vector hybrid search |
 
 ## Getting started
 
@@ -81,8 +83,8 @@ CI runs the same gates on every pull request.
 | 1 — Repository Intelligence Core | GitHub OAuth, import & clone, project-area detection, Java AST analysis, code explorer, architecture view, history |
 | 2 — Cross-domain Intelligence | TypeScript analyzer, FE↔BE↔DB↔Infra linking, flows, findings, impact analysis |
 | 3 — AI | Context-aware assistant, why/alternative analysis, evidence-grounded answers |
-| 4 — Learning & Productivity | Notes, tasks, AI learning-task generation, unified search |
-| 5 — Advanced | PR review, playground, growth reports, what-if simulator |
+| 4 — Learning & Productivity | Notes, tasks, AI learning-task generation, unified search **(done)** |
+| 5 — Advanced | PR review, playground, growth reports, what-if simulator **(not started)** |
 
 Full design: [기획서.md](./기획서.md)
 
