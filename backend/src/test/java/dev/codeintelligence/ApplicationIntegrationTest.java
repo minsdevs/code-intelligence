@@ -30,16 +30,17 @@ class ApplicationIntegrationTest {
                 where table_schema = 'public'
                   and table_name in ('users', 'github_credentials', 'projects', 'snapshots',
                                      'project_area_selections', 'analysis_jobs', 'analysis_job_steps',
-                                     'files', 'project_areas', 'area_technologies', 'evidences', 'evidence_links')
+                                     'files', 'project_areas', 'area_technologies', 'evidences', 'evidence_links',
+                                     'commits', 'commit_files', 'branches', 'tags', 'pull_requests')
                 """, Integer.class);
-        assertThat(coreTables).isEqualTo(12);
+        assertThat(coreTables).isEqualTo(17);
 
         Boolean v1 = jdbcTemplate.queryForObject(
                 "select success from flyway_schema_history where version = '1'", Boolean.class);
         assertThat(v1).isTrue();
-        Boolean v4 = jdbcTemplate.queryForObject(
-                "select success from flyway_schema_history where version = '4'", Boolean.class);
-        assertThat(v4).isTrue();
+        Boolean v5 = jdbcTemplate.queryForObject(
+                "select success from flyway_schema_history where version = '5'", Boolean.class);
+        assertThat(v5).isTrue();
 
         Integer vectorExtension = jdbcTemplate.queryForObject(
                 "select count(*) from pg_extension where extname = 'vector'", Integer.class);
@@ -72,6 +73,9 @@ class ApplicationIntegrationTest {
                 .expectStatus()
                 .isOk()
                 .expectBody(String.class)
-                .value(body -> assertThat(body).contains("/api/auth/me").contains("/api/github/repos"));
+                .value(body -> assertThat(body)
+                        .contains("/api/auth/me")
+                        .contains("/api/github/repos")
+                        .contains("/api/projects/{projectId}/commits"));
     }
 }

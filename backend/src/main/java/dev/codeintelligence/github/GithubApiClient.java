@@ -2,6 +2,9 @@ package dev.codeintelligence.github;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,8 +12,11 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 /**
  * Thin GitHub REST wrapper. Tokens are passed per call (decrypted at call time by the caller)
@@ -82,6 +88,101 @@ public class GithubApiClient {
         return new GithubRepoPage(items, hasNextPage(response.getHeaders()));
     }
 
+    public GithubPullsPage listRepoPulls(String token, String owner, String repo, int page, int perPage, String etag) {
+        RestClient.RequestHeadersSpec<?> spec = restClient
+                .get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/repos/{owner}/{repo}/pulls")
+                        .queryParam("state", "all")
+                        .queryParam("per_page", perPage)
+                        .queryParam("page", page)
+                        .build(owner, repo))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+        if (StringUtils.hasText(etag)) {
+            spec = spec.header(HttpHeaders.IF_NONE_MATCH, etag);
+        }
+        try {
+            ResponseEntity<List<PullResponse>> response = spec.retrieve()
+                    .onStatus(status -> status.value() == 304, (request, res) -> {
+                        throw new NotModified(etagOf(res));
+                    })
+                    .onStatus(status -> status.value() == 403 || status.value() == 429, (request, res) -> {
+                        HttpHeaders headers = res.getHeaders();
+                        if (isRateLimited(res.getStatusCode().value(), headers)) {
+                            throw new GithubRateLimitException(parseRetryAfter(headers));
+                        }
+                        throw new RestClientException("GitHub pulls request failed");
+                    })
+                    .toEntity(new ParameterizedTypeReference<>() {});
+            consumeRateLimit(response.getHeaders());
+            List<PullResponse> body = response.getBody() == null ? List.of() : response.getBody();
+            List<GithubPullSummary> items = body.stream()
+                    .map(pull -> new GithubPullSummary(
+                            pull.number(),
+                            pull.title(),
+                            pull.body(),
+                            pull.state(),
+                            pull.user() == null ? null : pull.user().login(),
+                            pull.mergedAt(),
+                            pull.head() == null ? null : pull.head().sha(),
+                            pull.base() == null ? null : pull.base().sha()))
+                    .toList();
+            return new GithubPullsPage(false, items, hasNextPage(response.getHeaders()), etagOf(response.getHeaders()));
+        } catch (RuntimeException ex) {
+            NotModified notModified = findCause(ex, NotModified.class);
+            if (notModified != null) {
+                return GithubPullsPage.notModified(notModified.etag);
+            }
+            GithubRateLimitException rateLimit = findCause(ex, GithubRateLimitException.class);
+            if (rateLimit != null) {
+                throw rateLimit;
+            }
+            throw ex;
+        }
+    }
+
+    static boolean isRateLimited(int status, HttpHeaders headers) {
+        if (status != 403 && status != 429) {
+            return false;
+        }
+        if (StringUtils.hasText(headers.getFirst(HttpHeaders.RETRY_AFTER))) {
+            return true;
+        }
+        return "0".equals(headers.getFirst("x-ratelimit-remaining"));
+    }
+
+    static Duration parseRetryAfter(HttpHeaders headers) {
+        String retryAfter = headers.getFirst(HttpHeaders.RETRY_AFTER);
+        if (!StringUtils.hasText(retryAfter)) {
+            return null;
+        }
+        try {
+            return Duration.ofSeconds(Long.parseLong(retryAfter.trim()));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static String etagOf(ClientHttpResponse response) throws IOException {
+        return etagOf(response.getHeaders());
+    }
+
+    private static String etagOf(HttpHeaders headers) {
+        String etag = headers.getETag();
+        return StringUtils.hasText(etag) ? etag : headers.getFirst(HttpHeaders.ETAG);
+    }
+
+    private static <T extends Throwable> T findCause(Throwable thrown, Class<T> type) {
+        Throwable current = thrown;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
     private boolean isTokenRejection(HttpStatusCode status) {
         return status.value() == 401 || status.value() == 403;
     }
@@ -118,4 +219,29 @@ public class GithubApiClient {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record RepoOwner(String login) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record PullResponse(
+            int number,
+            String title,
+            String body,
+            String state,
+            PullUser user,
+            @JsonProperty("merged_at") Instant mergedAt,
+            ShaRef head,
+            ShaRef base) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record PullUser(String login) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record ShaRef(String sha) {}
+
+    private static final class NotModified extends RuntimeException {
+        private final String etag;
+
+        private NotModified(String etag) {
+            this.etag = etag;
+        }
+    }
 }

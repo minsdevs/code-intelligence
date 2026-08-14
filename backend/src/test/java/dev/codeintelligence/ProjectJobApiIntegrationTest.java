@@ -138,7 +138,13 @@ class ProjectJobApiIntegrationTest {
         assertThat(steps)
                 .extracting(step -> step.get("stepKey"))
                 .containsExactly(
-                        "IMPORT", "FILE_INVENTORY", "LANGUAGE_FRAMEWORK", "AREA_DETECTION", "T_GATE", "FINALIZE");
+                        "IMPORT",
+                        "FILE_INVENTORY",
+                        "LANGUAGE_FRAMEWORK",
+                        "AREA_DETECTION",
+                        "GIT_METADATA",
+                        "T_GATE",
+                        "FINALIZE");
         assertThat(steps).allSatisfy(step -> {
             assertThat(step.get("status")).isEqualTo("DONE");
             assertThat(step.get("attempt")).isEqualTo(1);
@@ -437,7 +443,7 @@ class ProjectJobApiIntegrationTest {
             Map<String, Object> snapshot = readJson(first.data());
             assertThat(((Number) snapshot.get("id")).longValue()).isEqualTo(created.jobId());
             assertThat(snapshot.get("status")).isEqualTo("RUNNING");
-            assertThat(asList(snapshot.get("steps"))).hasSize(6);
+            assertThat(asList(snapshot.get("steps"))).hasSize(7);
 
             gateStep.release();
 

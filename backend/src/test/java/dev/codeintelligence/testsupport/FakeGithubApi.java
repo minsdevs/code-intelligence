@@ -27,6 +27,7 @@ public final class FakeGithubApi implements AutoCloseable {
         }
         server.createContext("/user", this::handleUser);
         server.createContext("/user/repos", this::handleRepos);
+        server.createContext("/repos", this::handleRepoPulls);
         server.start();
     }
 
@@ -69,6 +70,27 @@ public final class FakeGithubApi implements AutoCloseable {
                  {"name":"beta-app","full_name":"octocat/beta-app","private":false,
                   "default_branch":"develop","description":"Public app",
                   "updated_at":"2026-07-15T09:30:00Z","owner":{"login":"octocat"}}]""");
+    }
+
+    private void handleRepoPulls(HttpExchange exchange) throws IOException {
+        if (!authorized(exchange)) {
+            respond(exchange, 401, "{\"message\":\"Bad credentials\"}");
+            return;
+        }
+        String path = exchange.getRequestURI().getPath();
+        if (!path.endsWith("/pulls")) {
+            respond(exchange, 404, "{\"message\":\"Not Found\"}");
+            return;
+        }
+        String ifNoneMatch = exchange.getRequestHeaders().getFirst("If-None-Match");
+        exchange.getResponseHeaders().add("ETag", "W/\"pulls-etag\"");
+        addRateLimitHeaders(exchange);
+        if ("W/\"pulls-etag\"".equals(ifNoneMatch)) {
+            exchange.sendResponseHeaders(304, -1);
+            exchange.close();
+            return;
+        }
+        respond(exchange, 200, "[]");
     }
 
     private boolean authorized(HttpExchange exchange) {

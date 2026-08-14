@@ -53,6 +53,9 @@ app:
   analysis:
     max-files: ${ANALYSIS_MAX_FILES:20000}
     max-file-size: ${ANALYSIS_MAX_FILE_SIZE:1048576}
+    max-commits: ${ANALYSIS_MAX_COMMITS:10000}
+    github-rate-limit-retries: ${ANALYSIS_GITHUB_RATE_LIMIT_RETRIES:5}
+    github-backoff-base-ms: ${ANALYSIS_GITHUB_BACKOFF_BASE_MS:1000}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   github:
