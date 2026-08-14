@@ -11,7 +11,8 @@
     "test": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen:api": "npx --yes openapi-typescript http://127.0.0.1:8080/v3/api-docs -o src/api/generated.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",

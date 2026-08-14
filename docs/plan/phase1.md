@@ -331,6 +331,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-6 · fe — Import Wizard UI `[P4]`
 
+**상태: 완료** — RTL 8/8, lint/typecheck/build green. `VITE_*` 시크릿 없음. 실 백엔드 E2E·SSE 프록시 실측은 1-17. `gen:api`는 스크립트만(CI는 핸드 타입).
 **완료 기준:** 영역 선택이 저장·반영
 **위치:** `frontend/src/features/import/`, `frontend/src/api/`
 
@@ -720,6 +721,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 - [ ] findings를 severity(critical/high/medium/low)로 리포트, critical/high 0이 될 때까지 수정 반복
 - [ ] P1 조기 점검(1-1) 이월 LOW 3건 재평가: PAT 등록 rate-limit 부재(GitHub API 대리 호출), springdoc `/v3/api-docs`·swagger 공개 유지 여부, 토큰 로그 미출력의 로그 캡처 테스트 부재(서버 루프백 바인딩은 P1에서 반영 완료)
 - [ ] P2 조기 점검(1-2·1-3) 이월 LOW 4건 재평가: retry의 트랜잭션 내 guard 순서, 프로젝트 삭제 TOCTOU 고아 디렉터리 가능성, RepoRef `.` 단독 세그먼트·대소문자 중복 import 하드닝, SSE emitter 잔존 정리
+- [ ] P3 조기 점검(1-4·1-5) 이월: evidence excerpt가 설정 파일 앞 80자를 그대로 저장(시크릿 마스킹은 LLM 연동 전/1-16), file-content symlink 탈출 통합 테스트 부재, PUT `/area-selections` IDOR 테스트 부재(코드는 user_id 스코프)
 
 ### 1-17 · verify — Phase 1 최종 검증 (DoD)
 

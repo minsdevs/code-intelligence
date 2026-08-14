@@ -76,7 +76,7 @@ export default function Sidebar() {
       </div>
 
       <div className="shrink-0 border-t border-line px-4 py-2.5 font-mono text-[10px] tracking-wide text-ink-faint">
-        v0.0.0 · Phase 0
+        v0.0.0 · Phase 1
       </div>
     </aside>
   )
