@@ -1,0 +1,26 @@
+{
+  "name": "ts-analyzer",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Stateless TypeScript/JavaScript analysis sidecar (기획서 §4.2, §10.4)",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.9",
+    "@nestjs/core": "^11.1.9",
+    "@nestjs/platform-express": "^11.1.9",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "ts-morph": "^27.0.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

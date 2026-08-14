@@ -40,6 +40,7 @@ public class ExtractionStep implements JobStep {
             projectInfra(snapshotId);
             projectEndpoints(snapshotId);
             projectEntities(snapshotId);
+            projectFrontendRoutes(snapshotId);
         });
         ctx.updateProgress(100);
     }
@@ -123,6 +124,31 @@ public class ExtractionStep implements JobStep {
                           and not exists (
                               select 1 from graph_nodes n
                               where n.id = e.node_id and n.node_type = 'DB_ENTITY'
+                          )
+                        """).param("snapshotId", snapshotId).update();
+    }
+
+    private void projectFrontendRoutes(long snapshotId) {
+        jdbc.sql("""
+                        insert into frontend_routes (snapshot_id, node_id, path, component_key)
+                        select n.snapshot_id,
+                               n.id,
+                               n.metadata->>'path',
+                               n.metadata->>'componentKey'
+                        from graph_nodes n
+                        where n.snapshot_id = :snapshotId
+                          and n.node_type = 'FE_ROUTE'
+                          and n.metadata->>'path' is not null
+                        on conflict (node_id) do update set
+                            path = excluded.path,
+                            component_key = excluded.component_key
+                        """).param("snapshotId", snapshotId).update();
+        jdbc.sql("""
+                        delete from frontend_routes r
+                        where r.snapshot_id = :snapshotId
+                          and not exists (
+                              select 1 from graph_nodes n
+                              where n.id = r.node_id and n.node_type = 'FE_ROUTE'
                           )
                         """).param("snapshotId", snapshotId).update();
     }

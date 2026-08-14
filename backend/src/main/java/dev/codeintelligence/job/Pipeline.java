@@ -8,8 +8,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Ordered pipeline definition: {@link JobStep} beans are injected in {@code @Order} order and
- * materialized into {@code analysis_job_steps.seq} at enqueue time (§4 step table). Phase 1 runs
- * the same full pipeline for both IMPORT and REANALYZE.
+ * materialized into {@code analysis_job_steps.seq} at enqueue time (§4 step table). IMPORT and
+ * REANALYZE share the same full pipeline.
  */
 @Component
 public class Pipeline {

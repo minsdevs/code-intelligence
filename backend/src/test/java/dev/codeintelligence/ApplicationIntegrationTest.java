@@ -45,6 +45,9 @@ class ApplicationIntegrationTest {
         Boolean v7 = jdbcTemplate.queryForObject(
                 "select success from flyway_schema_history where version = '7'", Boolean.class);
         assertThat(v7).isTrue();
+        Boolean v9 = jdbcTemplate.queryForObject(
+                "select success from flyway_schema_history where version = '9'", Boolean.class);
+        assertThat(v9).isTrue();
 
         Integer vectorExtension = jdbcTemplate.queryForObject(
                 "select count(*) from pg_extension where extname = 'vector'", Integer.class);
