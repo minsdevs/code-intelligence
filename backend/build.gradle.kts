@@ -31,6 +31,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.eclipse.jgit:org.eclipse.jgit:7.3.0.202506031305-r")
     implementation("com.github.javaparser:javaparser-symbol-solver-core:3.28.2")
+    implementation("com.github.jsqlparser:jsqlparser:5.3")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0")
     runtimeOnly("org.postgresql:postgresql")

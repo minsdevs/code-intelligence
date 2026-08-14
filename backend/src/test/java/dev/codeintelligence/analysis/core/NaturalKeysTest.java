@@ -21,5 +21,8 @@ class NaturalKeysTest {
         assertThat(NaturalKeys.table("todos")).isEqualTo("table:todos");
         assertThat(NaturalKeys.container("backend")).isEqualTo("container:backend");
         assertThat(NaturalKeys.ci("ci.yml", "build")).isEqualTo("ci:ci.yml:build");
+        assertThat(NaturalKeys.config("build.gradle")).isEqualTo("config:build.gradle");
+        assertThat(NaturalKeys.migration("db/migration/V1__init.sql")).isEqualTo("migration:db/migration/V1__init.sql");
+        assertThat(NaturalKeys.dependency("org.postgresql", "postgresql")).isEqualTo("dep:org.postgresql:postgresql");
     }
 }

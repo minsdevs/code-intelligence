@@ -42,6 +42,22 @@ public final class NaturalKeys {
         return "ci:" + require(workflow, "workflow") + ":" + require(job, "job");
     }
 
+    public static String config(String path) {
+        return "config:" + normalizePath(path);
+    }
+
+    public static String migration(String path) {
+        return "migration:" + normalizePath(path);
+    }
+
+    public static String dependency(String group, String artifact) {
+        String name = require(artifact, "artifact");
+        if (group == null || group.isBlank()) {
+            return "dep:" + name;
+        }
+        return "dep:" + group + ":" + name;
+    }
+
     private static String normalizePath(String path) {
         String normalized = require(path, "path").replace('\\', '/');
         if (normalized.startsWith("./")) {
