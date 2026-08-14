@@ -186,6 +186,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-2 · be — Repository import + JGit clone + snapshot 생성 `[P2]`
 
+**상태: 완료** — verify PASS(테스트 81/81). 실기동: private(`Min0504/code-intelligence`)·public(`octocat/Hello-World`) clone DONE, HEAD SHA 일치, reanalyze 스냅샷 교체, SSRF/path 400, DELETE 후 clone 제거.
 **완료 기준:** public/private clone 동작
 **패키지:** `dev.codeintelligence.project`, `dev.codeintelligence.github`
 
@@ -225,6 +226,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-3 · be — 비동기 Job 프레임워크 (steps, 체크포인트, SSE) `[P2]`
 
+**상태: 완료** — 2번째 step 실패→retry→1번째 step 재실행 없음(체크포인트) 테스트 고정. 활성 job 1개(partial unique index), SSE 접속 직후 스냅숏, 재기동 복구. sc LOW 4건은 1-16 이월.
 **완료 기준:** 실패 step 재시도 동작
 **패키지:** `dev.codeintelligence.job`
 
@@ -715,6 +717,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 - [ ] 의존성 감사: `npm audit` / gradle 의존성 리포트 — critical 0
 - [ ] findings를 severity(critical/high/medium/low)로 리포트, critical/high 0이 될 때까지 수정 반복
 - [ ] P1 조기 점검(1-1) 이월 LOW 3건 재평가: PAT 등록 rate-limit 부재(GitHub API 대리 호출), springdoc `/v3/api-docs`·swagger 공개 유지 여부, 토큰 로그 미출력의 로그 캡처 테스트 부재(서버 루프백 바인딩은 P1에서 반영 완료)
+- [ ] P2 조기 점검(1-2·1-3) 이월 LOW 4건 재평가: retry의 트랜잭션 내 guard 순서, 프로젝트 삭제 TOCTOU 고아 디렉터리 가능성, RepoRef `.` 단독 세그먼트·대소문자 중복 import 하드닝, SSE emitter 잔존 정리
 
 ### 1-17 · verify — Phase 1 최종 검증 (DoD)
 

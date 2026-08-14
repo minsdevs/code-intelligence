@@ -2,6 +2,10 @@ spring:
   application:
     name: code-intelligence-backend
 
+  threads:
+    virtual:
+      enabled: true
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/codeintel}
     username: ${DB_USERNAME:codeintel}
@@ -44,6 +48,8 @@ management:
 app:
   # Required (no default): TokenCryptoService fails fast at startup when missing or invalid.
   token-enc-key: ${TOKEN_ENC_KEY:}
+  data-dir: ${DATA_DIR:${user.home}/.code-intelligence}
+  snapshot-retention: 2
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   github:

@@ -1,5 +1,7 @@
 package dev.codeintelligence.auth;
 
+import dev.codeintelligence.common.security.AuthenticatedUser;
+import dev.codeintelligence.common.security.CredentialKind;
 import dev.codeintelligence.github.GithubApiClient;
 import dev.codeintelligence.github.GithubUserInfo;
 import jakarta.servlet.http.HttpServletRequest;
