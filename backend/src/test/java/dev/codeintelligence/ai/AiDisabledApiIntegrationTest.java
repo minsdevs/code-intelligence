@@ -102,6 +102,31 @@ class AiDisabledApiIntegrationTest {
         assertThat(text).doesNotContain("sk-");
     }
 
+    @Test
+    void taskDraftReturns503WhenDisabled() {
+        ResponseCookie session = loginWithPat();
+        long userId = jdbcTemplate.queryForObject("select id from users where login = 'octocat'", Long.class);
+        long projectId = jdbcTemplate.queryForObject("""
+                insert into projects (user_id, name, repo_owner, repo_name)
+                values (?, 'demo', 'octocat', ?) returning id
+                """, Long.class, userId, "demo-" + System.nanoTime());
+        ResponseCookie csrf = primeCsrfToken();
+        byte[] body = restTestClient
+                .post()
+                .uri("/api/projects/" + projectId + "/findings/1/task-draft")
+                .contentType(MediaType.APPLICATION_JSON)
+                .cookie("SESSION", session.getValue())
+                .cookie("XSRF-TOKEN", csrf.getValue())
+                .header("X-XSRF-TOKEN", csrf.getValue())
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
+                .expectBody()
+                .returnResult()
+                .getResponseBodyContent();
+        assertThat(new String(body)).contains("AI provider is not configured");
+    }
+
     private byte[] getAs(ResponseCookie session, String uri, HttpStatus expected) {
         return restTestClient
                 .get()

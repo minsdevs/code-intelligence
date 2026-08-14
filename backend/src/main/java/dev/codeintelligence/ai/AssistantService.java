@@ -104,7 +104,7 @@ public class AssistantService {
                 ? AiIntent.infer(question)
                 : AiIntent.from(request.intent());
         ContextRetrievalService.AskContext ctx = request.context() == null
-                ? new ContextRetrievalService.AskContext(null, null, null, null, null, List.of())
+                ? new ContextRetrievalService.AskContext(null, null, null, null, null, null, null, List.of())
                 : request.context();
         ContextRetrievalService.Retrieved retrieved =
                 retrieval.retrieve(projectId, snapshotId, project.getClonePath(), ctx, question);
