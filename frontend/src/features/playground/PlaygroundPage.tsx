@@ -89,6 +89,7 @@ export default function PlaygroundPage() {
     askMutation.error instanceof ApiError && askMutation.error.status === 503
       ? t('playground.aiDisabled')
       : queryError(askMutation.error)
+  const askAiDisabled = askMutation.error instanceof ApiError && askMutation.error.status === 503
   const result = askMutation.data
 
   function togglePath(path: string) {
@@ -205,9 +206,18 @@ export default function PlaygroundPage() {
           </button>
         </form>
         {askError && (
-          <p role="alert" className="px-4 py-2 text-[12px] text-danger">
-            {askError}
-          </p>
+          <div role="alert" className="px-4 py-2 text-[12px] text-danger">
+            <p>{askError}</p>
+            {askAiDisabled && (
+              <button
+                type="button"
+                onClick={() => navigate('/settings')}
+                className="mt-1 text-accent hover:underline"
+              >
+                {t('ai.openSettings')}
+              </button>
+            )}
+          </div>
         )}
         {result?.lastExplanation && (
           <div className="px-4 py-3">

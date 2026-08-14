@@ -62,6 +62,8 @@ export default function ReviewPage() {
     generateMutation.error instanceof ApiError && generateMutation.error.status === 503
       ? t('review.aiDisabled')
       : queryError(generateMutation.error)
+  const generateAiDisabled =
+    generateMutation.error instanceof ApiError && generateMutation.error.status === 503
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -112,8 +114,10 @@ export default function ReviewPage() {
             loading={reviewQuery.isLoading}
             error={reviewError}
             generateError={generateError}
+            generateAiDisabled={generateAiDisabled}
             generating={generateMutation.isPending}
             onGenerate={() => generateMutation.mutate()}
+            onOpenSettings={() => navigate('/settings')}
             onOpenEvidence={(path, line) =>
               navigate(`/projects/${projectId}/code${codeLocationSearch(path, line)}`)
             }
@@ -130,8 +134,10 @@ function ReviewDetail({
   loading,
   error,
   generateError,
+  generateAiDisabled,
   generating,
   onGenerate,
+  onOpenSettings,
   onOpenEvidence,
 }: {
   pull: PullRequest
@@ -139,8 +145,10 @@ function ReviewDetail({
   loading: boolean
   error: string | null
   generateError: string | null
+  generateAiDisabled: boolean
   generating: boolean
   onGenerate: () => void
+  onOpenSettings: () => void
   onOpenEvidence: (path: string, line: number | null) => void
 }) {
   const t = useT()
@@ -166,9 +174,18 @@ function ReviewDetail({
         <p className="mt-3 whitespace-pre-wrap text-[13px] text-ink-muted">{pull.body}</p>
       )}
       {generateError && (
-        <p role="alert" className="mt-3 text-[12px] text-danger">
-          {generateError}
-        </p>
+        <div role="alert" className="mt-3 text-[12px] text-danger">
+          <p>{generateError}</p>
+          {generateAiDisabled && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="mt-1 text-accent hover:underline"
+            >
+              {t('ai.openSettings')}
+            </button>
+          )}
+        </div>
       )}
       {error && (
         <p role="alert" className="mt-3 text-[12px] text-danger">

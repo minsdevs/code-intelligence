@@ -13,6 +13,21 @@ public class NoOpAIProvider implements AIProvider {
     }
 
     @Override
+    public String model() {
+        return "none";
+    }
+
+    @Override
+    public String embeddingModel() {
+        return "none";
+    }
+
+    @Override
+    public void testConnection() {
+        throw new AiNotConfiguredException();
+    }
+
+    @Override
     public ChatResponse chat(ChatRequest request) {
         throw new AiNotConfiguredException();
     }

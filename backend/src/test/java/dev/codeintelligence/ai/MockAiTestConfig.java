@@ -12,4 +12,10 @@ public class MockAiTestConfig {
     MockAIProvider mockAIProvider() {
         return new MockAIProvider();
     }
+
+    @Bean
+    @Primary
+    AIProviderResolver mockAIProviderResolver(MockAIProvider provider) {
+        return userId -> provider;
+    }
 }

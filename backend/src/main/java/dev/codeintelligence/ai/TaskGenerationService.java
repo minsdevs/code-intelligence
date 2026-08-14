@@ -11,7 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.ErrorResponseException;
 import tools.jackson.databind.JsonNode;
@@ -32,24 +32,30 @@ public class TaskGenerationService {
 
     private final ProjectRepository projectRepository;
     private final JdbcClient jdbc;
-    private final AIProvider aiProvider;
+    private final AIProviderResolver providerResolver;
     private final JsonMapper json;
+    private final TransactionTemplate transactions;
 
     public TaskGenerationService(
-            ProjectRepository projectRepository, JdbcClient jdbc, AIProvider aiProvider, JsonMapper json) {
+            ProjectRepository projectRepository,
+            JdbcClient jdbc,
+            AIProviderResolver providerResolver,
+            JsonMapper json,
+            TransactionTemplate transactions) {
         this.projectRepository = projectRepository;
         this.jdbc = jdbc;
-        this.aiProvider = aiProvider;
+        this.providerResolver = providerResolver;
         this.json = json;
+        this.transactions = transactions;
     }
 
-    @Transactional
     public GeneratedTask fromFinding(long projectId, long userId, long findingId) {
-        if (!aiProvider.enabled()) {
-            throw new AiNotConfiguredException();
-        }
         Project project =
                 projectRepository.findByIdAndUserId(projectId, userId).orElseThrow(ProjectNotFoundException::new);
+        AIProvider provider = providerResolver.resolve(userId);
+        if (!provider.enabled()) {
+            throw new AiNotConfiguredException();
+        }
         Long snapshotId = project.getCurrentSnapshotId();
         if (snapshotId == null) {
             throw new FindingMissingException();
@@ -76,33 +82,36 @@ public class TaskGenerationService {
                 """;
         String user = SecretMask.redact("FINDING:\n" + finding.severity() + " " + finding.category() + " "
                 + finding.title() + "\n" + nullToEmpty(finding.detail()));
-        AIProvider.ChatResponse response = aiProvider.chat(new AIProvider.ChatRequest(system, user, true));
+        AIProvider.ChatResponse response = provider.chat(new AIProvider.ChatRequest(system, user, true));
         Draft draft = parse(response, finding);
-        long id = jdbc.sql("""
-                        insert into tasks (project_id, type, title, description, status, origin, source_finding_id)
-                        values (:projectId, :type, :title, :description, 'DRAFT', 'AI', :findingId)
-                        returning id
-                        """)
-                .param("projectId", projectId)
-                .param("type", draft.type)
-                .param("title", draft.title)
-                .param("description", draft.description)
-                .param("findingId", findingId)
-                .query(Long.class)
-                .single();
-        int seq = 0;
-        for (String goal : draft.goals) {
-            seq++;
-            jdbc.sql("""
-                            insert into task_goals (task_id, seq, content, done)
-                            values (:taskId, :seq, :content, false)
+        return transactions.execute(status -> {
+            long id = jdbc.sql("""
+                            insert into tasks (project_id, type, title, description, status, origin, source_finding_id)
+                            values (:projectId, :type, :title, :description, 'DRAFT', 'AI', :findingId)
+                            returning id
                             """)
-                    .param("taskId", id)
-                    .param("seq", seq)
-                    .param("content", goal)
-                    .update();
-        }
-        return new GeneratedTask(id, draft.type, draft.title, draft.description, "DRAFT", "AI", findingId, draft.goals);
+                    .param("projectId", projectId)
+                    .param("type", draft.type)
+                    .param("title", draft.title)
+                    .param("description", draft.description)
+                    .param("findingId", findingId)
+                    .query(Long.class)
+                    .single();
+            int seq = 0;
+            for (String goal : draft.goals) {
+                seq++;
+                jdbc.sql("""
+                                insert into task_goals (task_id, seq, content, done)
+                                values (:taskId, :seq, :content, false)
+                                """)
+                        .param("taskId", id)
+                        .param("seq", seq)
+                        .param("content", goal)
+                        .update();
+            }
+            return new GeneratedTask(
+                    id, draft.type, draft.title, draft.description, "DRAFT", "AI", findingId, draft.goals);
+        });
     }
 
     private Draft parse(AIProvider.ChatResponse response, FindingRow finding) {

@@ -26,6 +26,7 @@ class OpenAIProviderTest {
     @BeforeEach
     void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/models/gpt-4o-mini", this::model);
         server.createContext("/v1/chat/completions", this::chat);
         server.createContext("/v1/embeddings", this::embed);
         server.start();
@@ -62,10 +63,24 @@ class OpenAIProviderTest {
     }
 
     @Test
-    void rejectsDisallowedHost() {
-        assertThatThrownBy(() -> new AiProperties.OpenAi("sk-x", "https://evil.example", "m", "e").validate())
+    void testConnectionChecksSelectedModel() {
+        provider.testConnection();
+        assertThat(lastAuth).isEqualTo("Bearer sk-test-key");
+        assertThat(lastPath).isEqualTo("/v1/models/gpt-4o-mini");
+    }
+
+    @Test
+    void rejectsDisallowedHostEvenWithoutEnvironmentKey() {
+        assertThatThrownBy(() -> new AiProperties.OpenAi("", "https://evil.example", "m", "e").validate())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("not allowed");
+    }
+
+    @Test
+    void rejectsPlaintextTransportForRemoteProviderHost() {
+        assertThatThrownBy(() -> new AiProperties.OpenAi("", "http://api.openai.com", "m", "e").validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("https");
     }
 
     private void chat(HttpExchange exchange) throws IOException {
@@ -81,6 +96,12 @@ class OpenAIProviderTest {
         lastPath = exchange.getRequestURI().getPath();
         exchange.getRequestBody().readAllBytes();
         respond(exchange, "{\"data\":[{\"embedding\":[0.5,0.25]}]}");
+    }
+
+    private void model(HttpExchange exchange) throws IOException {
+        lastAuth = header(exchange, "Authorization");
+        lastPath = exchange.getRequestURI().getPath();
+        respond(exchange, "{}");
     }
 
     private static String header(HttpExchange exchange, String name) {

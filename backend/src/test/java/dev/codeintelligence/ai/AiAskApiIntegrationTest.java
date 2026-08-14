@@ -61,6 +61,9 @@ class AiAskApiIntegrationTest {
     @Autowired
     private MockAIProvider mockAIProvider;
 
+    @Autowired
+    private SummaryService summaryService;
+
     @Test
     void statusReportsConfiguredMockWithoutKeys() {
         ResponseCookie session = loginWithPat();
@@ -155,6 +158,26 @@ class AiAskApiIntegrationTest {
                 .contains("FOCUS_TASK:")
                 .contains("Read App")
                 .contains("RELATED_NOTE: Auth notes");
+    }
+
+    @Test
+    void semanticSearchDoesNotMixEmbeddingModels() throws Exception {
+        ResponseCookie session = loginWithPat();
+        long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
+        long userId = jdbcTemplate.queryForObject("select id from users where login = 'octocat'", Long.class);
+        long snapshotId = jdbcTemplate.queryForObject(
+                "select current_snapshot_id from projects where id = ?", Long.class, projectId);
+        String vector = SummaryService.toVectorLiteral(mockAIProvider.embed("query"));
+        jdbcTemplate.update("""
+                insert into summaries
+                    (snapshot_id, subject_type, subject_id, level, content, embedding, model, embedding_model)
+                values (?, 'FILE', 1001, 'FILE', 'compatible summary', ?::vector, 'mock-chat', 'mock:mock-embedding'),
+                       (?, 'FILE', 1002, 'FILE', 'incompatible summary', ?::vector, 'other-chat', 'other:embedding')
+                """, snapshotId, vector, snapshotId, vector);
+
+        List<String> results = summaryService.similar(userId, snapshotId, "query", 5);
+
+        assertThat(results).contains("compatible summary").doesNotContain("incompatible summary");
     }
 
     @Test

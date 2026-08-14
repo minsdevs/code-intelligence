@@ -16,15 +16,26 @@ public class OpenAIProvider implements AIProvider {
     private final RestClient restClient;
     private final JsonMapper json;
     private final String apiKey;
+    private final String chatModel;
 
     /**
      * @param apiKey explicit key (from Settings) or null to fall back to the env-configured key.
      */
     public OpenAIProvider(
             AiProperties.OpenAi properties, RestClient.Builder restClientBuilder, JsonMapper json, String apiKey) {
+        this(properties, restClientBuilder, json, apiKey, null);
+    }
+
+    public OpenAIProvider(
+            AiProperties.OpenAi properties,
+            RestClient.Builder restClientBuilder,
+            JsonMapper json,
+            String apiKey,
+            String chatModel) {
         this.properties = properties;
         this.json = json;
         this.apiKey = apiKey == null || apiKey.isBlank() ? properties.apiKey() : apiKey;
+        this.chatModel = chatModel == null || chatModel.isBlank() ? properties.chatModel() : chatModel;
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -53,10 +64,34 @@ public class OpenAIProvider implements AIProvider {
     }
 
     @Override
+    public String model() {
+        return chatModel;
+    }
+
+    @Override
+    public String embeddingModel() {
+        return properties.embedModel();
+    }
+
+    @Override
+    public void testConnection() {
+        try {
+            restClient
+                    .get()
+                    .uri("/v1/models/" + chatModel)
+                    .header("Authorization", "Bearer " + apiKey)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException e) {
+            throw new AiConnectionException(e);
+        }
+    }
+
+    @Override
     public ChatResponse chat(ChatRequest request) {
         Map<String, Object> body = Map.of(
                 "model",
-                properties.chatModel(),
+                chatModel,
                 "response_format",
                 Map.of("type", "json_object"),
                 "messages",

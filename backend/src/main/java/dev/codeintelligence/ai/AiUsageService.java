@@ -8,12 +8,10 @@ import org.springframework.stereotype.Service;
 public class AiUsageService {
 
     private final JdbcClient jdbc;
-    private final AIProvider aiProvider;
     private final AiProperties aiProperties;
 
-    public AiUsageService(JdbcClient jdbc, AIProvider aiProvider, AiProperties aiProperties) {
+    public AiUsageService(JdbcClient jdbc, AiProperties aiProperties) {
         this.jdbc = jdbc;
-        this.aiProvider = aiProvider;
         this.aiProperties = aiProperties;
     }
 
@@ -28,15 +26,16 @@ public class AiUsageService {
         }
     }
 
-    public void log(long userId, long projectId, String purpose, AIProvider.ChatResponse response) {
+    public void log(
+            long userId, long projectId, AIProvider provider, String purpose, AIProvider.ChatResponse response) {
         jdbc.sql("""
                         insert into ai_usage_logs (user_id, project_id, provider, model, purpose, prompt_tokens, completion_tokens)
                         values (:userId, :projectId, :provider, :model, :purpose, :prompt, :completion)
                         """)
                 .param("userId", userId)
                 .param("projectId", projectId)
-                .param("provider", aiProvider.name())
-                .param("model", aiProvider.name())
+                .param("provider", provider.name())
+                .param("model", provider.model())
                 .param("purpose", purpose.toLowerCase(Locale.ROOT))
                 .param("prompt", response.promptTokens())
                 .param("completion", response.completionTokens())

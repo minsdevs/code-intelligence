@@ -10,6 +10,18 @@ vi.mock('@monaco-editor/react', () => ({
   DiffEditor: () => null,
 }))
 
+vi.mock('elkjs/lib/elk-worker.min.js?worker', () => ({
+  default: class ElkWorker {},
+}))
+
+vi.mock('elkjs/lib/elk-api.js', () => ({
+  default: class ELK {
+    layout<T>(graph: T): Promise<T> {
+      return Promise.resolve(graph)
+    }
+  },
+}))
+
 vi.mock('@xyflow/react', () => ({
   ReactFlow: ({
     nodes,

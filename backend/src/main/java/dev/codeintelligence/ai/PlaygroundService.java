@@ -12,6 +12,7 @@ import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -49,29 +50,32 @@ public class PlaygroundService {
     private final ProjectRepository projectRepository;
     private final SnapshotRepository snapshotRepository;
     private final JdbcClient jdbc;
-    private final AIProvider aiProvider;
+    private final AIProviderResolver providerResolver;
     private final AiUsageService usage;
     private final ContextRetrievalService retrieval;
     private final EvidenceValidator validator;
     private final JsonMapper json;
+    private final TransactionTemplate transactions;
 
     public PlaygroundService(
             ProjectRepository projectRepository,
             SnapshotRepository snapshotRepository,
             JdbcClient jdbc,
-            AIProvider aiProvider,
+            AIProviderResolver providerResolver,
             AiUsageService usage,
             ContextRetrievalService retrieval,
             EvidenceValidator validator,
-            JsonMapper json) {
+            JsonMapper json,
+            TransactionTemplate transactions) {
         this.projectRepository = projectRepository;
         this.snapshotRepository = snapshotRepository;
         this.jdbc = jdbc;
-        this.aiProvider = aiProvider;
+        this.providerResolver = providerResolver;
         this.usage = usage;
         this.retrieval = retrieval;
         this.validator = validator;
         this.json = json;
+        this.transactions = transactions;
     }
 
     @Transactional(readOnly = true)
@@ -153,18 +157,18 @@ public class PlaygroundService {
         }
     }
 
-    @Transactional
     public SessionView ask(long projectId, long userId, long sessionId, AskBody body) {
-        if (!aiProvider.enabled()) {
-            throw new AiNotConfiguredException();
-        }
         String question =
                 body == null || body.question() == null ? "" : body.question().strip();
         if (!StringUtils.hasText(question) || question.length() > QUESTION_MAX) {
             throw new InvalidAiQuestionException();
         }
-        usage.enforceBudget(userId);
         Project project = requireOwned(projectId, userId);
+        AIProvider provider = providerResolver.resolve(userId);
+        if (!provider.enabled()) {
+            throw new AiNotConfiguredException();
+        }
+        usage.enforceBudget(userId);
         long snapshotId = requireSnapshot(project);
         SessionView current = load(projectId, sessionId);
         List<String> paths = body != null && body.selectedPaths() != null
@@ -177,29 +181,31 @@ public class PlaygroundService {
         ContextRetrievalService.AskContext ctx =
                 new ContextRetrievalService.AskContext("playground", focused, null, null, null, null, null, List.of());
         ContextRetrievalService.Retrieved retrieved =
-                retrieval.retrieve(projectId, snapshotId, project.getClonePath(), ctx, question);
+                retrieval.retrieve(userId, projectId, snapshotId, project.getClonePath(), ctx, question);
         String extra = extraContext(paths, snippet);
         String userPrompt = SecretMask.redact(PromptBuilder.user(question, retrieved.text() + "\n" + extra));
-        AIProvider.ChatResponse raw = aiProvider.chat(new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
+        AIProvider.ChatResponse raw = provider.chat(new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
         AIProvider.ChatResponse validated = validator.validate(projectId, snapshotId, raw);
-        jdbc.sql("""
-                        update playground_sessions
-                        set title = :title, selected_paths = cast(:paths as jsonb), proposed_snippet = :snippet,
-                            last_question = :question, last_explanation = :explanation,
-                            last_claims = cast(:claims as jsonb), updated_at = now()
-                        where id = :id and project_id = :projectId
-                        """)
-                .param("title", current.title())
-                .param("paths", json.writeValueAsString(paths))
-                .param("snippet", snippet)
-                .param("question", SecretMask.redact(question))
-                .param("explanation", SecretMask.redact(validated.explanation()))
-                .param("claims", json.writeValueAsString(validated.claims()))
-                .param("id", sessionId)
-                .param("projectId", projectId)
-                .update();
-        usage.log(userId, projectId, "playground", validated);
-        return load(projectId, sessionId);
+        return transactions.execute(status -> {
+            jdbc.sql("""
+                            update playground_sessions
+                            set title = :title, selected_paths = cast(:paths as jsonb), proposed_snippet = :snippet,
+                                last_question = :question, last_explanation = :explanation,
+                                last_claims = cast(:claims as jsonb), updated_at = now()
+                            where id = :id and project_id = :projectId
+                            """)
+                    .param("title", current.title())
+                    .param("paths", json.writeValueAsString(paths))
+                    .param("snippet", snippet)
+                    .param("question", SecretMask.redact(question))
+                    .param("explanation", SecretMask.redact(validated.explanation()))
+                    .param("claims", json.writeValueAsString(validated.claims()))
+                    .param("id", sessionId)
+                    .param("projectId", projectId)
+                    .update();
+            usage.log(userId, projectId, provider, "playground", validated);
+            return load(projectId, sessionId);
+        });
     }
 
     private static String extraContext(List<String> paths, String snippet) {

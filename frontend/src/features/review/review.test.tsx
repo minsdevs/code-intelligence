@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { routes } from '../../app/router'
 import { AI_PANEL_DEFAULT_WIDTH, useUiStore } from '../../stores/uiStore'
@@ -57,6 +57,7 @@ const review: ReviewView = {
 }
 
 const fetchMock = vi.fn()
+let generateStatus = 201
 
 function installFetch() {
   fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -70,7 +71,9 @@ function installFetch() {
       return jsonResponse({ title: 'Not Found', detail: 'Review not found.' }, 404)
     }
     if (path === '/api/projects/7/pulls/12/review' && method === 'POST')
-      return jsonResponse(review, 201)
+      return generateStatus === 201
+        ? jsonResponse(review, 201)
+        : jsonResponse({ title: 'Service Unavailable', detail: 'AI is not configured.' }, generateStatus)
     return jsonResponse({ title: 'Not Found', detail: path }, 404)
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -89,6 +92,7 @@ beforeEach(() => {
     selectedAreas: [],
   })
   fetchMock.mockReset()
+  generateStatus = 201
   installFetch()
 })
 
@@ -105,5 +109,16 @@ describe('ReviewPage', () => {
     expect(screen.getByText('Check this change.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'src/App.java:1' }))
     expect(router.state.location.pathname).toBe('/projects/7/code')
+  })
+
+  it('opens Settings when review generation needs AI configuration', async () => {
+    generateStatus = 503
+    const { router } = renderReview()
+
+    expect(await screen.findByRole('heading', { name: 'Add login' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '리뷰 생성' }))
+    fireEvent.click(await screen.findByRole('button', { name: '설정 열기' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
   })
 })

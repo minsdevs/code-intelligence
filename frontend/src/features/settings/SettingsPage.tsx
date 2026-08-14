@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAiStatus } from '../../api/ai'
-import { clearAiSettings, getAiSettings, saveAiSettings } from '../../api/aiSettings'
+import { clearAiSettings, getAiModels, getAiSettings, saveAiSettings } from '../../api/aiSettings'
 import { LANGS } from '../../lib/i18n-core'
 import { useI18n } from '../../lib/i18n'
 import { queryError } from '../code/codeLocation'
@@ -14,7 +14,8 @@ export default function SettingsPage() {
   const setLang = useI18n().setLang
   const queryClient = useQueryClient()
 
-  const [provider, setProvider] = useState<'openai' | 'gemini'>('openai')
+  const [providerOverride, setProviderOverride] = useState<'openai' | 'gemini' | null>(null)
+  const [modelOverride, setModelOverride] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
 
   const statusQuery = useQuery({
@@ -27,15 +28,28 @@ export default function SettingsPage() {
     queryFn: getAiSettings,
     retry: false,
   })
-  const error = queryError(statusQuery.error)
-  const status = statusQuery.data
   const saved = settingsQuery.data
+  const provider = providerOverride ?? saved?.provider ?? 'openai'
+  const modelsQuery = useQuery({
+    queryKey: ['ai-models', provider],
+    queryFn: () => getAiModels(provider),
+    retry: false,
+  })
+  const error = queryError(statusQuery.error)
+  const modelsError = queryError(modelsQuery.error)
+  const status = statusQuery.data
+  const model =
+    modelOverride ??
+    (saved?.provider === provider ? saved.model : undefined) ??
+    modelsQuery.data?.[0]?.id ??
+    ''
 
   const saveMutation = useMutation({
-    mutationFn: () => saveAiSettings(provider, apiKey),
+    mutationFn: () => saveAiSettings(provider, model, apiKey),
     onSuccess: async (view) => {
       setApiKey('')
-      setProvider(view.provider)
+      setProviderOverride(view.provider)
+      setModelOverride(view.model)
       await queryClient.invalidateQueries({ queryKey: ['ai-settings'] })
       await queryClient.invalidateQueries({ queryKey: ['ai-status'] })
     },
@@ -55,7 +69,7 @@ export default function SettingsPage() {
 
   function onSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!apiKey.trim()) return
+    if (!model || (!apiKey.trim() && saved?.provider !== provider)) return
     saveMutation.mutate()
   }
 
@@ -103,6 +117,8 @@ export default function SettingsPage() {
             <dd className="text-ink">{status.configured ? t('settings.available') : t('settings.disabled')}</dd>
             <dt className="text-ink-muted">{t('settings.provider')}</dt>
             <dd className="font-mono text-ink">{status.provider ?? '—'}</dd>
+            <dt className="text-ink-muted">{t('settings.model')}</dt>
+            <dd className="font-mono text-ink">{status.model ?? '—'}</dd>
             <dt className="text-ink-muted">{t('settings.storedKey')}</dt>
             <dd className="font-mono text-ink">{saved ? saved.keyMasked : '—'}</dd>
           </dl>
@@ -113,7 +129,10 @@ export default function SettingsPage() {
             {t('settings.provider')}
             <select
               value={provider}
-              onChange={(event) => setProvider(event.target.value as 'openai' | 'gemini')}
+              onChange={(event) => {
+                setProviderOverride(event.target.value as 'openai' | 'gemini')
+                setModelOverride(null)
+              }}
               className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1.5 font-mono text-[13px] text-ink"
             >
               {PROVIDERS.map((value) => (
@@ -124,10 +143,38 @@ export default function SettingsPage() {
             </select>
           </label>
           <label className="block text-[12px] text-ink-muted">
+            {t('settings.model')}
+            <select
+              value={model}
+              onChange={(event) => setModelOverride(event.target.value)}
+              disabled={modelsQuery.isLoading || modelsQuery.isError}
+              className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1.5 font-mono text-[13px] text-ink disabled:opacity-60"
+            >
+              {modelsQuery.data?.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          {modelsError && (
+            <div className="text-[12px] text-danger">
+              <p role="alert">{modelsError}</p>
+              <button
+                type="button"
+                onClick={() => void modelsQuery.refetch()}
+                className="mt-1 rounded-md border border-line-strong px-2 py-1 text-ink hover:bg-surface-2"
+              >
+                {t('settings.retryModels')}
+              </button>
+            </div>
+          )}
+          <label className="block text-[12px] text-ink-muted">
             {t('settings.apiKey')}
             <input
               type="password"
               autoComplete="off"
+              maxLength={4096}
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
               placeholder={t('settings.apiKeyPlaceholder')}
@@ -143,7 +190,7 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2">
             <button
               type="submit"
-              disabled={saveMutation.isPending || !apiKey.trim()}
+              disabled={saveMutation.isPending || !model || (!apiKey.trim() && saved?.provider !== provider)}
               className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saveMutation.isPending ? t('settings.saving') : t('settings.saveKey')}

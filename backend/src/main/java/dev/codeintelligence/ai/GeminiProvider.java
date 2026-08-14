@@ -16,15 +16,26 @@ public class GeminiProvider implements AIProvider {
     private final RestClient restClient;
     private final JsonMapper json;
     private final String apiKey;
+    private final String chatModel;
 
     /**
      * @param apiKey explicit key (from Settings) or null to fall back to the env-configured key.
      */
     public GeminiProvider(
             AiProperties.Gemini properties, RestClient.Builder restClientBuilder, JsonMapper json, String apiKey) {
+        this(properties, restClientBuilder, json, apiKey, null);
+    }
+
+    public GeminiProvider(
+            AiProperties.Gemini properties,
+            RestClient.Builder restClientBuilder,
+            JsonMapper json,
+            String apiKey,
+            String chatModel) {
         this.properties = properties;
         this.json = json;
         this.apiKey = apiKey == null || apiKey.isBlank() ? properties.apiKey() : apiKey;
+        this.chatModel = chatModel == null || chatModel.isBlank() ? properties.chatModel() : chatModel;
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -53,8 +64,33 @@ public class GeminiProvider implements AIProvider {
     }
 
     @Override
+    public String model() {
+        return chatModel;
+    }
+
+    @Override
+    public String embeddingModel() {
+        return properties.embedModel();
+    }
+
+    @Override
+    public void testConnection() {
+        String path = "/v1beta/models/" + chatModel;
+        try {
+            restClient
+                    .get()
+                    .uri(path)
+                    .header("x-goog-api-key", apiKey)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException e) {
+            throw new AiConnectionException(e);
+        }
+    }
+
+    @Override
     public ChatResponse chat(ChatRequest request) {
-        String path = "/v1beta/models/" + properties.chatModel() + ":generateContent";
+        String path = "/v1beta/models/" + chatModel + ":generateContent";
         Map<String, Object> body = Map.of(
                 "systemInstruction",
                 Map.of("parts", List.of(Map.of("text", request.system()))),
@@ -87,7 +123,8 @@ public class GeminiProvider implements AIProvider {
     @Override
     public float[] embed(String text) {
         String path = "/v1beta/models/" + properties.embedModel() + ":embedContent";
-        Map<String, Object> body = Map.of("content", Map.of("parts", List.of(Map.of("text", text))));
+        Map<String, Object> body =
+                Map.of("content", Map.of("parts", List.of(Map.of("text", text))), "outputDimensionality", 1536);
         try {
             @SuppressWarnings("unchecked")
             Map<String, Object> response = restClient

@@ -37,15 +37,22 @@ const askResponse = {
 }
 
 const fetchMock = vi.fn()
+let aiConfigured = true
+let streamFails = false
 
 function installFetch() {
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
     const url = requestUrl(input)
     const path = url.pathname
-    if (path === '/api/ai/status') return jsonResponse({ configured: true, provider: 'mock' })
+    if (path === '/api/ai/status') {
+      return jsonResponse({ configured: aiConfigured, provider: aiConfigured ? 'mock' : null })
+    }
     if (path === '/api/csrf') return new Response(null, { status: 204 })
     if (path === '/api/projects/7/files') return jsonResponse([])
     if (path === '/api/projects/7/ai/ask/stream') {
+      if (streamFails) {
+        return jsonResponse({ title: 'Bad Gateway', detail: 'stream failed' }, 502)
+      }
       const payload = [
         'event: token',
         'data: App stores',
@@ -64,7 +71,7 @@ function installFetch() {
 
 function renderCode() {
   const router = createMemoryRouter(routes, { initialEntries: ['/projects/7/code'] })
-  return render(<RouterProvider router={router} />)
+  return { router, ...render(<RouterProvider router={router} />) }
 }
 
 beforeEach(() => {
@@ -79,6 +86,8 @@ beforeEach(() => {
     focusedFindingId: null,
     pendingIntent: null,
   })
+  aiConfigured = true
+  streamFails = false
   fetchMock.mockReset()
   installFetch()
 })
@@ -102,5 +111,28 @@ describe('AiPanel', () => {
     await waitFor(() => {
       expect(window.location.search === '' || true).toBe(true)
     })
+  })
+
+  it('opens Settings when AI is not configured', async () => {
+    aiConfigured = false
+    const { router } = renderCode()
+
+    fireEvent.click(await screen.findByRole('link', { name: '설정 열기' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
+  })
+
+  it('does not resend a failed streaming request through the non-streaming endpoint', async () => {
+    streamFails = true
+    renderCode()
+    const quick = await screen.findByRole('button', { name: '쉽게 설명' })
+    await waitFor(() => expect(quick).toBeEnabled())
+
+    fireEvent.click(quick)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('stream failed')
+    const aiRequests = fetchMock.mock.calls.map((call) => requestUrl(call[0]).pathname)
+    expect(aiRequests.filter((path) => path === '/api/projects/7/ai/ask/stream')).toHaveLength(1)
+    expect(aiRequests.filter((path) => path === '/api/projects/7/ai/ask')).toHaveLength(0)
   })
 })

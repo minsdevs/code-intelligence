@@ -1,10 +1,24 @@
-import ELK from 'elkjs/lib/elk.bundled.js'
-import type { ElkNode } from 'elkjs'
+import ELK from 'elkjs/lib/elk-api.js'
+import ElkWorker from 'elkjs/lib/elk-worker.min.js?worker'
+import type { ELK as ElkLayoutEngine, ElkNode } from 'elkjs'
 import type { Edge, Node } from '@xyflow/react'
 import type { ArchitectureView } from '../../api/types'
 
 const NODE_WIDTH = 180
 const NODE_HEIGHT = 40
+let elk: ElkLayoutEngine | null = null
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    elk?.terminateWorker()
+    elk = null
+  })
+}
+
+function layoutEngine(): ElkLayoutEngine {
+  elk ??= new ELK({ workerFactory: () => new ElkWorker({ name: 'architecture-layout' }) })
+  return elk
+}
 
 export type ArchitectureNodeData = {
   label: string
@@ -62,7 +76,6 @@ export async function layoutArchitecture(view: ArchitectureView): Promise<{
   nodes: Node<ArchitectureNodeData>[]
   edges: Edge[]
 }> {
-  const elk = new ELK()
   const children: ElkNode[] = view.groups.map((group) => ({
     id: groupId(group.layer),
     layoutOptions: {
@@ -83,7 +96,7 @@ export async function layoutArchitecture(view: ArchitectureView): Promise<{
       edge.targetNodeId != null ? nodeId(edge.targetNodeId) : groupId(edge.targetGroup)
     return { id: `e${index}`, sources: [source], targets: [target] }
   })
-  const laidOut = await elk.layout({
+  const laidOut = await layoutEngine().layout({
     id: 'root',
     layoutOptions: {
       'elk.algorithm': 'layered',

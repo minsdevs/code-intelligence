@@ -83,11 +83,13 @@ app:
       base-url: ${OPENAI_BASE_URL:https://api.openai.com}
       chat-model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
       embed-model: ${OPENAI_EMBED_MODEL:text-embedding-3-small}
+      chat-models: ${OPENAI_CHAT_MODELS:}
     gemini:
       api-key: ${GEMINI_API_KEY:}
       base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
-      chat-model: ${GEMINI_CHAT_MODEL:gemini-2.0-flash}
-      embed-model: ${GEMINI_EMBED_MODEL:text-embedding-004}
+      chat-model: ${GEMINI_CHAT_MODEL:gemini-2.5-flash}
+      embed-model: ${GEMINI_EMBED_MODEL:gemini-embedding-001}
+      chat-models: ${GEMINI_CHAT_MODELS:}
 
 ---
 spring:

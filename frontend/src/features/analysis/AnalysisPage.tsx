@@ -92,6 +92,8 @@ export default function AnalysisPage() {
 
   const findingsError = queryError(findingsQuery.error)
   const impactError = queryError(impactQuery.error)
+  const draftAiDisabled = draftMutation.error instanceof ApiError && draftMutation.error.status === 503
+  const whatIfAiDisabled = whatIfMutation.error instanceof ApiError && whatIfMutation.error.status === 503
 
   function selectFinding(finding: FindingView) {
     setSelectedFindingId(finding.id)
@@ -226,9 +228,18 @@ export default function AnalysisPage() {
               {t('analysis.createDraft')}
             </button>
             {draftMessage && (
-              <p role="alert" className="mt-2 text-[12px] text-danger">
-                {draftMessage}
-              </p>
+              <div role="alert" className="mt-2 text-[12px] text-danger">
+                <p>{draftMessage}</p>
+                {draftAiDisabled && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/settings')}
+                    className="mt-1 text-accent hover:underline"
+                  >
+                    {t('ai.openSettings')}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -353,9 +364,18 @@ export default function AnalysisPage() {
               {t('analysis.whatIf')}
             </button>
             {whatIfError && (
-              <p role="alert" className="mt-2 text-[12px] text-danger">
-                {whatIfError}
-              </p>
+              <div role="alert" className="mt-2 text-[12px] text-danger">
+                <p>{whatIfError}</p>
+                {whatIfAiDisabled && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/settings')}
+                    className="mt-1 text-accent hover:underline"
+                  >
+                    {t('ai.openSettings')}
+                  </button>
+                )}
+              </div>
             )}
             {whatIfMutation.data && (
               <div className="mt-3 border-t border-line pt-3">

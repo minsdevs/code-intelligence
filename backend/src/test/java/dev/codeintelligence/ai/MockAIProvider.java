@@ -27,6 +27,19 @@ public class MockAIProvider implements AIProvider {
     }
 
     @Override
+    public String model() {
+        return "mock-chat";
+    }
+
+    @Override
+    public String embeddingModel() {
+        return "mock-embedding";
+    }
+
+    @Override
+    public void testConnection() {}
+
+    @Override
     public ChatResponse chat(ChatRequest request) {
         lastUser = request.user() == null ? "" : request.user();
         if (request.system() != null && request.system().contains("Propose a Learning")) {
@@ -84,7 +97,9 @@ public class MockAIProvider implements AIProvider {
 
     @Override
     public float[] embed(String text) {
-        return new float[1536];
+        float[] vector = new float[1536];
+        vector[0] = 1f;
+        return vector;
     }
 
     private static List<String> evidenceFrom(String user) {

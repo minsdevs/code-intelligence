@@ -26,6 +26,9 @@ public class UserAiSetting {
     @Column(nullable = false)
     private String provider;
 
+    @Column
+    private String model;
+
     @Column(name = "encrypted_key", nullable = false)
     private String encryptedKey;
 
@@ -43,17 +46,18 @@ public class UserAiSetting {
 
     protected UserAiSetting() {}
 
-    public UserAiSetting(Long userId, String provider, EncryptedToken token) {
+    public UserAiSetting(Long userId, String provider, String model, EncryptedToken token) {
         this.userId = userId;
-        setProviderAndToken(provider, token);
+        setProviderAndToken(provider, model, token);
     }
 
-    public void update(String provider, EncryptedToken token) {
-        setProviderAndToken(provider, token);
+    public void update(String provider, String model, EncryptedToken token) {
+        setProviderAndToken(provider, model, token);
     }
 
-    private void setProviderAndToken(String provider, EncryptedToken token) {
+    private void setProviderAndToken(String provider, String model, EncryptedToken token) {
         this.provider = provider;
+        this.model = model;
         this.encryptedKey = token.ciphertext();
         this.nonce = token.nonce();
         this.keyVersion = token.keyVersion();
@@ -82,6 +86,10 @@ public class UserAiSetting {
         return provider;
     }
 
+    public String getModel() {
+        return model;
+    }
+
     public String getEncryptedKey() {
         return encryptedKey;
     }
@@ -101,7 +109,7 @@ public class UserAiSetting {
     /** Deliberately excludes key material. */
     @Override
     public String toString() {
-        return "UserAiSetting{id=%s, userId=%s, provider=%s, keyVersion=%d}"
-                .formatted(id, userId, provider, keyVersion);
+        return "UserAiSetting{id=%s, userId=%s, provider=%s, model=%s, keyVersion=%d}"
+                .formatted(id, userId, provider, model, keyVersion);
     }
 }
