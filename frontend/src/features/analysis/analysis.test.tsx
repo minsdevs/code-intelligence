@@ -96,6 +96,23 @@ function installFetch() {
     if (path === '/api/projects/7/impact') return jsonResponse(impact)
     if (path === '/api/projects/7/graph/nodes') return jsonResponse(nodes)
     if (path === '/api/ai/status') return jsonResponse({ configured: true, provider: 'mock' })
+    if (path === '/api/csrf') return new Response(null, { status: 204 })
+    if (path === '/api/projects/7/findings/5/task-draft') {
+      return jsonResponse(
+        {
+          id: 4,
+          type: 'LEARNING',
+          title: 'Review unmatched API call',
+          description: 'Confirm',
+          status: 'DRAFT',
+          origin: 'AI',
+          sourceFindingId: 5,
+          goals: ['Open evidence'],
+        },
+        201,
+      )
+    }
+    if (path === '/api/projects/7/tasks') return jsonResponse([])
     return jsonResponse({ title: 'Not Found', detail: path }, 404)
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -108,7 +125,11 @@ function renderAnalysis() {
 
 beforeEach(() => {
   window.localStorage.clear()
-  useUiStore.setState({ aiPanelOpen: true, aiPanelWidth: AI_PANEL_DEFAULT_WIDTH, selectedAreas: [] })
+  useUiStore.setState({
+    aiPanelOpen: true,
+    aiPanelWidth: AI_PANEL_DEFAULT_WIDTH,
+    selectedAreas: [],
+  })
   fetchMock.mockReset()
   installFetch()
 })
@@ -148,9 +169,20 @@ describe('AnalysisPage', () => {
     await waitFor(() => {
       const searched = fetchMock.mock.calls.some((call) => {
         const url = requestUrl(call[0] as RequestInfo | URL)
-        return url.pathname === '/api/projects/7/graph/nodes' && url.searchParams.get('q') === 'Todos'
+        return (
+          url.pathname === '/api/projects/7/graph/nodes' && url.searchParams.get('q') === 'Todos'
+        )
       })
       expect(searched).toBe(true)
+    })
+  })
+
+  it('creates a learning-task draft from a finding', async () => {
+    const { router } = renderAnalysis()
+    await screen.findByText('Unmatched GET /api/missing')
+    fireEvent.click(screen.getByRole('button', { name: '초안 생성' }))
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/projects/7/tasks')
     })
   })
 })

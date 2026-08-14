@@ -21,6 +21,18 @@ export { listFlows, getFlow } from './flows'
 export { listFindings, getImpact } from './analysis'
 export { GRAPH_NODE_PAGE_SIZE, getGraphNode, getGraphRelations, listGraphNodes } from './graph'
 export { askAi, askAiStream, getAiStatus, parseEvidenceRef } from './ai'
+export { listNotes, getNote, createNote, updateNote, deleteNote } from './notes'
+export {
+  listTasks,
+  getTask,
+  createTask,
+  updateTask,
+  approveTask,
+  patchTaskGoal,
+  addLearningRecord,
+  createTaskDraft,
+} from './tasks'
+export { searchWorkspace } from './search'
 export type {
   AreaSelection,
   AreaType,
@@ -46,7 +58,10 @@ export type {
   ImpactView,
   JobDetail,
   MeResponse,
+  NoteView,
   Project,
   ProjectArea,
   PullRequest,
+  SearchResponse,
+  TaskView,
 } from './types'
