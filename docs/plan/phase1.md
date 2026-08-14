@@ -264,6 +264,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-4 · be — 파일 인벤토리 + 언어/프레임워크 감지 `[P3]`
 
+**상태: 완료** — 테스트 137/137. fixture 4종 인벤토리 골든 고정. file-content path traversal 테스트(`../`, `%2e%2e`).
 **완료 기준:** fixture 골든 테스트 통과
 **패키지:** `dev.codeintelligence.analysis.core`
 
@@ -297,6 +298,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-5 · be — Project Area Detection 엔진 + 12영역 detector + evidence `[P3]`
 
+**상태: 완료** — confidence `min(1, Σ weights)`, 자동선택 ≥0.5. spring-mini BACKEND/DATABASE/TESTING, react-mini FRONTEND/TESTING, fullstack-mini BACKEND/FRONTEND/DATABASE/INFRASTRUCTURE/DEVOPS/TESTING, infra-mini INFRASTRUCTURE/DEVOPS. BUILD_TOOLING은 전 fixture <0.5.
 **완료 기준:** fixture 4종에서 기대 영역 감지
 **패키지:** `dev.codeintelligence.analysis.area`, `dev.codeintelligence.evidence`
 
