@@ -32,6 +32,8 @@ public class ProjectService {
     private final SnapshotRepository snapshotRepository;
     private final JobService jobService;
     private final GitCloneService gitCloneService;
+    private final LocalImportService localImportService;
+    private final LocalSourceStatusService localSourceStatusService;
     private final AppProperties appProperties;
     private final JdbcClient jdbc;
 
@@ -40,12 +42,16 @@ public class ProjectService {
             SnapshotRepository snapshotRepository,
             JobService jobService,
             GitCloneService gitCloneService,
+            LocalImportService localImportService,
+            LocalSourceStatusService localSourceStatusService,
             AppProperties appProperties,
             JdbcClient jdbc) {
         this.projectRepository = projectRepository;
         this.snapshotRepository = snapshotRepository;
         this.jobService = jobService;
         this.gitCloneService = gitCloneService;
+        this.localImportService = localImportService;
+        this.localSourceStatusService = localSourceStatusService;
         this.appProperties = appProperties;
         this.jdbc = jdbc;
     }
@@ -71,6 +77,36 @@ public class ProjectService {
         return new CreatedProject(toResponse(project, ProjectSummaries.empty()), jobId);
     }
 
+    /** Create a project from a local folder path. */
+    @Transactional
+    public CreatedProject createFromLocal(long userId, ProjectController.CreateLocalProjectRequest request) {
+        if (request.path() == null || request.path().isBlank()) {
+            throw new LocalImportException("path is required", null);
+        }
+        String name = request.name() != null && !request.name().isBlank()
+                ? request.name()
+                : Path.of(request.path()).getFileName().toString();
+
+        // Validate path before creating any DB rows
+        localImportService.validateSource(Path.of(request.path()));
+
+        if (projectRepository.existsByUserIdAndRepoOwnerAndRepoName(userId, "local", name)) {
+            throw new ProjectConflictException("A local project with this name already exists.");
+        }
+        Project project;
+        try {
+            project = projectRepository.save(new Project(userId, name, request.path()));
+        } catch (DataIntegrityViolationException e) {
+            throw new ProjectConflictException("A local project with this name already exists.");
+        }
+        project.assignClonePath(appProperties
+                .reposRoot()
+                .resolve(String.valueOf(project.getId()))
+                .toString());
+        long jobId = jobService.enqueue(project.getId(), JobType.IMPORT);
+        return new CreatedProject(toResponse(project, ProjectSummaries.empty()), jobId);
+    }
+
     @Transactional(readOnly = true)
     public List<ProjectResponse> list(long userId) {
         List<Project> projects = projectRepository.findAllByUserIdOrderByCreatedAtDesc(userId);
@@ -84,13 +120,19 @@ public class ProjectService {
         return toResponse(project, loadSummaries(List.of(project)));
     }
 
+    @Transactional(readOnly = true)
+    public LocalSourceStatusService.LocalSourceStatus localSourceStatus(long projectId, long userId) {
+        return localSourceStatusService.get(projectId, userId);
+    }
+
     public List<JobSummaryResponse> listJobs(long projectId, long userId, int limit) {
         requireOwned(projectId, userId);
         return jobService.listRecent(projectId, limit);
     }
 
-    public long reanalyze(long projectId, long userId) {
+    public long reanalyze(long projectId, long userId, LocalSourceStatusService.RefreshConfirmation confirmation) {
         Project project = requireOwned(projectId, userId);
+        localSourceStatusService.verifyRefresh(projectId, userId, confirmation);
         return jobService.enqueue(project.getId(), JobType.REANALYZE);
     }
 
@@ -143,6 +185,7 @@ public class ProjectService {
                 project.getRepoOwner(),
                 project.getRepoName(),
                 project.getDefaultBranch(),
+                project.getSourceType(),
                 currentSnapshot,
                 latestJob,
                 summaries.selectedAreas(id),

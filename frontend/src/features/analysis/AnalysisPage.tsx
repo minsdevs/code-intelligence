@@ -8,6 +8,10 @@ import { parseEvidenceRef } from '../../api/ai'
 import { ApiError } from '../../api/client'
 import type { FindingView } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
+import { CoveragePanel } from './CoveragePanel'
+import ExportButton from './ExportButton'
+import SnapshotComparisonPanel from './SnapshotComparisonPanel'
+import FindingJudgmentEditor from './FindingJudgmentEditor'
 import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { useUiStore } from '../../stores/uiStore'
@@ -25,6 +29,7 @@ export default function AnalysisPage() {
   const setPendingIntent = useUiStore((state) => state.setPendingIntent)
   const setAiPanelOpen = useUiStore((state) => state.setAiPanelOpen)
   const [severity, setSeverity] = useState('')
+  const [includeHidden, setIncludeHidden] = useState(false)
   const [selectedFindingId, setSelectedFindingId] = useState<number | null>(null)
   const [nodeQuery, setNodeQuery] = useState('')
   const [nodeId, setNodeId] = useState<number | null>(null)
@@ -33,8 +38,8 @@ export default function AnalysisPage() {
   const [whatIfError, setWhatIfError] = useState<string | null>(null)
 
   const findingsQuery = useQuery({
-    queryKey: ['findings', projectId, severity],
-    queryFn: () => listFindings(projectId!, severity || undefined),
+    queryKey: ['findings', projectId, severity, includeHidden],
+    queryFn: () => listFindings(projectId!, severity || undefined, includeHidden),
     enabled: projectId != null,
   })
 
@@ -101,7 +106,14 @@ export default function AnalysisPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2">
+        <span className="text-[13px] font-semibold text-ink">Analysis</span>
+        <ExportButton projectId={projectId} />
+      </div>
+      <CoveragePanel projectId={projectId} />
+      <SnapshotComparisonPanel projectId={projectId} />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       <section className="flex min-w-0 flex-1 flex-col border-r border-line">
         <div className="flex items-center gap-3 border-b border-line px-4 py-3">
           <h2 className="text-[13px] font-semibold text-ink">Findings</h2>
@@ -121,6 +133,14 @@ export default function AnalysisPage() {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="ml-auto flex items-center gap-1 text-[11px] text-ink-muted">
+            <input
+              type="checkbox"
+              checked={includeHidden}
+              onChange={(event) => setIncludeHidden(event.target.checked)}
+            />
+            숨긴 오탐 표시
           </label>
         </div>
         {findingsError && (
@@ -205,6 +225,12 @@ export default function AnalysisPage() {
                   {evidence.lineStart != null ? `:${evidence.lineStart}` : ''}
                 </button>
               ))}
+            <FindingJudgmentEditor
+              key={activeFinding.id}
+              projectId={projectId}
+              finding={activeFinding}
+              onSaved={() => setSelectedFindingId(null)}
+            />
             <button
               type="button"
               onClick={() => {
@@ -412,6 +438,7 @@ export default function AnalysisPage() {
           </div>
         )}
       </aside>
+    </div>
     </div>
   )
 }

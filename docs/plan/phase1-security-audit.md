@@ -1,7 +1,15 @@
+**Languages:** English | [한국어](phase1-security-audit.ko.md)
+
 # Phase 1 security audit (task 1-16)
 
-Date: 2026-08-14  
-Branch: `feature/phase1-security-fixes`  
+> **역사 문서:** 이 감사 결과는 해당 Phase 시점의 코드와 의존성을 대상으로
+> 한다. 현재 RC의 신규 local import/refresh, compare, judgment, export,
+> IDE, AI preview 표면과 release blocker는
+> [SECURITY](../../SECURITY.md) 및
+> [ADDITIONAL_FEATURES](../../ADDITIONAL_FEATURES.md)를 우선한다.
+
+Date: 2026-08-14
+Branch: `feature/phase1-security-fixes`
 Mode: audit-first. CRITICAL/HIGH fixed in this PR. LOW reported only.
 
 ## Controls verified (no finding)

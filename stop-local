@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# stop-local — stop all Code Intelligence local services.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+info() { echo -e "${BLUE}[INFO]${NC} $*"; }
+ok()   { echo -e "${GREEN}[OK]${NC} $*"; }
+
+info "Stopping Docker containers..."
+docker compose down 2>/dev/null && ok "Docker containers stopped" || true
+
+info "Stopping backend (Java/Gradle) processes..."
+pkill -f "code-intelligence.*bootRun" 2>/dev/null && ok "Backend stopped" || ok "No backend process found"
+
+info "Stopping frontend (Vite) processes..."
+pkill -f "code-intelligence.*vite" 2>/dev/null && ok "Frontend stopped" || ok "No frontend process found"
+
+echo ""
+ok "All services stopped."

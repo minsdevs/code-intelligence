@@ -36,6 +36,12 @@ public class Project {
     @Column(name = "clone_path")
     private String clonePath;
 
+    @Column(name = "local_path")
+    private String localPath;
+
+    @Column(name = "source_type")
+    private String sourceType;
+
     @Column(name = "current_snapshot_id")
     private Long currentSnapshotId;
 
@@ -52,6 +58,17 @@ public class Project {
         this.name = name;
         this.repoOwner = repoOwner;
         this.repoName = repoName;
+        this.sourceType = "GITHUB";
+    }
+
+    /** Constructor for local folder projects. */
+    public Project(long userId, String name, String localPath) {
+        this.userId = userId;
+        this.name = name;
+        this.repoOwner = "local";
+        this.repoName = name;
+        this.localPath = localPath;
+        this.sourceType = "LOCAL";
     }
 
     public void assignClonePath(String clonePath) {
@@ -99,6 +116,14 @@ public class Project {
 
     public String getClonePath() {
         return clonePath;
+    }
+
+    public String getLocalPath() {
+        return localPath;
+    }
+
+    public String getSourceType() {
+        return sourceType != null ? sourceType : "GITHUB";
     }
 
     public Long getCurrentSnapshotId() {

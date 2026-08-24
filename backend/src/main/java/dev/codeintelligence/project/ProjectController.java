@@ -21,7 +21,16 @@ public class ProjectController {
 
     public record CreateProjectRequest(String repoOwner, String repoName, String url) {}
 
+    public record CreateLocalProjectRequest(String path, String name) {}
+
     public record CreateProjectResponse(ProjectResponse project, long jobId) {}
+
+    public record ReanalyzeRequest(Long snapshotId, Integer added, Integer modified, Integer deleted) {
+        LocalSourceStatusService.RefreshConfirmation confirmation() {
+            if (snapshotId == null || added == null || modified == null || deleted == null) return null;
+            return new LocalSourceStatusService.RefreshConfirmation(snapshotId, added, modified, deleted);
+        }
+    }
 
     public record ReanalyzeResponse(long jobId) {}
 
@@ -36,6 +45,14 @@ public class ProjectController {
     public CreateProjectResponse create(
             @RequestBody CreateProjectRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
         ProjectService.CreatedProject created = projectService.create(user.userId(), request);
+        return new CreateProjectResponse(created.project(), created.jobId());
+    }
+
+    @PostMapping("/local")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CreateProjectResponse createLocal(
+            @RequestBody CreateLocalProjectRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
+        ProjectService.CreatedProject created = projectService.createFromLocal(user.userId(), request);
         return new CreateProjectResponse(created.project(), created.jobId());
     }
 
@@ -57,6 +74,12 @@ public class ProjectController {
         return projectService.listJobs(projectId, user.userId(), Math.clamp(limit, 1, 50));
     }
 
+    @GetMapping("/{projectId}/local-source-status")
+    public LocalSourceStatusService.LocalSourceStatus localSourceStatus(
+            @PathVariable long projectId, @AuthenticationPrincipal AuthenticatedUser user) {
+        return projectService.localSourceStatus(projectId, user.userId());
+    }
+
     @DeleteMapping("/{projectId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable long projectId, @AuthenticationPrincipal AuthenticatedUser user) {
@@ -65,7 +88,11 @@ public class ProjectController {
 
     @PostMapping("/{projectId}/reanalyze")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public ReanalyzeResponse reanalyze(@PathVariable long projectId, @AuthenticationPrincipal AuthenticatedUser user) {
-        return new ReanalyzeResponse(projectService.reanalyze(projectId, user.userId()));
+    public ReanalyzeResponse reanalyze(
+            @PathVariable long projectId,
+            @RequestBody(required = false) ReanalyzeRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        return new ReanalyzeResponse(
+                projectService.reanalyze(projectId, user.userId(), request == null ? null : request.confirmation()));
     }
 }

@@ -102,6 +102,7 @@ export default function FeaturesPage() {
           )}
           <EvidenceList
             evidences={detail.evidences}
+            projectId={projectId}
             onOpen={(path, line) =>
               navigate(`/projects/${projectId}/code${codeLocationSearch(path, line)}`)
             }

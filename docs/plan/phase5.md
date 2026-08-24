@@ -1,4 +1,11 @@
+**Languages:** English | [한국어](phase5.ko.md)
+
 # Phase 5 — Advanced 구현 계획
+
+> **역사 문서:** 이 계획과 체크박스는 해당 Phase 구현 당시의 범위·검증
+> 기록이다. 현재 RC release 상태로 해석하지 않는다. 현행 안내는
+> [README](../../README.md), RC 검증·blocker는
+> [ADDITIONAL_FEATURES](../../ADDITIONAL_FEATURES.md)를 우선한다.
 
 - 근거: `기획서.md` v1.2 (§14.1 CodeReviewService, §18 clone 비실행, §21 Phase 5)
 - 불변 원칙: 사실은 정적 분석만 · AI 해석은 `origin=AI` · evidence 깨지면 UNKNOWN · clone 코드 실행 금지 · 키는 env only · IDOR는 `findByIdAndUserId` · SecretMask · ArchUnit(`AIProvider`는 `ai` 패키지)

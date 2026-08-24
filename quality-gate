@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+BASELINE="$ROOT/quality-baseline.env"
+[[ -f "$BASELINE" ]] || { echo "[FAIL] missing quality-baseline.env" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$BASELINE"
+
+if [[ -n "${QUALITY_BASELINE_UPDATE:-}" ]]; then
+  echo "[FAIL] automatic baseline updates are forbidden; edit quality-baseline.env explicitly for review" >&2
+  exit 1
+fi
+if ! docker info >/dev/null 2>&1; then
+  echo "[FAIL] Docker daemon is required for the database-backed quality corpus" >&2
+  exit 1
+fi
+
+CORPUS="$ROOT/backend/src/test/resources/fixtures"
+CORPUS_FILES="$(find "$CORPUS" -type f | wc -l | tr -d ' ')"
+if (( CORPUS_FILES < MIN_CORPUS_FILES )); then
+  echo "[FAIL] corpus has $CORPUS_FILES files; baseline requires $MIN_CORPUS_FILES" >&2
+  exit 1
+fi
+
+TIME_LOG="$(mktemp)"
+cleanup() { rm -f "$TIME_LOG"; }
+trap cleanup EXIT
+START="$(date +%s)"
+
+GRADLE_ARGS=(
+  test
+  --tests '*.FixtureGoldenTest'
+  --tests '*.SpringMiniGraphGoldenTest'
+  --tests '*.SpringMiniEndpointsFeaturesGoldenTest'
+  --tests '*.FullstackCrossDomainGoldenTest'
+  --tests '*.ConfigAnalyzersGoldenTest'
+)
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  /usr/bin/time -l "$ROOT/backend/gradlew" -p "$ROOT/backend" "${GRADLE_ARGS[@]}" 2> >(tee "$TIME_LOG" >&2)
+  RSS_KB="$(awk '/maximum resident set size/ {print int($1 / 1024)}' "$TIME_LOG" | tail -1)"
+else
+  /usr/bin/time -v "$ROOT/backend/gradlew" -p "$ROOT/backend" "${GRADLE_ARGS[@]}" 2> >(tee "$TIME_LOG" >&2)
+  RSS_KB="$(awk -F: '/Maximum resident set size/ {gsub(/ /, "", $2); print $2}' "$TIME_LOG" | tail -1)"
+fi
+ELAPSED=$(( $(date +%s) - START ))
+RSS_KB="${RSS_KB:-0}"
+
+if (( ELAPSED > MAX_BACKEND_SECONDS )); then
+  echo "[FAIL] backend corpus took ${ELAPSED}s (limit ${MAX_BACKEND_SECONDS}s)" >&2
+  exit 1
+fi
+if (( RSS_KB > MAX_BACKEND_RSS_KB )); then
+  echo "[FAIL] backend corpus used ${RSS_KB}KB RSS (limit ${MAX_BACKEND_RSS_KB}KB)" >&2
+  exit 1
+fi
+
+for analyzer in ts-analyzer tree-analyzer; do
+  (
+    cd "$ROOT/analyzers/$analyzer"
+    npm test -- --run
+    npm run typecheck
+    npm run build
+  )
+done
+
+printf '[PASS] quality baseline v%s: corpus=%s files, backend=%ss, max-rss=%sKB\n' \
+  "$QUALITY_BASELINE_VERSION" "$CORPUS_FILES" "$ELAPSED" "$RSS_KB"

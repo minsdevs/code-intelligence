@@ -7,6 +7,7 @@ import EmptyState from '../../components/EmptyState'
 import { areaLabel } from '../areas/labels'
 import { useT } from '../../lib/i18n'
 import { firstLine, formatWhen, shortSha } from '../history/format'
+import LocalSourceStatus from '../projects/LocalSourceStatus'
 
 export default function HomePage() {
   const t = useT()
@@ -95,11 +96,13 @@ function ProjectCard({ project }: { project: Project }) {
           <span className="text-ink-faint">/</span>
           {project.repoName}
         </h2>
-        {analyzing && (
+        {analyzing ? (
           <span role="status" className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-accent">
             {t('home.analyzing')}
           </span>
-        )}
+        ) : project.sourceType === 'LOCAL' ? (
+          <LocalSourceStatus projectId={project.id} />
+        ) : null}
       </div>
       <dl className="mt-3 flex flex-col gap-2 text-[12px]">
         <div className="flex gap-2">

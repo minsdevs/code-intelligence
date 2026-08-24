@@ -1,7 +1,15 @@
+**Languages:** English | [한국어](phase5-security-audit.ko.md)
+
 # Phase 5 security audit (task 5-10)
 
-Date: 2026-08-14  
-Branches: `feature/phase5-backend` (PR #29, merged) + `feature/phase5-ui`  
+> **역사 문서:** 이 감사 결과는 해당 Phase 시점의 코드와 의존성을 대상으로
+> 한다. 현재 RC의 신규 local import/refresh, compare, judgment, export,
+> IDE, AI preview 표면과 release blocker는
+> [SECURITY](../../SECURITY.md) 및
+> [ADDITIONAL_FEATURES](../../ADDITIONAL_FEATURES.md)를 우선한다.
+
+Date: 2026-08-14
+Branches: `feature/phase5-backend` (PR #29, merged) + `feature/phase5-ui`
 Mode: audit-first. **CRITICAL/HIGH = 0** — no `feature/phase5-security-fixes` PR.
 
 ## Controls verified (no finding)

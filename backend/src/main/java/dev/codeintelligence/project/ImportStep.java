@@ -27,18 +27,21 @@ public class ImportStep implements JobStep {
     private final GitCloneService gitCloneService;
     private final GithubTokenProvider tokenProvider;
     private final GithubProperties githubProperties;
+    private final LocalImportService localImportService;
 
     public ImportStep(
             ProjectRepository projectRepository,
             SnapshotRepository snapshotRepository,
             GitCloneService gitCloneService,
             GithubTokenProvider tokenProvider,
-            GithubProperties githubProperties) {
+            GithubProperties githubProperties,
+            LocalImportService localImportService) {
         this.projectRepository = projectRepository;
         this.snapshotRepository = snapshotRepository;
         this.gitCloneService = gitCloneService;
         this.tokenProvider = tokenProvider;
         this.githubProperties = githubProperties;
+        this.localImportService = localImportService;
     }
 
     @Override
@@ -51,6 +54,13 @@ public class ImportStep implements JobStep {
         Project project = projectRepository
                 .findById(ctx.projectId())
                 .orElseThrow(() -> new IllegalStateException("project no longer exists"));
+
+        // Delegate to local import for LOCAL source type
+        if ("LOCAL".equals(project.getSourceType())) {
+            runLocalImport(project, ctx);
+            return;
+        }
+
         RepoRef ref = RepoRef.of(project.getRepoOwner(), project.getRepoName());
         String token = tokenProvider.findToken(project.getUserId()).orElse(null);
 
@@ -61,6 +71,23 @@ public class ImportStep implements JobStep {
             project.updateDefaultBranch(result.branch());
             projectRepository.save(project);
         }
+        Snapshot snapshot = snapshotRepository.save(new Snapshot(project.getId(), result.headSha()));
+        ctx.attachSnapshot(snapshot.getId());
+    }
+
+    private void runLocalImport(Project project, JobContext ctx) {
+        String localPath = project.getLocalPath();
+        if (localPath == null || localPath.isBlank()) {
+            throw new IllegalStateException("LOCAL project has no local_path");
+        }
+        java.nio.file.Path source = java.nio.file.Path.of(localPath);
+        localImportService.validateSource(source);
+        LocalImportService.LocalImportResult result = localImportService.importFolder(source, ctx.clonePath());
+
+        if (result.branch() != null && !Objects.equals(project.getDefaultBranch(), result.branch())) {
+            project.updateDefaultBranch(result.branch());
+        }
+        projectRepository.save(project);
         Snapshot snapshot = snapshotRepository.save(new Snapshot(project.getId(), result.headSha()));
         ctx.attachSnapshot(snapshot.getId());
     }

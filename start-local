@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+# start-local — single command to start all Code Intelligence services locally.
+# Performs pre-flight checks, starts infrastructure, then backend and frontend.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# ─── Colors & helpers ────────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+info()  { echo -e "${BLUE}[INFO]${NC} $*"; }
+ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
+fail()  { echo -e "${RED}[FAIL]${NC} $*"; }
+die()   { fail "$*"; exit 1; }
+
+# ─── Pre-flight checks ──────────────────────────────────────────────────────
+CHECKS_PASSED=true
+
+check_command() {
+  local cmd="$1" install_hint="$2"
+  if command -v "$cmd" &>/dev/null; then
+    ok "$cmd found: $(command -v "$cmd")"
+  else
+    fail "$cmd not found. Install: $install_hint"
+    CHECKS_PASSED=false
+  fi
+}
+
+check_java_version() {
+  if ! command -v java &>/dev/null; then
+    fail "java not found. Install JDK 21+: https://adoptium.net/"
+    CHECKS_PASSED=false
+    return
+  fi
+  local ver
+  ver=$(java -version 2>&1 | head -1 | grep -oE '[0-9]+' | head -1)
+  if [ "$ver" -ge 21 ] 2>/dev/null; then
+    ok "Java $ver (>= 21)"
+  else
+    fail "Java $ver found, but 21+ is required."
+    CHECKS_PASSED=false
+  fi
+}
+
+check_node_version() {
+  if ! command -v node &>/dev/null; then
+    fail "node not found. Install Node.js 18+: https://nodejs.org/"
+    CHECKS_PASSED=false
+    return
+  fi
+  local ver
+  ver=$(node --version | grep -oE '[0-9]+' | head -1)
+  if [ "$ver" -ge 18 ] 2>/dev/null; then
+    ok "Node.js v$ver (>= 18)"
+  else
+    fail "Node.js v$ver found, but 18+ is required."
+    CHECKS_PASSED=false
+  fi
+}
+
+check_port() {
+  local port="$1" service="$2"
+  if lsof -i ":$port" -sTCP:LISTEN &>/dev/null 2>&1; then
+    local pid
+    pid=$(lsof -ti ":$port" -sTCP:LISTEN 2>/dev/null | head -1)
+    fail "Port $port ($service) is in use by PID $pid."
+    echo "    Fix: kill $pid   or   change the port in .env"
+    CHECKS_PASSED=false
+  else
+    ok "Port $port ($service) is available"
+  fi
+}
+
+check_env_file() {
+  if [ -f "$SCRIPT_DIR/.env" ]; then
+    ok ".env file found"
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/.env"
+    if [ -z "${TOKEN_ENC_KEY:-}" ]; then
+      fail "TOKEN_ENC_KEY is empty in .env (required for backend)"
+      echo "    Fix: openssl rand -base64 32   and paste into .env"
+      CHECKS_PASSED=false
+    else
+      ok "TOKEN_ENC_KEY is set"
+    fi
+  else
+    warn ".env not found — copying from .env.example"
+    cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
+    fail "TOKEN_ENC_KEY needs to be set in .env"
+    echo "    Fix: openssl rand -base64 32   and paste into .env as TOKEN_ENC_KEY=..."
+    CHECKS_PASSED=false
+  fi
+}
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║        Code Intelligence — Local Start Pre-checks           ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+
+info "Checking environment..."
+check_env_file
+
+info "Checking required tools..."
+check_command docker "https://docs.docker.com/get-docker/"
+check_command docker "docker compose (bundled with Docker Desktop)"
+check_java_version
+check_node_version
+
+info "Checking ports..."
+check_port "${SERVER_PORT:-8080}" "backend"
+check_port 5432 "PostgreSQL"
+check_port 6379 "Redis"
+check_port 5173 "frontend (Vite)"
+
+# Docker daemon check
+if docker info &>/dev/null 2>&1; then
+  ok "Docker daemon is running"
+else
+  fail "Docker daemon is not running."
+  echo "    Fix: Start Docker Desktop or run 'sudo systemctl start docker'"
+  CHECKS_PASSED=false
+fi
+
+echo ""
+if [ "$CHECKS_PASSED" = false ]; then
+  die "Pre-checks failed. Fix the issues above and re-run."
+fi
+
+ok "All pre-checks passed!"
+echo ""
+
+# ─── Start infrastructure ────────────────────────────────────────────────────
+info "Starting infrastructure (PostgreSQL, Redis)..."
+docker compose up -d postgres redis
+
+info "Waiting for PostgreSQL to be ready..."
+for i in $(seq 1 30); do
+  if docker compose exec -T postgres pg_isready -U "${POSTGRES_USER:-codeintel}" -d "${POSTGRES_DB:-codeintel}" &>/dev/null 2>&1; then
+    ok "PostgreSQL is ready"
+    break
+  fi
+  if [ "$i" -eq 30 ]; then
+    die "PostgreSQL did not become ready in 30 seconds"
+  fi
+  sleep 1
+done
+
+info "Waiting for Redis to be ready..."
+for i in $(seq 1 15); do
+  if docker compose exec -T redis redis-cli ping &>/dev/null 2>&1; then
+    ok "Redis is ready"
+    break
+  fi
+  if [ "$i" -eq 15 ]; then
+    die "Redis did not become ready in 15 seconds"
+  fi
+  sleep 1
+done
+
+# ─── Start backend ──────────────────────────────────────────────────────────
+info "Starting backend (Spring Boot)..."
+(cd "$SCRIPT_DIR/backend" && ./gradlew bootRun --console=plain -q &)
+BACKEND_PID=$!
+
+info "Waiting for backend health endpoint..."
+for i in $(seq 1 60); do
+  if curl -sf "http://127.0.0.1:${SERVER_PORT:-8080}/actuator/health" &>/dev/null; then
+    ok "Backend is healthy (PID: $BACKEND_PID)"
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    warn "Backend did not respond within 60s; it may still be starting..."
+  fi
+  sleep 2
+done
+
+# ─── Start frontend ─────────────────────────────────────────────────────────
+info "Starting frontend (Vite dev server)..."
+(cd "$SCRIPT_DIR/frontend" && npm install --silent && npm run dev &)
+FRONTEND_PID=$!
+sleep 3
+ok "Frontend dev server starting (PID: $FRONTEND_PID)"
+
+# ─── Optional analyzers ─────────────────────────────────────────────────────
+if [ -n "${TS_ANALYZER_BASE_URL:-}" ] || [ -n "${TREE_ANALYZER_BASE_URL:-}" ]; then
+  info "Starting optional analyzers..."
+  docker compose up -d ts-analyzer tree-analyzer 2>/dev/null || true
+fi
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║                   ✅ All services started                    ║"
+echo "╠══════════════════════════════════════════════════════════════╣"
+echo "║  Frontend:    http://localhost:5173                          ║"
+echo "║  Backend:     http://127.0.0.1:${SERVER_PORT:-8080}                        ║"
+echo "║  PostgreSQL:  localhost:5432                                 ║"
+echo "║  Redis:       localhost:6379                                 ║"
+echo "╠══════════════════════════════════════════════════════════════╣"
+echo "║  Stop all:    ./stop-local                                  ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+
+# Keep script alive to show logs; Ctrl+C kills all
+trap 'echo ""; info "Shutting down..."; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; docker compose stop; exit 0' INT TERM
+wait

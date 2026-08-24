@@ -3,6 +3,7 @@ import { NavLink, Outlet, useParams } from 'react-router-dom'
 import { getProject } from '../../api/projects'
 import { parseProjectId } from '../../lib/projectId'
 import { workspaceTabs } from './workspaceTabs'
+import LocalSourceStatus from './LocalSourceStatus'
 
 export default function ProjectWorkspacePage() {
   const { projectId: rawId } = useParams()
@@ -40,6 +41,9 @@ export default function ProjectWorkspacePage() {
           ))}
         </nav>
       </header>
+      {projectQuery.data?.sourceType === 'LOCAL' && (
+        <LocalSourceStatus projectId={projectQuery.data.id} details />
+      )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <Outlet />
       </div>

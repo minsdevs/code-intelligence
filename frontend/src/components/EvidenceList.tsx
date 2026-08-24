@@ -1,11 +1,14 @@
 import type { FeatureEvidenceView } from '../api/types'
 import { useT } from '../lib/i18n'
+import OpenInIdeButton from '../features/code/OpenInIdeButton'
 
 export default function EvidenceList({
   evidences,
+  projectId,
   onOpen,
 }: {
   evidences: FeatureEvidenceView[]
+  projectId?: number | null
   onOpen: (path: string, line: number | null) => void
 }) {
   const t = useT()
@@ -19,19 +22,28 @@ export default function EvidenceList({
           {evidences.map((evidence, index) => (
             <li key={`${evidence.filePath ?? 'none'}-${index}`}>
               {evidence.filePath ? (
-                <button
-                  type="button"
-                  onClick={() => onOpen(evidence.filePath!, evidence.lineStart)}
-                  className="flex w-full flex-col rounded-md px-2 py-1.5 text-left hover:bg-surface-2"
-                >
-                  <span className="font-mono text-[12px] text-ink">
-                    {evidence.filePath}
-                    {evidence.lineStart != null ? `:${evidence.lineStart}` : ''}
-                  </span>
-                  {evidence.excerpt && (
-                    <span className="mt-0.5 line-clamp-2 text-[12px] text-ink-muted">{evidence.excerpt}</span>
+                <div className="flex items-center gap-1 rounded-md px-2 py-1.5 hover:bg-surface-2">
+                  <button
+                    type="button"
+                    onClick={() => onOpen(evidence.filePath!, evidence.lineStart)}
+                    className="flex min-w-0 flex-1 flex-col text-left"
+                  >
+                    <span className="font-mono text-[12px] text-ink">
+                      {evidence.filePath}
+                      {evidence.lineStart != null ? `:${evidence.lineStart}` : ''}
+                    </span>
+                    {evidence.excerpt && (
+                      <span className="mt-0.5 line-clamp-2 text-[12px] text-ink-muted">{evidence.excerpt}</span>
+                    )}
+                  </button>
+                  {projectId != null && (
+                    <OpenInIdeButton
+                      projectId={projectId}
+                      filePath={evidence.filePath}
+                      line={evidence.lineStart ?? 1}
+                    />
                   )}
-                </button>
+                </div>
               ) : (
                 <p className="px-2 py-1.5 text-[13px] text-ink-muted">{evidence.excerpt ?? 'evidence'}</p>
               )}

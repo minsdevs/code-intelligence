@@ -7,6 +7,7 @@ import { useT } from '../../lib/i18n'
 import { configureMonaco } from '../../lib/monacoSetup'
 import { queryError } from './codeLocation'
 import { monacoLanguage } from './language'
+import OpenInIdeButton from './OpenInIdeButton'
 
 configureMonaco()
 
@@ -91,8 +92,9 @@ export default function CodeViewer({ projectId, path, line }: CodeViewerProps) {
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={t('code.fileLabel')}>
-      <header className="shrink-0 border-b border-line px-4 py-2">
+      <header className="flex shrink-0 items-center justify-between border-b border-line px-4 py-2">
         <p className="truncate font-mono text-[12px] text-ink-muted">{path}</p>
+        <OpenInIdeButton projectId={projectId} filePath={path} line={line ?? 1} />
       </header>
       <div className="min-h-0 flex-1" data-testid="code-viewer">
         <Editor

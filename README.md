@@ -1,3 +1,5 @@
+**Languages:** English | [한국어](README.ko.md)
+
 # Code Intelligence
 
 A personal workspace that analyzes an entire GitHub repository, automatically
@@ -7,14 +9,18 @@ explore its features, architecture, call flows, dependencies, history, design
 rationale, and alternatives — with an evidence-grounded, context-aware AI
 assistant.
 
-> **Status: Phase 5 — Advanced (complete).**
-> Phase 1 (import, Java analysis, architecture, history), Phase 2
-> (TypeScript sidecar, FE↔BE matching, flows, findings, impact, era),
-> Phase 3 (provider-abstracted assistant, summaries + pgvector, evidence-grounded
-> Why/Alternative answers), Phase 4 (notes, tasks, AI learning-task drafts,
-> unified search), and Phase 5 (PR review, playground, growth reports,
-> static what-if) are on `main`.
-> See [기획서.md](./기획서.md) and [docs/plan/phase5.md](./docs/plan/phase5.md).
+> **Status: release candidate / internal testing.**
+> Phase 1–5 functionality is present, and the current RC adds local-folder
+> import, safe local refresh, snapshot comparison, finding judgments, coverage,
+> Markdown/JSON export, IDE deep links, AI context preview/exclusion, and a
+> quality regression gate. These RC changes are staged on
+> `rc/feature-freeze-20260824`; they are not described here as released on
+> `main`. See [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md) for the
+> implementation and validation record.
+>
+> **Release remains blocked** on the real browser 10-step E2E and an approved
+> accuracy/false-positive oracle for representative repositories. User-data
+> backup/restore and roadmap P2 incremental reanalysis are not implemented.
 
 This repository currently ships a browser-based local workspace with a Spring
 Boot backend and optional analyzer sidecars. It is not yet a packaged native
@@ -46,50 +52,68 @@ channel, or macOS/Windows/Linux signing pipeline in this repository.
 
 ## Getting started
 
-Prerequisites: Docker, Node.js ≥ 24, JDK (Gradle auto-provisions the Java 21
-toolchain via Foojay).
+Prerequisites: Docker with `docker compose`, Node.js 24, and JDK 21 or newer.
+Docker must be running for PostgreSQL, Redis, Testcontainers-backed backend
+checks, and `./quality-gate`. Gradle uses the Java 21 toolchain.
+
+### Recommended local path
 
 ```bash
-cp .env.example .env          # local defaults work out of the box
-                              # optional: OPENAI_API_KEY or GEMINI_API_KEY (the Settings UI also supports encrypted BYOK)
+cp .env.example .env
+# Generate a value and set TOKEN_ENC_KEY in .env:
+openssl rand -base64 32
 
-docker compose up -d          # PostgreSQL + Redis + both analyzer sidecars
+./check-local   # checks env, Docker/Compose, Java, Node, and local ports
+./start-local   # PostgreSQL + Redis, backend, frontend; optional analyzers when configured
+# Open http://localhost:5173
+./stop-local
+```
 
-# Optional sidecar URLs when running them outside Docker:
-# TypeScript — http://127.0.0.1:3040
-cd analyzers/ts-analyzer && npm ci && npm start
+`./start-local` is a development helper, not a production supervisor. It starts
+the analyzer containers only when `TS_ANALYZER_BASE_URL` or
+`TREE_ANALYZER_BASE_URL` is configured. To start all local infrastructure
+manually, including both analyzers:
 
-# tree-sitter (Python/Go/Vue/Svelte) — http://127.0.0.1:3041
-cd ../tree-analyzer && npm ci && npm start
+```bash
+docker compose up -d
 
-# Backend — http://localhost:8080 (health: /actuator/health)
-# Set TS_ANALYZER_BASE_URL and TREE_ANALYZER_BASE_URL to enable sidecar parsing
-cd backend && ./gradlew bootRun
+# Backend — http://127.0.0.1:8080 (health: /actuator/health)
+(cd backend && ./gradlew bootRun)
 
 # Frontend — http://localhost:5173
-cd frontend && npm install && npm run dev
-# For a backend on another local port:
-# VITE_BACKEND_URL=http://127.0.0.1:18080 npm run dev
+(cd frontend && npm ci && npm run dev)
 ```
+
+AI is optional. GitHub OAuth credentials are optional because PAT login is
+supported, but `TOKEN_ENC_KEY` is always required by the backend. Set
+`TS_ANALYZER_BASE_URL=http://127.0.0.1:3040` and
+`TREE_ANALYZER_BASE_URL=http://127.0.0.1:3041` to enable the sidecars.
 
 ## Development
 
+Run these commands from the repository root:
+
 ```bash
 # Backend: format check + tests (Testcontainers; Docker required) + build
-cd backend && ./gradlew spotlessCheck build
+(cd backend && ./gradlew spotlessCheck build)
 
 # Frontend: lint, typecheck, tests, build
-cd frontend && npm run lint && npm run typecheck && npm test -- --run && npm run build
+(cd frontend && npm ci && npm run lint && npm run typecheck && npm test -- --run && npm run build)
 
 # ts-analyzer sidecar
-cd analyzers/ts-analyzer && npm ci && npm test && npm run build
+(cd analyzers/ts-analyzer && npm ci && npm test && npm run typecheck && npm run build)
 
 # tree-sitter sidecar
-cd analyzers/tree-analyzer && npm ci && npm test && npm run build
+(cd analyzers/tree-analyzer && npm ci && npm test && npm run typecheck && npm run build)
+
+# Docker-backed golden corpus + analyzer quality/performance thresholds
+./quality-gate
 ```
 
 CI runs the backend, frontend, TypeScript analyzer, and tree-sitter analyzer
-gates on every pull request.
+gates on every pull request. The backend job also runs `./quality-gate`, so its
+runner must provide Docker. Baseline changes are explicit reviewed edits to
+`quality-baseline.env`; `QUALITY_BASELINE_UPDATE` is intentionally rejected.
 
 ## AI providers, models, and cost
 
@@ -126,6 +150,55 @@ The backend binds to loopback by default. If you expose it beyond the local
 machine, configure authentication, CORS, TLS, secret management, backups, and
 network access controls for that deployment; the local Docker Compose setup is
 not a production deployment.
+
+## RC workflows and safety boundaries
+
+- **Local import:** an authenticated user can open
+  `/import?path=<URL-encoded-path>`, inspect the path, and explicitly confirm
+  before `POST /api/projects/local` runs. There is no automatic import or
+  browser directory picker. `LOCAL_IMPORT_ALLOWED_ROOTS` is a comma-separated
+  allowlist; when empty, the backend user home is the only allowed root.
+  Canonical-path, system/secret-directory, and symlink-escape checks apply.
+- **Safe refresh:** local projects show `최신`, `변경됨`, `경로 없음`, or
+  `권한 재확인 필요`. Refresh requires a preview snapshot plus matching
+  added/modified/deleted counts; a source change after preview returns a
+  conflict. Refresh remains a safe **full** analysis, not incremental P2 work.
+- **Analysis decisions:** Analysis exposes coverage/partial-result information,
+  deterministic snapshot comparison, and per-user finding judgments
+  (`NEEDS_REVIEW`, `ACCEPTED`, `FALSE_POSITIVE`, `RESOLVED`). Hidden false
+  positives remain recoverable; rule/evidence changes return them to review.
+- **Reuse and editing:** current-snapshot summaries export as Markdown or JSON
+  after secret redaction and without source bodies. IDE links are available
+  only for local projects and validate the relative path; commit mismatch is
+  reported before opening the configured IDE.
+- **AI control:** preview uses the real retrieval path without contacting the
+  provider. Excluded context IDs are filtered server-side; “local data only”
+  prevents the frontend from sending an AI request. This is not a guarantee
+  about provider policy when a request is actually sent.
+
+## RC validation record (2026-08-24)
+
+Recorded against the current staged RC implementation:
+
+- Backend: `310` tests passed, `0` failed/skipped; `spotlessCheck`, compilation,
+  and assemble passed with Docker/Testcontainers available.
+- Frontend: lint, typecheck, build, and `19` files / `57` tests passed.
+- Analyzers: ts-analyzer `8` tests and tree-analyzer `7` tests passed, with
+  typecheck and build for both.
+- Quality gate: `54` fixture files, backend `23s`, maximum RSS `127,616KB`
+  against the reviewed `300s` / `2,097,152KB` limits.
+- Flyway: fresh V1→V19 and V17→V18→V19 upgrade passed with sentinel user,
+  project, snapshot, note, task, AI setting, and finding data preserved.
+- Local pipeline: small/medium/current-repository copies analyzed `14/14`,
+  `130/130`, and `646/646` eligible files; the largest run took `45.972s` with
+  `1,541,760KB` observed JVM process-tree peak RSS.
+- Cross-project service/library smoke: `1` integration test passed for confirmed
+  local import, stale-preview conflict, safe full refresh, snapshot comparison,
+  and cleanup.
+
+These numbers do **not** claim browser E2E, analysis accuracy, approved
+false-positive rates, backup/restore, or production readiness. See the RC record
+and blockers in [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md).
 
 ## Supported execution and release scope
 
@@ -167,8 +240,10 @@ can be called production-ready.
 | 1 — Repository Intelligence Core | GitHub OAuth, import & clone, project-area detection, Java AST analysis, code explorer, architecture view, history |
 | 2 — Cross-domain Intelligence | TypeScript analyzer, FE↔BE↔DB↔Infra linking, flows, findings, impact analysis |
 | 3 — AI | Context-aware assistant, why/alternative analysis, evidence-grounded answers |
-| 4 — Learning & Productivity | Notes, tasks, AI learning-task generation, unified search **(done)** |
-| 5 — Advanced | PR review, playground, growth reports, what-if simulator **(done)** |
+| 4 — Learning & Productivity | Notes, tasks, AI learning-task generation, unified search |
+| 5 — Advanced | PR review, playground, growth reports, what-if simulator |
+
+This table describes implemented phase scope, not the current RC release gate.
 
 Full design: [기획서.md](./기획서.md)
 

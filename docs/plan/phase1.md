@@ -1,4 +1,11 @@
+**Languages:** English | [한국어](phase1.ko.md)
+
 # Phase 1 — Repository Intelligence Core 구현 계획
+
+> **역사 문서:** 이 계획과 체크박스는 해당 Phase 구현 당시의 범위·검증
+> 기록이다. 현재 RC release 상태로 해석하지 않는다. 현행 안내는
+> [README](../../README.md), RC 검증·blocker는
+> [ADDITIONAL_FEATURES](../../ADDITIONAL_FEATURES.md)를 우선한다.
 
 - 개정: PR #8로 merge된 초안(G1~G15 체계)을 본 문서(P1~P11 체계)가 대체한다. 구현·마이그레이션 번호는 본 문서를 따른다.
 - 근거: `기획서.md` v1.2 (§6~§10, §12~§13, §15, §18~§19, §21) · Phase 0 완료(main merge)

@@ -91,6 +91,7 @@ export type Project = {
   repoOwner: string
   repoName: string
   defaultBranch: string
+  sourceType: 'GITHUB' | 'LOCAL'
   currentSnapshot: ProjectSnapshotView | null
   latestJob: JobSummary | null
   selectedAreas: AreaType[]
@@ -331,6 +332,17 @@ export type FlowDetail = {
   evidences: FeatureEvidenceView[]
 }
 
+export type FindingJudgmentStatus = 'NEEDS_REVIEW' | 'ACCEPTED' | 'FALSE_POSITIVE' | 'RESOLVED'
+
+export type FindingJudgment = {
+  status: FindingJudgmentStatus
+  reason: string
+  judgedBy: number | null
+  judgedAt: string | null
+  needsReview: boolean
+  hidden: boolean
+}
+
 export type FindingView = {
   id: number
   areaType: string | null
@@ -340,7 +352,52 @@ export type FindingView = {
   detail: string | null
   status: string
   nodeId: number | null
+  stableKey: string
+  ruleId: string
+  ruleVersion: string
+  judgment: FindingJudgment
   evidences: FeatureEvidenceView[]
+}
+
+export type LocalSourceStatus = {
+  state: 'UP_TO_DATE' | 'CHANGED' | 'PATH_MISSING' | 'REAUTHORIZATION_REQUIRED' | 'NOT_LOCAL' | 'NO_SNAPSHOT'
+  snapshotId: number | null
+  changes: { added: number; modified: number; deleted: number; total: number }
+  changedPaths: string[]
+  fullAnalysisRequired: boolean
+  message: string | null
+}
+
+export type SnapshotOption = {
+  id: number
+  commitSha: string
+  status: string
+  analyzedAt: string | null
+}
+
+export type SnapshotItemChange = {
+  type: string
+  key: string
+  beforeName: string | null
+  afterName: string | null
+}
+
+export type SnapshotCategoryChanges = {
+  added: SnapshotItemChange[]
+  removed: SnapshotItemChange[]
+  changed: SnapshotItemChange[]
+}
+
+export type SnapshotComparison = {
+  baseSnapshotId: number
+  targetSnapshotId: number
+  features: SnapshotCategoryChanges
+  flows: SnapshotCategoryChanges
+  findings: SnapshotCategoryChanges
+  structure: { nodes: SnapshotCategoryChanges; relationships: SnapshotCategoryChanges }
+  coverage: { before: CoverageReport; after: CoverageReport }
+  renameCandidates: SnapshotItemChange[]
+  regressionWarnings: string[]
 }
 
 export type ImpactNodeView = {
@@ -408,6 +465,7 @@ export type AiAskBody = {
   focusedNoteId?: number | null
   focusedTaskId?: number | null
   selectedAreas?: string[]
+  excludedContextIds?: string[]
 }
 
 export type NoteRefView = {
@@ -566,4 +624,86 @@ export type WhatIfView = {
   impact: ImpactView
   explanation: string
   claims: AiClaim[]
+}
+
+export type FileCoverage = {
+  discoveredFiles: number
+  analyzedFiles: number
+  skippedForCount: number
+  skippedForSize: number
+  skippedBinary: number
+}
+
+export type LanguageCoverage = {
+  language: string
+  total: number
+  analyzed: number
+  skipped: number
+  failed: number
+}
+
+export type ExcludedFolder = {
+  path: string
+  reason: string
+}
+
+export type AnalyzerStatusView = {
+  name: string
+  status: string
+  failureReason: string | null
+}
+
+export type PartialResultInfo = {
+  featuresPartial: boolean
+  flowsPartial: boolean
+  graphPartial: boolean
+  reason: string | null
+}
+
+export type CoverageReport = {
+  fileCoverage: FileCoverage
+  languageCoverage: LanguageCoverage[]
+  excludedFolders: ExcludedFolder[]
+  analyzerStatuses: AnalyzerStatusView[]
+  partialResults: PartialResultInfo
+  retryableIssues: string[]
+  unsupportedItems: string[]
+}
+
+// P1: IDE Open
+export type IdeType = 'vscode' | 'cursor' | 'intellij' | 'webstorm'
+
+export type IdeOpenRequest = {
+  filePath: string
+  line: number
+  ide: IdeType
+}
+
+export type IdeOpenResponse = {
+  uri: string
+  commitMismatch: boolean
+  snapshotCommit: string | null
+  currentCommit: string | null
+}
+
+// P1: AI Preview
+export type ContextItem = {
+  id: string
+  type: string
+  label: string
+  charCount: number
+  masked: boolean
+}
+
+export type AiPreviewResponse = {
+  contextItems: ContextItem[]
+  fileRefs: string[]
+  totalChars: number
+  estimatedInputTokens: number
+  estimatedOutputTokens: number
+  estimatedCostUsd: number
+  provider: string
+  model: string
+  maskedSecrets: number
+  localOnly: boolean
 }
