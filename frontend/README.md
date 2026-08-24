@@ -1,3 +1,5 @@
+**Languages:** English | [한국어](README.ko.md)
+
 # Code Intelligence frontend
 
 React 19 + TypeScript strict-mode + Vite SPA for the browser-based local

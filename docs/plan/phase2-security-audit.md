@@ -1,3 +1,5 @@
+**Languages:** English | [한국어](phase2-security-audit.ko.md)
+
 # Phase 2 security audit (task 2-12)
 
 > **역사 문서:** 이 감사 결과는 해당 Phase 시점의 코드와 의존성을 대상으로

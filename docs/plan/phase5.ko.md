@@ -1,4 +1,4 @@
-**Languages:** English | [한국어](phase5.ko.md)
+**언어:** [English](phase5.md) | 한국어
 
 # Phase 5 — Advanced 구현 계획
 

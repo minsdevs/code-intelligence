@@ -1,4 +1,4 @@
-**Languages:** English | [한국어](phase3.ko.md)
+**언어:** [English](phase3.md) | 한국어
 
 # Phase 3 — AI 구현 계획
 

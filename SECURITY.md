@@ -1,3 +1,5 @@
+**Languages:** English | [한국어](SECURITY.ko.md)
+
 # Security Policy
 
 ## Scope

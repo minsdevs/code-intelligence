@@ -1,4 +1,4 @@
-**Languages:** English | [한국어](phase4.ko.md)
+**언어:** [English](phase4.md) | 한국어
 
 # Phase 4 — Learning / Productivity 구현 계획
 

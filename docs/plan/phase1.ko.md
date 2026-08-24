@@ -1,4 +1,4 @@
-**Languages:** English | [한국어](phase1.ko.md)
+**언어:** [English](phase1.md) | 한국어
 
 # Phase 1 — Repository Intelligence Core 구현 계획
 

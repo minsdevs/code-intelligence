@@ -1,3 +1,5 @@
+**Languages:** English | [한국어](README.ko.md)
+
 # Code Intelligence
 
 A personal workspace that analyzes an entire GitHub repository, automatically

@@ -1,4 +1,4 @@
-**Languages:** English | [한국어](phase2.ko.md)
+**언어:** [English](phase2.md) | 한국어
 
 # Phase 2 — Cross-domain Intelligence 구현 계획
 

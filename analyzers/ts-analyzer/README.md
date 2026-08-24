@@ -1,3 +1,5 @@
+**Languages:** English | [한국어](README.ko.md)
+
 # ts-analyzer sidecar
 
 Stateless NestJS service that parses TypeScript/JavaScript in memory with
