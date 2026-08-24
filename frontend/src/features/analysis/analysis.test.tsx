@@ -39,6 +39,17 @@ const findings: FindingView[] = [
     detail: 'No backend endpoint matched this call.',
     status: 'OPEN',
     nodeId: 21,
+    stableKey: 'UNMATCHED_API_CALL|component:TodosPage',
+    ruleId: 'UNMATCHED_API_CALL',
+    ruleVersion: '1',
+    judgment: {
+      status: 'NEEDS_REVIEW',
+      reason: '',
+      judgedBy: null,
+      judgedAt: null,
+      needsReview: true,
+      hidden: false,
+    },
     evidences: [
       {
         filePath: 'src/pages/TodosPage.tsx',
@@ -93,7 +104,35 @@ function installFetch() {
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
     const url = requestUrl(input)
     const path = url.pathname
+    if (path === '/api/projects/7/findings/5/judgment') {
+      return jsonResponse({
+        status: 'FALSE_POSITIVE', reason: 'expected external route', judgedBy: 1,
+        judgedAt: '2026-08-24T00:00:00Z', needsReview: false, hidden: true,
+      })
+    }
     if (path === '/api/projects/7/findings') return jsonResponse(findings)
+    if (path === '/api/projects/7/snapshots') {
+      return jsonResponse([
+        { id: 2, commitSha: 'bbbbbbbb', status: 'READY', analyzedAt: null },
+        { id: 1, commitSha: 'aaaaaaaa', status: 'READY', analyzedAt: null },
+      ])
+    }
+    if (path === '/api/projects/7/snapshots/compare') {
+      const empty = { added: [], removed: [], changed: [] }
+      const coverage = {
+        fileCoverage: { discoveredFiles: 10, analyzedFiles: 10, skippedForCount: 0, skippedForSize: 0, skippedBinary: 0 },
+        languageCoverage: [], excludedFolders: [], analyzerStatuses: [],
+        partialResults: { featuresPartial: false, flowsPartial: false, graphPartial: false, reason: null },
+        retryableIssues: [], unsupportedItems: [],
+      }
+      return jsonResponse({
+        baseSnapshotId: 1, targetSnapshotId: 2,
+        features: { added: [{ type: 'ADDED', key: 'checkout', beforeName: null, afterName: 'checkout' }], removed: [], changed: [] },
+        flows: empty, findings: empty, structure: { nodes: empty, relationships: empty },
+        coverage: { before: coverage, after: coverage }, renameCandidates: [],
+        regressionWarnings: ['flows decreased by more than 30%'],
+      })
+    }
     if (path === '/api/projects/7/impact') return jsonResponse(impact)
     if (path === '/api/projects/7/graph/nodes') return jsonResponse(nodes)
     if (path === '/api/ai/status') return jsonResponse({ configured: true, provider: 'mock' })
@@ -157,6 +196,15 @@ afterEach(() => {
 })
 
 describe('AnalysisPage', () => {
+  it('compares retained snapshots across analysis categories and coverage', async () => {
+    renderAnalysis()
+    const panel = await screen.findByRole('region', { name: 'Snapshot comparison' })
+    expect(within(panel).getByText('Features')).toBeInTheDocument()
+    expect(within(panel).getByText('+1 ~0 -0')).toBeInTheDocument()
+    expect(within(panel).getByText(/coverage 10 → 10/)).toBeInTheDocument()
+    expect(within(panel).getByRole('alert')).toHaveTextContent('flows decreased')
+  })
+
   it('lists findings and loads impact when a finding with nodeId is selected', async () => {
     renderAnalysis()
 
@@ -192,6 +240,24 @@ describe('AnalysisPage', () => {
         )
       })
       expect(searched).toBe(true)
+    })
+  })
+
+  it('saves a false-positive judgment and can request hidden findings', async () => {
+    renderAnalysis()
+    await screen.findByText('Unmatched GET /api/missing')
+    fireEvent.change(screen.getByLabelText('Finding judgment'), { target: { value: 'FALSE_POSITIVE' } })
+    fireEvent.change(screen.getByLabelText('Judgment reason'), { target: { value: 'expected external route' } })
+    fireEvent.click(screen.getByRole('button', { name: '판정 저장' }))
+
+    await waitFor(() => {
+      const request = fetchMock.mock.calls.find((call) => requestUrl(call[0] as RequestInfo | URL).pathname.endsWith('/judgment'))
+      expect(request?.[1]).toMatchObject({ method: 'PUT' })
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '숨긴 오탐 표시' }))
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some((call) => requestUrl(call[0] as RequestInfo | URL).searchParams.get('includeHidden') === 'true')).toBe(true)
     })
   })
 

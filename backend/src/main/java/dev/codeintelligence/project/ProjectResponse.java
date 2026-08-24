@@ -10,6 +10,7 @@ public record ProjectResponse(
         String repoOwner,
         String repoName,
         String defaultBranch,
+        String sourceType,
         SnapshotView currentSnapshot,
         JobSummaryResponse latestJob,
         List<String> selectedAreas,

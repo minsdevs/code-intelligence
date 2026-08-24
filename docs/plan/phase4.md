@@ -1,5 +1,10 @@
 # Phase 4 — Learning / Productivity 구현 계획
 
+> **역사 문서:** 이 계획과 체크박스는 해당 Phase 구현 당시의 범위·검증
+> 기록이다. 현재 RC release 상태로 해석하지 않는다. 현행 안내는
+> [README](../../README.md), RC 검증·blocker는
+> [ADDITIONAL_FEATURES](../../ADDITIONAL_FEATURES.md)를 우선한다.
+
 - 근거: `기획서.md` v1.2 (§6.2 Notes/Tasks, §14.1 TaskGeneration, §15.2–15.3, §16 Search, §17, §21 Phase 4)
 - 불변 원칙: 사실은 정적 분석만 · AI 초안은 `origin=AI` + 승인 전 DRAFT · clone 코드 실행 금지 · 키는 env only
 - **Phase 5 시작 금지** (PR Review / Playground / Growth 리포트 / What-if)

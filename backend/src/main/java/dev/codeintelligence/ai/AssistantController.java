@@ -30,7 +30,8 @@ public class AssistantController {
             Long focusedFindingId,
             Long focusedNoteId,
             Long focusedTaskId,
-            List<String> selectedAreas) {}
+            List<String> selectedAreas,
+            List<String> excludedContextIds) {}
 
     private final AssistantService assistantService;
     private final JsonMapper json;
@@ -80,7 +81,7 @@ public class AssistantController {
 
     private static AssistantService.AskRequest toRequest(AskBody body) {
         AskBody safe = body == null
-                ? new AskBody(null, null, null, null, null, null, null, null, null, null, List.of())
+                ? new AskBody(null, null, null, null, null, null, null, null, null, null, List.of(), List.of())
                 : body;
         return new AssistantService.AskRequest(
                 safe.conversationId(),
@@ -94,6 +95,7 @@ public class AssistantController {
                         safe.focusedFindingId(),
                         safe.focusedNoteId(),
                         safe.focusedTaskId(),
-                        safe.selectedAreas() == null ? List.of() : safe.selectedAreas()));
+                        safe.selectedAreas() == null ? List.of() : safe.selectedAreas()),
+                safe.excludedContextIds() == null ? List.of() : safe.excludedContextIds());
     }
 }

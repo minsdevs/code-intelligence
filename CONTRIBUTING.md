@@ -15,11 +15,18 @@ cd backend && ./gradlew spotlessCheck build
 cd ../frontend && npm ci && npm run lint && npm run typecheck && npm test -- --run && npm run build
 cd ../analyzers/ts-analyzer && npm ci && npm test && npm run typecheck && npm run build
 cd ../tree-analyzer && npm ci && npm test && npm run typecheck && npm run build
+cd ../.. && ./quality-gate
 ```
 
-If Docker, PostgreSQL, Redis, or an external provider is unavailable, state the
-unverified scope in the pull request. Do not report environment-dependent tests
-as passing when they were not run.
+Docker must be running for backend Testcontainers and `./quality-gate`; the
+quality gate also checks the reviewed corpus/time/RSS thresholds in
+`quality-baseline.env`. Do not update that baseline implicitly or use
+`QUALITY_BASELINE_UPDATE`—baseline changes require an explicit reviewed edit.
+
+Run `bash -n start-local stop-local check-local quality-gate` when changing the
+local scripts. If Docker, PostgreSQL, Redis, a browser session, or an external
+provider is unavailable, state the unverified scope. Unit/API smoke tests do not
+count as browser E2E, and result counts do not count as an accuracy oracle.
 
 ## Security and privacy
 

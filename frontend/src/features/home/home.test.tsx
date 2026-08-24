@@ -24,6 +24,7 @@ const readyProject: Project = {
   repoOwner: 'octocat',
   repoName: 'Hello-World',
   defaultBranch: 'main',
+  sourceType: 'GITHUB',
   currentSnapshot: {
     id: 3,
     commitSha: 'abc1234deadbeef',
@@ -51,6 +52,15 @@ const readyProject: Project = {
   },
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-04-01T12:00:00Z',
+}
+
+const localProject: Project = {
+  ...readyProject,
+  id: 9,
+  name: 'local-app',
+  repoOwner: 'local',
+  repoName: 'local-app',
+  sourceType: 'LOCAL',
 }
 
 const analyzingProject: Project = {
@@ -86,6 +96,14 @@ function installFetch() {
     const path = requestUrl(input).pathname
     if (path === '/api/projects') {
       return jsonResponse(projects)
+    }
+    if (path === '/api/projects/9/local-source-status') {
+      return jsonResponse({
+        state: 'CHANGED', snapshotId: 3,
+        changes: { added: 2, modified: 1, deleted: 0, total: 3 },
+        changedPaths: ['A src/New.ts', 'M src/App.ts'],
+        fullAnalysisRequired: true, message: 'A full analysis will run.',
+      })
     }
     return jsonResponse({ title: 'Not Found' }, 404)
   })
@@ -125,6 +143,12 @@ describe('HomePage', () => {
     expect(screen.getByText(/abc1234 wire auth filter/)).toBeInTheDocument()
     expect(screen.getByText(/#4 Harden sessions \(closed\)/)).toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: 'Import repository' }).length).toBeGreaterThan(0)
+  })
+
+  it('shows local source freshness and change count on a project card', async () => {
+    projects = [localProject]
+    renderHome()
+    expect(await screen.findByText('변경됨 · 3')).toBeInTheDocument()
   })
 
   it('shows an analyzing badge for in-progress jobs', async () => {

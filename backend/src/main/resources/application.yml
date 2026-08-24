@@ -73,6 +73,8 @@ app:
   tree-analyzer:
     base-url: ${TREE_ANALYZER_BASE_URL:}
     timeout-seconds: ${TREE_ANALYZER_TIMEOUT_SECONDS:30}
+  local-import:
+    allowed-roots: ${LOCAL_IMPORT_ALLOWED_ROOTS:}
   ai:
     provider: ${AI_PROVIDER:}
     max-context-tokens: ${AI_MAX_CONTEXT_TOKENS:8000}

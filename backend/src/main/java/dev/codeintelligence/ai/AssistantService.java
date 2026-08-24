@@ -11,6 +11,7 @@ import dev.codeintelligence.project.ProjectNotFoundException;
 import dev.codeintelligence.project.ProjectRepository;
 import dev.codeintelligence.project.SnapshotRepository;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -26,7 +27,11 @@ public class AssistantService {
     private static final int QUESTION_MAX = 4000;
 
     public record AskRequest(
-            Long conversationId, String question, String intent, ContextRetrievalService.AskContext context) {}
+            Long conversationId,
+            String question,
+            String intent,
+            ContextRetrievalService.AskContext context,
+            List<String> excludedContextIds) {}
 
     public record AskResponse(
             long conversationId,
@@ -112,8 +117,12 @@ public class AssistantService {
         ContextRetrievalService.AskContext ctx = request.context() == null
                 ? new ContextRetrievalService.AskContext(null, null, null, null, null, null, null, List.of())
                 : request.context();
-        ContextRetrievalService.Retrieved retrieved =
-                retrieval.retrieve(userId, projectId, snapshotId, project.getClonePath(), ctx, question);
+        Set<String> excluded = request.excludedContextIds() == null
+                        || request.excludedContextIds().isEmpty()
+                ? Set.of()
+                : Set.copyOf(request.excludedContextIds());
+        ContextRetrievalService.Retrieved retrieved = retrieval.retrieveWithExclusions(
+                userId, projectId, snapshotId, project.getClonePath(), ctx, question, excluded);
         String userPrompt = SecretMask.redact(PromptBuilder.user(question, retrieved.text()));
         AIProvider.ChatResponse raw = provider.chat(new AIProvider.ChatRequest(systemPrompt(intent), userPrompt, true));
         AIProvider.ChatResponse validated = validator.validate(projectId, snapshotId, raw);

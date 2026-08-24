@@ -1,5 +1,10 @@
 # Phase 2 — Cross-domain Intelligence 구현 계획
 
+> **역사 문서:** 이 계획과 체크박스는 해당 Phase 구현 당시의 범위·검증
+> 기록이다. 현재 RC release 상태로 해석하지 않는다. 현행 안내는
+> [README](../../README.md), RC 검증·blocker는
+> [ADDITIONAL_FEATURES](../../ADDITIONAL_FEATURES.md)를 우선한다.
+
 - 근거: `기획서.md` v1.2 (§4.2, §6.2, §8.1 step 10–11, §10.3–10.4, §11–13, §21) · Phase 1 완료(main, PR #20)
 - 불변 원칙: 사실은 정적 분석만(§10.5) · evidence 필수(§9.1) · snapshot 귀속 · **clone한 코드는 절대 실행하지 않는다**(§18). ts-morph/JavaParser는 parse-only.
 - 스택 제약: 기존 스택 유지. 신규는 기획서 명시분 — NestJS + ts-morph sidecar, tree-sitter fallback(사이드카). Neo4j/Elasticsearch/AI 금지.

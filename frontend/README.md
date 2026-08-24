@@ -1,32 +1,61 @@
-# Code Intelligence — Frontend
+# Code Intelligence frontend
 
-React 19 + TypeScript(strict) + Vite SPA. 기획서 §15의 3-pane 워크스페이스 셸(Phase 0 스캐폴딩).
+React 19 + TypeScript strict-mode + Vite SPA for the browser-based local
+workspace. It contains the import flow and the Features, Architecture, Flows,
+Code, History, Analysis, Notes, Tasks, Review, Playground, Growth, Search,
+Settings, and context-aware AI surfaces. It is not a native desktop runtime.
 
-## Stack
+## Requirements and backend
 
-- React 19, React Router 7, TanStack Query 5, Zustand 5
-- Tailwind CSS 4 (`@tailwindcss/vite`)
-- Vitest + Testing Library, ESLint(flat) + Prettier
+Use Node.js 24 for the RC/CI baseline. The Vite dev server runs on
+`http://localhost:5173` and proxies local API/auth routes to the backend. For a
+backend on another port, set `VITE_BACKEND_URL` to a loopback URL; never put a
+secret in a `VITE_*` variable because Vite exposes it to the browser bundle.
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
 
 ## Scripts
 
-| 명령                   | 설명                          |
-| ---------------------- | ----------------------------- |
-| `npm run dev`          | 개발 서버                     |
-| `npm run build`        | 타입체크 + 프로덕션 빌드      |
-| `npm run lint`         | ESLint                        |
-| `npm run typecheck`    | `tsc -b`                      |
-| `npm test`             | Vitest (`-- --run` 단발 실행) |
-| `npm run format`       | Prettier 쓰기                 |
-| `npm run format:check` | Prettier 검사                 |
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Start the Vite development server |
+| `npm run build` | Typecheck with `tsc -b`, then build production assets |
+| `npm run lint` | Run ESLint over the package |
+| `npm run typecheck` | Run `tsc -b` without Vite build |
+| `npm test -- --run` | Run Vitest once (CI form) |
+| `npm test` | Run Vitest in its default interactive/watch behavior |
+| `npm run format` | Write Prettier formatting |
+| `npm run format:check` | Check Prettier formatting |
+| `npm run preview` | Preview a completed production build |
+| `npm run gen:api` | Generate `src/api/generated.ts` from a backend running at `127.0.0.1:8080` |
 
-## 구조 (기획서 §5.2)
+The full frontend gate is:
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test -- --run
+npm run build
+```
+
+## Source layout
 
 ```text
 src/
-├── app/          # 라우팅, 3-pane 레이아웃 (AppLayout, Sidebar, AiPanel)
-├── features/     # 화면 단위 (home, projects, search, settings)
-├── components/   # 공용 UI
-├── stores/       # Zustand (AI 패널 상태 등)
-└── api/          # Phase 1에서 openapi-typescript 클라이언트 추가 예정
+├── app/          # routing, shell, sidebar, AI panel
+├── features/     # product screens and workflows
+├── components/   # shared UI
+├── stores/       # Zustand UI/context state
+├── api/          # API wrappers and shared response types
+├── lib/          # i18n and shared helpers
+└── test/         # test setup/support
 ```
+
+The current RC record is in [../ADDITIONAL_FEATURES.md](../ADDITIONAL_FEATURES.md);
+real browser E2E remains a release blocker and must not be inferred from Vitest
+or build success.

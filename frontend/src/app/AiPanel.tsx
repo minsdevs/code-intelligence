@@ -2,8 +2,9 @@ import { useMemo, useState, type FormEvent, type PointerEvent as ReactPointerEve
 import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { askAiStream, getAiStatus, parseEvidenceRef } from '../api/ai'
+import { previewAiContext } from '../api/aiPreview'
 import { ApiError } from '../api/client'
-import type { AiAlternative, AiAskBody, AiAskResponse, AiClaim } from '../api/types'
+import type { AiAlternative, AiAskBody, AiAskResponse, AiClaim, AiPreviewResponse } from '../api/types'
 import { projectIdFromPath, workspaceViewFromPath } from '../lib/projectId'
 import { useT } from '../lib/i18n'
 import { useUiStore } from '../stores/uiStore'
@@ -48,6 +49,10 @@ export default function AiPanel() {
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [sending, setSending] = useState(false)
+  const [preview, setPreview] = useState<AiPreviewResponse | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [localDataOnly, setLocalDataOnly] = useState(false)
+  const [excludedItems, setExcludedItems] = useState<Set<string>>(new Set())
 
   const chips = useMemo(() => {
     const items: string[] = []
@@ -94,6 +99,13 @@ export default function AiPanel() {
   async function submit(text: string, intent?: string | null) {
     const trimmed = text.trim()
     if (!trimmed || projectId == null || sending) return
+    if (localDataOnly) {
+      // Local data only mode: do not send any external AI request.
+      // Show preview info only — no external API call is made.
+      const turn: ChatTurn = { question: trimmed, streamed: '', response: null, error: 'Local data only mode is active. No external AI request was sent. Disable "Local data only" to ask AI questions.' }
+      setTurns((prev) => [...prev, turn])
+      return
+    }
     const usedIntent = intent ?? pendingIntent
     setPendingIntent(null)
     setQuestion('')
@@ -110,6 +122,7 @@ export default function AiPanel() {
       focusedNoteId,
       focusedTaskId,
       selectedAreas,
+      excludedContextIds: excludedItems.size > 0 ? Array.from(excludedItems) : undefined,
     }
     const turn: ChatTurn = { question: trimmed, streamed: '', response: null, error: null }
     setTurns((prev) => [...prev, turn])
@@ -139,6 +152,33 @@ export default function AiPanel() {
   function onSubmit(event: FormEvent) {
     event.preventDefault()
     void submit(question)
+  }
+
+  async function onPreview() {
+    const trimmed = question.trim()
+    if (!trimmed || projectId == null || previewing) return
+    setPreviewing(true)
+    setPreview(null)
+    const body: AiAskBody = {
+      conversationId,
+      question: trimmed,
+      view,
+      focusedFile,
+      focusedNodeId: focusedNode?.id ?? null,
+      focusedCommitSha,
+      focusedFindingId,
+      focusedNoteId,
+      focusedTaskId,
+      selectedAreas,
+    }
+    try {
+      const result = await previewAiContext(projectId, body)
+      setPreview(result)
+    } catch {
+      setPreview(null)
+    } finally {
+      setPreviewing(false)
+    }
   }
 
   if (!open) {
@@ -291,6 +331,63 @@ export default function AiPanel() {
         </div>
 
         <form onSubmit={onSubmit} className="shrink-0 border-t border-line p-3">
+          {preview && (
+            <div className="mb-2 rounded-md border border-line bg-surface-2 p-2 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink">Context Preview</span>
+                <button type="button" onClick={() => { setPreview(null); setExcludedItems(new Set()) }} className="text-ink-muted hover:text-ink">✕</button>
+              </div>
+              <div className="mt-1 space-y-0.5 text-ink-muted">
+                <p>Provider: {preview.provider} / {preview.model}</p>
+                <p>Input tokens: ~{preview.estimatedInputTokens.toLocaleString()} · Output: ~{preview.estimatedOutputTokens.toLocaleString()}</p>
+                <p>Est. cost: ${preview.estimatedCostUsd.toFixed(5)}</p>
+                <p>Masked secrets: {preview.maskedSecrets} · Files: {preview.fileRefs.length}</p>
+                {localDataOnly ? (
+                  <p className="text-warn">🔒 Local data only — AI request will be blocked</p>
+                ) : (
+                  <p className="text-ok">✓ Preview only — no external request yet</p>
+                )}
+              </div>
+              <details className="mt-1">
+                <summary className="cursor-pointer text-ink-muted hover:text-ink">Context items ({preview.contextItems.length - excludedItems.size} / {preview.contextItems.length} included)</summary>
+                <ul className="mt-1 max-h-24 overflow-y-auto space-y-0.5">
+                  {preview.contextItems.map((item) => (
+                    <li key={item.id} className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={!excludedItems.has(item.id)}
+                        onChange={() => {
+                          setExcludedItems(prev => {
+                            const next = new Set(prev)
+                            if (next.has(item.id)) next.delete(item.id)
+                            else next.add(item.id)
+                            return next
+                          })
+                        }}
+                        className="h-3 w-3 rounded"
+                        aria-label={`Include ${item.type}: ${item.label}`}
+                      />
+                      <span className={`rounded bg-surface-3 px-1 text-[10px] font-mono ${excludedItems.has(item.id) ? 'opacity-40 line-through' : ''}`}>{item.type}</span>
+                      <span className={`truncate ${excludedItems.has(item.id) ? 'opacity-40 line-through' : ''}`}>{item.label}</span>
+                      <span className="ml-auto text-ink-faint">{item.charCount}c</span>
+                      {item.masked && <span className="text-warn">🔒</span>}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </div>
+          )}
+          <div className="mb-2 flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-[11px] text-ink-muted">
+              <input
+                type="checkbox"
+                checked={localDataOnly}
+                onChange={(e) => setLocalDataOnly(e.target.checked)}
+                className="h-3 w-3 rounded"
+              />
+              Local data only (no external AI)
+            </label>
+          </div>
           <div className="flex gap-2">
             <input
               type="text"
@@ -301,6 +398,15 @@ export default function AiPanel() {
               placeholder={configured ? t('ai.placeholder') : t('ai.placeholderDisabled')}
               className="min-w-0 flex-1 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-ink placeholder:text-ink-faint disabled:cursor-not-allowed disabled:opacity-60"
             />
+            <button
+              type="button"
+              onClick={() => void onPreview()}
+              disabled={!canAsk || question.trim().length === 0 || previewing}
+              className="rounded-md border border-line-strong bg-surface-2 px-2 py-1.5 text-[12px] text-ink-muted disabled:cursor-not-allowed disabled:opacity-60"
+              title="Preview what will be sent"
+            >
+              {previewing ? '...' : '👁'}
+            </button>
             <button
               type="submit"
               disabled={!canAsk || question.trim().length === 0}

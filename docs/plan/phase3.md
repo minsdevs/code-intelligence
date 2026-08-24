@@ -1,5 +1,10 @@
 # Phase 3 — AI 구현 계획
 
+> **역사 문서:** 이 계획과 체크박스는 해당 Phase 구현 당시의 범위·검증
+> 기록이다. 현재 RC release 상태로 해석하지 않는다. 현행 안내는
+> [README](../../README.md), RC 검증·blocker는
+> [ADDITIONAL_FEATURES](../../ADDITIONAL_FEATURES.md)를 우선한다.
+
 - 근거: `기획서.md` v1.2 (§4.4, §8 Indexing, §14, §15.1–15.3, §19, §21 Phase 3)
 - 불변 원칙: 사실은 정적 분석만 · AI는 해석만 · evidence 없는 단정 금지 · **clone 코드 실행 금지** · 모델명은 설정에만
 - 스택: Spring RestClient (SDK 없음). WebFlux 미도입 — `AIProvider.stream`은 `Consumer<String>` + MVC `SseEmitter`.

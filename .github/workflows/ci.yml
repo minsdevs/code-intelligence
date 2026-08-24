@@ -28,6 +28,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Format check, tests, build
         run: ./gradlew spotlessCheck build
+      - name: Multi-language quality and performance regression gate
+        run: ../quality-gate
 
   frontend:
     name: Frontend (Vite)
