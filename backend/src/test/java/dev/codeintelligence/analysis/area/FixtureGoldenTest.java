@@ -181,7 +181,7 @@ class FixtureGoldenTest {
             case "spring-mini" -> 13;
             case "react-mini" -> 10;
             case "fullstack-mini" -> 25;
-            case "infra-mini" -> 6;
+            case "infra-mini" -> 7;
             default -> throw new IllegalArgumentException(fixture);
         };
     }
@@ -192,7 +192,7 @@ class FixtureGoldenTest {
             case "react-mini" -> Map.of("json", 2, "html", 1, "typescript", 7);
             case "fullstack-mini" ->
                 Map.of("java", 8, "gradle", 2, "yaml", 3, "sql", 2, "json", 2, "html", 1, "typescript", 7);
-            case "infra-mini" -> Map.of("dockerfile", 1, "yaml", 2, "hcl", 1, "shell", 1, "markdown", 1);
+            case "infra-mini" -> Map.of("dockerfile", 1, "yaml", 2, "hcl", 1, "shell", 1, "markdown", 2);
             default -> throw new IllegalArgumentException(fixture);
         };
     }
