@@ -1,5 +1,6 @@
 package dev.codeintelligence.analysis.feature;
 
+import dev.codeintelligence.analysis.graph.AreaPathTagger;
 import dev.codeintelligence.common.AnalysisProperties;
 import dev.codeintelligence.evidence.EvidenceKind;
 import dev.codeintelligence.evidence.EvidenceService;
@@ -161,7 +162,9 @@ public class FeatureDetectionStep implements JobStep {
                         rs.getString("file_path"),
                         (Integer) rs.getObject("line_start")))
                 .list();
-        return endpointSeeds(routes);
+        return endpointSeeds(routes.stream()
+                .filter(route -> !"TESTING".equals(AreaPathTagger.tag(route.filePath())))
+                .toList());
     }
 
     private List<FeatureMerger.Seed> packageSeeds(List<TypeRow> types) {
@@ -222,7 +225,8 @@ public class FeatureDetectionStep implements JobStep {
     }
 
     private List<EndpointRow> loadEndpoints(long snapshotId) {
-        return jdbc.sql("""
+        return jdbc
+                .sql("""
                         select n.natural_key, n.name, e.http_method, e.path, f.path as file_path, n.line_start
                         from api_endpoints e
                         join graph_nodes n on n.id = e.node_id
@@ -237,7 +241,10 @@ public class FeatureDetectionStep implements JobStep {
                         rs.getString("path"),
                         rs.getString("file_path"),
                         (Integer) rs.getObject("line_start")))
-                .list();
+                .list()
+                .stream()
+                .filter(endpoint -> !"TESTING".equals(AreaPathTagger.tag(endpoint.filePath())))
+                .toList();
     }
 
     private List<TypeRow> loadBackendTypes(long snapshotId) {
@@ -256,7 +263,8 @@ public class FeatureDetectionStep implements JobStep {
     }
 
     private List<FeatureLinkBuilder.GraphNode> loadNodes(long snapshotId) {
-        return jdbc.sql("""
+        return jdbc
+                .sql("""
                         select n.id, n.node_type, n.natural_key, n.name, f.path as file_path,
                                n.metadata->>'layer' as layer
                         from graph_nodes n
@@ -271,7 +279,10 @@ public class FeatureDetectionStep implements JobStep {
                         rs.getString("name"),
                         rs.getString("file_path"),
                         rs.getString("layer")))
-                .list();
+                .list()
+                .stream()
+                .filter(node -> !"TESTING".equals(AreaPathTagger.tag(node.filePath())))
+                .toList();
     }
 
     private List<FeatureLinkBuilder.GraphEdge> loadEdges(long snapshotId) {

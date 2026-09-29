@@ -1,9 +1,25 @@
 import { Node, Project, type SourceFile, SyntaxKind, ts } from 'ts-morph'
-import type { AnalyzeFile, AnalyzeResponse, ApiCallHit, EndpointHit, ImportHit, RouteHit, SymbolHit } from './types'
-import { isTsJs, resolveRelativeImport } from './paths'
+import type { AnalyzeFile, AnalyzeResponse, ApiCallHit, EndpointHit, RouteHit, SymbolHit } from './types'
+import { isTsJs } from './paths'
 import { extractGeneric } from './generic-extractor'
+import { extractSemanticGraph } from './semantic-extractor'
 
-const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
+const HTTP_METHODS: Record<string, true> = {
+  GET: true,
+  POST: true,
+  PUT: true,
+  PATCH: true,
+  DELETE: true,
+  HEAD: true,
+  OPTIONS: true,
+}
+
+const STORE_FACTORIES_BY_SOURCE: Record<string, string[]> = {
+  zustand: ['create', 'createStore'],
+  redux: ['createStore'],
+  '@reduxjs/toolkit': ['createSlice', 'configureStore'],
+  pinia: ['defineStore'],
+}
 
 export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
   const tsFiles = files.filter((file) => isTsJs(file.path))
@@ -17,7 +33,7 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
       module: ts.ModuleKind.ESNext,
       esModuleInterop: true,
       skipLibCheck: true,
-      noResolve: true,
+      noResolve: false,
       strict: false,
     },
   })
@@ -31,9 +47,7 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
   const hooks: SymbolHit[] = []
   const stores: SymbolHit[] = []
   const apiCalls: ApiCallHit[] = []
-  const imports: ImportHit[] = []
   const symbols: SymbolHit[] = []
-  const pathSet = new Set(tsFiles.map((file) => file.path))
 
   for (const source of project.getSourceFiles()) {
     const filePath = source.getFilePath().replace(/^\//, '')
@@ -42,9 +56,10 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
     collectFileBasedRoutes(source, filePath, routes, endpoints, symbols)
     collectDeclarations(source, filePath, components, hooks, stores)
     collectApiCalls(source, filePath, apiCalls)
-    collectImports(source, filePath, pathSet, imports)
   }
   symbols.push(...extractGeneric(files))
+  const semantic = extractSemanticGraph(project, files)
+  endpoints.push(...semantic.endpoints)
 
   return {
     routes,
@@ -52,9 +67,12 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
     hooks,
     stores,
     apiCalls,
-    imports,
+    imports: semantic.imports,
     symbols,
     endpoints,
+    nodes: semantic.nodes,
+    edges: semantic.edges,
+    unresolvedCalls: semantic.unresolvedCalls,
   }
 }
 
@@ -285,7 +303,7 @@ function exportedHttpHandlers(source: SourceFile): { name: string; start: number
       continue
     }
     const name = fn.getName()
-    if (name && HTTP_METHODS.has(name.toUpperCase())) {
+    if (name && HTTP_METHODS[name.toUpperCase()]) {
       handlers.push({ name: name.toUpperCase(), start: fn.getStartLineNumber(), end: fn.getEndLineNumber() })
     }
   }
@@ -294,7 +312,7 @@ function exportedHttpHandlers(source: SourceFile): { name: string; start: number
       continue
     }
     const name = declaration.getName()
-    if (HTTP_METHODS.has(name.toUpperCase())) {
+    if (HTTP_METHODS[name.toUpperCase()]) {
       handlers.push({
         name: name.toUpperCase(),
         start: declaration.getStartLineNumber(),
@@ -341,19 +359,37 @@ function collectDeclarations(
         components.push({ name, kind: 'COMPONENT', filePath, lineStart: start, lineEnd: end })
       }
     }
-    if (Node.isCallExpression(node)) {
-      const callee = node.getExpression().getText()
-      if (callee === 'create' || callee.endsWith('.create') || callee === 'createSlice') {
-        stores.push({
-          name: enclosingName(node) ?? 'store',
-          kind: 'STORE',
-          filePath,
-          lineStart: node.getStartLineNumber(),
-          lineEnd: node.getEndLineNumber(),
-        })
-      }
+    if (Node.isCallExpression(node) && isImportedStoreFactory(node, source)) {
+      stores.push({
+        name: enclosingName(node) ?? 'store',
+        kind: 'STORE',
+        filePath,
+        lineStart: node.getStartLineNumber(),
+        lineEnd: node.getEndLineNumber(),
+      })
     }
   })
+}
+
+function isImportedStoreFactory(node: Node, source: SourceFile): boolean {
+  if (!Node.isCallExpression(node)) return false
+  const expression = node.getExpression().getText()
+  const dot = expression.indexOf('.')
+  const localName = dot < 0 ? expression : expression.slice(0, dot)
+  const memberName = dot < 0 ? null : expression.slice(dot + 1)
+  for (const declaration of source.getImportDeclarations()) {
+    const moduleSource = declaration.getModuleSpecifierValue()
+    const factories = STORE_FACTORIES_BY_SOURCE[moduleSource]
+    if (!factories) continue
+    const namespace = declaration.getNamespaceImport()
+    if (namespace?.getText() === localName && memberName && factories.includes(memberName)) return true
+    for (const named of declaration.getNamedImports()) {
+      const imported = named.getName()
+      const local = named.getAliasNode()?.getText() ?? imported
+      if (local === expression && factories.includes(imported)) return true
+    }
+  }
+  return false
 }
 
 function collectApiCalls(source: SourceFile, filePath: string, apiCalls: ApiCallHit[]): void {
@@ -375,51 +411,6 @@ function collectApiCalls(source: SourceFile, filePath: string, apiCalls: ApiCall
   })
 }
 
-function collectImports(source: SourceFile, filePath: string, pathSet: Set<string>, imports: ImportHit[]): void {
-  for (const decl of source.getImportDeclarations()) {
-    const spec = decl.getModuleSpecifierValue()
-    const resolved = resolveImportedFile(spec, filePath, pathSet)
-    if (!resolved) {
-      continue
-    }
-    const names: string[] = []
-    const def = decl.getDefaultImport()
-    if (def) {
-      names.push(def.getText())
-    }
-    for (const named of decl.getNamedImports()) {
-      names.push(named.getName())
-    }
-    if (names.length === 0) {
-      names.push('*')
-    }
-    for (const imported of names) {
-      imports.push({ fromPath: filePath, toPath: resolved, imported })
-    }
-  }
-}
-
-function resolveImportedFile(spec: string, fromPath: string, pathSet: Set<string>): string | null {
-  const relative = resolveRelativeImport(fromPath, spec)
-  if (!relative) {
-    return null
-  }
-  const candidates = [
-    relative,
-    `${relative}.ts`,
-    `${relative}.tsx`,
-    `${relative}.js`,
-    `${relative}.jsx`,
-    `${relative}/index.ts`,
-    `${relative}/index.tsx`,
-  ]
-  for (const candidate of candidates) {
-    if (pathSet.has(candidate)) {
-      return candidate
-    }
-  }
-  return relative
-}
 
 function parseApiCall(node: Node): { method: string; url: string } | null {
   if (!Node.isCallExpression(node)) {

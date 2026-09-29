@@ -7,12 +7,15 @@ import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -69,13 +72,15 @@ public final class FakeTsAnalyzer implements AutoCloseable {
         List<Map<String, Object>> components = new ArrayList<>();
         List<Map<String, Object>> apiCalls = new ArrayList<>();
         List<Map<String, Object>> imports = new ArrayList<>();
+        Set<String> paths =
+                files.stream().map(file -> String.valueOf(file.get("path"))).collect(Collectors.toSet());
         for (Map<String, Object> file : files) {
             String path = String.valueOf(file.get("path"));
             String content = String.valueOf(file.getOrDefault("content", ""));
             extractRoutes(path, content, routes);
             extractComponents(path, content, components);
             extractFetch(path, content, apiCalls);
-            extractImports(path, content, imports);
+            extractImports(path, content, paths, imports);
         }
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("routes", routes);
@@ -148,11 +153,22 @@ public final class FakeTsAnalyzer implements AutoCloseable {
         }
     }
 
-    private static void extractImports(String path, String content, List<Map<String, Object>> imports) {
+    private static void extractImports(
+            String path, String content, Set<String> paths, List<Map<String, Object>> imports) {
         Matcher matcher = IMPORT.matcher(content);
         while (matcher.find()) {
             String spec = matcher.group(3);
             if (spec == null || !spec.startsWith(".")) {
+                continue;
+            }
+            String base =
+                    Path.of(path).resolveSibling(spec).normalize().toString().replace('\\', '/');
+            String target = List.of("", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx").stream()
+                    .map(suffix -> base + suffix)
+                    .filter(paths::contains)
+                    .findFirst()
+                    .orElse(null);
+            if (target == null) {
                 continue;
             }
             String imported = matcher.group(1) != null ? matcher.group(1).replace(" ", "") : matcher.group(2);
@@ -166,7 +182,7 @@ public final class FakeTsAnalyzer implements AutoCloseable {
                 }
                 Map<String, Object> hit = new LinkedHashMap<>();
                 hit.put("fromPath", path);
-                hit.put("toPath", spec);
+                hit.put("toPath", target);
                 hit.put("imported", trimmed);
                 imports.add(hit);
             }

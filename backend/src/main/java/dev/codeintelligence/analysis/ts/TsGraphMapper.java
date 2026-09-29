@@ -25,6 +25,26 @@ final class TsGraphMapper {
         List<GraphEdgeDraft> edges = new ArrayList<>();
         List<AnalyzerEvidence> evidences = new ArrayList<>();
         Map<String, List<TsAnalyzeDtos.ApiCallHit>> callsByOwner = new LinkedHashMap<>();
+        Map<String, List<Map<String, Object>>> unresolvedBySource = new LinkedHashMap<>();
+        for (TsAnalyzeDtos.UnresolvedCallHit unresolved : response.unresolvedCalls()) {
+            if (unresolved.sourceKey() == null || unresolved.expression() == null) {
+                continue;
+            }
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("expression", unresolved.expression());
+            if (unresolved.filePath() != null) {
+                detail.put("filePath", unresolved.filePath());
+            }
+            if (unresolved.lineStart() != null) {
+                detail.put("lineStart", unresolved.lineStart());
+            }
+            if (unresolved.reason() != null) {
+                detail.put("reason", unresolved.reason());
+            }
+            unresolvedBySource
+                    .computeIfAbsent(unresolved.sourceKey(), key -> new ArrayList<>())
+                    .add(detail);
+        }
         for (TsAnalyzeDtos.ApiCallHit call : response.apiCalls()) {
             String owner = call.owner() == null ? "" : call.owner();
             callsByOwner.computeIfAbsent(owner, key -> new ArrayList<>()).add(call);
@@ -73,7 +93,7 @@ final class TsGraphMapper {
                 continue;
             }
             String key = NaturalKeys.endpoint(endpoint.method(), endpoint.path());
-            Map<String, Object> metadata = new LinkedHashMap<>();
+            Map<String, Object> metadata = new LinkedHashMap<>(endpoint.metadata());
             metadata.put("httpMethod", endpoint.method());
             metadata.put("path", endpoint.path());
             metadata.put("handlerKey", endpoint.handlerKey());
@@ -86,7 +106,9 @@ final class TsGraphMapper {
                     endpoint.lineEnd(),
                     "BACKEND",
                     metadata));
-            if (endpoint.filePath() != null) {
+            if (endpoint.ownerKey() != null && !endpoint.ownerKey().isBlank()) {
+                edges.add(GraphEdgeDraft.of(endpoint.ownerKey(), key, GraphEdgeType.EXPOSES, EdgeConfidence.CONFIRMED));
+            } else if (endpoint.filePath() != null) {
                 edges.add(GraphEdgeDraft.of(
                         NaturalKeys.file(endpoint.filePath()), key, GraphEdgeType.EXPOSES, EdgeConfidence.CONFIRMED));
             }
@@ -101,11 +123,20 @@ final class TsGraphMapper {
             if (imported.fromPath() == null || imported.toPath() == null) {
                 continue;
             }
-            edges.add(GraphEdgeDraft.of(
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("typeOnly", Boolean.TRUE.equals(imported.typeOnly()));
+            if (imported.imported() != null) {
+                metadata.put("localName", imported.imported());
+            }
+            if (imported.importedName() != null) {
+                metadata.put("importedName", imported.importedName());
+            }
+            edges.add(new GraphEdgeDraft(
                     NaturalKeys.file(imported.fromPath()),
                     NaturalKeys.file(imported.toPath()),
-                    GraphEdgeType.IMPORTS,
-                    EdgeConfidence.CONFIRMED));
+                    GraphEdgeType.IMPORTS.name(),
+                    EdgeConfidence.CONFIRMED.name(),
+                    metadata));
         }
         for (TsAnalyzeDtos.SymbolHit symbol : response.symbols()) {
             if (symbol.name() == null || symbol.filePath() == null) {
@@ -122,6 +153,57 @@ final class TsGraphMapper {
                     symbol.lineEnd(),
                     AreaPathTagger.tag(symbol.filePath()),
                     Map.of("kind", symbol.kind() == null ? "" : symbol.kind())));
+        }
+        for (TsAnalyzeDtos.SemanticNodeHit node : response.nodes()) {
+            if (node.key() == null
+                    || node.key().isBlank()
+                    || node.type() == null
+                    || node.type().isBlank()) {
+                continue;
+            }
+            Map<String, Object> metadata = new LinkedHashMap<>(node.metadata());
+            List<Map<String, Object>> unresolved = unresolvedBySource.get(node.key());
+            if (unresolved != null && !unresolved.isEmpty()) {
+                metadata.put("unresolvedCalls", unresolved);
+            }
+            nodes.add(new GraphNodeDraft(
+                    node.type(),
+                    node.key(),
+                    node.name() == null ? node.key() : node.name(),
+                    node.filePath(),
+                    node.lineStart(),
+                    node.lineEnd(),
+                    node.layer() == null ? AreaPathTagger.tag(node.filePath()) : node.layer(),
+                    metadata));
+            if (node.filePath() != null) {
+                evidences.add(evidence(
+                        node.key(),
+                        node.filePath(),
+                        node.lineStart(),
+                        node.lineEnd(),
+                        node.type() + " " + (node.name() == null ? node.key() : node.name())));
+            }
+        }
+        for (TsAnalyzeDtos.SemanticEdgeHit semanticEdge : response.edges()) {
+            if (semanticEdge.sourceKey() == null || semanticEdge.targetKey() == null || semanticEdge.type() == null) {
+                continue;
+            }
+            Map<String, Object> metadata = new LinkedHashMap<>(semanticEdge.metadata());
+            if (semanticEdge.filePath() != null) {
+                metadata.put("filePath", semanticEdge.filePath());
+            }
+            if (semanticEdge.lineStart() != null) {
+                metadata.put("lineStart", semanticEdge.lineStart());
+            }
+            if (semanticEdge.lineEnd() != null) {
+                metadata.put("lineEnd", semanticEdge.lineEnd());
+            }
+            edges.add(new GraphEdgeDraft(
+                    semanticEdge.sourceKey(),
+                    semanticEdge.targetKey(),
+                    semanticEdge.type(),
+                    confidence(semanticEdge.confidence()).name(),
+                    metadata));
         }
         return new AnalysisResult(nodes, edges, evidences);
     }
@@ -180,6 +262,17 @@ final class TsGraphMapper {
             }
         }
         return fallback;
+    }
+
+    private static EdgeConfidence confidence(String raw) {
+        if (raw == null) {
+            return EdgeConfidence.POSSIBLE;
+        }
+        try {
+            return EdgeConfidence.valueOf(raw.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return EdgeConfidence.POSSIBLE;
+        }
     }
 
     private static AnalyzerEvidence evidence(String key, String path, Integer start, Integer end, String excerpt) {

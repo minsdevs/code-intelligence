@@ -21,4 +21,19 @@ class AreaPathTaggerTest {
         assertThat(AreaPathTagger.tag("src/pages/TodosPage.tsx")).isEqualTo("FRONTEND");
         assertThat(AreaPathTagger.tag("frontend/src/App.tsx")).isEqualTo("FRONTEND");
     }
+
+    @Test
+    void tagsFrontendTestsBeforeFrontendPathHeuristics() {
+        for (String path : new String[] {
+            "src/components/TodoItem.test.tsx",
+            "frontend/src/pages/Home.spec.ts",
+            "src/__tests__/Page.tsx",
+            "tests/Page.tsx",
+            "src/components/__tests__/Page.jsx"
+        }) {
+            assertThat(AreaPathTagger.tag(path)).as(path).isEqualTo("TESTING");
+        }
+        assertThat(AreaPathTagger.tag("src/pages/Contest.tsx")).isEqualTo("FRONTEND");
+        assertThat(AreaPathTagger.tag("src/pages/test.tsx")).isEqualTo("FRONTEND");
+    }
 }

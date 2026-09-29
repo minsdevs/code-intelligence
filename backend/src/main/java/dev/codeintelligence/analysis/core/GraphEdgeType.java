@@ -6,6 +6,7 @@ public enum GraphEdgeType {
     IMPORTS,
     DECLARES,
     EXTENDS,
+    EXPORTS,
     IMPLEMENTS,
     ANNOTATED_BY,
     CALLS,

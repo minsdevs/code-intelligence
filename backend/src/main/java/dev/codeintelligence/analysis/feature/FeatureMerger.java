@@ -79,7 +79,9 @@ final class FeatureMerger {
             if (!seed.endpointDerived()) {
                 continue;
             }
-            byName.put(seed.name(), seed);
+            // A route and an endpoint can have the same prefix with disjoint natural keys.
+            // Retain both domains instead of letting input order discard one seed's links.
+            byName.merge(seed.name(), seed, FeatureMerger::mergeTwo);
         }
         return List.copyOf(byName.values());
     }
