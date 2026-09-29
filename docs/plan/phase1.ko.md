@@ -193,7 +193,7 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 
 ### 1-2 · be — Repository import + JGit clone + snapshot 생성 `[P2]`
 
-**상태: 완료** — verify PASS(테스트 81/81). 실기동: private(`Min0504/code-intelligence`)·public(`octocat/Hello-World`) clone DONE, HEAD SHA 일치, reanalyze 스냅샷 교체, SSRF/path 400, DELETE 후 clone 제거.
+**상태: 완료** — verify PASS(테스트 81/81). 실기동: private(`minsdevs/code-intelligence`)·public(`octocat/Hello-World`) clone DONE, HEAD SHA 일치, reanalyze 스냅샷 교체, SSRF/path 400, DELETE 후 clone 제거.
 **완료 기준:** public/private clone 동작
 **패키지:** `dev.codeintelligence.project`, `dev.codeintelligence.github`
 
@@ -742,6 +742,21 @@ Phase 1에 없는 step(Flow/Cross-domain/Indexing)은 파이프라인 정의에�
 - [x] P11: History DiffViewer가 Monaco를 CDN에서 로드함 — 오프라인/공급망 재평가(번들 vs CDN)
 
 ### 1-17 · verify — Phase 1 최종 검증 (DoD)
+
+**로컬 fixture accuracy gate — 2026-09-23 검증 완료:** 저장소 루트에서 `./accuracy-gate`.
+기존 `quality-gate`에도 이 단계를 연결했다. 설치된 TS analyzer를 빌드해 loopback 임시 포트에서 실제 Nest/TS parser를 실행하고,
+Testcontainers DB 파이프라인 결과를 `FixtureAccuracyOracle`과 비교한다. 일반 backend `test`에서는 기존 `FakeTsAnalyzer`로 같은 계약을 검증하므로, 실제 TS parser 승인은 반드시 `./accuracy-gate` 결과로 구분한다.
+
+- `spring-mini`: endpoint 5개, entity 1개, migration 2개·table/column/index, 파일·Java node key, DECLARES/EXPOSES/EXTENDS/CALLS 및 DB 관계 — 127개 의미 항목.
+- `react-mini`: route 2개, component 4개, API call 1개, 내부 import 5개와 feature 관계 — 34개 의미 항목.
+- `fullstack-mini`: 두 영역의 기대 집합과 CONSUMES/MAPS_TO/READS_WRITES, frontend/backend feature 연결 — 165개 의미 항목.
+- 기대값은 fixture 선언과 기존 golden에서 직접 정의했다. 새 snapshot 2개와 각각의 재실행을 비교하며 ID·timestamp·행 순서에는 의존하지 않는다. edge confidence(CONFIRMED/LIKELY/POSSIBLE) 변경도 실패한다.
+- **expected / unexpected / intentionally-ignored:** 범위 내 기대 집합을 정확히 비교하고, 누락·추가·변경·중복을 natural key로 출력한다. 정적 페이지의 `ORPHAN_ROUTE`, 테스트 파일의 feature 유입은 unexpected다. component 연결이 없는 route·미매칭 API·미매핑 entity의 양성 검출도 임시 fixture 변형으로 확인했다.
+- **코드 버그 수정:** API 호출 유무를 orphan 기준으로 쓰던 문제, frontend 테스트 경로 태깅과 feature 포함, 같은 이름의 frontend/backend feature가 덮어써져 연결을 잃던 문제.
+- **oracle 불명확 [검증 필요]:** backend가 없는 `react-mini`의 특정 `UNMATCHED_API_CALL`만 사유를 남겨 intentionally-ignored로 처리한다. fullstack의 `/api/todos → /todos`는 proxy rewrite 근거가 없어 `POSSIBLE`까지만 인정하며 실제 통신 성공을 뜻하지 않는다.
+- **허용 가능한 변동 / 범위 밖:** line/evidence 표현과 package·상속 method stub의 위치는 비교하지 않는다. external stub, Java IMPORTS/USES_TYPE/annotation, 동적 routing 및 실제 저장소 precision/recall은 [검증 필요]. infra는 기존 golden 범위를 유지한다.
+
+이 결과는 **로컬 fixture 회귀 기준선만 승인**한다. 실제 backend·GitHub를 포함한 real-browser E2E, private/public 실제 저장소 oracle, 백업/복구는 별도 release blocker로 남는다. 실제 GitHub 저장소 정확도 또는 production release 승인이 아니다.
 
 **Checklist:** (글로벌 verify 하드 스위트 — FE+BE+보안+디버거 증거 기준)
 

@@ -1,5 +1,5 @@
-/// <reference types="vitest/config" />
-import { defineConfig, loadEnv, type ProxyOptions } from 'vite'
+import { loadEnv, type ProxyOptions } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -40,6 +40,7 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
+      exclude: [...configDefaults.exclude, 'e2e/**'],
     },
   }
 })
