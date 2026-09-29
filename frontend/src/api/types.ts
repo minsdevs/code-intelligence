@@ -1,6 +1,6 @@
 /** Hand-written API types for Phase 1 Import Wizard. `npm run gen:api` writes generated.ts when the backend is up. */
 
-export type CredentialKind = 'OAUTH' | 'PAT'
+export type CredentialKind = 'OAUTH' | 'PAT' | 'LOCAL'
 
 export type MeResponse = {
   authenticated: boolean
@@ -23,6 +23,17 @@ export type GithubRepo = {
 
 export type GithubRepoList = {
   items: GithubRepo[]
+  page: number
+  hasNext: boolean
+}
+export type GithubBranch = {
+  name: string
+  commitSha: string
+  protected: boolean
+}
+
+export type GithubBranchList = {
+  items: GithubBranch[]
   page: number
   hasNext: boolean
 }
@@ -91,6 +102,7 @@ export type Project = {
   repoOwner: string
   repoName: string
   defaultBranch: string
+  sourceAddress: string
   sourceType: 'GITHUB' | 'LOCAL'
   currentSnapshot: ProjectSnapshotView | null
   latestJob: JobSummary | null
@@ -360,7 +372,13 @@ export type FindingView = {
 }
 
 export type LocalSourceStatus = {
-  state: 'UP_TO_DATE' | 'CHANGED' | 'PATH_MISSING' | 'REAUTHORIZATION_REQUIRED' | 'NOT_LOCAL' | 'NO_SNAPSHOT'
+  state:
+    | 'UP_TO_DATE'
+    | 'CHANGED'
+    | 'PATH_MISSING'
+    | 'REAUTHORIZATION_REQUIRED'
+    | 'NOT_LOCAL'
+    | 'NO_SNAPSHOT'
   snapshotId: number | null
   changes: { added: number; modified: number; deleted: number; total: number }
   changedPaths: string[]
@@ -706,4 +724,5 @@ export type AiPreviewResponse = {
   model: string
   maskedSecrets: number
   localOnly: boolean
+  copyablePrompt: string
 }

@@ -22,14 +22,16 @@ class LocalImportServiceTest {
 
     private LocalImportService service;
     private AppProperties appProperties;
+    private DesktopPathAuthorizationService desktopPaths;
 
     @BeforeEach
     void setUp() throws IOException {
         appProperties = new AppProperties(tempDir.resolve("data").toString(), 2);
-        // Allow the tempDir as the allowed root — use toRealPath() because on macOS
-        // /var is a symlink to /private/var
+        desktopPaths = new DesktopPathAuthorizationService();
+        // Allow the tempDir as the configured server root — use toRealPath() because on macOS
+        // /var is a symlink to /private/var.
         var localImportProps = new LocalImportProperties(tempDir.toRealPath().toString());
-        service = new LocalImportService(appProperties, localImportProps, analysisProperties());
+        service = new LocalImportService(appProperties, localImportProps, analysisProperties(), desktopPaths);
     }
 
     @Test
@@ -65,16 +67,15 @@ class LocalImportServiceTest {
         Path allowedRoot = tempDir.resolve("allowed");
         Files.createDirectories(allowedRoot);
         var restrictedProps = new LocalImportProperties(allowedRoot.toRealPath().toString());
-        var restrictedService = new LocalImportService(appProperties, restrictedProps, analysisProperties());
+        var restrictedService =
+                new LocalImportService(appProperties, restrictedProps, analysisProperties(), desktopPaths);
 
         // Create a directory outside the allowed root
         Path outsideDir = tempDir.resolve("outside");
         Files.createDirectories(outsideDir);
         Files.writeString(outsideDir.resolve("file.txt"), "content");
 
-        assertThatThrownBy(() -> restrictedService.validateSource(outsideDir))
-                .isInstanceOf(LocalImportException.class)
-                .hasMessageContaining("not under any allowed root");
+        assertThatThrownBy(() -> restrictedService.validateSource(outsideDir)).isInstanceOf(LocalImportException.class);
     }
 
     @Test
@@ -88,7 +89,8 @@ class LocalImportServiceTest {
         Files.createSymbolicLink(alias, realRoot);
 
         var symlinkRootProps = new LocalImportProperties(alias.toString());
-        var symlinkRootService = new LocalImportService(appProperties, symlinkRootProps, analysisProperties());
+        var symlinkRootService =
+                new LocalImportService(appProperties, symlinkRootProps, analysisProperties(), desktopPaths);
 
         assertThat(symlinkRootService.validateSource(alias.resolve("project"))).isEqualTo(project.toRealPath());
     }
@@ -100,7 +102,8 @@ class LocalImportServiceTest {
         Path allowedRoot = tempDir.resolve("allowed");
         Files.createDirectories(allowedRoot);
         var restrictedProps = new LocalImportProperties(allowedRoot.toRealPath().toString());
-        var restrictedService = new LocalImportService(appProperties, restrictedProps, analysisProperties());
+        var restrictedService =
+                new LocalImportService(appProperties, restrictedProps, analysisProperties(), desktopPaths);
 
         // Create a target outside the allowed root
         Path outsideTarget = tempDir.resolve("secret-data");
@@ -111,9 +114,7 @@ class LocalImportServiceTest {
         Path symlink = allowedRoot.resolve("escape-link");
         Files.createSymbolicLink(symlink, outsideTarget);
 
-        assertThatThrownBy(() -> restrictedService.validateSource(symlink))
-                .isInstanceOf(LocalImportException.class)
-                .hasMessageContaining("not under any allowed root");
+        assertThatThrownBy(() -> restrictedService.validateSource(symlink)).isInstanceOf(LocalImportException.class);
     }
 
     @Test
@@ -124,6 +125,21 @@ class LocalImportServiceTest {
 
         // Should not throw
         service.validateSource(validDir);
+    }
+
+    @Test
+    void validateSource_requiresPickerGrantWhenNoServerRootIsConfigured() throws IOException {
+        Path selected = tempDir.resolve("picked-project");
+        Files.createDirectories(selected);
+        Files.writeString(selected.resolve("Main.java"), "class Main {}");
+        var desktopOnlyService = new LocalImportService(
+                appProperties, new LocalImportProperties(""), analysisProperties(), desktopPaths);
+
+        assertThatThrownBy(() -> desktopOnlyService.validateSource(selected)).isInstanceOf(LocalImportException.class);
+
+        Path granted = desktopPaths.authorize(selected);
+
+        assertThat(desktopOnlyService.validateSource(selected)).isEqualTo(granted);
     }
 
     @Test

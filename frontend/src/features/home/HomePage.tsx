@@ -54,10 +54,7 @@ export default function HomePage() {
       )}
 
       {!projectsQuery.isLoading && !projectsQuery.isError && projects.length === 0 && (
-        <EmptyState
-          title={t('home.emptyTitle')}
-          description={t('home.emptyDesc')}
-        >
+        <EmptyState title={t('home.emptyTitle')} description={t('home.emptyDesc')}>
           <Link
             to="/import"
             className="mt-1 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 transition-opacity hover:opacity-90"
@@ -90,21 +87,45 @@ function ProjectCard({ project }: { project: Project }) {
         analyzing ? 'shadow-[inset_3px_0_0_var(--color-accent)]' : ''
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <h2 className="font-mono text-[14px] font-semibold text-ink">
-          {project.repoOwner}
-          <span className="text-ink-faint">/</span>
-          {project.repoName}
-        </h2>
-        {analyzing ? (
-          <span role="status" className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-accent">
-            {t('home.analyzing')}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="truncate font-mono text-[14px] font-semibold text-ink">{project.name}</h2>
+          <p
+            className="mt-1 truncate font-mono text-[11px] text-ink-faint"
+            title={project.sourceAddress}
+          >
+            {project.sourceAddress}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <span className="rounded border border-line-strong px-1.5 py-px font-mono text-[10px] uppercase tracking-wide text-ink-faint">
+            {project.sourceType}
           </span>
-        ) : project.sourceType === 'LOCAL' ? (
-          <LocalSourceStatus projectId={project.id} />
-        ) : null}
+          {analyzing ? (
+            <span
+              role="status"
+              className="font-mono text-[10px] uppercase tracking-wide text-accent"
+            >
+              {t('home.analyzing')}
+            </span>
+          ) : project.sourceType === 'LOCAL' ? (
+            <LocalSourceStatus projectId={project.id} />
+          ) : null}
+        </div>
       </div>
       <dl className="mt-3 flex flex-col gap-2 text-[12px]">
+        <div className="flex gap-2">
+          <dt className="shrink-0 text-ink-faint">Status</dt>
+          <dd className="text-ink-muted">
+            {project.latestJob?.status ?? project.currentSnapshot?.status ?? 'Not analyzed'}
+          </dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="shrink-0 text-ink-faint">Last analyzed</dt>
+          <dd className="text-ink-muted">
+            {formatWhen(project.currentSnapshot?.analyzedAt ?? null)}
+          </dd>
+        </div>
         <div className="flex gap-2">
           <dt className="shrink-0 text-ink-faint">{t('home.areas')}</dt>
           <dd className="text-ink-muted">

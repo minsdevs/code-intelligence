@@ -20,8 +20,7 @@ export default function ImportWizardPage() {
   const [projectId, setProjectId] = useState<number | null>(null)
   const [jobId, setJobId] = useState<number | null>(null)
 
-  // Local import path from ?path= query parameter (URL-decoded by the browser)
-  const localPath = searchParams.get('path')
+  const [localPath, setLocalPath] = useState<string | null>(() => searchParams.get('path'))
   const [localImporting, setLocalImporting] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
 
@@ -40,11 +39,12 @@ export default function ImportWizardPage() {
       .then((profile) => {
         if (cancelled) return
         setMe(profile)
-        if (profile.authenticated) {
-          // If local path is provided, stay on the local confirm step
-          if (!localPath) {
-            setStep('repo')
-          }
+        if (
+          profile.authenticated &&
+          !localPath &&
+          (profile.credentialKind === 'OAUTH' || profile.credentialKind === 'PAT')
+        ) {
+          setStep('repo')
         }
       })
       .catch(() => {
@@ -61,11 +61,17 @@ export default function ImportWizardPage() {
   const handleConnected = async () => {
     const profile = await getMe()
     setMe(profile)
-    if (profile.authenticated) {
-      if (!localPath) {
-        setStep('repo')
-      }
+    if (
+      profile.authenticated &&
+      !localPath &&
+      (profile.credentialKind === 'OAUTH' || profile.credentialKind === 'PAT')
+    ) {
+      setStep('repo')
     }
+  }
+  const handleLocalPath = (path: string) => {
+    setLocalPath(path)
+    setLocalError(null)
   }
 
   const handleLocalImport = async () => {
@@ -143,11 +149,14 @@ export default function ImportWizardPage() {
               importing={localImporting}
               error={localError}
               onConfirm={() => void handleLocalImport()}
-              onCancel={() => navigate('/projects')}
+              onCancel={() => {
+                setLocalPath(null)
+                setLocalError(null)
+              }}
             />
           )}
           {!showLocalConfirm && step === 'connect' && (
-            <ConnectStep me={me} onConnected={handleConnected} />
+            <ConnectStep me={me} onConnected={handleConnected} onLocalPath={handleLocalPath} />
           )}
           {!showLocalConfirm && step === 'repo' && (
             <RepoStep onImported={handleImported} onUnauthorized={goConnect} />
@@ -187,7 +196,8 @@ function LocalImportConfirm({
       <div>
         <h2 className="text-[15px] font-semibold text-ink">Confirm local import</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
-          An external tool wants to import the following local project for analysis. Please review the path and confirm.
+          An external tool wants to import the following local project for analysis. Please review
+          the path and confirm.
         </p>
       </div>
 
@@ -197,7 +207,10 @@ function LocalImportConfirm({
       </div>
 
       {error && (
-        <p role="alert" className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-[12px] text-danger">
+        <p
+          role="alert"
+          className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-[12px] text-danger"
+        >
           {error}
         </p>
       )}

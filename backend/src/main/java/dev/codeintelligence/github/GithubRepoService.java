@@ -31,4 +31,9 @@ public class GithubRepoService {
                 .toList();
         return new GithubRepoPage(filtered, repoPage.hasNext());
     }
+
+    public GithubBranchPage listBranches(long userId, String owner, String repo, int page, int perPage) {
+        String token = tokenProvider.requireToken(userId);
+        return githubApiClient.listRepoBranches(token, owner, repo, page, perPage);
+    }
 }

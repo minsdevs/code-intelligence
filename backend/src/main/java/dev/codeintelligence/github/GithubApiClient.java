@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.stereotype.Component;
@@ -44,8 +43,14 @@ public class GithubApiClient {
                 .uri("/user")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve()
-                .onStatus(this::isTokenRejection, (request, res) -> {
+                .onStatus(status -> status.value() == 401, (request, res) -> {
                     throw new InvalidGithubTokenException();
+                })
+                .onStatus(status -> status.value() == 403 || status.value() == 429, (request, res) -> {
+                    if (isRateLimited(res.getStatusCode().value(), res.getHeaders())) {
+                        throw new GithubRateLimitException(parseRetryAfter(res.getHeaders()));
+                    }
+                    throw new GithubRepositoryAccessException();
                 })
                 .toEntity(UserResponse.class);
         consumeRateLimit(response.getHeaders());
@@ -70,8 +75,14 @@ public class GithubApiClient {
                         .build())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve()
-                .onStatus(this::isTokenRejection, (request, res) -> {
+                .onStatus(status -> status.value() == 401, (request, res) -> {
                     throw new InvalidGithubTokenException();
+                })
+                .onStatus(status -> status.value() == 403 || status.value() == 429, (request, res) -> {
+                    if (isRateLimited(res.getStatusCode().value(), res.getHeaders())) {
+                        throw new GithubRateLimitException(parseRetryAfter(res.getHeaders()));
+                    }
+                    throw new GithubRepositoryAccessException();
                 })
                 .toEntity(new ParameterizedTypeReference<>() {});
         consumeRateLimit(response.getHeaders());
@@ -86,6 +97,37 @@ public class GithubApiClient {
                         repo.updatedAt()))
                 .toList();
         return new GithubRepoPage(items, hasNextPage(response.getHeaders()));
+    }
+
+    public GithubBranchPage listRepoBranches(String token, String owner, String repo, int page, int perPage) {
+        ResponseEntity<List<BranchResponse>> response = restClient
+                .get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/repos/{owner}/{repo}/branches")
+                        .queryParam("per_page", perPage)
+                        .queryParam("page", page)
+                        .build(owner, repo))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .onStatus(status -> status.value() == 401, (request, res) -> {
+                    throw new InvalidGithubTokenException();
+                })
+                .onStatus(status -> status.value() == 403 || status.value() == 429, (request, res) -> {
+                    if (isRateLimited(res.getStatusCode().value(), res.getHeaders())) {
+                        throw new GithubRateLimitException(parseRetryAfter(res.getHeaders()));
+                    }
+                    throw new GithubRepositoryAccessException();
+                })
+                .toEntity(new ParameterizedTypeReference<>() {});
+        consumeRateLimit(response.getHeaders());
+        List<BranchResponse> body = response.getBody() == null ? List.of() : response.getBody();
+        List<GithubBranchSummary> items = body.stream()
+                .map(branch -> new GithubBranchSummary(
+                        branch.name(),
+                        branch.commit() == null ? null : branch.commit().sha(),
+                        branch.isProtected()))
+                .toList();
+        return new GithubBranchPage(items, hasNextPage(response.getHeaders()));
     }
 
     public GithubPullsPage listRepoPulls(String token, String owner, String repo, int page, int perPage, String etag) {
@@ -183,10 +225,6 @@ public class GithubApiClient {
         return null;
     }
 
-    private boolean isTokenRejection(HttpStatusCode status) {
-        return status.value() == 401 || status.value() == 403;
-    }
-
     private boolean hasNextPage(HttpHeaders headers) {
         String link = headers.getFirst(HttpHeaders.LINK);
         return link != null && link.contains("rel=\"next\"");
@@ -219,6 +257,15 @@ public class GithubApiClient {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record RepoOwner(String login) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record BranchResponse(
+            String name,
+            BranchCommit commit,
+            @JsonProperty("protected") boolean isProtected) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record BranchCommit(String sha) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record PullResponse(

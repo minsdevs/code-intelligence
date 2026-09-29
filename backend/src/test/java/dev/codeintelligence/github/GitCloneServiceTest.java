@@ -7,6 +7,10 @@ import dev.codeintelligence.common.AppProperties;
 import dev.codeintelligence.testsupport.GitRepoFixtures;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.RefUpdate;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.transport.CredentialItem;
 import org.eclipse.jgit.transport.URIish;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
@@ -52,6 +56,25 @@ class GitCloneServiceTest {
         assertThat(second.headSha()).isEqualTo(secondSha).isNotEqualTo(firstSha);
         assertThat(marker).as("fetch must reuse the existing clone").exists();
         assertThat(target.resolve("second.txt")).exists();
+    }
+
+    @Test
+    void clonesTheSelectedBranchOnFirstImport() throws Exception {
+        Path origin = temp.resolve("branch-origin");
+        String sha = GitRepoFixtures.createBareRepoWithCommit(origin, "octocat", "branched");
+        Path bare = origin.resolve("octocat/branched.git");
+        try (Repository repository =
+                new FileRepositoryBuilder().setGitDir(bare.toFile()).setBare().build()) {
+            RefUpdate update = repository.updateRef("refs/heads/release");
+            update.setNewObjectId(ObjectId.fromString(sha));
+            assertThat(update.update()).isEqualTo(RefUpdate.Result.NEW);
+        }
+
+        GitCloneService.CloneResult result =
+                service.cloneOrFetch(reposRoot.resolve("selected"), bare.toUri().toString(), null, "release");
+
+        assertThat(result.branch()).isEqualTo("release");
+        assertThat(result.headSha()).isEqualTo(sha);
     }
 
     @Test

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getLocalSourceStatus, reanalyzeLocalProject } from '../../api/projects'
+import { getLocalSourceStatus, reanalyzeLocalProject, relinkLocalProject } from '../../api/projects'
 
 export default function LocalSourceStatus({
   projectId,
@@ -17,6 +17,21 @@ export default function LocalSourceStatus({
   const refreshMutation = useMutation({
     mutationFn: () => reanalyzeLocalProject(projectId, statusQuery.data!),
     onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
+        queryClient.invalidateQueries({ queryKey: ['projects'] }),
+        queryClient.invalidateQueries({ queryKey: ['local-source-status', projectId] }),
+      ])
+    },
+  })
+  const relinkMutation = useMutation({
+    mutationFn: async () => {
+      const path = await window.codeIntelligenceDesktop?.pickFolder()
+      if (!path) return null
+      return relinkLocalProject(projectId, path)
+    },
+    onSuccess: async (project) => {
+      if (!project) return
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
         queryClient.invalidateQueries({ queryKey: ['projects'] }),
@@ -58,7 +73,10 @@ export default function LocalSourceStatus({
   }
 
   return (
-    <section className="border-b border-line bg-surface-1 px-5 py-2" aria-label="Local source status">
+    <section
+      className="border-b border-line bg-surface-1 px-5 py-2"
+      aria-label="Local source status"
+    >
       <div className="flex flex-wrap items-center gap-3 text-[12px]">
         <strong className={tone}>{labels[status.state]}</strong>
         {status.state === 'CHANGED' && (
@@ -77,12 +95,30 @@ export default function LocalSourceStatus({
             {refreshMutation.isPending ? 'Starting…' : '변경 확인 후 전체 재분석'}
           </button>
         )}
+        {(status.state === 'PATH_MISSING' || status.state === 'REAUTHORIZATION_REQUIRED') &&
+          window.codeIntelligenceDesktop && (
+            <button
+              type="button"
+              disabled={relinkMutation.isPending}
+              onClick={() => relinkMutation.mutate()}
+              className="ml-auto rounded-md border border-line-strong bg-surface-2 px-2.5 py-1 text-ink hover:bg-surface-3 disabled:opacity-60"
+            >
+              {relinkMutation.isPending ? 'Choosing…' : '폴더 다시 연결'}
+            </button>
+          )}
+        {relinkMutation.isError && (
+          <span role="alert" className="text-[11px] text-danger">
+            선택한 폴더를 다시 연결할 수 없습니다.
+          </span>
+        )}
       </div>
       {details && status.changedPaths.length > 0 && (
         <details className="mt-1 text-[11px] text-ink-muted">
           <summary className="cursor-pointer">변경 파일 보기</summary>
           <ul className="mt-1 max-h-28 overflow-auto font-mono">
-            {status.changedPaths.map((path) => <li key={path}>{path}</li>)}
+            {status.changedPaths.map((path) => (
+              <li key={path}>{path}</li>
+            ))}
           </ul>
         </details>
       )}

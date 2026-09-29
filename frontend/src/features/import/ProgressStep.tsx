@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, UnauthorizedError } from '../../api/client'
-import { getJob, retryJob, subscribeJobEvents } from '../../api/jobs'
+import { cancelJob, getJob, retryJob, subscribeJobEvents } from '../../api/jobs'
 import { useT } from '../../lib/i18n'
 import type { JobDetail, JobStep, StepStatus } from '../../api/types'
 import { PIPELINE_STEPS, pipelineLabel } from './wizard'
@@ -51,6 +51,7 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
   const [job, setJob] = useState<JobDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [retrying, setRetrying] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [streamEpoch, setStreamEpoch] = useState(0)
   const onDoneRef = useRef(onDone)
 
@@ -147,6 +148,22 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
       setRetrying(false)
     }
   }
+  const handleCancel = async () => {
+    setCancelling(true)
+    setError(null)
+    try {
+      await cancelJob(jobId)
+      setJob(await getJob(jobId))
+    } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        onUnauthorized()
+        return
+      }
+      setError(err instanceof ApiError ? err.message : 'Could not cancel analysis.')
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   const steps = displaySteps(job)
 
@@ -154,7 +171,9 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
     <div className="flex max-w-xl flex-col gap-4">
       <div>
         <h2 className="text-[15px] font-semibold text-ink">{t('progress.title')}</h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{t('progress.description')}</p>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
+          {t('progress.description')}
+        </p>
       </div>
 
       <ol aria-label={t('progress.pipelineLabel')} className="flex flex-col gap-1.5">
@@ -175,6 +194,16 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
           </li>
         ))}
       </ol>
+      {job && !isTerminal(job.status) && (
+        <button
+          type="button"
+          disabled={cancelling}
+          onClick={() => void handleCancel()}
+          className="w-fit rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink-muted disabled:opacity-60"
+        >
+          {cancelling ? 'Cancelling…' : 'Cancel analysis'}
+        </button>
+      )}
 
       {(error || job?.status === 'FAILED') && (
         <div role="alert" className="rounded-md border border-danger/40 bg-surface-1 px-3 py-2.5">

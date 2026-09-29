@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,9 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/projects")
 public class ProjectController {
 
-    public record CreateProjectRequest(String repoOwner, String repoName, String url) {}
+    public record CreateProjectRequest(String repoOwner, String repoName, String url, String branch) {}
 
     public record CreateLocalProjectRequest(String path, String name) {}
+
+    public record RelinkLocalProjectRequest(String path) {}
 
     public record CreateProjectResponse(ProjectResponse project, long jobId) {}
 
@@ -78,6 +81,14 @@ public class ProjectController {
     public LocalSourceStatusService.LocalSourceStatus localSourceStatus(
             @PathVariable long projectId, @AuthenticationPrincipal AuthenticatedUser user) {
         return projectService.localSourceStatus(projectId, user.userId());
+    }
+
+    @PatchMapping("/{projectId}/local-source")
+    public ProjectResponse relinkLocalSource(
+            @PathVariable long projectId,
+            @RequestBody RelinkLocalProjectRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        return projectService.relinkLocalSource(projectId, user.userId(), request.path());
     }
 
     @DeleteMapping("/{projectId}")

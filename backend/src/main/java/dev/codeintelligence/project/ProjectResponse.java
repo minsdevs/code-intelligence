@@ -11,6 +11,7 @@ public record ProjectResponse(
         String repoName,
         String defaultBranch,
         String sourceType,
+        String sourceAddress,
         SnapshotView currentSnapshot,
         JobSummaryResponse latestJob,
         List<String> selectedAreas,

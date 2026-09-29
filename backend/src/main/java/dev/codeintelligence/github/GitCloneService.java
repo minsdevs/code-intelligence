@@ -4,11 +4,13 @@ import dev.codeintelligence.common.AppProperties;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ResetCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.transport.CredentialsProvider;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.stereotype.Service;
@@ -34,16 +36,20 @@ public class GitCloneService {
     public CloneResult cloneOrFetch(Path targetDir, String remoteUri, String token, String preferredBranch) {
         Path target = requireUnderReposRoot(targetDir);
         CredentialsProvider credentials = token == null ? null : credentialsFor(token);
+        String branch = requireValidBranch(preferredBranch);
         try {
             if (Files.isDirectory(target.resolve(Constants.DOT_GIT))) {
-                return fetchExisting(target, credentials, preferredBranch);
+                return fetchExisting(target, credentials, branch);
             }
             Files.createDirectories(target.getParent());
-            try (Git git = Git.cloneRepository()
+            CloneCommand command = Git.cloneRepository()
                     .setURI(remoteUri)
                     .setDirectory(target.toFile())
-                    .setCredentialsProvider(credentials)
-                    .call()) {
+                    .setCredentialsProvider(credentials);
+            if (branch != null) {
+                command.setBranch(Constants.R_HEADS + branch);
+            }
+            try (Git git = command.call()) {
                 return headOf(git);
             }
         } catch (GitAPIException | IOException e) {
@@ -77,13 +83,15 @@ public class GitCloneService {
                     : git.getRepository().getBranch();
             ObjectId remoteHead =
                     git.getRepository().resolve(Constants.R_REMOTES + Constants.DEFAULT_REMOTE_NAME + "/" + branch);
-            if (remoteHead != null) {
-                git.reset()
-                        .setMode(ResetCommand.ResetType.HARD)
-                        .setRef(remoteHead.name())
-                        .call();
+            if (remoteHead == null) {
+                throw new GitCloneException("requested branch is unavailable: " + branch, null);
             }
-            return headOf(git);
+            git.reset()
+                    .setMode(ResetCommand.ResetType.HARD)
+                    .setRef(remoteHead.name())
+                    .call();
+            ObjectId head = git.getRepository().resolve(Constants.HEAD);
+            return new CloneResult(head.name(), branch);
         }
     }
 
@@ -93,6 +101,17 @@ public class GitCloneService {
             throw new GitCloneException("repository has no HEAD commit", null);
         }
         return new CloneResult(head.name(), git.getRepository().getBranch());
+    }
+
+    private String requireValidBranch(String preferredBranch) {
+        if (preferredBranch == null || preferredBranch.isBlank()) {
+            return null;
+        }
+        String branch = preferredBranch.trim();
+        if (!Repository.isValidRefName(Constants.R_HEADS + branch)) {
+            throw new GitCloneException("invalid branch name", null);
+        }
+        return branch;
     }
 
     /**

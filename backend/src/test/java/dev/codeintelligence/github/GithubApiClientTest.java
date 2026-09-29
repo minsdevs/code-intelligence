@@ -94,4 +94,20 @@ class GithubApiClientTest {
         assertThat(page.items()).isEmpty();
         assertThat(page.hasNext()).isFalse();
     }
+
+    @Test
+    void listBranchesMapsCommitProtectionAndPagination() {
+        HttpHeaders responseHeaders = new HttpHeaders();
+        responseHeaders.add(HttpHeaders.LINK, "<" + BASE_URL + "/repos/octocat/demo/branches?page=2>; rel=\"next\"");
+        server.expect(requestTo(BASE_URL + "/repos/octocat/demo/branches?per_page=100&page=1"))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer ghp_tok"))
+                .andRespond(withSuccess("""
+                                [{"name":"main","commit":{"sha":"abc123"},"protected":true}]
+                                """, MediaType.APPLICATION_JSON).headers(responseHeaders));
+
+        GithubBranchPage page = client.listRepoBranches("ghp_tok", "octocat", "demo", 1, 100);
+
+        assertThat(page.hasNext()).isTrue();
+        assertThat(page.items()).containsExactly(new GithubBranchSummary("main", "abc123", true));
+    }
 }

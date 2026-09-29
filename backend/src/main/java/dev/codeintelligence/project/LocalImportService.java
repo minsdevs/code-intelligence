@@ -54,14 +54,17 @@ public class LocalImportService {
     private final AppProperties appProperties;
     private final LocalImportProperties localImportProperties;
     private final AnalysisProperties analysisProperties;
+    private final DesktopPathAuthorizationService desktopPaths;
 
     public LocalImportService(
             AppProperties appProperties,
             LocalImportProperties localImportProperties,
-            AnalysisProperties analysisProperties) {
+            AnalysisProperties analysisProperties,
+            DesktopPathAuthorizationService desktopPaths) {
         this.appProperties = appProperties;
         this.localImportProperties = localImportProperties;
         this.analysisProperties = analysisProperties;
+        this.desktopPaths = desktopPaths;
     }
 
     public record LocalImportResult(String headSha, String branch, boolean hasUncommittedChanges) {}
@@ -135,8 +138,10 @@ public class LocalImportService {
                 // An unresolved configured root must not grant access.
             }
         }
-        if (!allowedRoots.isEmpty() && !underAllowedRoot) {
-            throw new LocalImportException("Path is not under any allowed root.", null);
+        if (!underAllowedRoot && !desktopPaths.isAuthorized(realPath)) {
+            throw new LocalImportException(
+                    "Path is not authorized. Choose it with the native folder picker or configure an allowed root.",
+                    null);
         }
         return realPath;
     }
