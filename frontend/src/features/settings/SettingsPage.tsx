@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAiStatus } from '../../api/ai'
 import { clearAiSettings, getAiModels, getAiSettings, saveAiSettings } from '../../api/aiSettings'
+import { disconnectGithub, getGithubConnection } from '../../api/desktopAuth'
 import { LANGS } from '../../lib/i18n-core'
 import { useI18n } from '../../lib/i18n'
 import { queryError } from '../code/codeLocation'
@@ -13,10 +14,15 @@ export default function SettingsPage() {
   const lang = useI18n().lang
   const setLang = useI18n().setLang
   const queryClient = useQueryClient()
+  const desktop = typeof window === 'undefined' ? undefined : window.codeIntelligenceDesktop
 
   const [providerOverride, setProviderOverride] = useState<'openai' | 'gemini' | null>(null)
   const [modelOverride, setModelOverride] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
+  const [disconnectConfirm, setDisconnectConfirm] = useState(false)
+  const [restoreConfirm, setRestoreConfirm] = useState(false)
+  const [backupPath, setBackupPath] = useState<string | null>(null)
+  const [recoveryBackupPath, setRecoveryBackupPath] = useState<string | null>(null)
 
   const statusQuery = useQuery({
     queryKey: ['ai-status'],
@@ -33,6 +39,17 @@ export default function SettingsPage() {
   const modelsQuery = useQuery({
     queryKey: ['ai-models', provider],
     queryFn: () => getAiModels(provider),
+    retry: false,
+  })
+  const githubQuery = useQuery({
+    queryKey: ['github-connection'],
+    queryFn: getGithubConnection,
+    retry: false,
+  })
+  const runtimeQuery = useQuery({
+    queryKey: ['desktop-runtime'],
+    queryFn: () => desktop!.runtimeStatus(),
+    enabled: Boolean(desktop),
     retry: false,
   })
   const error = queryError(statusQuery.error)
@@ -61,11 +78,39 @@ export default function SettingsPage() {
       await queryClient.invalidateQueries({ queryKey: ['ai-status'] })
     },
   })
+  const disconnectMutation = useMutation({
+    mutationFn: disconnectGithub,
+    onSuccess: async () => {
+      setDisconnectConfirm(false)
+      await queryClient.invalidateQueries({ queryKey: ['github-connection'] })
+    },
+  })
+  const restartMutation = useMutation({
+    mutationFn: () => desktop!.restartRuntime(),
+    onSuccess: (status) => queryClient.setQueryData(['desktop-runtime'], status),
+  })
+  const backupMutation = useMutation({
+    mutationFn: () => desktop!.backup(),
+    onSuccess: (path) => setBackupPath(path),
+  })
+  const restoreMutation = useMutation({
+    mutationFn: () => desktop!.restore(),
+    onSuccess: async (result) => {
+      setRestoreConfirm(false)
+      setRecoveryBackupPath(result?.recoveryBackup ?? null)
+      await queryClient.invalidateQueries({ queryKey: ['desktop-runtime'] })
+    },
+  })
 
   const saveError =
     queryError(saveMutation.error) ??
     queryError(clearMutation.error) ??
     queryError(settingsQuery.error)
+  const githubError = queryError(githubQuery.error) ?? queryError(disconnectMutation.error)
+  const runtimeError = queryError(runtimeQuery.error)
+    ?? queryError(restartMutation.error)
+    ?? queryError(backupMutation.error)
+    ?? queryError(restoreMutation.error)
 
   function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -76,6 +121,70 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-xl px-6 py-10">
       <h1 className="text-[16px] font-semibold text-ink">{t('settings.title')}</h1>
+
+      <section className="mt-6 rounded-md border border-line bg-surface-1 px-4 py-3" aria-label={t('settings.github')}>
+        <h2 className="text-[13px] font-semibold text-ink">{t('settings.github')}</h2>
+        <p className="mt-1 text-[12px] text-ink-muted">{t('settings.githubDesc')}</p>
+        {githubError && <p className="mt-2 text-[12px] text-danger" role="alert">{githubError}</p>}
+        {githubQuery.isLoading && <p className="mt-2 text-[13px] text-ink-muted">{t('settings.githubLoading')}</p>}
+        {githubQuery.data && (
+          <>
+            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
+              <dt className="text-ink-muted">{t('settings.identity')}</dt>
+              <dd className="font-mono text-ink">{githubQuery.data.identityType}</dd>
+              <dt className="text-ink-muted">{t('settings.githubStatus')}</dt>
+              <dd className="text-ink">{githubQuery.data.connected ? t('settings.githubConnected') : t('settings.githubNotConnected')}</dd>
+            </dl>
+            {githubQuery.data.connected && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {!disconnectConfirm ? (
+                  <button
+                    type="button"
+                    onClick={() => setDisconnectConfirm(true)}
+                    className="rounded-md border border-line px-3 py-1.5 text-[13px] text-danger hover:bg-surface-2"
+                  >
+                    {t('settings.unlinkGithub')}
+                  </button>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2" role="alert">
+                    <span className="text-[12px] text-danger">{t('settings.unlinkConfirm')}</span>
+                    <button
+                      type="button"
+                      onClick={() => disconnectMutation.mutate()}
+                      disabled={disconnectMutation.isPending}
+                      className="rounded-md bg-danger px-3 py-1.5 text-[13px] font-medium text-surface-0 disabled:opacity-50"
+                    >
+                      {disconnectMutation.isPending ? t('settings.unlinking') : t('settings.confirmUnlink')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDisconnectConfirm(false)}
+                      className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink-muted hover:bg-surface-2"
+                    >
+                      {t('settings.cancel')}
+                    </button>
+                  </div>
+                )}
+                {githubQuery.data.githubRevocationUrl && (
+                  <button
+                    type="button"
+                    disabled={!desktop}
+                    onClick={() => {
+                      if (desktop && githubQuery.data?.githubRevocationUrl) {
+                        void desktop.openExternal(githubQuery.data.githubRevocationUrl)
+                      }
+                    }}
+                    className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink-muted hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {t('settings.revokeGithub')}
+                  </button>
+                )}
+              </div>
+            )}
+            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">{t('settings.unlinkHint')}</p>
+          </>
+        )}
+      </section>
 
       <section className="mt-6 rounded-md border border-line bg-surface-1 px-4 py-3" aria-label={t('settings.language')}>
         <h2 className="text-[13px] font-semibold text-ink">{t('settings.language')}</h2>
@@ -209,6 +318,79 @@ export default function SettingsPage() {
         </form>
         <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">{t('settings.keyHint')}</p>
       </section>
+
+      {desktop && (
+        <section className="mt-6 rounded-md border border-line bg-surface-1 px-4 py-3" aria-label={t('settings.desktopRuntime')}>
+          <h2 className="text-[13px] font-semibold text-ink">{t('settings.desktopRuntime')}</h2>
+          <p className="mt-1 text-[12px] text-ink-muted">{t('settings.desktopRuntimeDesc')}</p>
+          {runtimeError && <p className="mt-2 text-[12px] text-danger" role="alert">{runtimeError}</p>}
+          {runtimeQuery.isLoading && <p className="mt-2 text-[13px] text-ink-muted">{t('settings.runtimeLoading')}</p>}
+          {runtimeQuery.data && (
+            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
+              <dt className="text-ink-muted">{t('settings.runtimeReady')}</dt>
+              <dd className="text-ink">{runtimeQuery.data.ready ? t('settings.ready') : t('settings.notReady')}</dd>
+              <dt className="text-ink-muted">{t('settings.runtimeError')}</dt>
+              <dd className="break-words text-danger">{runtimeQuery.data.error ?? '—'}</dd>
+              <dt className="text-ink-muted">{t('settings.services')}</dt>
+              <dd className="font-mono text-ink">{runtimeQuery.data.services.join(', ') || '—'}</dd>
+            </dl>
+          )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => restartMutation.mutate()}
+              disabled={restartMutation.isPending}
+              className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink hover:bg-surface-2 disabled:opacity-50"
+            >
+              {restartMutation.isPending ? t('settings.restarting') : t('settings.restartRuntime')}
+            </button>
+            <button
+              type="button"
+              onClick={() => backupMutation.mutate()}
+              disabled={backupMutation.isPending}
+              className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink hover:bg-surface-2 disabled:opacity-50"
+            >
+              {backupMutation.isPending ? t('settings.backingUp') : t('settings.backup')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRestoreConfirm(true)}
+              disabled={restoreMutation.isPending}
+              className="rounded-md border border-line px-3 py-1.5 text-[13px] text-danger hover:bg-surface-2 disabled:opacity-50"
+            >
+              {restoreMutation.isPending ? t('settings.restoring') : t('settings.restore')}
+            </button>
+          </div>
+          {restoreConfirm && (
+            <div className="mt-3 rounded-md border border-danger/40 bg-surface-2 p-3" role="alert">
+              <p className="text-[12px] text-danger">{t('settings.restoreConfirm')}</p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => restoreMutation.mutate()}
+                  disabled={restoreMutation.isPending}
+                  className="rounded-md bg-danger px-3 py-1.5 text-[13px] font-medium text-surface-0 disabled:opacity-50"
+                >
+                  {t('settings.confirmRestore')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRestoreConfirm(false)}
+                  className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink-muted hover:bg-surface-3"
+                >
+                  {t('settings.cancel')}
+                </button>
+              </div>
+            </div>
+          )}
+          {(backupPath || recoveryBackupPath) && (
+            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
+              {backupPath && <><dt className="text-ink-muted">{t('settings.backupPath')}</dt><dd className="break-all font-mono text-ink">{backupPath}</dd></>}
+              {recoveryBackupPath && <><dt className="text-ink-muted">{t('settings.recoveryPath')}</dt><dd className="break-all font-mono text-ink">{recoveryBackupPath}</dd></>}
+            </dl>
+          )}
+        </section>
+      )}
     </div>
   )
 }

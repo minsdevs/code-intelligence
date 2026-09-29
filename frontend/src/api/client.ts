@@ -1,5 +1,16 @@
 const CSRF_COOKIE = 'XSRF-TOKEN'
 const CSRF_HEADER = 'X-XSRF-TOKEN'
+const desktop = typeof window === 'undefined' ? undefined : window.codeIntelligenceDesktop
+
+export function resolveApiUrl(path: string): string {
+  if (!path.startsWith('/')) throw new Error('API paths must be root-relative')
+  return desktop ? desktop.apiBaseUrl + path : path
+}
+
+export function desktopApiHeaders(headers = new Headers()): Headers {
+  if (desktop) headers.set('X-Code-Intelligence-Token', desktop.apiToken)
+  return headers
+}
 
 export class ApiError extends Error {
   readonly status: number
@@ -30,7 +41,11 @@ export function readCookie(name: string): string | undefined {
 }
 
 export async function primeCsrf(): Promise<void> {
-  await fetch('/api/csrf', { method: 'GET', credentials: 'include' })
+  await fetch(resolveApiUrl('/api/csrf'), {
+    method: 'GET',
+    credentials: 'include',
+    headers: desktopApiHeaders(),
+  })
 }
 
 export async function readApiError(response: Response): Promise<string> {
@@ -52,7 +67,7 @@ export async function readApiError(response: Response): Promise<string> {
 }
 
 async function request<T>(path: string, init: { method: string; body?: unknown }): Promise<T> {
-  const headers = new Headers()
+  const headers = desktopApiHeaders()
   if (init.body !== undefined) {
     headers.set('Content-Type', 'application/json')
   }
@@ -63,7 +78,7 @@ async function request<T>(path: string, init: { method: string; body?: unknown }
     }
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(resolveApiUrl(path), {
     method: init.method,
     credentials: 'include',
     headers,
@@ -92,5 +107,15 @@ export async function apiSend<T = void>(
   options: { method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: unknown },
 ): Promise<T> {
   await primeCsrf()
-  return request<T>(path, { method: options.method, body: options.body })
+  try {
+    return await request<T>(path, { method: options.method, body: options.body })
+  } catch (error) {
+    // A browser can retain an old XSRF-TOKEN after the backend restarts. Refresh it once
+    // before surfacing a 403; do not disable CSRF or retry other failures indefinitely.
+    if (!(error instanceof ApiError) || error.status !== 403) {
+      throw error
+    }
+    await primeCsrf()
+    return request<T>(path, { method: options.method, body: options.body })
+  }
 }
