@@ -1,5 +1,6 @@
 package dev.codeintelligence.ai;
 
+import dev.codeintelligence.evidence.SecretMask;
 import dev.codeintelligence.project.Project;
 import dev.codeintelligence.project.ProjectNotFoundException;
 import dev.codeintelligence.project.ProjectRepository;
@@ -32,7 +33,8 @@ public class AiPreviewService {
             String provider,
             String model,
             int maskedSecrets,
-            boolean localOnly) {}
+            boolean localOnly,
+            String copyablePrompt) {}
 
     private final ProjectRepository projectRepository;
     private final SnapshotRepository snapshotRepository;
@@ -71,6 +73,7 @@ public class AiPreviewService {
 
         String text = structured.text();
         List<String> fileRefs = structured.fileRefs();
+        String copyablePrompt = SecretMask.redact(PromptBuilder.user(question, text));
 
         // Build context items from structured blocks (with deterministic IDs)
         List<ContextItem> items = new ArrayList<>();
@@ -107,7 +110,8 @@ public class AiPreviewService {
                 providerName,
                 modelName,
                 maskedSecrets,
-                true); // always local-only: no external request
+                true,
+                copyablePrompt); // always local-only: no external request
     }
 
     int countRedacted(String text) {

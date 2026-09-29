@@ -39,6 +39,7 @@ const askResponse = {
 const fetchMock = vi.fn()
 let aiConfigured = true
 let streamFails = false
+let previewPayload: unknown = null
 
 function installFetch() {
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
@@ -49,6 +50,7 @@ function installFetch() {
     }
     if (path === '/api/csrf') return new Response(null, { status: 204 })
     if (path === '/api/projects/7/files') return jsonResponse([])
+    if (path === '/api/projects/7/ai/preview' && previewPayload) return jsonResponse(previewPayload)
     if (path === '/api/projects/7/ai/ask/stream') {
       if (streamFails) {
         return jsonResponse({ title: 'Bad Gateway', detail: 'stream failed' }, 502)
@@ -88,6 +90,7 @@ beforeEach(() => {
   })
   aiConfigured = true
   streamFails = false
+  previewPayload = null
   fetchMock.mockReset()
   installFetch()
 })
@@ -147,6 +150,7 @@ describe('AiPanel', () => {
 
     // Type a question and submit
     const input = screen.getByLabelText('AI 질문 입력')
+    expect(input).toBeEnabled()
     fireEvent.change(input, { target: { value: 'explain this code' } })
     const sendButton = screen.getByRole('button', { name: '전송' })
     fireEvent.click(sendButton)
@@ -157,6 +161,37 @@ describe('AiPanel', () => {
     // Verify no AI stream or ask request was made
     const aiRequests = fetchMock.mock.calls.map((call) => requestUrl(call[0]).pathname)
     expect(aiRequests.filter((path) => path.includes('/ai/ask'))).toHaveLength(0)
+  })
+
+  it('previews and copies a prompt without an AI key', async () => {
+    aiConfigured = false
+    previewPayload = {
+      contextItems: [{ id: 'VIEW:abc123def456', type: 'VIEW', label: 'code', charCount: 10, masked: false }],
+      fileRefs: ['file:src/App.tsx:1'],
+      totalChars: 10,
+      estimatedInputTokens: 3,
+      estimatedOutputTokens: 1,
+      estimatedCostUsd: 0,
+      provider: '',
+      model: '',
+      maskedSecrets: 0,
+      localOnly: true,
+      copyablePrompt: 'QUESTION:\nExplain this code\n\n---BEGIN CONTEXT---\nVIEW: code\n---END CONTEXT---',
+    }
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+
+    renderCode()
+    const input = await screen.findByLabelText('AI 질문 입력')
+    fireEvent.change(input, { target: { value: 'Explain this code' } })
+    fireEvent.click(screen.getByTitle('Preview what will be sent'))
+    await screen.findByText('Context Preview')
+    fireEvent.click(screen.getByRole('button', { name: 'Prompt 복사' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('QUESTION:')))
   })
 
   it('passes excludedContextIds from preview selection to ask request', async () => {
@@ -176,6 +211,7 @@ describe('AiPanel', () => {
       model: 'gpt-4o-mini',
       maskedSecrets: 0,
       localOnly: true,
+      copyablePrompt: 'QUESTION:\nexplain this code\n\n---BEGIN CONTEXT---\nVIEW: code\n---END CONTEXT---',
     }
 
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {

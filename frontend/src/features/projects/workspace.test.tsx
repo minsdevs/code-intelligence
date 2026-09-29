@@ -26,6 +26,10 @@ describe('project workspace', () => {
       'aria-current',
       'page',
     )
+    expect(within(tabs).getByRole('link', { name: 'Architecture' })).toHaveAttribute(
+      'href',
+      '/projects/demo-project/architecture',
+    )
 
     // 숫자 id가 아닌 미리보기에서는 Areas 자리 표시가 보인다
     expect(screen.getByText(/저장소를 import한 뒤 이곳에 표시됩니다/)).toBeInTheDocument()
