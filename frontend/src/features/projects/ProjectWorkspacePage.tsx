@@ -15,6 +15,7 @@ export default function ProjectWorkspacePage() {
     enabled: projectId != null,
   })
   const projectName = projectQuery.data?.name ?? (rawId ?? '')
+  const workspaceBasePath = projectId != null ? `/projects/${projectId}` : null
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -27,7 +28,7 @@ export default function ProjectWorkspacePage() {
           {workspaceTabs.map((tab) => (
             <NavLink
               key={tab.path}
-              to={tab.path}
+              to={workspaceBasePath ? `${workspaceBasePath}/${tab.path}` : tab.path}
               className={({ isActive }) =>
                 `whitespace-nowrap border-b-2 px-2.5 pb-2 pt-1 transition-colors ${
                   isActive

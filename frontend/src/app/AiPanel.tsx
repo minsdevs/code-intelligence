@@ -51,6 +51,7 @@ export default function AiPanel() {
   const [sending, setSending] = useState(false)
   const [preview, setPreview] = useState<AiPreviewResponse | null>(null)
   const [previewing, setPreviewing] = useState(false)
+  const [promptCopied, setPromptCopied] = useState(false)
   const [localDataOnly, setLocalDataOnly] = useState(false)
   const [excludedItems, setExcludedItems] = useState<Set<string>>(new Set())
 
@@ -78,7 +79,8 @@ export default function AiPanel() {
 
   const quick = quickQuestions(view, t)
   const configured = statusQuery.data?.configured === true
-  const canAsk = projectId != null && configured && !sending
+  const canPreview = projectId != null && !sending
+  const canAsk = canPreview && (configured || localDataOnly)
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -159,6 +161,7 @@ export default function AiPanel() {
     if (!trimmed || projectId == null || previewing) return
     setPreviewing(true)
     setPreview(null)
+    setPromptCopied(false)
     const body: AiAskBody = {
       conversationId,
       question: trimmed,
@@ -179,6 +182,12 @@ export default function AiPanel() {
     } finally {
       setPreviewing(false)
     }
+  }
+
+  async function copyPrompt() {
+    if (!preview?.copyablePrompt || !navigator.clipboard) return
+    await navigator.clipboard.writeText(preview.copyablePrompt)
+    setPromptCopied(true)
   }
 
   if (!open) {
@@ -342,6 +351,14 @@ export default function AiPanel() {
                 <p>Input tokens: ~{preview.estimatedInputTokens.toLocaleString()} · Output: ~{preview.estimatedOutputTokens.toLocaleString()}</p>
                 <p>Est. cost: ${preview.estimatedCostUsd.toFixed(5)}</p>
                 <p>Masked secrets: {preview.maskedSecrets} · Files: {preview.fileRefs.length}</p>
+                <button
+                  type="button"
+                  onClick={() => void copyPrompt()}
+                  disabled={!preview.copyablePrompt || !navigator.clipboard}
+                  className="mt-1 rounded border border-line-strong px-2 py-1 text-[11px] text-ink hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {promptCopied ? t('ai.promptCopied') : t('ai.copyPrompt')}
+                </button>
                 {localDataOnly ? (
                   <p className="text-warn">🔒 Local data only — AI request will be blocked</p>
                 ) : (
@@ -401,7 +418,7 @@ export default function AiPanel() {
             <button
               type="button"
               onClick={() => void onPreview()}
-              disabled={!canAsk || question.trim().length === 0 || previewing}
+              disabled={!canPreview || question.trim().length === 0 || previewing}
               className="rounded-md border border-line-strong bg-surface-2 px-2 py-1.5 text-[12px] text-ink-muted disabled:cursor-not-allowed disabled:opacity-60"
               title="Preview what will be sent"
             >

@@ -78,6 +78,7 @@ class AiPreviewServiceTest {
         assertThat(result.contextItems().get(0).type()).isEqualTo("VIEW");
         assertThat(result.contextItems().get(1).id()).isEqualTo("FILE:def789abc012");
         assertThat(result.contextItems().get(1).type()).isEqualTo("FILE");
+        assertThat(result.copyablePrompt()).contains("QUESTION:\nexplain this").contains("---BEGIN CONTEXT---");
     }
 
     @Test
