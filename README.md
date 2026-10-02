@@ -19,13 +19,16 @@ assistant.
 > implementation and validation record.
 >
 > **Release remains blocked** on the real browser 10-step E2E and an approved
-> accuracy/false-positive oracle for representative repositories. User-data
-> backup/restore and roadmap P2 incremental reanalysis are not implemented.
+> accuracy/false-positive oracle for representative repositories. Desktop
+> backup/restore is implemented for the local macOS runtime; roadmap P2
+> incremental reanalysis is not implemented.
 
 This repository currently ships a browser-based local workspace with a Spring
-Boot backend and optional analyzer sidecars. It is not yet a packaged native
-desktop application: there is no Tauri/Electron runtime, installer, auto-update
-channel, or macOS/Windows/Linux signing pipeline in this repository.
+Boot backend and optional analyzer sidecars, plus an Electron desktop runtime
+under `desktop/`. The desktop path is a local macOS arm64 RC surface: it stages
+the backend, analyzer, JRE, PostgreSQL, and Redis, keeps runtime credentials in
+OS-protected storage, and exposes only the allowlisted renderer bridge. It is
+not a signed/notarized production distribution or an auto-update channel.
 
 ## Principles
 
@@ -69,6 +72,44 @@ openssl rand -base64 32
 ./stop-local
 ```
 
+For the local macOS desktop runtime, use a staged bundle after the browser
+checks pass:
+
+```bash
+(cd desktop && npm ci && npm run stage && npm start)
+```
+
+`desktop/scripts/stage-runtime.mjs` currently verifies macOS arm64, builds the
+frontend/analyzer/backend, and requires local PostgreSQL with pgvector and
+Redis binaries. `pack:mac` creates a local directory package; signing,
+notarization, fresh-machine install, and real OAuth remain release blockers.
+When the host `pgvector` bottle targets a different PostgreSQL major, set
+`PGVECTOR_ROOT` to a matching build root containing `lib/postgresql` and
+`share/postgresql/extension` before staging; the stage is committed atomically
+only after its manifest is complete.
+
+On macOS, Electron's default app-data directory is
+`~/Library/Application Support/code-intelligence-desktop` (the desktop package
+name is `code-intelligence-desktop`). Based on `desktop/src/main.cjs`, the
+bundled PostgreSQL database is stored below `postgres/`, Redis state below
+`redis/`, backend data and repositories below `data/`, and restore recovery
+backups below `recovery/<timestamp>/` within that app-data directory. Runtime
+child logs use Electron's `app.getPath('logs')`, so they are written to
+`~/Library/Logs/code-intelligence-desktop/runtime` on macOS, outside the app-data
+directory. User-selected backup exports remain at the destination chosen in the
+backup dialog.
+
+To create and directly run the local unsigned directory package:
+
+```bash
+(cd desktop && npm run stage && npm run pack:mac)
+open "desktop/dist/mac-arm64/Code Intelligence.app"
+```
+
+This produces a local `electron-builder --mac dir` package. The package was
+directly launched for macOS acceptance, but it was not copied to
+`/Applications`; no release, publishing, or deployment was performed.
+
 `./start-local` is a development helper, not a production supervisor. It starts
 the analyzer containers only when `TS_ANALYZER_BASE_URL` or
 `TREE_ANALYZER_BASE_URL` is configured. To start all local infrastructure
@@ -84,8 +125,10 @@ docker compose up -d
 (cd frontend && npm ci && npm run dev)
 ```
 
-AI is optional. GitHub OAuth credentials are optional because PAT login is
-supported, but `TOKEN_ENC_KEY` is always required by the backend. Set
+AI is optional. Native GitHub OAuth requires `GITHUB_NATIVE_CLIENT_ID` at
+desktop/backend launch. The client secret is never placed in the desktop
+binary; PAT login is supported as a secondary path. `TOKEN_ENC_KEY` is always
+required by the backend. Set
 `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040` and
 `TREE_ANALYZER_BASE_URL=http://127.0.0.1:3041` to enable the sidecars.
 
@@ -108,6 +151,10 @@ Run these commands from the repository root:
 
 # Docker-backed golden corpus + analyzer quality/performance thresholds
 ./quality-gate
+
+# Desktop syntax and local macOS staging/package checks
+(cd desktop && node --check src/main.cjs && node --check src/preload.cjs)
+(cd desktop && npm run stage && npm run pack:mac)
 ```
 
 CI runs the backend, frontend, TypeScript analyzer, and tree-sitter analyzer
@@ -175,6 +222,17 @@ not a production deployment.
   provider. Excluded context IDs are filtered server-side; “local data only”
   prevents the frontend from sending an AI request. This is not a guarantee
   about provider policy when a request is actually sent.
+- **Copyable prompt:** Context Preview can generate a masked, copyable prompt
+  without an AI key or provider request. It is a handoff artifact, not a claim
+  that an external model was called.
+- **Reanalysis diff:** local refresh remains an explicitly confirmed full
+  reanalysis. Snapshot comparison shows changed features, flows, findings,
+  nodes, relations, coverage, rename candidates, and regression warnings;
+  incremental P2 reanalysis is still out of scope.
+- **Desktop recovery:** the desktop Settings screen shows runtime status and
+  services, restart, backup, and restore. Restore requires a UI confirmation
+  and a main-process warning after manifest/hash validation; a recovery backup
+  is created only after explicit Restore.
 
 ## RC validation record (2026-08-24)
 
@@ -206,16 +264,15 @@ and blockers in [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md).
 |---|---|
 | Local browser + Spring Boot backend | Supported development path |
 | Docker Compose PostgreSQL/Redis/sidecars | Supported local infrastructure |
-| macOS native installer | Not implemented |
-| Windows native installer | Not implemented |
-| Linux native package | Not implemented |
+| macOS arm64 Electron runtime | Local staged/package RC; unsigned/notarized acceptance pending |
+| Windows native installer | Not verified |
+| Linux native package | Not verified |
 | Production hosted deployment | Deployment-specific; no release workflow is included |
 
-The current release is therefore suitable for local evaluation and development,
-not for claiming a signed cross-platform desktop distribution. A future desktop
-release must add a native runtime, OS credential integration, packaging,
-signing/notarization, update delivery, crash recovery, and platform CI before it
-can be called production-ready.
+The only follow-up deployment sequence is: Developer ID signing → notarization
+→ staple/Gatekeeper validation → fresh-machine backup/restore/OAuth acceptance
+→ release. Developer ID/notary credentials and real OAuth credentials were not
+available or used for this local verification.
 
 ## Troubleshooting
 

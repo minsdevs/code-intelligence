@@ -81,7 +81,9 @@ check_env_file() {
   if [ -f "$SCRIPT_DIR/.env" ]; then
     ok ".env file found"
     # shellcheck source=/dev/null
+    set -a
     source "$SCRIPT_DIR/.env"
+    set +a
     if [ -z "${TOKEN_ENC_KEY:-}" ]; then
       fail "TOKEN_ENC_KEY is empty in .env (required for backend)"
       echo "    Fix: openssl rand -base64 32   and paste into .env"
@@ -166,7 +168,7 @@ done
 
 # ─── Start backend ──────────────────────────────────────────────────────────
 info "Starting backend (Spring Boot)..."
-(cd "$SCRIPT_DIR/backend" && ./gradlew bootRun --console=plain -q &)
+(cd "$SCRIPT_DIR/backend" && exec ./gradlew bootRun --console=plain -q) &
 BACKEND_PID=$!
 
 info "Waiting for backend health endpoint..."
@@ -183,7 +185,7 @@ done
 
 # ─── Start frontend ─────────────────────────────────────────────────────────
 info "Starting frontend (Vite dev server)..."
-(cd "$SCRIPT_DIR/frontend" && npm install --silent && npm run dev &)
+(cd "$SCRIPT_DIR/frontend" && npm install --silent && exec npm run dev) &
 FRONTEND_PID=$!
 sleep 3
 ok "Frontend dev server starting (PID: $FRONTEND_PID)"

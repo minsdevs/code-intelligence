@@ -17,13 +17,16 @@ Database, Infrastructure, DevOps, Security, Testing, AI, …)을 자동으로 �
 > [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md)를 참조하십시오.
 >
 > **릴리스는 여전히** 실제 브라우저 10단계 E2E와 대표 저장소에 대해 승인된
-> 정확도/오탐 oracle 때문에 차단되어 있습니다. 사용자 데이터 백업/복원과
-> 로드맵 P2 증분 재분석은 구현되지 않았습니다.
+> 정확도/오탐 oracle 때문에 차단되어 있습니다. 사용자 데이터 백업/복원은
+> 로컬 macOS runtime에 구현되었지만, 로드맵 P2 증분 재분석은 구현되지
+> 않았습니다.
 
 이 저장소는 현재 Spring Boot 백엔드와 선택적 analyzer sidecar를 갖춘
-브라우저 기반 로컬 워크스페이스를 제공합니다. 아직 패키징된 네이티브 데스크톱
-애플리케이션은 아닙니다. 이 저장소에는 Tauri/Electron 런타임, 설치 프로그램,
-자동 업데이트 채널 또는 macOS/Windows/Linux 서명 파이프라인이 없습니다.
+브라우저 기반 로컬 워크스페이스와 `desktop/`의 Electron 데스크톱 runtime을
+제공합니다. 데스크톱 경로는 backend, analyzer, JRE, PostgreSQL, Redis를
+staging하고 OS 보호 저장소에 runtime credential을 보관하는 macOS arm64 RC
+surface입니다. 서명/notarization된 프로덕션 배포나 자동 업데이트 채널은
+아직 아닙니다.
 
 ## 원칙
 
@@ -65,6 +68,43 @@ openssl rand -base64 32
 ./stop-local
 ```
 
+브라우저 검증 후 로컬 macOS 데스크톱 runtime은 다음처럼 실행할 수 있습니다.
+
+```bash
+(cd desktop && npm ci && npm run stage && npm start)
+```
+
+`desktop/scripts/stage-runtime.mjs`는 현재 macOS arm64를 검증하고
+frontend/analyzer/backend를 빌드하며, 로컬 PostgreSQL(pgvector 포함)과 Redis
+binary를 요구합니다. `pack:mac`은 로컬 directory package를 생성합니다.
+서명, notarization, 새 기기 설치 및 실제 OAuth는 여전히 release blocker입니다.
+호스트의 `pgvector` bottle이 선택한 PostgreSQL major와 다르면, 해당
+`pg_config`로 빌드한 extension root(`lib/postgresql` 및
+`share/postgresql/extension` 포함)를 `PGVECTOR_ROOT`로 지정해야 합니다.
+stage는 manifest가 완성된 뒤에만 원자적으로 교체됩니다.
+
+macOS Electron의 기본 app-data 위치는
+`~/Library/Application Support/code-intelligence-desktop`입니다
+(`desktop` 패키지 이름은 `code-intelligence-desktop`). 현재
+`desktop/src/main.cjs` 기준으로 bundled PostgreSQL DB는 `postgres/`, Redis
+상태는 `redis/`, backend data와 repositories는 `data/`, 복원 전 recovery
+backup은 `recovery/<timestamp>/` 아래에 저장됩니다. Runtime child log는
+Electron의 `app.getPath('logs')`를 사용하므로 macOS에서는 app-data 밖의
+`~/Library/Logs/code-intelligence-desktop/runtime`에 기록됩니다. 사용자가
+선택한 backup export는 backup dialog에서 선택한 위치에 남습니다.
+
+로컬 unsigned directory package를 만들고 직접 실행하는 경로는 다음과
+같습니다.
+
+```bash
+(cd desktop && npm run stage && npm run pack:mac)
+open "desktop/dist/mac-arm64/Code Intelligence.app"
+```
+
+이는 `electron-builder --mac dir` 로컬 package를 생성합니다. 이 package는
+macOS acceptance를 위해 직접 실행했지만 `/Applications`로 복사하지 않았고,
+release·publish·deploy도 수행하지 않았습니다.
+
 `./start-local`은 개발 도우미이며 프로덕션 supervisor가 아닙니다.
 `TS_ANALYZER_BASE_URL` 또는 `TREE_ANALYZER_BASE_URL`이 설정된 경우에만
 analyzer 컨테이너를 시작합니다. 두 analyzer를 포함한 모든 로컬 인프라를
@@ -80,8 +120,10 @@ docker compose up -d
 (cd frontend && npm ci && npm run dev)
 ```
 
-AI는 선택 사항입니다. PAT 로그인을 지원하므로 GitHub OAuth 자격 증명도
-선택 사항이지만, 백엔드에는 항상 `TOKEN_ENC_KEY`가 필요합니다. sidecar를
+AI는 선택 사항입니다. Native GitHub OAuth에는 desktop/backend 실행 시
+`GITHUB_NATIVE_CLIENT_ID`가 필요합니다. client secret은 desktop binary에
+넣지 않으며, PAT login은 secondary 경로로만 지원합니다. 백엔드에는 항상
+`TOKEN_ENC_KEY`가 필요합니다. sidecar를
 활성화하려면 `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040`과
 `TREE_ANALYZER_BASE_URL=http://127.0.0.1:3041`을 설정하십시오.
 
@@ -104,6 +146,10 @@ AI는 선택 사항입니다. PAT 로그인을 지원하므로 GitHub OAuth 자�
 
 # Docker-backed golden corpus + analyzer quality/performance thresholds
 ./quality-gate
+
+# Desktop syntax 및 local macOS staging/package 검사
+(cd desktop && node --check src/main.cjs && node --check src/preload.cjs)
+(cd desktop && npm run stage && npm run pack:mac)
 ```
 
 CI는 모든 pull request에서 backend, frontend, TypeScript analyzer와 tree-sitter
@@ -168,6 +214,17 @@ AI 컨텍스트를 구성하기 전에 secret을 마스킹하지만, 사용자�
   사용합니다. 제외한 컨텍스트 ID는 서버 측에서 필터링되며, “local data only”는
   frontend가 AI 요청을 보내지 못하게 합니다. 실제 요청이 전송될 때의 provider
   정책을 보장하는 것은 아닙니다.
+- **복사 가능한 prompt:** Context Preview는 AI key나 provider 요청 없이
+  secret을 마스킹한 prompt를 생성하고 복사할 수 있습니다. 이는 외부 model
+  호출이 발생했다는 의미가 아닙니다.
+- **재분석 diff:** local refresh는 명시적으로 확인하는 전체 재분석입니다.
+  Snapshot comparison에서 feature, flow, finding, node, relation, coverage,
+  rename candidate와 regression warning을 비교합니다. 증분 P2 재분석은
+  여전히 범위 밖입니다.
+- **Desktop recovery:** desktop Settings에서 runtime 상태/service, restart,
+  backup, restore를 확인할 수 있습니다. Restore는 manifest/hash 검증 뒤
+  UI 확인과 main-process warning을 모두 거치며, 명시적으로 Restore한 경우에만
+  recovery backup을 만듭니다.
 
 ## RC 검증 기록 (2026-08-24)
 
@@ -199,15 +256,15 @@ AI 컨텍스트를 구성하기 전에 secret을 마스킹하지만, 사용자�
 |---|---|
 | 로컬 브라우저 + Spring Boot backend | 지원되는 개발 경로 |
 | Docker Compose PostgreSQL/Redis/sidecar | 지원되는 로컬 인프라 |
-| macOS 네이티브 설치 프로그램 | 구현되지 않음 |
-| Windows 네이티브 설치 프로그램 | 구현되지 않음 |
-| Linux 네이티브 패키지 | 구현되지 않음 |
+| macOS arm64 Electron runtime | 로컬 staging/package RC; unsigned/notarized acceptance 대기 |
+| Windows 네이티브 설치 프로그램 | 검증하지 않음 |
+| Linux 네이티브 패키지 | 검증하지 않음 |
 | 프로덕션 호스팅 배포 | 배포별로 다름; 릴리스 워크플로가 포함되지 않음 |
 
-따라서 현재 릴리스는 서명된 크로스 플랫폼 데스크톱 배포라고 주장하기 위한 것이
-아니라 로컬 평가와 개발에 적합합니다. 향후 데스크톱 릴리스가 프로덕션 준비
-완료로 불리려면 네이티브 런타임, OS 자격 증명 통합, 패키징, 서명/notarization,
-업데이트 전달, crash 복구, 플랫폼 CI를 추가해야 합니다.
+후속 배포 순서는 Developer ID 서명 → notarization → staple/Gatekeeper 검증
+→ fresh-machine backup/restore/OAuth acceptance → release 순서로만 진행합니다.
+이번 로컬 검증에는 Developer ID/notary credential과 실제 OAuth credential을
+사용할 수 없었고, 사용하지도 않았습니다.
 
 ## 문제 해결
 

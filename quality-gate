@@ -16,6 +16,8 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
+"$ROOT/accuracy-gate"
+
 CORPUS="$ROOT/backend/src/test/resources/fixtures"
 CORPUS_FILES="$(find "$CORPUS" -type f | wc -l | tr -d ' ')"
 if (( CORPUS_FILES < MIN_CORPUS_FILES )); then
@@ -33,6 +35,7 @@ GRADLE_ARGS=(
   --tests '*.FixtureGoldenTest'
   --tests '*.SpringMiniGraphGoldenTest'
   --tests '*.SpringMiniEndpointsFeaturesGoldenTest'
+  --tests '*.ReactMiniTsParsingGoldenTest'
   --tests '*.FullstackCrossDomainGoldenTest'
   --tests '*.ConfigAnalyzersGoldenTest'
 )
