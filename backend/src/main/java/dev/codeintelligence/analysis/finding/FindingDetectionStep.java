@@ -133,9 +133,11 @@ public class FindingDetectionStep implements JobStep {
                           and n.node_type = 'FE_ROUTE'
                           and not exists (
                               select 1 from graph_edges e
+                              join graph_nodes component on component.id = e.target_node_id
                               where e.snapshot_id = :snapshotId
                                 and e.source_node_id = n.id
-                                and e.edge_type = 'CONSUMES'
+                                and e.edge_type = 'CONTAINS'
+                                and component.node_type = 'COMPONENT'
                           )
                         """)
                 .param("snapshotId", snapshotId)
@@ -146,8 +148,8 @@ public class FindingDetectionStep implements JobStep {
                             rs.getString("area_type"),
                             "ORPHAN_ROUTE",
                             "LOW",
-                            "Frontend route does not consume an API",
-                            "Route " + rs.getString("name") + " has no CONSUMES edge",
+                            "Frontend route has no resolved component",
+                            "Route " + rs.getString("name") + " has no CONTAINS edge to a component",
                             rs.getLong("id"),
                             rs.getString("file_path"),
                             (Integer) rs.getObject("line_start"));

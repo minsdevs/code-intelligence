@@ -63,3 +63,28 @@ spotless {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+tasks.processResources {
+    from(layout.projectDirectory.dir("../frontend/dist")) {
+        into("static")
+    }
+}
+
+tasks.register<Test>("accuracyTest") {
+    description = "Checks reviewed fixture semantics; run via ../accuracy-gate for the real local TS analyzer."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter { includeTestsMatching("dev.codeintelligence.analysis.accuracy.*Test") }
+    val tsUrl = providers.gradleProperty("accuracyTsUrl")
+    doFirst {
+        require(tsUrl.isPresent) { "Use ./accuracy-gate at the repository root (real TS analyzer required)." }
+        require(tsUrl.get().matches(Regex("http://127\\.0\\.0\\.1:[0-9]+"))) { "Only a local analyzer is allowed." }
+        systemProperty("accuracy.ts-url", tsUrl.get())
+    }
+    outputs.upToDateWhen { false }
+    testLogging {
+        events("passed", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = true
+    }
+}

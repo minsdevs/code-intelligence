@@ -27,7 +27,7 @@ public class TsParsingStep implements JobStep {
 
     public static final String KEY = "TS_PARSING";
     public static final int ORDER = 750;
-    static final int BATCH_SIZE = 40;
+    static final int BATCH_SIZE = 500;
 
     private static final Logger log = LoggerFactory.getLogger(TsParsingStep.class);
 
@@ -98,7 +98,7 @@ public class TsParsingStep implements JobStep {
                         rs.getString("content_hash")))
                 .list()
                 .stream()
-                .filter(TsParsingStep::isFrontendSource)
+                .filter(TsParsingStep::isAnalyzerInput)
                 .toList();
     }
 
@@ -122,7 +122,7 @@ public class TsParsingStep implements JobStep {
         return payloads;
     }
 
-    static boolean isFrontendSource(InventoriedFile file) {
+    static boolean isAnalyzerInput(InventoriedFile file) {
         String language = file.language() == null ? "" : file.language().toLowerCase(Locale.ROOT);
         if ("typescript".equals(language)
                 || "javascript".equals(language)
@@ -131,11 +131,14 @@ public class TsParsingStep implements JobStep {
             return true;
         }
         String path = file.path().toLowerCase(Locale.ROOT);
+        String name = path.substring(path.lastIndexOf('/') + 1);
         return path.endsWith(".ts")
                 || path.endsWith(".tsx")
                 || path.endsWith(".js")
                 || path.endsWith(".jsx")
                 || path.endsWith(".py")
-                || path.endsWith(".go");
+                || path.endsWith(".go")
+                || name.equals("package.json")
+                || name.matches("(?:tsconfig|jsconfig)(?:\\.[^/]+)?\\.json");
     }
 }

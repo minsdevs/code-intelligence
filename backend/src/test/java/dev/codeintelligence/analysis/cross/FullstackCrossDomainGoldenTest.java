@@ -84,6 +84,9 @@ class FullstackCrossDomainGoldenTest {
             assertThat(edgePairs(run.snapshotId(), "MAPS_TO")).anyMatch(pair -> pair.contains("todos"));
             assertThat(edgePairs(run.snapshotId(), "READS_WRITES")).isNotEmpty();
             assertThat(kinds(run.snapshotId())).contains("BACKEND", "FE_BE");
+            assertThat(backendFlowSteps(run.snapshotId(), "endpoint:GET:/todos"))
+                    .contains("GET /todos", "TodoController", "list", "findAll")
+                    .doesNotContain("get", "create", "findById", "save");
             Integer findings = jdbcTemplate.queryForObject(
                     "select count(*) from analysis_findings where snapshot_id = ?", Integer.class, run.snapshotId());
             assertThat(findings).isNotNull();
@@ -138,6 +141,18 @@ class FullstackCrossDomainGoldenTest {
     private Set<String> kinds(long snapshotId) {
         return jdbcTemplate.queryForList("select kind from flows where snapshot_id = ?", snapshotId).stream()
                 .map(row -> String.valueOf(row.get("kind")))
+                .collect(Collectors.toSet());
+    }
+
+    private Set<String> backendFlowSteps(long snapshotId, String endpointKey) {
+        return jdbcTemplate.queryForList("""
+                        select fs.description
+                        from flows f
+                        join graph_nodes entry on entry.id = f.entry_node_id
+                        join flow_steps fs on fs.flow_id = f.id
+                        where f.snapshot_id = ? and f.kind = 'BACKEND' and entry.natural_key = ?
+                        """, snapshotId, endpointKey).stream()
+                .map(row -> String.valueOf(row.get("description")))
                 .collect(Collectors.toSet());
     }
 

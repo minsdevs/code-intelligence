@@ -35,6 +35,8 @@ export type ImportHit = {
   fromPath: string
   toPath: string
   imported: string
+  importedName?: string
+  typeOnly?: boolean
 }
 
 export type EndpointHit = {
@@ -42,9 +44,41 @@ export type EndpointHit = {
   path: string
   handlerKey: string
   handler: string | null
+  ownerKey?: string | null
   filePath: string
   lineStart: number
   lineEnd: number
+  metadata?: Record<string, unknown>
+}
+
+export type SemanticNodeHit = {
+  key: string
+  type: string
+  name: string
+  filePath: string | null
+  lineStart: number | null
+  lineEnd: number | null
+  layer: string | null
+  metadata: Record<string, unknown>
+}
+
+export type SemanticEdgeHit = {
+  sourceKey: string
+  targetKey: string
+  type: string
+  confidence: 'CONFIRMED' | 'LIKELY' | 'POSSIBLE'
+  filePath: string | null
+  lineStart: number | null
+  lineEnd: number | null
+  metadata: Record<string, unknown>
+}
+
+export type UnresolvedCallHit = {
+  sourceKey: string
+  expression: string
+  filePath: string
+  lineStart: number
+  reason: string
 }
 
 export type AnalyzeResponse = {
@@ -56,4 +90,7 @@ export type AnalyzeResponse = {
   imports: ImportHit[]
   symbols: SymbolHit[]
   endpoints: EndpointHit[]
+  nodes: SemanticNodeHit[]
+  edges: SemanticEdgeHit[]
+  unresolvedCalls: UnresolvedCallHit[]
 }

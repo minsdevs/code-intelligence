@@ -157,11 +157,15 @@ public class FlowDetectionStep implements JobStep {
             ordered.add(controller.id);
             ArrayDeque<long[]> queue = new ArrayDeque<>();
             for (Edge declared : graph.out.getOrDefault(controller.id, List.of())) {
-                if ("DECLARES".equals(declared.type)) {
-                    Node method = graph.byId.get(declared.targetId);
-                    if (method != null && "METHOD".equals(method.type)) {
-                        queue.add(new long[] {method.id, 0});
-                    }
+                if (!"DECLARES".equals(declared.type)) {
+                    continue;
+                }
+                Node method = graph.byId.get(declared.targetId);
+                if (method != null
+                        && "METHOD".equals(method.type)
+                        && endpoint.handlerKey != null
+                        && endpoint.handlerKey.equals(method.naturalKey)) {
+                    queue.add(new long[] {method.id, 0});
                 }
             }
             Set<Long> visited = new HashSet<>();
@@ -244,7 +248,7 @@ public class FlowDetectionStep implements JobStep {
         Graph graph = new Graph();
         jdbc.sql("""
                         select n.id, n.node_type, n.natural_key, n.name, f.path as file_path,
-                               n.metadata->>'layer' as layer
+                               n.metadata->>'layer' as layer, n.metadata->>'handlerKey' as handler_key
                         from graph_nodes n
                         left join files f on f.id = n.file_id
                         where n.snapshot_id = :snapshotId
@@ -257,7 +261,8 @@ public class FlowDetectionStep implements JobStep {
                             rs.getString("natural_key"),
                             rs.getString("name"),
                             rs.getString("file_path"),
-                            rs.getString("layer"));
+                            rs.getString("layer"),
+                            rs.getString("handler_key"));
                     graph.byId.put(node.id, node);
                     graph.nodesByType
                             .computeIfAbsent(node.type, key -> new ArrayList<>())
@@ -295,7 +300,8 @@ public class FlowDetectionStep implements JobStep {
         private final Map<Long, List<Edge>> in = new HashMap<>();
     }
 
-    private record Node(long id, String type, String naturalKey, String name, String filePath, String layer) {}
+    private record Node(
+            long id, String type, String naturalKey, String name, String filePath, String layer, String handlerKey) {}
 
     private record Edge(long id, long sourceId, long targetId, String type) {}
 

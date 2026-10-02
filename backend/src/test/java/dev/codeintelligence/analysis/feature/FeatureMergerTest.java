@@ -39,4 +39,15 @@ class FeatureMergerTest {
                 .extracting(FeatureMerger.Seed::name)
                 .containsExactly("auth");
     }
+
+    @Test
+    void sameNameRouteAndEndpointSeedsKeepBothDomainsRegardlessOfOrder() {
+        var backend = new FeatureMerger.Seed("todos", Set.of("endpoint:GET:/todos"), true);
+        var frontend = new FeatureMerger.Seed("todos", Set.of("route:/todos"), true);
+        for (var seeds : List.of(List.of(backend, frontend), List.of(frontend, backend))) {
+            var merged = FeatureMerger.dropUnmergedPackageSeeds(FeatureMerger.merge(seeds, 0.5));
+            assertThat(merged).hasSize(1);
+            assertThat(merged.getFirst().nodeKeys()).containsExactlyInAnyOrder("endpoint:GET:/todos", "route:/todos");
+        }
+    }
 }

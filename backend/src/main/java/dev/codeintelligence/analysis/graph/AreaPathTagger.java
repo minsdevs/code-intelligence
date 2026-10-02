@@ -2,9 +2,13 @@ package dev.codeintelligence.analysis.graph;
 
 import dev.codeintelligence.analysis.area.AreaType;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /** Path-based area_type tagging for graph nodes (기획서 §9.3, task 1-8 example: src/test → TESTING). */
 public final class AreaPathTagger {
+
+    private static final Pattern TEST_PATH =
+            Pattern.compile("(^|/)(test|tests|__tests__)/|\\.(test|spec)\\.[cm]?[jt]sx?$");
 
     private AreaPathTagger() {}
 
@@ -14,7 +18,7 @@ public final class AreaPathTagger {
         }
         String normalized = path.replace('\\', '/');
         String lower = normalized.toLowerCase(Locale.ROOT);
-        if (normalized.contains("src/test") || lower.contains("/test/") && lower.endsWith(".java")) {
+        if (TEST_PATH.matcher(lower).find()) {
             return AreaType.TESTING.name();
         }
         if (normalized.contains("src/main/java") || lower.endsWith(".java")) {

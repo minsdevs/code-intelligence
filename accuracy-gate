@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+[[ -z "${ACCURACY_BASELINE_UPDATE:-}" ]] || { echo '[FAIL] automatic oracle updates are forbidden' >&2; exit 1; }
+docker info >/dev/null 2>&1 || { echo '[FAIL] Docker is required for fixture accuracy tests' >&2; exit 1; }
+
+# Use installed dependencies only. No downloads, credentials, GitHub calls or .env sourcing.
+(cd "$ROOT/analyzers/ts-analyzer" && npm run build)
+URL_FILE="$(mktemp)"
+SIDECAR_PID=""
+cleanup() {
+  if [[ -n "$SIDECAR_PID" ]]; then
+    kill "$SIDECAR_PID" 2>/dev/null || true
+    wait "$SIDECAR_PID" 2>/dev/null || true
+  fi
+  rm -f "$URL_FILE"
+}
+trap cleanup EXIT
+node "$ROOT/analyzers/ts-analyzer/accuracy-server.cjs" > "$URL_FILE" &
+SIDECAR_PID=$!
+for ((attempt=0; attempt<100; attempt++)); do
+  [[ -s "$URL_FILE" ]] && break
+  kill -0 "$SIDECAR_PID" 2>/dev/null || { echo '[FAIL] local TS analyzer exited' >&2; exit 1; }
+  sleep 0.1
+done
+read -r TS_URL < "$URL_FILE" || { echo '[FAIL] local TS analyzer did not become ready' >&2; exit 1; }
+[[ "$TS_URL" =~ ^http://127\.0\.0\.1:[0-9]+$ ]] || { echo '[FAIL] expected a loopback analyzer URL' >&2; exit 1; }
+"$ROOT/backend/gradlew" --offline -p "$ROOT/backend" accuracyTest "-PaccuracyTsUrl=$TS_URL" --console=plain
+echo '[PASS] fixture accuracy: spring-mini, react-mini, fullstack-mini (real local TS analyzer + database pipeline)'
+echo '[검증 필요] real repositories, real-backend browser E2E and backup/restore remain separate release blockers'
