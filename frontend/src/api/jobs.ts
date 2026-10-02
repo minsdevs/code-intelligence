@@ -1,4 +1,4 @@
-import { apiGet, apiSend } from './client'
+import { apiGet, apiSend, desktopApiHeaders, resolveApiUrl } from './client'
 import type { JobDetail } from './types'
 
 export function getJob(jobId: number): Promise<JobDetail> {
@@ -30,22 +30,22 @@ function emitEventBlock(block: string, onJob: (job: JobDetail) => void): void {
   if (data) onJob(parseJobEventData(data))
 }
 
+/** Fetch-based SSE keeps the desktop launch token in a header; EventSource cannot set headers. */
 export function subscribeJobEvents(
   jobId: number,
   onJob: (job: JobDetail) => void,
   onDisconnect: () => void,
 ): () => void {
   const controller = new AbortController()
-  void fetch(`/api/jobs/${jobId}/events`, {
+  void fetch(resolveApiUrl(`/api/jobs/${jobId}/events`), {
     method: 'GET',
     credentials: 'include',
-    headers: new Headers({ Accept: 'text/event-stream' }),
+    headers: desktopApiHeaders(new Headers({ Accept: 'text/event-stream' })),
     signal: controller.signal,
   })
     .then(async (response) => {
-      if (!response.ok || !response.body) {
+      if (!response.ok || !response.body)
         throw new Error(`Event stream failed (${response.status})`)
-      }
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''

@@ -1,6 +1,9 @@
 package dev.codeintelligence.common.config;
 
+import dev.codeintelligence.auth.AccountService;
 import dev.codeintelligence.auth.AuthProperties;
+import dev.codeintelligence.auth.DesktopAuthProperties;
+import dev.codeintelligence.auth.DesktopAuthenticationFilter;
 import dev.codeintelligence.auth.GithubOAuth2UserService;
 import dev.codeintelligence.auth.PatLoginRateLimitFilter;
 import jakarta.servlet.DispatcherType;
@@ -66,6 +69,8 @@ public class SecurityConfig {
             HttpSecurity http,
             CorsProperties corsProperties,
             AuthProperties authProperties,
+            DesktopAuthProperties desktopAuthProperties,
+            AccountService accountService,
             SecurityContextRepository securityContextRepository,
             GithubOAuth2UserService githubOAuth2UserService,
             ObjectProvider<ClientRegistrationRepository> clientRegistrations)
@@ -75,7 +80,11 @@ public class SecurityConfig {
 
         http.cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository)
-                        .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
+                        .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
+                        .ignoringRequestMatchers("/api/desktop/paths"))
+                .addFilterBefore(
+                        new DesktopAuthenticationFilter(desktopAuthProperties, accountService),
+                        BasicAuthenticationFilter.class)
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .addFilterAfter(new PatLoginRateLimitFilter(authProperties), CsrfFilter.class)
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
@@ -97,6 +106,8 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.GET, "/api/csrf", "/api/auth/me")
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/auth/pat")
+                                .permitAll()
+                                .requestMatchers(HttpMethod.GET, "/api/auth/github/native/callback")
                                 .permitAll()
                                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                                 .permitAll()
@@ -122,8 +133,12 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(corsProperties.allowedOrigins());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(
-                List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT, "X-XSRF-TOKEN", "X-Requested-With"));
+        config.setAllowedHeaders(List.of(
+                HttpHeaders.CONTENT_TYPE,
+                HttpHeaders.ACCEPT,
+                "X-XSRF-TOKEN",
+                "X-Requested-With",
+                DesktopAuthenticationFilter.TOKEN_HEADER));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
