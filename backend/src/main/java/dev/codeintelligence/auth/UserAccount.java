@@ -18,8 +18,14 @@ public class UserAccount {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "github_id", nullable = false, unique = true)
+    @Column(name = "github_id", unique = true)
     private Long githubId;
+
+    @Column(name = "local_key", unique = true)
+    private String localKey;
+
+    @Column(name = "identity_type", nullable = false)
+    private String identityType;
 
     @Column(nullable = false)
     private String login;
@@ -42,12 +48,39 @@ public class UserAccount {
         this.login = login;
         this.name = name;
         this.avatarUrl = avatarUrl;
+        this.identityType = "GITHUB";
+    }
+
+    public static UserAccount local(String localKey) {
+        UserAccount account = new UserAccount();
+        account.localKey = localKey;
+        account.login = "local";
+        account.name = "Local workspace";
+        account.identityType = "LOCAL";
+        return account;
     }
 
     public void updateProfile(String login, String name, String avatarUrl) {
         this.login = login;
         this.name = name;
         this.avatarUrl = avatarUrl;
+    }
+
+    public void linkGithub(long githubId, String login, String name, String avatarUrl) {
+        this.githubId = githubId;
+        updateProfile(login, name, avatarUrl);
+        this.identityType = localKey == null ? "GITHUB" : "LOCAL_LINKED";
+    }
+
+    public void disconnectGithub() {
+        if (localKey == null) {
+            throw new IllegalStateException("A GitHub-only account cannot be disconnected without a local identity");
+        }
+        githubId = null;
+        login = "local";
+        name = "Local workspace";
+        avatarUrl = null;
+        identityType = "LOCAL";
     }
 
     @PrePersist
@@ -67,6 +100,14 @@ public class UserAccount {
 
     public Long getGithubId() {
         return githubId;
+    }
+
+    public String getLocalKey() {
+        return localKey;
+    }
+
+    public String getIdentityType() {
+        return identityType;
     }
 
     public String getLogin() {

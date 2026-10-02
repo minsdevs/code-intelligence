@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { listProjects } from '../../api/projects'
+import { useState } from 'react'
+import { deleteProject, listProjects } from '../../api/projects'
 import EmptyState from '../../components/EmptyState'
 import { FolderIcon, GithubIcon } from '../../components/icons'
 import { useT } from '../../lib/i18n'
@@ -9,6 +10,15 @@ import { areaLabel } from '../areas/labels'
 
 export default function ProjectsPage() {
   const t = useT()
+  const queryClient = useQueryClient()
+  const [removeProjectId, setRemoveProjectId] = useState<number | null>(null)
+  const removeMutation = useMutation({
+    mutationFn: deleteProject,
+    onSuccess: async () => {
+      setRemoveProjectId(null)
+      await queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
   const query = useQuery({
     queryKey: ['projects'],
     queryFn: listProjects,
@@ -28,7 +38,9 @@ export default function ProjectsPage() {
         </Link>
       </div>
 
-      {query.isLoading && <p className="py-8 text-center text-[13px] text-ink-muted">{t('projects.loading')}</p>}
+      {query.isLoading && (
+        <p className="py-8 text-center text-[13px] text-ink-muted">{t('projects.loading')}</p>
+      )}
 
       {!query.isLoading && query.error && (
         <p role="alert" className="py-8 text-center text-[13px] text-danger">
@@ -53,14 +65,16 @@ export default function ProjectsPage() {
             const status = project.currentSnapshot?.status ?? 'ANALYZING'
             const ready = status === 'READY'
             return (
-              <li key={project.id}>
+              <li key={project.id} className="flex flex-col gap-1">
                 <Link
                   to={`/projects/${project.id}`}
                   className="flex flex-col gap-2.5 rounded-lg border border-line bg-surface-1 px-4 py-3.5 transition-colors hover:border-line-strong hover:bg-surface-2"
                 >
                   <div className="flex items-center gap-2">
                     <FolderIcon className="shrink-0 text-accent" />
-                    <span className="min-w-0 truncate text-[14px] font-semibold text-ink">{project.name}</span>
+                    <span className="min-w-0 truncate text-[14px] font-semibold text-ink">
+                      {project.name}
+                    </span>
                     <span
                       className={`ml-auto shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
                         ready ? 'border-line-strong text-ok' : 'text-warn'
@@ -88,7 +102,8 @@ export default function ProjectsPage() {
                     </p>
                   )}
                   <p className="text-[12px] text-ink-faint">
-                    {t('projects.analyzedAt')}: {formatWhen(project.currentSnapshot?.analyzedAt ?? null)}
+                    {t('projects.analyzedAt')}:{' '}
+                    {formatWhen(project.currentSnapshot?.analyzedAt ?? null)}
                   </p>
                   {project.selectedAreas.length > 0 && (
                     <p className="text-[12px] text-ink-faint">
@@ -96,6 +111,43 @@ export default function ProjectsPage() {
                     </p>
                   )}
                 </Link>
+                {removeProjectId === project.id ? (
+                  <div className="flex items-center justify-between gap-2 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-[12px]">
+                    <span className="text-danger">
+                      Remove {project.name} and its stored analysis?
+                    </span>
+                    <span className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={removeMutation.isPending}
+                        onClick={() => removeMutation.mutate(project.id)}
+                        className="text-danger underline disabled:opacity-60"
+                      >
+                        Confirm removal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRemoveProjectId(null)}
+                        className="text-ink-muted underline"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setRemoveProjectId(project.id)}
+                    className="self-end px-2 py-1 text-[11px] text-ink-faint hover:text-danger"
+                  >
+                    Remove project…
+                  </button>
+                )}
+                {removeMutation.isError && removeProjectId === project.id && (
+                  <p role="alert" className="text-[11px] text-danger">
+                    Could not remove this project. Cancel active analysis first.
+                  </p>
+                )}
               </li>
             )
           })}

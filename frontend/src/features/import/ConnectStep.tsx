@@ -1,22 +1,50 @@
-import { useState, type FormEvent } from 'react'
-import { ApiError } from '../../api/client'
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { registerPat } from '../../api/auth'
-import { useT } from '../../lib/i18n'
+import { ApiError } from '../../api/client'
+import {
+  cancelNativeGithubOAuth,
+  getNativeGithubOAuthStatus,
+  startNativeGithubOAuth,
+} from '../../api/desktopAuth'
 import type { MeResponse } from '../../api/types'
 import { GithubIcon } from '../../components/icons'
+import { useT } from '../../lib/i18n'
 
 const OAUTH_HREF = '/oauth2/authorization/github'
+const TERMINAL_OAUTH_STATUSES = new Set([
+  'CONNECTED',
+  'CANCELLED',
+  'DENIED',
+  'EXPIRED',
+  'CONFLICT',
+  'FAILED',
+  'INVALID',
+])
 
 type ConnectStepProps = {
   me: MeResponse | null
   onConnected: () => Promise<void>
+  onLocalPath: (path: string) => void
 }
 
-export default function ConnectStep({ me, onConnected }: ConnectStepProps) {
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+}
+
+export default function ConnectStep({ me, onConnected, onLocalPath }: ConnectStepProps) {
   const t = useT()
+  const desktop = window.codeIntelligenceDesktop
+  const oauthRun = useRef(0)
   const [token, setToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [oauthAttemptId, setOauthAttemptId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  useEffect(
+    () => () => {
+      oauthRun.current += 1
+    },
+    [],
+  )
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -38,53 +66,188 @@ export default function ConnectStep({ me, onConnected }: ConnectStepProps) {
     }
   }
 
-  return (
-    <div className="flex max-w-lg flex-col gap-5">
-      <div>
-        <h2 className="text-[15px] font-semibold text-ink">{t('connect.title')}</h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{t('connect.description')}</p>
-      </div>
+  const handleNativeOAuth = async () => {
+    if (!desktop) return
+    const run = ++oauthRun.current
+    setError(null)
+    try {
+      const attempt = await startNativeGithubOAuth()
+      if (run !== oauthRun.current) return
+      if (!attempt.authorizationUrl) throw new Error('GitHub did not return an authorization URL.')
+      setOauthAttemptId(attempt.attemptId)
+      await desktop.openExternal(attempt.authorizationUrl)
+      while (run === oauthRun.current) {
+        await wait(1_000)
+        const status = await getNativeGithubOAuthStatus(attempt.attemptId)
+        if (status.status === 'CONNECTED') {
+          setOauthAttemptId(null)
+          await onConnected()
+          return
+        }
+        if (status.status && TERMINAL_OAUTH_STATUSES.has(status.status)) {
+          setOauthAttemptId(null)
+          setError(status.message ?? 'GitHub login was not completed.')
+          return
+        }
+      }
+    } catch (err) {
+      if (run === oauthRun.current) {
+        setOauthAttemptId(null)
+        setError(err instanceof Error ? err.message : 'Could not start GitHub login.')
+      }
+    }
+  }
 
-      {me?.oauthAvailable && (
-        <a
-          href={OAUTH_HREF}
-          className="inline-flex w-fit items-center gap-2 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[13px] font-medium text-ink transition-colors hover:bg-surface-3"
+  const handleCancelOAuth = async () => {
+    if (!oauthAttemptId) return
+    oauthRun.current += 1
+    const attemptId = oauthAttemptId
+    setOauthAttemptId(null)
+    try {
+      await cancelNativeGithubOAuth(attemptId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not cancel GitHub login.')
+    }
+  }
+
+  const handlePickFolder = async () => {
+    if (!desktop) return
+    setError(null)
+    try {
+      const path = await desktop.pickFolder()
+      if (path) onLocalPath(path)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open the folder picker.')
+    }
+  }
+
+  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const file = event.dataTransfer.files.item(0)
+    if (!desktop || !file) return
+    setError(null)
+    try {
+      const path = await desktop.authorizeDroppedFolder(file)
+      if (path) onLocalPath(path)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not authorize the dropped folder.')
+    }
+  }
+
+  const oauthControl = me?.oauthAvailable ? (
+    desktop ? (
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={oauthAttemptId !== null}
+          onClick={() => void handleNativeOAuth()}
+          className="inline-flex items-center gap-2 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[13px] font-medium text-ink transition-colors hover:bg-surface-3 disabled:opacity-60"
         >
           <GithubIcon />
-          {t('connect.continue')}
-        </a>
+          {oauthAttemptId ? 'Waiting for GitHub…' : t('connect.continue')}
+        </button>
+        {oauthAttemptId && (
+          <button
+            type="button"
+            onClick={() => void handleCancelOAuth()}
+            className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink-muted"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+    ) : (
+      <a
+        href={OAUTH_HREF}
+        className="inline-flex w-fit items-center gap-2 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[13px] font-medium text-ink transition-colors hover:bg-surface-3"
+      >
+        <GithubIcon />
+        {t('connect.continue')}
+      </a>
+    )
+  ) : null
+
+  return (
+    <div className="flex max-w-xl flex-col gap-5">
+      <div>
+        <h2 className="text-[15px] font-semibold text-ink">Choose a project source</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
+          GitHub access and local folders are separate. Local analysis does not require a GitHub
+          login.
+        </p>
+      </div>
+
+      {desktop && (
+        <section className="rounded-md border border-line bg-surface-1 p-4">
+          <h3 className="text-[13px] font-medium text-ink">Open a folder on this computer</h3>
+          <p className="mt-1 text-[12px] text-ink-muted">
+            Select a Git or non-Git project. Only the selected folder is authorized.
+          </p>
+          <div
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => void handleDrop(event)}
+            className="mt-3 rounded-md border border-dashed border-line-strong bg-surface-2 p-4 text-center"
+          >
+            <button
+              type="button"
+              onClick={() => void handlePickFolder()}
+              className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0"
+            >
+              Choose folder
+            </button>
+            <p className="mt-2 text-[11px] text-ink-faint">or drop a project folder here</p>
+          </div>
+        </section>
       )}
 
-      {me?.oauthAvailable && (
-        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint">{t('connect.or')}</p>
-      )}
-
-      <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-ink-muted">{t('connect.tokenLabel')}</span>
-          <input
-            type="password"
-            name="token"
-            autoComplete="off"
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            placeholder={t('connect.placeholder')}
-            className="rounded-md border border-line bg-surface-2 px-3 py-1.5 font-mono text-[13px] text-ink placeholder:text-ink-faint"
-          />
-        </label>
-        {error && (
-          <p role="alert" className="text-[12px] text-danger">
-            {error}
+      <section className="rounded-md border border-line bg-surface-1 p-4">
+        <h3 className="text-[13px] font-medium text-ink">Import from GitHub</h3>
+        <p className="mb-3 mt-1 text-[12px] text-ink-muted">
+          Public and private repositories use your GitHub authorization.
+        </p>
+        {oauthControl}
+        {!me?.oauthAvailable && (
+          <p className="text-[12px] text-ink-muted">
+            GitHub OAuth is not configured. Use a personal access token below.
           </p>
         )}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-fit rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 disabled:opacity-60"
+
+        <details className="mt-4">
+          <summary className="cursor-pointer text-[12px] text-ink-muted">
+            Use a personal access token instead
+          </summary>
+          <form onSubmit={(event) => void handleSubmit(event)} className="mt-3 flex flex-col gap-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[12px] text-ink-muted">{t('connect.tokenLabel')}</span>
+              <input
+                type="password"
+                name="token"
+                autoComplete="off"
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+                placeholder={t('connect.placeholder')}
+                className="rounded-md border border-line bg-surface-2 px-3 py-1.5 font-mono text-[13px] text-ink placeholder:text-ink-faint"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-fit rounded-md border border-line-strong px-3 py-1.5 text-[13px] font-medium text-ink disabled:opacity-60"
+            >
+              {submitting ? t('connect.submitting') : t('connect.submit')}
+            </button>
+          </form>
+        </details>
+      </section>
+
+      {error && (
+        <p
+          role="alert"
+          className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-[12px] text-danger"
         >
-          {submitting ? t('connect.submitting') : t('connect.submit')}
-        </button>
-      </form>
+          {error}
+        </p>
+      )}
     </div>
   )
 }

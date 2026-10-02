@@ -2,6 +2,7 @@ package dev.codeintelligence.common.security;
 
 import java.io.Serializable;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.security.core.GrantedAuthority;
@@ -14,12 +15,17 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
  * Lives in common.security because every API package needs it for owner scoping.
  */
 public record AuthenticatedUser(
-        long userId, long githubId, String login, String name, String avatarUrl, CredentialKind credentialKind)
+        long userId, Long githubId, String login, String name, String avatarUrl, CredentialKind credentialKind)
         implements OAuth2User, Serializable {
 
     @Override
     public Map<String, Object> getAttributes() {
-        return Map.of("id", githubId, "login", login);
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        if (githubId != null) {
+            attributes.put("id", githubId);
+        }
+        attributes.put("login", login);
+        return Map.copyOf(attributes);
     }
 
     @Override
@@ -29,6 +35,6 @@ public record AuthenticatedUser(
 
     @Override
     public String getName() {
-        return String.valueOf(githubId);
+        return githubId == null ? "local:" + userId : String.valueOf(githubId);
     }
 }

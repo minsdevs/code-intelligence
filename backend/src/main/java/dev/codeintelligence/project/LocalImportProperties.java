@@ -6,24 +6,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
- * Configuration for local folder import. The {@code allowed-roots} property defines which
- * directories may be used as source for local project imports. If empty, the user's home
- * directory is used as the single allowed root.
+ * Configured roots are an explicit server deployment allowlist. Desktop selections are granted
+ * separately for the running process; an empty value grants no filesystem access.
  */
 @ConfigurationProperties("app.local-import")
 public record LocalImportProperties(@DefaultValue("") String allowedRoots) {
 
-    /**
-     * Returns the list of allowed root paths. If none are configured, defaults to the
-     * user's home directory.
-     */
+    /** Returns explicitly configured roots. An empty value grants no roots. */
     public List<Path> resolvedAllowedRoots() {
         if (allowedRoots == null || allowedRoots.isBlank()) {
-            String home = System.getProperty("user.home");
-            if (home == null || home.isBlank()) {
-                return List.of();
-            }
-            return List.of(Path.of(home).toAbsolutePath().normalize());
+            return List.of();
         }
         return java.util.Arrays.stream(allowedRoots.split(","))
                 .map(String::strip)

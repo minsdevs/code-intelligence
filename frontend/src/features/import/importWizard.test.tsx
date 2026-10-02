@@ -3,48 +3,21 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { routes } from '../../app/router'
 import { AI_PANEL_DEFAULT_WIDTH, useUiStore } from '../../stores/uiStore'
-import type { GithubRepo, JobDetail, JobStep, MeResponse, ProjectArea, StepStatus } from '../../api/types'
+import type {
+  GithubRepo,
+  JobDetail,
+  JobStep,
+  MeResponse,
+  ProjectArea,
+  StepStatus,
+} from '../../api/types'
 
-class MockEventSource {
-  static instances: MockEventSource[] = []
+let jobStreamController: ReadableStreamDefaultController<Uint8Array> | null = null
+const jobStreamEncoder = new TextEncoder()
 
-  readonly url: string
-  readonly withCredentials: boolean
-  onerror: ((event: Event) => void) | null = null
-  readyState = 0
-  private readonly listeners = new Map<string, Array<(event: MessageEvent<string>) => void>>()
-
-  constructor(url: string, init?: EventSourceInit) {
-    this.url = url
-    this.withCredentials = Boolean(init?.withCredentials)
-    MockEventSource.instances.push(this)
-  }
-
-  addEventListener(type: string, listener: EventListener) {
-    const list = this.listeners.get(type) ?? []
-    list.push(listener as (event: MessageEvent<string>) => void)
-    this.listeners.set(type, list)
-  }
-
-  removeEventListener(type: string, listener: EventListener) {
-    const list = this.listeners.get(type) ?? []
-    this.listeners.set(
-      type,
-      list.filter((item) => item !== listener),
-    )
-  }
-
-  close() {
-    this.readyState = 2
-  }
-
-  emit(type: string, data: unknown) {
-    const payload = typeof data === 'string' ? data : JSON.stringify(data)
-    const event = { data: payload } as MessageEvent<string>
-    for (const listener of this.listeners.get(type) ?? []) {
-      listener(event)
-    }
-  }
+function emitJobUpdate(job: JobDetail) {
+  if (!jobStreamController) throw new Error('Job stream is not connected')
+  jobStreamController.enqueue(jobStreamEncoder.encode(`data: ${JSON.stringify(job)}\n\n`))
 }
 
 const anonymousMe: MeResponse = {
@@ -102,12 +75,23 @@ const sampleAreas: ProjectArea[] = [
     areaType: 'DATABASE',
     confidence: 0.61,
     technologies: ['PostgreSQL'],
-    evidences: [{ filePath: 'src/main/resources/db/migration/V1__create_todos.sql', line: null, excerpt: null }],
+    evidences: [
+      {
+        filePath: 'src/main/resources/db/migration/V1__create_todos.sql',
+        line: null,
+        excerpt: null,
+      },
+    ],
     selected: true,
   },
 ]
 
-function jobStep(stepKey: string, seq: number, status: StepStatus, error: string | null = null): JobStep {
+function jobStep(
+  stepKey: string,
+  seq: number,
+  status: StepStatus,
+  error: string | null = null,
+): JobStep {
   return {
     stepKey,
     seq,
@@ -120,7 +104,11 @@ function jobStep(stepKey: string, seq: number, status: StepStatus, error: string
   }
 }
 
-function jobDetail(status: JobDetail['status'], steps: JobStep[], error: string | null = null): JobDetail {
+function jobDetail(
+  status: JobDetail['status'],
+  steps: JobStep[],
+  error: string | null = null,
+): JobDetail {
   return {
     id: 42,
     projectId: 7,
@@ -204,10 +192,28 @@ function installFetch() {
       if (reposStatus === 401) {
         return jsonResponse({ title: 'Unauthorized' }, 401)
       }
-      return jsonResponse({ items: [sampleRepo], page: Number(url.searchParams.get('page') ?? '1'), hasNext: false })
+      return jsonResponse({
+        items: [sampleRepo],
+        page: Number(url.searchParams.get('page') ?? '1'),
+        hasNext: false,
+      })
+    }
+    if (key === 'GET /api/github/repos/octocat/Hello-World/branches') {
+      return jsonResponse({
+        items: [{ name: 'master', protected: false }],
+        defaultBranch: 'master',
+      })
     }
     if (key === 'POST /api/projects') {
       return jsonResponse(createdProject, 201)
+    }
+    if (key === 'GET /api/jobs/42/events') {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          jobStreamController = controller
+        },
+      })
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
     }
     if (key === 'GET /api/jobs/42') {
       return jsonResponse(jobState)
@@ -239,8 +245,7 @@ beforeEach(() => {
   for (const key of Object.keys(extraHandlers)) {
     delete extraHandlers[key]
   }
-  MockEventSource.instances = []
-  vi.stubGlobal('EventSource', MockEventSource)
+  jobStreamController = null
   fetchMock.mockReset()
   installFetch()
 })
@@ -253,7 +258,7 @@ describe('ImportWizardPage', () => {
   it('shows Connect when unauthenticated and advances to Repository after PAT submit', async () => {
     renderImport()
 
-    expect(await screen.findByRole('heading', { name: 'GitHub 계정 연결' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Personal access token')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'GitHub로 계속' })).toHaveAttribute(
       'href',
       '/oauth2/authorization/github',
@@ -268,7 +273,10 @@ describe('ImportWizardPage', () => {
     expect(await screen.findByRole('option', { name: /octocat\/Hello-World/ })).toBeInTheDocument()
 
     const patCall = fetchMock.mock.calls.find(([input, init]) => {
-      return requestUrl(input).pathname === '/api/auth/pat' && (init?.method ?? 'GET').toUpperCase() === 'POST'
+      return (
+        requestUrl(input).pathname === '/api/auth/pat' &&
+        (init?.method ?? 'GET').toUpperCase() === 'POST'
+      )
     })
     expect(patCall).toBeTruthy()
     const headers = new Headers(patCall?.[1]?.headers)
@@ -276,24 +284,22 @@ describe('ImportWizardPage', () => {
     expect(patCall?.[1]?.body).toBe(JSON.stringify({ token: 'ghp_test_token' }))
   })
 
-  it('updates pipeline steps from EventSource and shows Retry when the job fails', async () => {
+  it('updates pipeline steps from the authenticated event stream and shows Retry when the job fails', async () => {
     meState = signedInMe
     renderImport()
 
     expect(await screen.findByRole('heading', { name: '저장소 선택' })).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('option', { name: /octocat\/Hello-World/ }))
-    fireEvent.click(screen.getByRole('button', { name: '저장소 가져오기' }))
+    const importButton = screen.getByRole('button', { name: '저장소 가져오기' })
+    await waitFor(() => expect(importButton).toBeEnabled())
+    fireEvent.click(importButton)
 
-    expect(await screen.findByRole('heading', { name: '분석 진행' })).toBeInTheDocument()
-    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0))
-    expect(MockEventSource.instances.at(-1)?.withCredentials).toBe(true)
-    expect(MockEventSource.instances.at(-1)?.url).toBe('/api/jobs/42/events')
+    const pipeline = await screen.findByRole('list', { name: '분석 파이프라인' })
+    await waitFor(() => expect(jobStreamController).not.toBeNull())
 
-    const pipeline = screen.getByRole('list', { name: '분석 파이프라인' })
     expect(within(pipeline).getByText(/^IMPORT/)).toBeInTheDocument()
 
-    MockEventSource.instances.at(-1)?.emit(
-      'update',
+    emitJobUpdate(
       jobDetail('RUNNING', [
         jobStep('IMPORT', 1, 'DONE'),
         jobStep('FILE_INVENTORY', 2, 'RUNNING'),
@@ -304,19 +310,24 @@ describe('ImportWizardPage', () => {
     )
 
     await waitFor(() => {
-      const inventory = within(pipeline).getByText(/^FILE_INVENTORY/).closest('li')
+      const inventory = within(pipeline)
+        .getByText(/^FILE_INVENTORY/)
+        .closest('li')
       expect(inventory).toHaveTextContent('진행 중')
     })
 
-    MockEventSource.instances.at(-1)?.emit(
-      'update',
-      jobDetail('FAILED', [
-        jobStep('IMPORT', 1, 'DONE'),
-        jobStep('FILE_INVENTORY', 2, 'FAILED', 'clone failed'),
-        jobStep('LANGUAGE_FRAMEWORK', 3, 'PENDING'),
-        jobStep('AREA_DETECTION', 4, 'PENDING'),
-        jobStep('FINALIZE', 5, 'PENDING'),
-      ], 'FILE_INVENTORY failed'),
+    emitJobUpdate(
+      jobDetail(
+        'FAILED',
+        [
+          jobStep('IMPORT', 1, 'DONE'),
+          jobStep('FILE_INVENTORY', 2, 'FAILED', 'clone failed'),
+          jobStep('LANGUAGE_FRAMEWORK', 3, 'PENDING'),
+          jobStep('AREA_DETECTION', 4, 'PENDING'),
+          jobStep('FINALIZE', 5, 'PENDING'),
+        ],
+        'FILE_INVENTORY failed',
+      ),
     )
 
     expect(await screen.findByRole('button', { name: '다시 시도' })).toBeInTheDocument()
@@ -340,9 +351,11 @@ describe('ImportWizardPage', () => {
     renderImport()
 
     fireEvent.click(await screen.findByRole('option', { name: /octocat\/Hello-World/ }))
-    fireEvent.click(screen.getByRole('button', { name: '저장소 가져오기' }))
+    const importButton = screen.getByRole('button', { name: '저장소 가져오기' })
+    await waitFor(() => expect(importButton).toBeEnabled())
+    fireEvent.click(importButton)
 
-    expect(await screen.findByRole('heading', { name: '영역 선택' })).toBeInTheDocument()
+    expect(await screen.findByRole('checkbox', { name: 'Backend' })).toBeInTheDocument()
     expect(await screen.findByText('src/main/java/TodoController.java:12')).toBeInTheDocument()
 
     const backend = screen.getByRole('checkbox', { name: 'Backend' })
@@ -375,7 +388,9 @@ describe('ImportWizardPage', () => {
     meState = signedInMe
     reposStatus = 401
     extraHandlers['GET /api/auth/me'] = () => {
-      const calls = fetchMock.mock.calls.filter(([input]) => requestUrl(input).pathname === '/api/auth/me')
+      const calls = fetchMock.mock.calls.filter(
+        ([input]) => requestUrl(input).pathname === '/api/auth/me',
+      )
       if (calls.length <= 1) {
         return jsonResponse(signedInMe)
       }
@@ -384,7 +399,6 @@ describe('ImportWizardPage', () => {
 
     renderImport()
 
-    expect(await screen.findByRole('heading', { name: 'GitHub 계정 연결' })).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: 'GitHub로 계속' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '저장소 선택' })).not.toBeInTheDocument()
   })
@@ -393,8 +407,7 @@ describe('ImportWizardPage', () => {
     meState = { ...anonymousMe, oauthAvailable: false }
     renderImport()
 
-    expect(await screen.findByRole('heading', { name: 'GitHub 계정 연결' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'PAT로 연결' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'GitHub로 계속' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'PAT로 연결' })).toBeInTheDocument()
   })
 })

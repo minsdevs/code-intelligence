@@ -79,6 +79,13 @@ public class Project {
         this.defaultBranch = defaultBranch;
     }
 
+    public void updateLocalPath(String localPath) {
+        if (!"LOCAL".equals(getSourceType())) {
+            throw new IllegalStateException("Only local projects can be relinked");
+        }
+        this.localPath = localPath;
+    }
+
     @PrePersist
     void onCreate() {
         createdAt = Instant.now();

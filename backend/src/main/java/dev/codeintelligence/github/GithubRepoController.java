@@ -5,6 +5,7 @@ import dev.codeintelligence.common.security.AuthenticatedUser;
 import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,6 +40,21 @@ public class GithubRepoController {
         return new RepoListResponse(items, page, repoPage.hasNext());
     }
 
+    @GetMapping("/repos/{owner}/{repo}/branches")
+    public BranchListResponse branches(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable String owner,
+            @PathVariable String repo,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "100") int perPage) {
+        GithubBranchPage branchPage = githubRepoService.listBranches(
+                user.userId(), owner, repo, Math.max(1, page), Math.clamp(perPage, 1, 100));
+        List<BranchItem> items = branchPage.items().stream()
+                .map(branch -> new BranchItem(branch.name(), branch.commitSha(), branch.isProtected()))
+                .toList();
+        return new BranchListResponse(items, page, branchPage.hasNext());
+    }
+
     public record RepoItem(
             String owner,
             String name,
@@ -49,4 +65,11 @@ public class GithubRepoController {
             String updatedAt) {}
 
     public record RepoListResponse(List<RepoItem> items, int page, boolean hasNext) {}
+
+    public record BranchItem(
+            String name,
+            String commitSha,
+            @JsonProperty("protected") boolean isProtected) {}
+
+    public record BranchListResponse(List<BranchItem> items, int page, boolean hasNext) {}
 }

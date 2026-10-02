@@ -25,6 +25,7 @@ const readyProject: Project = {
   repoName: 'Hello-World',
   defaultBranch: 'main',
   sourceType: 'GITHUB',
+  sourceAddress: 'octocat/Hello-World',
   currentSnapshot: {
     id: 3,
     commitSha: 'abc1234deadbeef',
@@ -61,12 +62,15 @@ const localProject: Project = {
   repoOwner: 'local',
   repoName: 'local-app',
   sourceType: 'LOCAL',
+  sourceAddress: '/Users/test/local-app',
 }
 
 const analyzingProject: Project = {
   ...readyProject,
   id: 8,
+  name: 'in-flight',
   repoName: 'in-flight',
+  sourceAddress: 'octocat/in-flight',
   currentSnapshot: {
     id: 4,
     commitSha: 'fff',
@@ -99,10 +103,12 @@ function installFetch() {
     }
     if (path === '/api/projects/9/local-source-status') {
       return jsonResponse({
-        state: 'CHANGED', snapshotId: 3,
+        state: 'CHANGED',
+        snapshotId: 3,
         changes: { added: 2, modified: 1, deleted: 0, total: 3 },
         changedPaths: ['A src/New.ts', 'M src/App.ts'],
-        fullAnalysisRequired: true, message: 'A full analysis will run.',
+        fullAnalysisRequired: true,
+        message: 'A full analysis will run.',
       })
     }
     return jsonResponse({ title: 'Not Found' }, 404)
@@ -136,7 +142,7 @@ describe('HomePage', () => {
     projects = [readyProject]
     renderHome()
 
-    expect(await screen.findByRole('heading', { name: 'octocat/Hello-World' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Hello-World' })).toBeInTheDocument()
     expect(screen.getByText('Backend, Database')).toBeInTheDocument()
     expect(screen.getByText('Java, Spring Boot, PostgreSQL')).toBeInTheDocument()
     expect(screen.getByText(/READY/)).toBeInTheDocument()
@@ -155,7 +161,7 @@ describe('HomePage', () => {
     projects = [analyzingProject]
     renderHome()
 
-    expect(await screen.findByRole('heading', { name: 'octocat/in-flight' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'in-flight' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('분석 중')
     expect(screen.getByText(/ANALYZING/)).toBeInTheDocument()
   })

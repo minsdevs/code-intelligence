@@ -63,9 +63,12 @@ public class ProjectService {
         if (projectRepository.existsByUserIdAndRepoOwnerAndRepoName(userId, ref.owner(), ref.name())) {
             throw new ProjectConflictException(DUPLICATE_DETAIL);
         }
-        Project project;
+        Project project = new Project(userId, ref.name(), ref.owner(), ref.name());
+        if (StringUtils.hasText(request.branch())) {
+            project.updateDefaultBranch(request.branch().trim());
+        }
         try {
-            project = projectRepository.save(new Project(userId, ref.name(), ref.owner(), ref.name()));
+            project = projectRepository.save(project);
         } catch (DataIntegrityViolationException e) {
             throw new ProjectConflictException(DUPLICATE_DETAIL);
         }
@@ -117,6 +120,20 @@ public class ProjectService {
     @Transactional(readOnly = true)
     public ProjectResponse get(long projectId, long userId) {
         Project project = requireOwned(projectId, userId);
+        return toResponse(project, loadSummaries(List.of(project)));
+    }
+
+    @Transactional
+    public ProjectResponse relinkLocalSource(long projectId, long userId, String path) {
+        if (!StringUtils.hasText(path)) {
+            throw new LocalImportException("path is required", null);
+        }
+        Project project = requireOwned(projectId, userId);
+        if (!"LOCAL".equals(project.getSourceType())) {
+            throw new LocalImportException("Only local projects can be relinked.", null);
+        }
+        Path authorizedPath = localImportService.validateSource(Path.of(path));
+        project.updateLocalPath(authorizedPath.toString());
         return toResponse(project, loadSummaries(List.of(project)));
     }
 
@@ -186,6 +203,9 @@ public class ProjectService {
                 project.getRepoName(),
                 project.getDefaultBranch(),
                 project.getSourceType(),
+                "LOCAL".equals(project.getSourceType())
+                        ? project.getLocalPath()
+                        : project.getRepoOwner() + "/" + project.getRepoName(),
                 currentSnapshot,
                 latestJob,
                 summaries.selectedAreas(id),
