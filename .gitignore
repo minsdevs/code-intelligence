@@ -21,3 +21,10 @@ Thumbs.db
 .omc/
 .codebase-memory/
 .freebuff/
+
+# Local desktop bundles and browser verification artifacts
+desktop/node_modules/
+desktop/stage/
+desktop/dist/
+frontend/test-results/
+frontend/playwright-report/
