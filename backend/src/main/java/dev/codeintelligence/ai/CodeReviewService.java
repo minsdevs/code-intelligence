@@ -102,7 +102,8 @@ public class CodeReviewService {
                 + "\n\n---BEGIN CONTEXT---\n"
                 + context
                 + "\n---END CONTEXT---");
-        AIProvider.ChatResponse raw = provider.chat(new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
+        AIProvider.ChatResponse raw =
+                usage.chat(userId, projectId, provider, "review", new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
         Parsed parsed = parse(raw);
         List<AIProvider.Claim> asClaims = parsed.comments.stream()
                 .map(comment -> new AIProvider.Claim(comment.body(), comment.confidence(), comment.evidence()))
@@ -141,7 +142,6 @@ public class CodeReviewService {
                         .param("evidence", json.writeValueAsString(comment.evidence()))
                         .update();
             }
-            usage.log(userId, projectId, provider, "review", validated);
             return load(reviewId, pullNumber);
         });
     }

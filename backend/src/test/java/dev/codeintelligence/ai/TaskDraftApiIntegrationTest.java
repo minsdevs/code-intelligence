@@ -81,6 +81,11 @@ class TaskDraftApiIntegrationTest {
         assertThat(draft.get("origin")).isEqualTo("AI");
         assertThat(draft.get("type")).isEqualTo("LEARNING");
         assertThat(draft.get("title")).isEqualTo("Review unmatched API call");
+        assertThat(jdbcTemplate.queryForObject(
+                        "select sum(prompt_tokens + completion_tokens) from ai_usage_logs where project_id = ? and purpose = 'task'",
+                        Long.class,
+                        projectId))
+                .isEqualTo(20L);
 
         List<Map<String, Object>> listed = jsonMapper.readValue(
                 send(session, "GET", "/api/projects/" + projectId + "/tasks", null, HttpStatus.OK), List.class);

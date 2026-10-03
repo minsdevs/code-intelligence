@@ -11,53 +11,128 @@ public class AIProviderConfig {
 
     @Bean
     AIProviderFactory aiProviderFactory(
-            AiProperties properties, RestClient.Builder restClientBuilder, JsonMapper json) {
-        return (provider, apiKey, model) -> switch (provider == null
-                ? ""
-                : provider.strip().toLowerCase(Locale.ROOT)) {
-            case "openai" -> new OpenAIProvider(properties.openai(), restClientBuilder, json, apiKey, model);
-            case "gemini" -> new GeminiProvider(properties.gemini(), restClientBuilder, json, apiKey, model);
-            default -> new NoOpAIProvider();
-        };
+            AiProperties properties, RestClient.Builder restClientBuilder, JsonMapper json, AiMainGatewayClient main) {
+        return (provider, apiKey, model) -> main.enabled()
+                ? new DesktopMetadataProvider(provider, model)
+                : switch (provider == null ? "" : provider.strip().toLowerCase(Locale.ROOT)) {
+                    case "openai" -> new OpenAIProvider(properties.openai(), restClientBuilder, json, apiKey, model);
+                    case "gemini" -> new GeminiProvider(properties.gemini(), restClientBuilder, json, apiKey, model);
+                    default -> new NoOpAIProvider();
+                };
+    }
+
+    /** Helpers cannot send implicitly. Only an approved request plan reaches main's transport. */
+    private record DesktopMetadataProvider(String name, String model) implements AIProvider {
+        public boolean enabled() {
+            return "openai".equals(name) && AiDesktopGateway.MODEL.equals(model);
+        }
+
+        public String embeddingModel() {
+            return "";
+        }
+
+        public void testConnection() {
+            throw new AiRequestPlanRequiredException();
+        }
+
+        public ChatResponse chat(ChatRequest request) {
+            throw new AiRequestPlanRequiredException();
+        }
+
+        public void stream(ChatRequest request, TokenConsumer consumer) {
+            throw new AiRequestPlanRequiredException();
+        }
+
+        public float[] embed(String text) {
+            throw new AiRequestPlanRequiredException();
+        }
     }
 
     @Bean
-    AIProviderResolver aiProviderResolver(
-            AiProperties properties, AiSettingsService settings, AIProviderFactory factory) {
-        return new RuntimeAIProvider(properties, settings, factory);
+    AIProviderResolver aiProviderResolver(AiSettingsService settings, AIProviderFactory factory) {
+        return new RuntimeAIProvider(settings, factory);
     }
 
     /**
-     * Picks the key at call time: a key saved from the Settings screen wins, otherwise the
-     * env-configured key. Saving/clearing a key therefore takes effect without a restart.
+     * A missing, OFF or reconnect-required preference cannot authorize any provider. Environment
+     * credentials do not opt a user in. Every operation also revalidates the resolved revision.
      */
     static final class RuntimeAIProvider implements AIProviderResolver {
 
-        private final AiProperties env;
         private final AiSettingsService settings;
         private final AIProviderFactory factory;
 
-        RuntimeAIProvider(AiProperties env, AiSettingsService settings, AIProviderFactory factory) {
-            this.env = env;
+        RuntimeAIProvider(AiSettingsService settings, AIProviderFactory factory) {
             this.settings = settings;
             this.factory = factory;
         }
 
         @Override
         public AIProvider resolve(long userId) {
+            if (blockedReason() != null) return new NoOpAIProvider();
             var stored = settings.getKey(userId);
             if (stored.isPresent()) {
                 AiSettingsService.StoredKey key = stored.get();
                 AIProvider provider = factory.create(key.provider(), key.apiKey(), key.model());
                 if (provider.enabled()) {
-                    return provider;
+                    return new GuardedProvider(userId, key.revision(), provider, settings);
                 }
             }
-            return switch (env.resolvedProvider()) {
-                case "openai" -> env.configured() ? factory.create("openai", null, null) : new NoOpAIProvider();
-                case "gemini" -> env.configured() ? factory.create("gemini", null, null) : new NoOpAIProvider();
-                default -> new NoOpAIProvider();
-            };
+            return new NoOpAIProvider();
+        }
+
+        @Override
+        public String blockedReason() {
+            return settings.blockedReason();
+        }
+    }
+
+    private record GuardedProvider(long userId, long revision, AIProvider delegate, AiSettingsService settings)
+            implements AIProvider {
+        @Override
+        public boolean enabled() {
+            return delegate.enabled();
+        }
+
+        @Override
+        public String name() {
+            return delegate.name();
+        }
+
+        @Override
+        public String model() {
+            return delegate.model();
+        }
+
+        @Override
+        public String embeddingModel() {
+            return delegate.embeddingModel();
+        }
+
+        @Override
+        public void testConnection() {
+            settings.call(userId, revision, () -> {
+                delegate.testConnection();
+                return null;
+            });
+        }
+
+        @Override
+        public ChatResponse chat(ChatRequest request) {
+            return settings.call(userId, revision, () -> delegate.chat(request));
+        }
+
+        @Override
+        public void stream(ChatRequest request, TokenConsumer consumer) {
+            settings.call(userId, revision, () -> {
+                delegate.stream(request, consumer);
+                return null;
+            });
+        }
+
+        @Override
+        public float[] embed(String text) {
+            return settings.call(userId, revision, () -> delegate.embed(text));
         }
     }
 }

@@ -1,10 +1,13 @@
 import { apiGet, apiSend } from './client'
 
 export type AiSettingView = {
-  provider: 'openai' | 'gemini'
-  model: string
-  keyMasked: string
+  provider: 'openai' | 'gemini' | null
+  model: string | null
+  keyMasked: string | null
   keySet: boolean
+  state: 'ENABLED' | 'OFF' | 'RECONNECT_REQUIRED'
+  /** Previously admitted requests; diagnostic only, not a budget or cancellation guarantee. */
+  activeRequests: number
 }
 
 export type AiModelView = {
@@ -31,6 +34,6 @@ export function saveAiSettings(provider: string, model: string, apiKey: string):
   })
 }
 
-export function clearAiSettings(): Promise<void> {
-  return apiSend<void>('/api/ai/settings', { method: 'DELETE' })
+export function clearAiSettings(): Promise<AiSettingView> {
+  return apiSend<AiSettingView>('/api/ai/settings', { method: 'DELETE' })
 }

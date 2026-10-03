@@ -1,18 +1,23 @@
-import { useState, type FormEvent } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAiStatus } from '../../api/ai'
+import { AI_BUDGET_MUTATION_KEY, AI_BUDGET_QUERY_KEY, budgetAllowsRequests, getAiBudget } from '../../api/aiBudget'
 import { clearAiSettings, getAiModels, getAiSettings, saveAiSettings } from '../../api/aiSettings'
+import { ApiError, UnauthorizedError } from '../../api/client'
+import type { AiStatus } from '../../api/types'
 import { disconnectGithub, getGithubConnection } from '../../api/desktopAuth'
 import { LANGS } from '../../lib/i18n-core'
 import { useI18n } from '../../lib/i18n'
 import { queryError } from '../code/codeLocation'
+import AiBudgetSettings from './AiBudgetSettings'
 
 const PROVIDERS = ['openai', 'gemini'] as const
+type AiSettingsAction =
+  | { action: 'save'; provider: 'openai' | 'gemini'; model: string }
+  | { action: 'clear' }
 
 export default function SettingsPage() {
-  const t = useI18n().t
-  const lang = useI18n().lang
-  const setLang = useI18n().setLang
+  const { t, lang, setLang } = useI18n()
   const queryClient = useQueryClient()
   const desktop = typeof window === 'undefined' ? undefined : window.codeIntelligenceDesktop
 
@@ -23,22 +28,89 @@ export default function SettingsPage() {
   const [restoreConfirm, setRestoreConfirm] = useState(false)
   const [backupPath, setBackupPath] = useState<string | null>(null)
   const [recoveryBackupPath, setRecoveryBackupPath] = useState<string | null>(null)
+  const settingsActionInProgress = useRef(false)
+  const submittedApiKey = useRef<string | null>(null)
+  useEffect(() => () => { submittedApiKey.current = null }, [])
+  const settingsMutation = useMutation({
+    mutationFn: async (input: AiSettingsAction) => {
+      // Mutation records outlive their observer. Transfer the key privately, never through
+      // variables/context/data, and clear the component ref before awaiting the request.
+      const key = submittedApiKey.current
+      submittedApiKey.current = null
+      try {
+        if (input.action === 'clear') return await clearAiSettings()
+        if (key === null) throw new Error('No pending AI key submission.')
+        return await saveAiSettings(input.provider, input.model, key)
+      } catch (error) {
+        // Provider/transport errors may echo request content; do not cache their detail/cause.
+        const message = 'AI settings request failed.'
+        if (error instanceof UnauthorizedError) throw new UnauthorizedError(message)
+        if (error instanceof ApiError) throw new ApiError(error.status, message)
+        // eslint-disable-next-line preserve-caught-error -- A cached cause could retain the raw provider key.
+        throw new Error(message)
+      } finally {
+        submittedApiKey.current = null
+      }
+    },
+    retry: false,
+    onMutate: () => Promise.all([
+      queryClient.cancelQueries({ queryKey: ['ai-settings'] }),
+      queryClient.cancelQueries({ queryKey: ['ai-status'] }),
+      queryClient.cancelQueries({ queryKey: AI_BUDGET_QUERY_KEY }),
+    ]),
+    onSuccess: async (view) => {
+      queryClient.setQueryData(['ai-settings'], view)
+      setApiKey('')
+      setProviderOverride(view.provider)
+      setModelOverride(view.model)
+      if (view.state !== 'ENABLED') {
+        queryClient.setQueryData<AiStatus>(['ai-status'], (previous) => previous
+          ? { ...previous, configured: false }
+          : undefined)
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['ai-status'] }),
+        queryClient.invalidateQueries({ queryKey: AI_BUDGET_QUERY_KEY }),
+      ])
+    },
+    onError: () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['ai-settings'] }),
+      queryClient.invalidateQueries({ queryKey: ['ai-status'] }),
+      queryClient.invalidateQueries({ queryKey: AI_BUDGET_QUERY_KEY }),
+    ]),
+    onSettled: () => {
+      submittedApiKey.current = null
+      setApiKey('')
+      settingsActionInProgress.current = false
+    },
+  })
+  const settingsPending = settingsMutation.isPending
+  const budgetPending = useIsMutating({ mutationKey: AI_BUDGET_MUTATION_KEY }) > 0
+  const budgetQuery = useQuery({
+    queryKey: AI_BUDGET_QUERY_KEY, queryFn: getAiBudget,
+    enabled: !settingsPending && !budgetPending, retry: false,
+  })
+  const desktopBudget = Boolean(desktop) || budgetQuery.data?.available === true
 
   const statusQuery = useQuery({
     queryKey: ['ai-status'],
     queryFn: getAiStatus,
+    enabled: !settingsPending,
     retry: false,
   })
   const settingsQuery = useQuery({
     queryKey: ['ai-settings'],
     queryFn: getAiSettings,
+    enabled: !settingsPending,
     retry: false,
   })
   const saved = settingsQuery.data
   const provider = providerOverride ?? saved?.provider ?? 'openai'
+  const providers = desktopBudget ? (['openai'] as const) : PROVIDERS
   const modelsQuery = useQuery({
     queryKey: ['ai-models', provider],
     queryFn: () => getAiModels(provider),
+    enabled: !settingsPending,
     retry: false,
   })
   const githubQuery = useQuery({
@@ -55,29 +127,33 @@ export default function SettingsPage() {
   const error = queryError(statusQuery.error)
   const modelsError = queryError(modelsQuery.error)
   const status = statusQuery.data
+  const desktopAiUnavailable = status?.blockedReason === 'DESKTOP_AI_SAFETY_UNAVAILABLE'
+  const budgetReadReady = budgetQuery.isSuccess && !budgetQuery.isFetching && !budgetPending
+  const aiAvailable = statusQuery.isSuccess && !statusQuery.isFetching && status?.configured === true
+    && !desktopAiUnavailable && budgetReadReady && budgetAllowsRequests(budgetQuery.data, Boolean(desktop))
+  const availabilityLabel = saved?.state === 'OFF' ? 'settings.off'
+    : desktopAiUnavailable ? 'settings.disabled'
+      : saved?.state === 'RECONNECT_REQUIRED' ? 'settings.reconnectRequired'
+        : !status?.configured ? 'settings.disabled'
+          : !statusQuery.isSuccess || statusQuery.isFetching || !budgetReadReady ? 'settings.availabilityUnknown'
+            : budgetQuery.data?.available && budgetQuery.data.state === 'OFF' ? 'settings.off'
+              : budgetQuery.data?.available && budgetQuery.data.state === 'RECOVERY_REQUIRED' ? 'settings.budgetRecovery'
+                : aiAvailable ? 'settings.available' : 'settings.disabled'
   const model =
     modelOverride ??
     (saved?.provider === provider ? saved.model : undefined) ??
     modelsQuery.data?.[0]?.id ??
     ''
-
-  const saveMutation = useMutation({
-    mutationFn: () => saveAiSettings(provider, model, apiKey),
-    onSuccess: async (view) => {
-      setApiKey('')
-      setProviderOverride(view.provider)
-      setModelOverride(view.model)
-      await queryClient.invalidateQueries({ queryKey: ['ai-settings'] })
-      await queryClient.invalidateQueries({ queryKey: ['ai-status'] })
-    },
-  })
-  const clearMutation = useMutation({
-    mutationFn: clearAiSettings,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['ai-settings'] })
-      await queryClient.invalidateQueries({ queryKey: ['ai-status'] })
-    },
-  })
+  const settingsUnavailable = settingsPending || budgetPending || settingsQuery.isPending || settingsQuery.isFetching || settingsQuery.isError
+  const editingUnavailable = settingsUnavailable || !statusQuery.isSuccess || statusQuery.isFetching || desktopAiUnavailable
+  const canReuseKey = saved?.state === 'ENABLED' && saved.keySet && saved.provider === provider
+  const listedModel = modelsQuery.data?.some((entry) => entry.id === model) ?? false
+  const canSave = !editingUnavailable && !modelsQuery.isPending && !modelsQuery.isError
+    && listedModel && Boolean(apiKey.trim() || canReuseKey)
+  const blockedState = saved?.state === 'OFF' || saved?.state === 'RECONNECT_REQUIRED'
+  const previousRequests = saved && Number.isSafeInteger(saved.activeRequests) && saved.activeRequests > 0
+    ? saved.activeRequests
+    : 0
   const disconnectMutation = useMutation({
     mutationFn: disconnectGithub,
     onSuccess: async () => {
@@ -101,11 +177,19 @@ export default function SettingsPage() {
       await queryClient.invalidateQueries({ queryKey: ['desktop-runtime'] })
     },
   })
+  const runtimeControlsReady = runtimeQuery.isSuccess && !runtimeQuery.isFetching
+    && !restartMutation.isPending && runtimeQuery.data.ready === true && runtimeQuery.data.error === null
+  const backupDisabled = !runtimeControlsReady || runtimeQuery.data?.backupAvailable === false
+    || backupMutation.isPending || restoreMutation.isPending
+  const restoreDisabled = !runtimeControlsReady || runtimeQuery.data?.restoreAvailable === false
+    || backupMutation.isPending || restoreMutation.isPending
+  const backupUnavailable = runtimeQuery.data?.backupAvailable === false || runtimeQuery.data?.restoreAvailable === false
 
-  const saveError =
-    queryError(saveMutation.error) ??
-    queryError(clearMutation.error) ??
-    queryError(settingsQuery.error)
+  const saveError = settingsMutation.error
+    ? t(settingsMutation.error instanceof ApiError && settingsMutation.error.status === 409
+      ? 'settings.changeConflict'
+      : 'settings.changeFailed')
+    : queryError(settingsQuery.error)
   const githubError = queryError(githubQuery.error) ?? queryError(disconnectMutation.error)
   const runtimeError = queryError(runtimeQuery.error)
     ?? queryError(restartMutation.error)
@@ -114,8 +198,19 @@ export default function SettingsPage() {
 
   function onSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!model || (!apiKey.trim() && saved?.provider !== provider)) return
-    saveMutation.mutate()
+    if (settingsActionInProgress.current || !canSave) return
+    settingsActionInProgress.current = true
+    submittedApiKey.current = apiKey
+    setApiKey('')
+    settingsMutation.mutate({ action: 'save', provider, model })
+  }
+
+  function onClear() {
+    if (settingsActionInProgress.current || settingsUnavailable || saved?.state === 'OFF') return
+    settingsActionInProgress.current = true
+    submittedApiKey.current = null
+    setApiKey('')
+    settingsMutation.mutate({ action: 'clear' })
   }
 
   return (
@@ -213,7 +308,7 @@ export default function SettingsPage() {
 
       <section className="mt-6 rounded-md border border-line bg-surface-1 px-4 py-3" aria-label={t('settings.aiProvider')}>
         <h2 className="text-[13px] font-semibold text-ink">{t('settings.aiProvider')}</h2>
-        <p className="mt-1 text-[12px] text-ink-muted">{t('settings.aiDesc')}</p>
+        <p className="mt-1 text-[12px] text-ink-muted">{t(desktopAiUnavailable ? 'ai.desktopUnavailable' : 'settings.aiDesc')}</p>
         {error && (
           <p role="alert" className="mt-2 text-[12px] text-danger">
             {error}
@@ -223,100 +318,120 @@ export default function SettingsPage() {
         {status && (
           <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
             <dt className="text-ink-muted">{t('settings.status')}</dt>
-            <dd className="text-ink">{status.configured ? t('settings.available') : t('settings.disabled')}</dd>
+            <dd className="text-ink">{t(availabilityLabel)}</dd>
             <dt className="text-ink-muted">{t('settings.provider')}</dt>
-            <dd className="font-mono text-ink">{status.provider ?? '—'}</dd>
+            <dd className="font-mono text-ink">{saved?.provider ?? status.provider ?? '—'}</dd>
             <dt className="text-ink-muted">{t('settings.model')}</dt>
-            <dd className="font-mono text-ink">{status.model ?? '—'}</dd>
+            <dd className="font-mono text-ink">{saved?.model ?? status.model ?? '—'}</dd>
             <dt className="text-ink-muted">{t('settings.storedKey')}</dt>
-            <dd className="font-mono text-ink">{saved ? saved.keyMasked : '—'}</dd>
+            <dd className="font-mono text-ink">{saved?.state === 'ENABLED' && saved.keySet ? saved.keyMasked ?? '—' : '—'}</dd>
           </dl>
         )}
 
-        <form onSubmit={onSubmit} className="mt-4 space-y-3">
-          <label className="block text-[12px] text-ink-muted">
-            {t('settings.provider')}
-            <select
-              value={provider}
-              onChange={(event) => {
-                setProviderOverride(event.target.value as 'openai' | 'gemini')
-                setModelOverride(null)
-              }}
-              className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1.5 font-mono text-[13px] text-ink"
-            >
-              {PROVIDERS.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-[12px] text-ink-muted">
-            {t('settings.model')}
-            <select
-              value={model}
-              onChange={(event) => setModelOverride(event.target.value)}
-              disabled={modelsQuery.isLoading || modelsQuery.isError}
-              className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1.5 font-mono text-[13px] text-ink disabled:opacity-60"
-            >
-              {modelsQuery.data?.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          {modelsError && (
-            <div className="text-[12px] text-danger">
-              <p role="alert">{modelsError}</p>
-              <button
-                type="button"
-                onClick={() => void modelsQuery.refetch()}
-                className="mt-1 rounded-md border border-line-strong px-2 py-1 text-ink hover:bg-surface-2"
+        {!desktopAiUnavailable && saved?.state === 'RECONNECT_REQUIRED' && (
+          <p className="mt-3 text-[12px] text-ink-muted" role="status">{t('settings.reconnectHint')}</p>
+        )}
+        {!desktopAiUnavailable && saved?.state === 'OFF' && (
+          <p className="mt-3 text-[12px] text-ink-muted" role="status">{t(desktopBudget ? 'settings.desktopOffHint' : 'settings.offHint')}</p>
+        )}
+        {blockedState && previousRequests > 0 && (
+          <p className="mt-2 text-[12px] text-ink-muted" role="status">
+            {t('settings.previousRequests').replace('{count}', String(previousRequests))}
+          </p>
+        )}
+
+        <form onSubmit={onSubmit} className="mt-4" aria-busy={settingsPending}>
+          <fieldset disabled={settingsUnavailable} className="min-w-0 space-y-3 border-0 p-0">
+            <label className="block text-[12px] text-ink-muted">
+              {t('settings.provider')}
+              <select
+                value={provider}
+                disabled={editingUnavailable}
+                onChange={(event) => {
+                  setProviderOverride(event.target.value as 'openai' | 'gemini')
+                  setModelOverride(null)
+                }}
+                className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1.5 font-mono text-[13px] text-ink"
               >
-                {t('settings.retryModels')}
+                {providers.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+                {desktopBudget && provider !== 'openai' && <option value={provider} disabled>{provider}</option>}
+              </select>
+            </label>
+            <label className="block text-[12px] text-ink-muted">
+              {t('settings.model')}
+              <select
+                value={model}
+                onChange={(event) => setModelOverride(event.target.value)}
+                disabled={editingUnavailable || modelsQuery.isLoading || modelsQuery.isError}
+                className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1.5 font-mono text-[13px] text-ink disabled:opacity-60"
+              >
+                {modelsQuery.data?.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.id}
+                  </option>
+                ))}
+                {model && !listedModel && <option value={model} disabled>{model}</option>}
+              </select>
+            </label>
+            {model && !listedModel && modelsQuery.isSuccess && (
+              <p className="text-[12px] text-ink-muted">{t('settings.modelUnavailable')}</p>
+            )}
+            {modelsError && (
+              <div className="text-[12px] text-danger">
+                <p role="alert">{modelsError}</p>
+                <button
+                  type="button"
+                  onClick={() => void modelsQuery.refetch()}
+                  className="mt-1 rounded-md border border-line-strong px-2 py-1 text-ink hover:bg-surface-2"
+                >
+                  {t('settings.retryModels')}
+                </button>
+              </div>
+            )}
+            <label className="block text-[12px] text-ink-muted">
+              {t('settings.apiKey')}
+              <input
+                type="password"
+                autoComplete="off"
+                maxLength={4096}
+                value={apiKey}
+                disabled={editingUnavailable}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder={t('settings.apiKeyPlaceholder')}
+                aria-label={t('settings.apiKey')}
+                className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1.5 font-mono text-[13px] text-ink placeholder:text-ink-faint"
+              />
+            </label>
+            {saveError && (
+              <p role="alert" className="text-[12px] text-danger">
+                {saveError}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={!canSave}
+                className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {settingsPending && settingsMutation.variables?.action === 'save' ? t('settings.saving') : t('settings.saveKey')}
               </button>
-            </div>
-          )}
-          <label className="block text-[12px] text-ink-muted">
-            {t('settings.apiKey')}
-            <input
-              type="password"
-              autoComplete="off"
-              maxLength={4096}
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              placeholder={t('settings.apiKeyPlaceholder')}
-              aria-label={t('settings.apiKey')}
-              className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1.5 font-mono text-[13px] text-ink placeholder:text-ink-faint"
-            />
-          </label>
-          {saveError && (
-            <p role="alert" className="text-[12px] text-danger">
-              {saveError}
-            </p>
-          )}
-          <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              disabled={saveMutation.isPending || !model || (!apiKey.trim() && saved?.provider !== provider)}
-              className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saveMutation.isPending ? t('settings.saving') : t('settings.saveKey')}
-            </button>
-            {saved?.keySet && (
               <button
                 type="button"
-                onClick={() => clearMutation.mutate()}
-                disabled={clearMutation.isPending}
+                onClick={onClear}
+                disabled={settingsUnavailable || saved?.state === 'OFF'}
                 className="rounded-md border border-line px-3 py-1.5 text-[13px] text-danger hover:bg-surface-2 disabled:opacity-50"
               >
-                {t('settings.clearKey')}
+                {settingsPending && settingsMutation.variables?.action === 'clear' ? t('settings.clearing') : t('settings.clearKey')}
               </button>
-            )}
-          </div>
+            </div>
+          </fieldset>
         </form>
-        <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">{t('settings.keyHint')}</p>
+        {!desktopAiUnavailable && budgetReadReady && <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">{t(desktopBudget ? 'settings.desktopKeyHint' : 'settings.keyHint')}</p>}
+        <AiBudgetSettings disabled={settingsPending} />
       </section>
 
       {desktop && (
@@ -325,6 +440,7 @@ export default function SettingsPage() {
           <p className="mt-1 text-[12px] text-ink-muted">{t('settings.desktopRuntimeDesc')}</p>
           {runtimeError && <p className="mt-2 text-[12px] text-danger" role="alert">{runtimeError}</p>}
           {runtimeQuery.isLoading && <p className="mt-2 text-[13px] text-ink-muted">{t('settings.runtimeLoading')}</p>}
+          {backupUnavailable && <p className="mt-2 text-[12px] text-ink-muted">{t('settings.backupUnavailable')}</p>}
           {runtimeQuery.data && (
             <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
               <dt className="text-ink-muted">{t('settings.runtimeReady')}</dt>
@@ -346,16 +462,16 @@ export default function SettingsPage() {
             </button>
             <button
               type="button"
-              onClick={() => backupMutation.mutate()}
-              disabled={backupMutation.isPending}
+              onClick={() => { if (!backupDisabled) backupMutation.mutate() }}
+              disabled={backupDisabled}
               className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink hover:bg-surface-2 disabled:opacity-50"
             >
               {backupMutation.isPending ? t('settings.backingUp') : t('settings.backup')}
             </button>
             <button
               type="button"
-              onClick={() => setRestoreConfirm(true)}
-              disabled={restoreMutation.isPending}
+              onClick={() => { if (!restoreDisabled) setRestoreConfirm(true) }}
+              disabled={restoreDisabled}
               className="rounded-md border border-line px-3 py-1.5 text-[13px] text-danger hover:bg-surface-2 disabled:opacity-50"
             >
               {restoreMutation.isPending ? t('settings.restoring') : t('settings.restore')}
@@ -367,8 +483,8 @@ export default function SettingsPage() {
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => restoreMutation.mutate()}
-                  disabled={restoreMutation.isPending}
+                  onClick={() => { if (!restoreDisabled) restoreMutation.mutate() }}
+                  disabled={restoreDisabled}
                   className="rounded-md bg-danger px-3 py-1.5 text-[13px] font-medium text-surface-0 disabled:opacity-50"
                 >
                   {t('settings.confirmRestore')}

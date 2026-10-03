@@ -1,4 +1,4 @@
-import { ApiError, UnauthorizedError, apiGet, apiSend, primeCsrf, readApiError, readCookie } from './client'
+import { ApiError, UnauthorizedError, apiGet, apiSend, desktopApiHeaders, primeCsrf, readApiError, readCookie, resolveApiUrl } from './client'
 import type { AiAskBody, AiAskResponse, AiStatus } from './types'
 
 const CSRF_COOKIE = 'XSRF-TOKEN'
@@ -9,7 +9,7 @@ export function getAiStatus(): Promise<AiStatus> {
 }
 
 export function askAi(projectId: number, body: AiAskBody): Promise<AiAskResponse> {
-  return apiSend<AiAskResponse>(`/api/projects/${projectId}/ai/ask`, { method: 'POST', body })
+  return apiSend<AiAskResponse>(`/api/projects/${projectId}/ai/ask`, { method: 'POST', body, retryOnCsrfFailure: false })
 }
 
 export async function askAiStream(
@@ -18,13 +18,13 @@ export async function askAiStream(
   onToken: (token: string) => void,
 ): Promise<AiAskResponse> {
   await primeCsrf()
-  const headers = new Headers({
+  const headers = desktopApiHeaders(new Headers({
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',
-  })
+  }))
   const csrf = readCookie(CSRF_COOKIE)
   if (csrf) headers.set(CSRF_HEADER, csrf)
-  const response = await fetch(`/api/projects/${projectId}/ai/ask/stream`, {
+  const response = await fetch(resolveApiUrl(`/api/projects/${projectId}/ai/ask/stream`), {
     method: 'POST',
     credentials: 'include',
     headers,
@@ -32,7 +32,7 @@ export async function askAiStream(
   })
   if (response.status === 401) throw new UnauthorizedError()
   if (!response.ok) throw new ApiError(response.status, await readApiError(response))
-  if (!response.body) return askAi(projectId, body)
+  if (!response.body) throw unknownOutcome('AI response stream is missing.')
   return readSseResult(response.body, onToken)
 }
 
@@ -50,35 +50,49 @@ async function readSseResult(
   const decoder = new TextDecoder()
   let buffer = ''
   let result: AiAskResponse | null = null
-  while (true) {
-    const { done, value } = await reader.read()
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
-    const parts = buffer.split('\n\n')
-    buffer = parts.pop() ?? ''
-    for (const block of parts) {
-      const parsed = parseSseBlock(block)
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+      const parts = buffer.split(/\r?\n\r?\n/)
+      buffer = parts.pop() ?? ''
+      for (const block of parts) {
+        const parsed = parseSseBlock(block)
+        if (parsed.event === 'token' && parsed.data) onToken(parsed.data)
+        if (parsed.event === 'result' && parsed.data) {
+          result = JSON.parse(parsed.data) as AiAskResponse
+        }
+      }
+      if (done) break
+    }
+    if (buffer.trim()) {
+      const parsed = parseSseBlock(buffer)
       if (parsed.event === 'token' && parsed.data) onToken(parsed.data)
       if (parsed.event === 'result' && parsed.data) {
         result = JSON.parse(parsed.data) as AiAskResponse
       }
     }
-    if (done) break
-  }
-  if (buffer.trim()) {
-    const parsed = parseSseBlock(buffer)
-    if (parsed.event === 'token' && parsed.data) onToken(parsed.data)
-    if (parsed.event === 'result' && parsed.data) {
-      result = JSON.parse(parsed.data) as AiAskResponse
+    if (!result || !Number.isSafeInteger(result.conversationId) || !Number.isSafeInteger(result.messageId)
+      || typeof result.explanation !== 'string' || !Array.isArray(result.claims) || !Array.isArray(result.alternatives)) {
+      throw unknownOutcome('AI stream ended without a complete result.')
     }
+    return result
+  } catch {
+    // The server may already have dispatched the request. Never replay it through another endpoint.
+    throw unknownOutcome('AI stream did not provide a complete result.')
+  } finally {
+    reader.releaseLock()
   }
-  if (!result) throw new ApiError(502, 'AI stream ended without a result.')
-  return result
+}
+
+function unknownOutcome(message: string): ApiError {
+  return new ApiError(502, `${message} The request outcome is unknown; it was not resent.`, 'AI_REQUEST_OUTCOME_UNKNOWN')
 }
 
 export function parseSseBlock(block: string): { event: string; data: string } {
   let event = 'message'
   const dataLines: string[] = []
-  for (const line of block.split('\n')) {
+  for (const line of block.split(/\r?\n/)) {
     if (line.startsWith('event:')) event = line.slice(6).trim()
     else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
   }

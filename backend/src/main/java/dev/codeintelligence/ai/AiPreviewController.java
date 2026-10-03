@@ -2,6 +2,7 @@ package dev.codeintelligence.ai;
 
 import dev.codeintelligence.common.security.AuthenticatedUser;
 import java.util.List;
+import java.util.Set;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -10,7 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * POST /api/projects/{projectId}/ai/preview — returns a preview of what would be sent to the AI
- * provider without making any external request. Uses the same context retrieval path as the real ask.
+ * provider without making any external request. Uses bounded local context and existing cached
+ * summaries; it does not generate summaries or embeddings to fill missing context.
  */
 @RestController
 public class AiPreviewController {
@@ -40,6 +42,11 @@ public class AiPreviewController {
                 safe.focusedTaskId(),
                 safe.selectedAreas() == null ? List.of() : safe.selectedAreas());
         String question = safe.question() == null ? "" : safe.question();
-        return previewService.preview(projectId, user.userId(), question, context);
+        return previewService.preview(
+                projectId,
+                user.userId(),
+                question,
+                context,
+                safe.excludedContextIds() == null ? Set.of() : Set.copyOf(safe.excludedContextIds()));
     }
 }

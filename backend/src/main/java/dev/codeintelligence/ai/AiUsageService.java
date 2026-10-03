@@ -3,6 +3,8 @@ package dev.codeintelligence.ai;
 import java.util.Locale;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AiUsageService {
@@ -13,6 +15,16 @@ public class AiUsageService {
     public AiUsageService(JdbcClient jdbc, AiProperties aiProperties) {
         this.jdbc = jdbc;
         this.aiProperties = aiProperties;
+    }
+
+    /** Account for returned usage before validation/persistence, independently of their transaction. */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public AIProvider.ChatResponse chat(
+            long userId, long projectId, AIProvider provider, String purpose, AIProvider.ChatRequest request) {
+        enforceBudget(userId);
+        AIProvider.ChatResponse response = provider.chat(request);
+        log(userId, projectId, provider, purpose, response);
+        return response;
     }
 
     public void enforceBudget(long userId) {
@@ -26,7 +38,7 @@ public class AiUsageService {
         }
     }
 
-    public void log(
+    private void log(
             long userId, long projectId, AIProvider provider, String purpose, AIProvider.ChatResponse response) {
         jdbc.sql("""
                         insert into ai_usage_logs (user_id, project_id, provider, model, purpose, prompt_tokens, completion_tokens)

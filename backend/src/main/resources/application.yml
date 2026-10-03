@@ -63,6 +63,8 @@ app:
   desktop:
     # Per-launch API token and stable local identity are injected by the desktop process.
     api-token: ${DESKTOP_API_TOKEN:}
+    # Main-process capability; never exposed through the renderer preload.
+    path-token: ${DESKTOP_PATH_TOKEN:}
     local-identity: ${DESKTOP_LOCAL_IDENTITY:}
     allowed-origin: ${DESKTOP_ALLOWED_ORIGIN:}
   cors:
