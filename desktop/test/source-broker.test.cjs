@@ -220,7 +220,11 @@ test('trickled incomplete frames cannot extend the absolute connection deadline'
   await new Promise((resolve, reject) => {
     const socket = net.createConnection(f.socketPath);
     let timer;
-    socket.on('error', reject);
+    socket.on('error', (error) => {
+      clearInterval(timer);
+      // A trickled write can race the broker's deadline shutdown before close arrives.
+      if (!['EPIPE', 'ECONNRESET'].includes(error.code)) reject(error);
+    });
     socket.on('connect', () => {
       socket.write(Buffer.from([0, 0, 1, 0]));
       timer = setInterval(() => socket.write(Buffer.from(' ')), 10);
