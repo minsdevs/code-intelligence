@@ -108,6 +108,7 @@ describe('AI request plans and one-use stream transport', () => {
   it('uses the existing desktop origin and authentication header for the single stream POST', async () => {
     const previous = window.codeIntelligenceDesktop
     window.codeIntelligenceDesktop = {
+      appVersion: '0.1.0',
       platform: 'darwin', apiBaseUrl: 'http://127.0.0.1:54321', apiToken: 'synthetic-desktop-token',
       pickFolder: vi.fn(), authorizeDroppedFolder: vi.fn(), openExternal: vi.fn(),
       backup: vi.fn(), restore: vi.fn(), runtimeStatus: vi.fn(), restartRuntime: vi.fn(),

@@ -69,6 +69,7 @@ async function harness(t, options = {}) {
   const safeStorage = storage(); const realLifecycle = modeledLifecycle(); let runtimeLifecycle; let gateway; let adapter; let port = 41000;
   let quitCount = 0; const cap = 'e'.repeat(64); const channelEpoch = 'd'.repeat(64);
   const app = { isPackaged: true, requestSingleInstanceLock: () => true,
+    getVersion: () => { events.push('app.getVersion'); return controls.appVersion ?? '0.1.0'; },
     hasSingleInstanceLock: () => controls.singleton, whenReady: () => new Promise(() => {}),
     on: (name, callback) => appHandlers.set(name, callback), getPath: name => paths[name],
     quit() { events.push('app.quit'); quitCount++; appHandlers.get('before-quit')?.({ preventDefault() { events.push('quit.prevent'); } }); } };
@@ -382,6 +383,36 @@ async function flushStopDeadlines(h, operation) {
   assert.equal(settled, true, 'synthetic shutdown did not settle after both stop deadlines');
 }
 
+for (const appVersion of ['2.4.6', '7.8.9-rc.2']) {
+  test(`runtime config exposes Electron app version ${appVersion} only to the trusted renderer`, async t => {
+    const h = await harness(t, { appVersion });
+    // Register only IPC and a synthetic window; do not start any runtime service.
+    h.run(`mainWindow = new BrowserWindow({}); runtime = { apiBaseUrl: 'http://127.0.0.1:41000', apiToken: 'synthetic' };
+      mainWindow.webContents.mainFrame.url = runtime.apiBaseUrl; registerIpc();`);
+    const event = h.rendererEvent(); h.handlers.get('runtime:config')(event);
+    assert.equal(event.returnValue.appVersion, appVersion);
+    assert.deepEqual(h.events.filter(value => value === 'app.getVersion'), ['app.getVersion']);
+    assert.equal(h.children.length, 0);
+  });
+}
+
+test('runtime config denies foreign windows, subframes and navigated origins before reading the app version', async t => {
+  const h = await harness(t);
+  h.run(`mainWindow = new BrowserWindow({}); runtime = { apiBaseUrl: 'http://127.0.0.1:41000', apiToken: 'synthetic' };
+    mainWindow.webContents.mainFrame.url = runtime.apiBaseUrl; registerIpc();`);
+  const foreignWindow = { ...h.rendererEvent(), sender: {} };
+  const subframe = { ...h.rendererEvent(), senderFrame: { url: 'http://127.0.0.1:41000' } };
+  for (const event of [foreignWindow, subframe]) {
+    assert.throws(() => h.handlers.get('runtime:config')(event), /Untrusted renderer/);
+    assert.equal(event.returnValue, undefined);
+  }
+  const navigated = h.rendererEvent(); navigated.senderFrame.url = 'https://untrusted.example';
+  assert.throws(() => h.handlers.get('runtime:config')(navigated), /Untrusted renderer/);
+  assert.equal(navigated.returnValue, undefined);
+  assert.equal(h.events.includes('app.getVersion'), false);
+  assert.equal(h.children.length, 0);
+});
+
 test('actual main startup passes fresh enrollment before paths file and private bootstrap only to backend stdin', async t => {
   const h = await harness(t); await h.start(); await Promise.resolve();
   assert.equal(h.run('runtime.ready'), true); assert.equal(h.controls.gatewayOptions.freshEnrollmentAllowed, true);
@@ -398,7 +429,7 @@ test('actual main startup passes fresh enrollment before paths file and private 
     if (child !== backend) { assert.equal(child.options.stdio[0], 'ignore'); assert.equal(child.options.env.TOKEN_ENC_KEY, undefined); }
   }
   const event = h.rendererEvent(); h.handlers.get('runtime:config')(event);
-  assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken']);
+  assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken', 'appVersion']);
   assert.doesNotMatch(JSON.stringify({ config: event.returnValue, status: h.handlers.get('runtime:status')(event), outbound: h.outbound }),
     new RegExp(`${h.cap}|${h.channelEpoch}|private/ai.sock|tokenEncryptionKey`));
   assert.equal([...h.handlers.keys()].some(name => /activate|gateway|settle|enrollment|permit/.test(name)), false);
@@ -461,7 +492,7 @@ test('protocol3 connects backup inside lifecycle without leaking keys, ports or 
   const event = h.rendererEvent(); h.handlers.get('runtime:config')(event);
   const status = h.handlers.get('runtime:status')(event);
   assert.equal(status.backupAvailable, true); assert.equal(status.restoreAvailable, true);
-  assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken']);
+  assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken', 'appVersion']);
   assert.doesNotMatch(JSON.stringify({ config: event.returnValue, status, outbound: h.outbound }), /keyProvider|getBackupKey|sealMaintenance|sourceWorker|installationId|private\/ai/);
 });
 
