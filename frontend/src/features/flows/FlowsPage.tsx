@@ -52,8 +52,8 @@ export default function FlowsPage() {
   const detail = detailQuery.data
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
-      <section className="flex w-[22rem] shrink-0 flex-col border-r border-line bg-surface-1">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @min-[640px]:flex-row">
+      <section className="flex max-h-[35%] min-h-0 w-full shrink-0 flex-col border-b border-line bg-surface-1 @min-[640px]:max-h-none @min-[640px]:w-72 @min-[640px]:border-b-0 @min-[640px]:border-r">
         <div className="border-b border-line px-3 py-3">
           <h2 className="text-[13px] font-semibold text-ink">Flows</h2>
           <label className="mt-2 flex items-center gap-2 text-[12px] text-ink-muted">
@@ -96,7 +96,7 @@ export default function FlowsPage() {
                     active ? 'bg-surface-3 text-ink' : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
                   }`}
                 >
-                  <span className="text-[13px] text-ink">{flow.name}</span>
+                  <span className="max-w-full text-[13px] text-ink [overflow-wrap:anywhere]">{flow.name}</span>
                   <span className="font-mono text-[11px] text-ink-faint">{flow.kind}</span>
                 </button>
               </li>
@@ -106,9 +106,9 @@ export default function FlowsPage() {
       </section>
 
       {detail ? (
-        <article className="min-h-0 flex-1 overflow-y-auto px-6 py-5" aria-label="Flow detail">
-          <div className="flex items-center gap-2">
-            <h3 className="text-[16px] font-semibold text-ink">{detail.name}</h3>
+        <article className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 [overflow-wrap:anywhere]" aria-label="Flow detail" tabIndex={0}>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="min-w-0 text-[16px] font-semibold text-ink">{detail.name}</h3>
             {detail.kind && (
               <span
                 className={`rounded-full border border-line-strong px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
@@ -156,7 +156,7 @@ export default function FlowsPage() {
                       : undefined
                   }
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="min-w-0 truncate text-[13px] font-medium text-ink">
                       {step.nodeName ?? step.description ?? 'step'}
                     </span>

@@ -105,7 +105,12 @@ export default function CodeExplorerPage() {
           <span role="alert">프로젝트의 snapshot을 확인할 수 없습니다.</span>
         )}
       </header>
-      <div className="flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+      <div
+        role="region"
+        aria-label="Code panels"
+        tabIndex={0}
+        className="flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+      >
         <FileTreePanel
           files={unknown ? EMPTY_FILES : (filesQuery.data ?? EMPTY_FILES)}
           selectedPath={path}
@@ -113,26 +118,28 @@ export default function CodeExplorerPage() {
           error={queryError(filesQuery.error)}
           onSelectFile={(nextPath) => openLocation(nextPath)}
         />
-        <Suspense
-          fallback={
-            <p className="px-5 py-8 text-[13px] text-ink-muted">{t('code.loadingEditor')}</p>
-          }
-        >
-          <CodeViewer
-            projectId={projectId}
-            snapshotId={snapshotId}
-            path={path}
-            line={line}
-            sourceContext={unknown ? 'unknown' : sourceContext}
-            evidenceId={evidenceId}
-            onOpenCurrent={() => {
-              const params = new URLSearchParams()
-              if (path) params.set('path', path)
-              params.set('sourceContext', 'current')
-              setSearchParams(params)
-            }}
-          />
-        </Suspense>
+        <div className="flex min-h-0 min-w-[20rem] flex-1 flex-col [overflow-wrap:anywhere]">
+          <Suspense
+            fallback={
+              <p className="px-5 py-8 text-[13px] text-ink-muted">{t('code.loadingEditor')}</p>
+            }
+          >
+            <CodeViewer
+              projectId={projectId}
+              snapshotId={snapshotId}
+              path={path}
+              line={line}
+              sourceContext={unknown ? 'unknown' : sourceContext}
+              evidenceId={evidenceId}
+              onOpenCurrent={() => {
+                const params = new URLSearchParams()
+                if (path) params.set('path', path)
+                params.set('sourceContext', 'current')
+                setSearchParams(params)
+              }}
+            />
+          </Suspense>
+        </div>
         <SymbolPanel
           projectId={projectId}
           snapshotId={unknown ? null : snapshotId}

@@ -9,7 +9,7 @@ import { ApiError } from '../api/client'
 import type { AiAlternative, AiAskBody, AiAskResponse, AiClaim, AiPreviewResponse, AiRequestPlanResponse, AiStatus } from '../api/types'
 import { projectIdFromPath, workspaceViewFromPath } from '../lib/projectId'
 import { useT } from '../lib/i18n'
-import { useUiStore } from '../stores/uiStore'
+import { AI_PANEL_MAX_WIDTH, AI_PANEL_MIN_WIDTH, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH, useUiStore } from '../stores/uiStore'
 import { PanelRightIcon, SparkleIcon } from '../components/icons'
 import { codeLocationSearch } from '../features/code/codeLocation'
 
@@ -61,6 +61,12 @@ export default function AiPanel() {
   const desktop = Boolean(window.codeIntelligenceDesktop)
   const open = useUiStore((state) => state.aiPanelOpen)
   const width = useUiStore((state) => state.aiPanelWidth)
+  const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed)
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
+  // Keep the saved preference while reserving usable workspace space at smaller sizes.
+  const maxWidth = Math.max(AI_PANEL_MIN_WIDTH, Math.min(AI_PANEL_MAX_WIDTH,
+    viewportWidth - (sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH) - 400 - 6))
+  const panelWidth = Math.max(AI_PANEL_MIN_WIDTH, Math.min(width, maxWidth))
   const toggle = useUiStore((state) => state.toggleAiPanel)
   const setWidth = useUiStore((state) => state.setAiPanelWidth)
   const focusedFile = useUiStore((state) => state.focusedFile)
@@ -72,6 +78,12 @@ export default function AiPanel() {
   const selectedAreas = useUiStore((state) => state.selectedAreas)
   const pendingIntent = useUiStore((state) => state.pendingIntent)
   const setPendingIntent = useUiStore((state) => state.setPendingIntent)
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -278,7 +290,7 @@ export default function AiPanel() {
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
-    setWidth(window.innerWidth - event.clientX)
+    setWidth(Math.min(maxWidth, window.innerWidth - event.clientX))
   }
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -491,15 +503,33 @@ export default function AiPanel() {
         role="separator"
         aria-orientation="vertical"
         aria-label={t('ai.panelResize')}
-        className="w-[3px] shrink-0 cursor-col-resize touch-none bg-line transition-colors hover:bg-accent/70 active:bg-accent"
+        aria-controls="ai-assistant-panel"
+        aria-valuemin={AI_PANEL_MIN_WIDTH}
+        aria-valuemax={maxWidth}
+        aria-valuenow={panelWidth}
+        aria-valuetext={`${panelWidth} pixels`}
+        tabIndex={0}
+        className="w-1.5 shrink-0 cursor-col-resize touch-none bg-line transition-colors hover:bg-accent/70 focus-visible:bg-accent focus-visible:outline-2 focus-visible:outline-accent active:bg-accent"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onKeyDown={(event) => {
+          const step = event.shiftKey ? 48 : 24
+          const next = event.key === 'Home' ? AI_PANEL_MIN_WIDTH
+            : event.key === 'End' ? maxWidth
+            : event.key === 'ArrowLeft' ? panelWidth + step
+            : event.key === 'ArrowRight' ? panelWidth - step : null
+          if (next == null) return
+          event.preventDefault()
+          setWidth(Math.min(maxWidth, next))
+        }}
       />
       <aside
+        id="ai-assistant-panel"
         aria-label={t('ai.panelLabel')}
-        style={{ width }}
-        className="flex shrink-0 flex-col bg-surface-1"
+        style={{ width: panelWidth }}
+        className="flex min-w-0 shrink-0 flex-col bg-surface-1 [overflow-wrap:anywhere]"
       >
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-line pl-4 pr-2">
           <div className="flex items-center gap-2">
@@ -666,7 +696,7 @@ export default function AiPanel() {
           </div>
         </div>
 
-        <form onSubmit={onSubmit} className="shrink-0 border-t border-line p-3">
+        <form onSubmit={onSubmit} className="max-h-[50%] shrink-0 overflow-y-auto border-t border-line p-3">
           {preview && (
             <div className="mb-2 rounded-md border border-line bg-surface-2 p-2 text-[11px]">
               <div className="flex items-center justify-between">
@@ -741,7 +771,7 @@ export default function AiPanel() {
               Local data only (no external AI)
             </label>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               type="text"
               value={question}
@@ -749,7 +779,7 @@ export default function AiPanel() {
               disabled={!canPreview}
               aria-label={t('ai.inputLabel')}
               placeholder={canPreview ? t('ai.placeholder') : t('ai.placeholderDisabled')}
-              className="min-w-0 flex-1 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-ink placeholder:text-ink-faint disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-w-0 flex-1 basis-full rounded-md border border-line bg-surface-2 px-3 py-1.5 text-ink placeholder:text-ink-faint disabled:cursor-not-allowed disabled:opacity-60"
             />
             <button
               type="button"

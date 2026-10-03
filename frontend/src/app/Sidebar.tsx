@@ -6,11 +6,11 @@ import { ApiError } from '../api/client'
 import { listProjects } from '../api/projects'
 import { listAreas, updateAreaSelections } from '../api/areas'
 import type { AreaSelectionsRequest, AreaType, ProjectArea } from '../api/types'
-import { FolderIcon, HomeIcon, SearchIcon, SlidersIcon } from '../components/icons'
+import { FolderIcon, HomeIcon, PanelRightIcon, SearchIcon, SlidersIcon } from '../components/icons'
 import { areaLabel } from '../features/areas/labels'
 import { useT } from '../lib/i18n'
 import { parseProjectId } from '../lib/projectId'
-import { useUiStore } from '../stores/uiStore'
+import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH, useUiStore } from '../stores/uiStore'
 
 const navItems = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true },
@@ -29,6 +29,8 @@ function SectionLabel({ children }: { children: ReactNode }) {
 
 export default function Sidebar() {
   const t = useT()
+  const collapsed = useUiStore((state) => state.sidebarCollapsed)
+  const toggleSidebar = useUiStore((state) => state.toggleSidebar)
   const versionLabel = window.codeIntelligenceDesktop
     ? `v${window.codeIntelligenceDesktop.appVersion}`
     : import.meta.env.DEV ? 'Browser development' : 'Browser build'
@@ -84,20 +86,38 @@ export default function Sidebar() {
   }, [areas, setSelectedAreas])
 
   return (
-    <aside aria-label={t('sidebar.label')} className="flex w-60 shrink-0 flex-col border-r border-line bg-surface-1">
+    <aside
+      aria-label={t('sidebar.label')}
+      style={{ width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH }}
+      className="flex min-w-0 shrink-0 flex-col border-r border-line bg-surface-1"
+    >
       <NavLink
         to="/"
         end
         aria-label="Code Intelligence home"
-        className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4 transition-colors hover:bg-surface-2"
+        title="Code Intelligence home"
+        className="flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-line px-4 transition-colors hover:bg-surface-2"
       >
         <span aria-hidden="true" className="font-mono text-[13px] font-bold text-accent">
           {'{}'}
         </span>
-        <span className="font-mono text-[13px] font-semibold tracking-tight text-ink">
+        <span className={`${collapsed ? 'sr-only' : 'truncate'} font-mono text-[13px] font-semibold tracking-tight text-ink`}>
           Code Intelligence
         </span>
       </NavLink>
+
+      <button
+        type="button"
+        onClick={toggleSidebar}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-expanded={!collapsed}
+        aria-controls="sidebar-projects"
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className="mx-2 mt-2 flex shrink-0 items-center justify-center gap-2 rounded-md p-2 text-ink-muted hover:bg-surface-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        <PanelRightIcon className="rotate-180" />
+        {!collapsed && <span>Collapse sidebar</span>}
+      </button>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         <nav aria-label="Main menu" className="flex flex-col gap-0.5 pt-2">
@@ -106,6 +126,8 @@ export default function Sidebar() {
               key={to}
               to={to}
               end={end}
+              aria-label={label}
+              title={label}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 transition-colors ${
                   isActive
@@ -115,52 +137,55 @@ export default function Sidebar() {
               }
             >
               <NavIcon className="shrink-0" />
-              {label}
+              <span className={collapsed ? 'sr-only' : undefined}>{label}</span>
             </NavLink>
           ))}
         </nav>
 
-        <SectionLabel>{t('sidebar.projects')}</SectionLabel>
-        {projectsQuery.isLoading ? (
-          <p className="px-2.5 text-[12px] text-ink-muted">{t('sidebar.projectsLoading')}</p>
-        ) : projects.length === 0 ? (
-          <p className="px-2.5 text-[12px] leading-relaxed text-ink-faint">{t('sidebar.noProject')}</p>
-        ) : (
-          <ul aria-label={t('sidebar.projects')} className="flex flex-col gap-0.5">
-            {projects.map((project) => (
-              <li key={project.id}>
-                <NavLink
-                  to={`/projects/${project.id}`}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 rounded-md px-2.5 py-1.5 font-mono text-[12px] transition-colors ${
-                      isActive
-                        ? 'bg-surface-3 text-ink shadow-[inset_2px_0_0_var(--color-accent)]'
-                        : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
-                    }`
-                  }
-                >
-                  <FolderIcon className="shrink-0 text-accent" />
-                  <span className="truncate">{project.name}</span>
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        )}
-        {rawProjectId && (
-          <div className="flex flex-col">
-            <SectionLabel>{t('sidebar.areas')}</SectionLabel>
-            <AreasSection
-              numeric={projectId != null}
-              loading={areasQuery.isLoading}
-              error={areasQuery.error}
-              areas={areas}
-              onToggle={toggleArea}
-            />
-          </div>
-        )}
+        <div id="sidebar-projects" hidden={collapsed}>
+          <SectionLabel>{t('sidebar.projects')}</SectionLabel>
+          {projectsQuery.isLoading ? (
+            <p className="px-2.5 text-[12px] text-ink-muted">{t('sidebar.projectsLoading')}</p>
+          ) : projects.length === 0 ? (
+            <p className="px-2.5 text-[12px] leading-relaxed text-ink-faint">{t('sidebar.noProject')}</p>
+          ) : (
+            <ul aria-label={t('sidebar.projects')} className="flex flex-col gap-0.5">
+              {projects.map((project) => (
+                <li key={project.id}>
+                  <NavLink
+                    to={`/projects/${project.id}`}
+                    title={project.name}
+                    className={({ isActive }) =>
+                      `flex items-center gap-2 rounded-md px-2.5 py-1.5 font-mono text-[12px] transition-colors ${
+                        isActive
+                          ? 'bg-surface-3 text-ink shadow-[inset_2px_0_0_var(--color-accent)]'
+                          : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
+                      }`
+                    }
+                  >
+                    <FolderIcon className="shrink-0 text-accent" />
+                    <span className="truncate">{project.name}</span>
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          )}
+          {rawProjectId && (
+            <div className="flex flex-col">
+              <SectionLabel>{t('sidebar.areas')}</SectionLabel>
+              <AreasSection
+                numeric={projectId != null}
+                loading={areasQuery.isLoading}
+                error={areasQuery.error}
+                areas={areas}
+                onToggle={toggleArea}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="shrink-0 border-t border-line px-4 py-2.5 font-mono text-[10px] tracking-wide text-ink-faint">
+      <div className={`${collapsed ? 'sr-only' : 'shrink-0 border-t border-line px-4 py-2.5'} font-mono text-[10px] tracking-wide text-ink-faint`}>
         {versionLabel}
       </div>
     </aside>
