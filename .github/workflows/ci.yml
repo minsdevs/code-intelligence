@@ -13,6 +13,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validation-contract:
+    name: Offline validation runner contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - run: node --test validation/t00/test/*.test.cjs
+
+  desktop:
+    name: Desktop runtime regression tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - run: node --check src/main.cjs && node --check src/preload.cjs && node --check src/backup.cjs && node --check scripts/stage-runtime.mjs && node --check scripts/runtime-stage.cjs
+      - run: npm test
+
   backend:
     name: Backend (Gradle)
     runs-on: ubuntu-latest
@@ -33,6 +57,7 @@ jobs:
           cache-dependency-path: |
             analyzers/ts-analyzer/package-lock.json
             analyzers/tree-analyzer/package-lock.json
+            frontend/package-lock.json
       - name: Install analyzer dependencies for the quality gate
         working-directory: .
         run: |
@@ -40,6 +65,13 @@ jobs:
           npm --prefix analyzers/tree-analyzer ci
       - name: Format check, tests, build
         run: ./gradlew spotlessCheck build
+      - name: Install source-viewer gate dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Snapshot source contract (real backend and browser)
+        run: ./gradlew snapshotSourceTest
       - name: Multi-language quality and performance regression gate
         run: ../quality-gate
 

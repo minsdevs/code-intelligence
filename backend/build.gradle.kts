@@ -63,7 +63,25 @@ spotless {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+// Explicit opt-in gate: requires installed frontend dependencies and local Playwright Chromium.
+tasks.test { exclude("**/SnapshotSourceContractIntegrationTest.class") }
+val buildSnapshotSourceFrontend by tasks.registering(Exec::class) {
+    description = "Builds the real UI before snapshot source integration tests."
+    workingDir(layout.projectDirectory.dir("../frontend"))
+    commandLine("npm", "run", "build")
+}
+tasks.register<Test>("snapshotSourceTest") {
+    description = "S1: Java/TS x six source-contract scenarios, including real backend browser paths."
+    group = "verification"
+    dependsOn(buildSnapshotSourceFrontend)
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter { includeTestsMatching("*SnapshotSourceContractIntegrationTest") }
+    outputs.upToDateWhen { false }
+    testLogging { events("passed", "failed"); showStandardStreams = true }
+}
 tasks.processResources {
+    mustRunAfter(buildSnapshotSourceFrontend)
     from(layout.projectDirectory.dir("../frontend/dist")) {
         into("static")
     }
