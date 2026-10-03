@@ -42,7 +42,7 @@ public class AiSettingsController {
     }
 
     @DeleteMapping("/api/ai/settings")
-    public void clear(@AuthenticationPrincipal AuthenticatedUser user) {
-        settings.clear(user.userId());
+    public AiSettingsService.SettingView clear(@AuthenticationPrincipal AuthenticatedUser user) {
+        return settings.clear(user.userId());
     }
 }

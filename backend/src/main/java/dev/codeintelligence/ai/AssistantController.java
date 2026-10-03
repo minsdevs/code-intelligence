@@ -1,11 +1,13 @@
 package dev.codeintelligence.ai;
 
 import dev.codeintelligence.common.security.AuthenticatedUser;
+import dev.codeintelligence.maintenance.MaintenanceGate;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,20 +33,69 @@ public class AssistantController {
             Long focusedNoteId,
             Long focusedTaskId,
             List<String> selectedAreas,
-            List<String> excludedContextIds) {}
+            List<String> excludedContextIds,
+            String requestPlanToken) {
+        public AskBody(
+                Long conversationId,
+                String question,
+                String intent,
+                String view,
+                String focusedFile,
+                Long focusedNodeId,
+                String focusedCommitSha,
+                Long focusedFindingId,
+                Long focusedNoteId,
+                Long focusedTaskId,
+                List<String> selectedAreas,
+                List<String> excludedContextIds) {
+            this(
+                    conversationId,
+                    question,
+                    intent,
+                    view,
+                    focusedFile,
+                    focusedNodeId,
+                    focusedCommitSha,
+                    focusedFindingId,
+                    focusedNoteId,
+                    focusedTaskId,
+                    selectedAreas,
+                    excludedContextIds,
+                    null);
+        }
+    }
 
     private final AssistantService assistantService;
     private final JsonMapper json;
+    private final AiRequestPlanService plans;
+    private final MaintenanceGate maintenance;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public AssistantController(AssistantService assistantService, JsonMapper json) {
+    public AssistantController(AssistantService assistantService, JsonMapper json, AiRequestPlanService plans) {
+        this(assistantService, json, plans, new MaintenanceGate());
+    }
+
+    @Autowired
+    public AssistantController(
+            AssistantService assistantService,
+            JsonMapper json,
+            AiRequestPlanService plans,
+            MaintenanceGate maintenance) {
         this.assistantService = assistantService;
         this.json = json;
+        this.plans = plans;
+        this.maintenance = maintenance;
     }
 
     @GetMapping("/api/ai/status")
     public AssistantService.AiStatus status(@AuthenticationPrincipal AuthenticatedUser user) {
         return assistantService.status(user.userId());
+    }
+
+    @PostMapping("/api/projects/{projectId}/ai/request-plan")
+    public AiRequestPlanService.View prepare(
+            @PathVariable long projectId, @RequestBody AskBody body, @AuthenticationPrincipal AuthenticatedUser user) {
+        return plans.prepare(projectId, user.userId(), toRequest(body));
     }
 
     @PostMapping("/api/projects/{projectId}/ai/ask")
@@ -58,24 +109,32 @@ public class AssistantController {
             @PathVariable long projectId, @RequestBody AskBody body, @AuthenticationPrincipal AuthenticatedUser user) {
         SseEmitter emitter = new SseEmitter(Duration.ofMinutes(2).toMillis());
         AssistantService.AskRequest request = toRequest(body);
-        executor.execute(() -> {
-            try {
-                AssistantService.AskResponse response = assistantService.ask(projectId, user.userId(), request);
-                OpenAIProvider.chunk(response.explanation(), token -> {
+        MaintenanceGate.Lease lease = maintenance.admitWriter();
+        try {
+            executor.execute(() -> {
+                try (lease) {
                     try {
-                        emitter.send(SseEmitter.event().name("token").data(token));
-                    } catch (IOException e) {
-                        throw new IllegalStateException(e);
+                        AssistantService.AskResponse response = assistantService.ask(projectId, user.userId(), request);
+                        OpenAIProvider.chunk(response.explanation(), token -> {
+                            try {
+                                emitter.send(SseEmitter.event().name("token").data(token));
+                            } catch (IOException e) {
+                                throw new IllegalStateException(e);
+                            }
+                        });
+                        emitter.send(SseEmitter.event()
+                                .name("result")
+                                .data(json.writeValueAsString(response), MediaType.APPLICATION_JSON));
+                        emitter.complete();
+                    } catch (Exception e) {
+                        emitter.completeWithError(e);
                     }
-                });
-                emitter.send(SseEmitter.event()
-                        .name("result")
-                        .data(json.writeValueAsString(response), MediaType.APPLICATION_JSON));
-                emitter.complete();
-            } catch (Exception e) {
-                emitter.completeWithError(e);
-            }
-        });
+                }
+            });
+        } catch (RuntimeException | Error error) {
+            lease.close();
+            throw error;
+        }
         return emitter;
     }
 
@@ -96,6 +155,7 @@ public class AssistantController {
                         safe.focusedNoteId(),
                         safe.focusedTaskId(),
                         safe.selectedAreas() == null ? List.of() : safe.selectedAreas()),
-                safe.excludedContextIds() == null ? List.of() : safe.excludedContextIds());
+                safe.excludedContextIds() == null ? List.of() : safe.excludedContextIds(),
+                safe.requestPlanToken());
     }
 }

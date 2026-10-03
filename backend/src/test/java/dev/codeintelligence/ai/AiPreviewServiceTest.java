@@ -52,7 +52,7 @@ class AiPreviewServiceTest {
                 new ContextRetrievalService.ContextBlock(
                         "SOURCE:111222333444", "SOURCE", "src/Main.java", "SOURCE:\n1|public class Main {}"));
         String contextText = "VIEW: code\nFOCUS_FILE: src/Main.java\nSOURCE:\n1|public class Main {}";
-        when(retrieval.retrieveStructured(eq(1L), eq(1L), eq(10L), any(), any(), anyString()))
+        when(retrieval.retrievePreviewStructured(eq(1L), eq(1L), eq(10L), any(), any(), anyString()))
                 .thenReturn(new ContextRetrievalService.StructuredRetrieved(
                         contextText, List.of("file:src/Main.java:1"), blocks));
 
@@ -88,7 +88,7 @@ class AiPreviewServiceTest {
         when(projectRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(project));
 
         var blocks = List.of(new ContextRetrievalService.ContextBlock("VIEW:aaa111222333", "VIEW", "-", "VIEW: code"));
-        when(retrieval.retrieveStructured(anyLong(), anyLong(), anyLong(), any(), any(), anyString()))
+        when(retrieval.retrievePreviewStructured(anyLong(), anyLong(), anyLong(), any(), any(), anyString()))
                 .thenReturn(new ContextRetrievalService.StructuredRetrieved("VIEW: code", List.of(), blocks));
 
         AIProvider mockProvider = mock(AIProvider.class);
@@ -102,6 +102,10 @@ class AiPreviewServiceTest {
 
         // Verify the AI provider's chat() method is never called
         verify(mockProvider, never()).chat(any());
+        verify(mockProvider, never()).embed(anyString());
+        verify(mockProvider, never()).stream(any(), any());
+        verify(mockProvider, never()).testConnection();
+        verify(retrieval, never()).retrieveStructured(anyLong(), anyLong(), anyLong(), any(), any(), anyString());
     }
 
     @Test
@@ -156,7 +160,7 @@ class AiPreviewServiceTest {
                 new ContextRetrievalService.ContextBlock(
                         sourceId, "SOURCE", "src/Main.java", "SOURCE:\n1|public class Main {}"));
         String contextText = "VIEW: code\nFOCUS_FILE: src/Main.java\nSOURCE:\n1|public class Main {}";
-        when(retrieval.retrieveStructured(anyLong(), anyLong(), anyLong(), any(), any(), anyString()))
+        when(retrieval.retrievePreviewStructured(anyLong(), anyLong(), anyLong(), any(), any(), anyString()))
                 .thenReturn(new ContextRetrievalService.StructuredRetrieved(
                         contextText, List.of("file:src/Main.java:1"), blocks));
 

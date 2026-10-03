@@ -33,6 +33,7 @@ public class TaskGenerationService {
     private final ProjectRepository projectRepository;
     private final JdbcClient jdbc;
     private final AIProviderResolver providerResolver;
+    private final AiUsageService usage;
     private final JsonMapper json;
     private final TransactionTemplate transactions;
 
@@ -40,11 +41,13 @@ public class TaskGenerationService {
             ProjectRepository projectRepository,
             JdbcClient jdbc,
             AIProviderResolver providerResolver,
+            AiUsageService usage,
             JsonMapper json,
             TransactionTemplate transactions) {
         this.projectRepository = projectRepository;
         this.jdbc = jdbc;
         this.providerResolver = providerResolver;
+        this.usage = usage;
         this.json = json;
         this.transactions = transactions;
     }
@@ -82,7 +85,8 @@ public class TaskGenerationService {
                 """;
         String user = SecretMask.redact("FINDING:\n" + finding.severity() + " " + finding.category() + " "
                 + finding.title() + "\n" + nullToEmpty(finding.detail()));
-        AIProvider.ChatResponse response = provider.chat(new AIProvider.ChatRequest(system, user, true));
+        AIProvider.ChatResponse response =
+                usage.chat(userId, projectId, provider, "task", new AIProvider.ChatRequest(system, user, true));
         Draft draft = parse(response, finding);
         return transactions.execute(status -> {
             long id = jdbc.sql("""

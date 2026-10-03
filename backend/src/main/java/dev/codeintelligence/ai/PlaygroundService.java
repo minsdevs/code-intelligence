@@ -184,7 +184,8 @@ public class PlaygroundService {
                 retrieval.retrieve(userId, projectId, snapshotId, project.getClonePath(), ctx, question);
         String extra = extraContext(paths, snippet);
         String userPrompt = SecretMask.redact(PromptBuilder.user(question, retrieved.text() + "\n" + extra));
-        AIProvider.ChatResponse raw = provider.chat(new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
+        AIProvider.ChatResponse raw = usage.chat(
+                userId, projectId, provider, "playground", new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
         AIProvider.ChatResponse validated = validator.validate(projectId, snapshotId, raw);
         return transactions.execute(status -> {
             jdbc.sql("""
@@ -203,7 +204,6 @@ public class PlaygroundService {
                     .param("id", sessionId)
                     .param("projectId", projectId)
                     .update();
-            usage.log(userId, projectId, provider, "playground", validated);
             return load(projectId, sessionId);
         });
     }

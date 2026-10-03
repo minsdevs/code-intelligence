@@ -1,6 +1,5 @@
 package dev.codeintelligence.ai;
 
-import dev.codeintelligence.analysis.core.SnapshotNotFoundException;
 import dev.codeintelligence.evidence.EvidenceKind;
 import dev.codeintelligence.evidence.EvidenceService;
 import dev.codeintelligence.evidence.EvidenceSubjects;
@@ -9,9 +8,7 @@ import dev.codeintelligence.evidence.SecretMask;
 import dev.codeintelligence.project.Project;
 import dev.codeintelligence.project.ProjectNotFoundException;
 import dev.codeintelligence.project.ProjectRepository;
-import dev.codeintelligence.project.SnapshotRepository;
 import java.util.List;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -31,7 +28,17 @@ public class AssistantService {
             String question,
             String intent,
             ContextRetrievalService.AskContext context,
-            List<String> excludedContextIds) {}
+            List<String> excludedContextIds,
+            String requestPlanToken) {
+        public AskRequest(
+                Long conversationId,
+                String question,
+                String intent,
+                ContextRetrievalService.AskContext context,
+                List<String> excludedContextIds) {
+            this(conversationId, question, intent, context, excludedContextIds, null);
+        }
+    }
 
     public record AskResponse(
             long conversationId,
@@ -40,54 +47,36 @@ public class AssistantService {
             List<AIProvider.Claim> claims,
             List<AIProvider.Alternative> alternatives) {}
 
-    public record AiStatus(boolean configured, String provider, String model) {}
+    public record AiStatus(boolean configured, String provider, String model, String blockedReason) {}
 
     private final ProjectRepository projectRepository;
-    private final SnapshotRepository snapshotRepository;
     private final JdbcClient jdbc;
     private final AIProviderResolver providerResolver;
     private final AiUsageService usage;
-    private final ContextRetrievalService retrieval;
+    private final AiRequestPlanService plans;
     private final EvidenceValidator validator;
     private final EvidenceService evidenceService;
     private final JsonMapper json;
-    private final CodeExplanationService codeExplanationService;
-    private final WhyAnalysisService whyAnalysisService;
-    private final AlternativeAnalysisService alternativeAnalysisService;
-    private final ArchitectureAnalysisService architectureAnalysisService;
-    private final ProjectAreaAnalysisService projectAreaAnalysisService;
     private final TransactionTemplate transactions;
 
     public AssistantService(
             ProjectRepository projectRepository,
-            SnapshotRepository snapshotRepository,
             JdbcClient jdbc,
             AIProviderResolver providerResolver,
             AiUsageService usage,
-            ContextRetrievalService retrieval,
+            AiRequestPlanService plans,
             EvidenceValidator validator,
             EvidenceService evidenceService,
             JsonMapper json,
-            CodeExplanationService codeExplanationService,
-            WhyAnalysisService whyAnalysisService,
-            AlternativeAnalysisService alternativeAnalysisService,
-            ArchitectureAnalysisService architectureAnalysisService,
-            ProjectAreaAnalysisService projectAreaAnalysisService,
             TransactionTemplate transactions) {
         this.projectRepository = projectRepository;
-        this.snapshotRepository = snapshotRepository;
         this.jdbc = jdbc;
         this.providerResolver = providerResolver;
         this.usage = usage;
-        this.retrieval = retrieval;
+        this.plans = plans;
         this.validator = validator;
         this.evidenceService = evidenceService;
         this.json = json;
-        this.codeExplanationService = codeExplanationService;
-        this.whyAnalysisService = whyAnalysisService;
-        this.alternativeAnalysisService = alternativeAnalysisService;
-        this.architectureAnalysisService = architectureAnalysisService;
-        this.projectAreaAnalysisService = projectAreaAnalysisService;
         this.transactions = transactions;
     }
 
@@ -96,7 +85,8 @@ public class AssistantService {
         return new AiStatus(
                 provider.enabled(),
                 provider.enabled() ? provider.name() : null,
-                provider.enabled() ? provider.model() : null);
+                provider.enabled() ? provider.model() : null,
+                providerResolver.blockedReason());
     }
 
     public AskResponse ask(long projectId, long userId, AskRequest request) {
@@ -104,34 +94,24 @@ public class AssistantService {
         if (!StringUtils.hasText(question) || question.length() > QUESTION_MAX) {
             throw new InvalidAiQuestionException();
         }
-        Project project = requireOwned(projectId, userId);
+        requireOwned(projectId, userId);
         AIProvider provider = providerResolver.resolve(userId);
         if (!provider.enabled()) {
             throw new AiNotConfiguredException();
         }
-        usage.enforceBudget(userId);
-        long snapshotId = requireSnapshot(project, null);
-        AiIntent intent = request.intent() == null || request.intent().isBlank()
-                ? AiIntent.infer(question)
-                : AiIntent.from(request.intent());
-        ContextRetrievalService.AskContext ctx = request.context() == null
-                ? new ContextRetrievalService.AskContext(null, null, null, null, null, null, null, List.of())
-                : request.context();
-        Set<String> excluded = request.excludedContextIds() == null
-                        || request.excludedContextIds().isEmpty()
-                ? Set.of()
-                : Set.copyOf(request.excludedContextIds());
-        ContextRetrievalService.Retrieved retrieved = retrieval.retrieveWithExclusions(
-                userId, projectId, snapshotId, project.getClonePath(), ctx, question, excluded);
-        String userPrompt = SecretMask.redact(PromptBuilder.user(question, retrieved.text()));
-        AIProvider.ChatResponse raw = provider.chat(new AIProvider.ChatRequest(systemPrompt(intent), userPrompt, true));
+        if (!plans.desktop()) usage.enforceBudget(userId);
+        AiRequestPlanService.Approved approved = plans.consume(projectId, userId, request, provider);
+        long snapshotId = approved.snapshotId();
+        ContextRetrievalService.AskContext ctx = approved.context();
+        AIProvider.ChatResponse raw = plans.desktop()
+                ? plans.execute(approved)
+                : usage.chat(userId, projectId, provider, approved.intent().name(), approved.payload());
         AIProvider.ChatResponse validated = validator.validate(projectId, snapshotId, raw);
         return transactions.execute(status -> {
             long conversationId = resolveConversation(projectId, snapshotId, userId, request.conversationId());
             persistUserMessage(conversationId, question, ctx);
             long messageId = persistAssistant(conversationId, validated);
             linkEvidence(projectId, messageId, validated);
-            usage.log(userId, projectId, provider, intent.name(), validated);
             return new AskResponse(
                     conversationId, messageId, validated.explanation(), validated.claims(), validated.alternatives());
         });
@@ -140,18 +120,6 @@ public class AssistantService {
     public void stream(long projectId, long userId, AskRequest request, AIProvider.TokenConsumer consumer) {
         AskResponse response = ask(projectId, userId, request);
         OpenAIProvider.chunk(response.explanation(), consumer);
-    }
-
-    private String systemPrompt(AiIntent intent) {
-        return switch (intent) {
-            case WHY -> whyAnalysisService.systemPrompt();
-            case ALTERNATIVE -> alternativeAnalysisService.systemPrompt();
-            case ARCHITECTURE -> architectureAnalysisService.systemPrompt();
-            case PROJECT -> projectAreaAnalysisService.systemPrompt();
-            case FINDING, EXPLAIN ->
-                codeExplanationService.systemPrompt()
-                        + (intent == AiIntent.FINDING ? "\n" + PromptBuilder.system(AiIntent.FINDING) : "");
-        };
     }
 
     private long resolveConversation(long projectId, long snapshotId, long userId, Long conversationId) {
@@ -190,7 +158,7 @@ public class AssistantService {
                         values (:conversationId, 'USER', :content, :context::jsonb)
                         """)
                 .param("conversationId", conversationId)
-                .param("content", question)
+                .param("content", SecretMask.redact(question))
                 .param("context", json.writeValueAsString(ctx))
                 .update();
     }
@@ -230,14 +198,5 @@ public class AssistantService {
 
     private Project requireOwned(long projectId, long userId) {
         return projectRepository.findByIdAndUserId(projectId, userId).orElseThrow(ProjectNotFoundException::new);
-    }
-
-    private long requireSnapshot(Project project, Long snapshotId) {
-        Long id = snapshotId != null ? snapshotId : project.getCurrentSnapshotId();
-        if (id == null) {
-            throw new SnapshotNotFoundException();
-        }
-        snapshotRepository.findByIdAndProjectId(id, project.getId()).orElseThrow(SnapshotNotFoundException::new);
-        return id;
     }
 }

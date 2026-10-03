@@ -7,14 +7,14 @@ import dev.codeintelligence.project.ProjectRepository;
 import dev.codeintelligence.project.SnapshotRepository;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 /**
- * Previews what would be sent to the AI provider without making any external request.
- * Reuses the same ContextRetrievalService.retrieveStructured() code path as the actual ask flow,
- * ensuring the preview faithfully represents what would be transmitted.
+ * Previews locally available context without making an external request or generating new summaries.
+ * Exact payload approval binding remains separate from this read-only preview.
  */
 @Service
 public class AiPreviewService {
@@ -57,6 +57,15 @@ public class AiPreviewService {
 
     public AiPreviewResponse preview(
             long projectId, long userId, String question, ContextRetrievalService.AskContext context) {
+        return preview(projectId, userId, question, context, Set.of());
+    }
+
+    public AiPreviewResponse preview(
+            long projectId,
+            long userId,
+            String question,
+            ContextRetrievalService.AskContext context,
+            Set<String> excludedIds) {
         Project project =
                 projectRepository.findByIdAndUserId(projectId, userId).orElseThrow(ProjectNotFoundException::new);
         Long snapshotId = project.getCurrentSnapshotId();
@@ -67,9 +76,10 @@ public class AiPreviewService {
                 .findByIdAndProjectId(snapshotId, project.getId())
                 .orElseThrow(dev.codeintelligence.analysis.core.SnapshotNotFoundException::new);
 
-        // Use the structured retrieval path — same logic as the real ask flow
-        ContextRetrievalService.StructuredRetrieved structured =
-                retrieval.retrieveStructured(userId, projectId, snapshotId, project.getClonePath(), context, question);
+        // Preview must not generate summaries, refresh embeddings, or run semantic provider search.
+        ContextRetrievalService.StructuredRetrieved structured = retrieval.retrievePreviewStructured(
+                userId, projectId, snapshotId, project.getClonePath(), context, question);
+        structured = ContextRetrievalService.filterExclusions(structured, excludedIds);
 
         String text = structured.text();
         List<String> fileRefs = structured.fileRefs();

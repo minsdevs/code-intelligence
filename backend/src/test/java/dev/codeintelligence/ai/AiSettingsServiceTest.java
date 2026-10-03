@@ -3,6 +3,9 @@ package dev.codeintelligence.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -78,7 +81,17 @@ class AiSettingsServiceTest {
         AIProviderFactory factory = mock(AIProviderFactory.class);
         when(factory.create(eq("openai"), eq("sk-existing-key"), eq("gpt-4o-mini")))
                 .thenReturn(provider);
-        AiSettingsService service = service(repository, crypto, factory);
+        AiPreferenceStore preferences = preferences();
+        var encrypted = crypto.encrypt("sk-existing-key");
+        when(preferences.activeCredential(7L))
+                .thenReturn(Optional.of(new AiPreferenceStore.ActiveCredential(
+                        "openai",
+                        "gpt-4o-mini",
+                        1L,
+                        encrypted.keyVersion(),
+                        encrypted.nonce(),
+                        encrypted.ciphertext())));
+        AiSettingsService service = service(repository, crypto, factory, transactionManager(), preferences);
 
         AiSettingsService.SettingView result = service.set(7L, "openai", "gpt-4o-mini", "");
 
@@ -109,6 +122,15 @@ class AiSettingsServiceTest {
             TokenCryptoService crypto,
             AIProviderFactory factory,
             PlatformTransactionManager transactionManager) {
+        return service(repository, crypto, factory, transactionManager, preferences());
+    }
+
+    private static AiSettingsService service(
+            UserAiSettingRepository repository,
+            TokenCryptoService crypto,
+            AIProviderFactory factory,
+            PlatformTransactionManager transactionManager,
+            AiPreferenceStore preferences) {
         AiProperties properties = new AiProperties(
                 "",
                 8000,
@@ -117,7 +139,22 @@ class AiSettingsServiceTest {
                 new AiProperties.OpenAi("", "https://api.openai.com", "gpt-4o-mini", "text-embedding-3-small"),
                 new AiProperties.Gemini(
                         "", "https://generativelanguage.googleapis.com", "gemini-2.5-flash", "gemini-embedding-001"));
-        return new AiSettingsService(repository, crypto, properties, factory, transactionManager);
+        return new AiSettingsService(
+                repository,
+                crypto,
+                properties,
+                factory,
+                transactionManager,
+                preferences,
+                new AiDispatchGate(new AiSafetyPolicy(new org.springframework.mock.env.MockEnvironment())));
+    }
+
+    private static AiPreferenceStore preferences() {
+        AiPreferenceStore preferences = mock(AiPreferenceStore.class);
+        when(preferences.beginSave(anyLong())).thenReturn(1L);
+        when(preferences.revisionMatches(anyLong(), anyLong(), anyBoolean())).thenReturn(true);
+        when(preferences.enable(anyLong(), anyLong(), anyString(), anyString())).thenReturn(true);
+        return preferences;
     }
 
     private static PlatformTransactionManager transactionManager() {

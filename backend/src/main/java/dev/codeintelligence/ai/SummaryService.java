@@ -12,22 +12,30 @@ public class SummaryService {
 
     private final JdbcClient jdbc;
     private final AIProviderResolver providerResolver;
+    private final AiUsageService usage;
     private final TransactionTemplate transactions;
 
-    public SummaryService(JdbcClient jdbc, AIProviderResolver providerResolver, TransactionTemplate transactions) {
+    public SummaryService(
+            JdbcClient jdbc,
+            AIProviderResolver providerResolver,
+            AiUsageService usage,
+            TransactionTemplate transactions) {
         this.jdbc = jdbc;
         this.providerResolver = providerResolver;
+        this.usage = usage;
         this.transactions = transactions;
     }
 
     public Optional<String> ensureFileSummary(long userId, long snapshotId, String path, String source) {
         FileRow file = jdbc.sql("""
-                        select id, content_hash from files
-                        where snapshot_id = :snapshotId and path = :path
+                        select f.id, f.content_hash, s.project_id from files f
+                        join snapshots s on s.id = f.snapshot_id
+                        where f.snapshot_id = :snapshotId and f.path = :path
                         """)
                 .param("snapshotId", snapshotId)
                 .param("path", path)
-                .query((rs, rowNum) -> new FileRow(rs.getLong("id"), rs.getString("content_hash")))
+                .query((rs, rowNum) ->
+                        new FileRow(rs.getLong("id"), rs.getString("content_hash"), rs.getLong("project_id")))
                 .optional()
                 .orElse(null);
         if (file == null) {
@@ -73,10 +81,16 @@ public class SummaryService {
         if (!provider.enabled() || source == null || source.isBlank()) {
             return Optional.empty();
         }
-        AIProvider.ChatResponse response = provider.chat(new AIProvider.ChatRequest(
-                PromptBuilder.SYSTEM,
-                "Summarize this file in at most two sentences. JSON claims may be empty.\n" + trim(source, 4000),
-                true));
+        AIProvider.ChatResponse response = usage.chat(
+                userId,
+                file.projectId(),
+                provider,
+                "summary",
+                new AIProvider.ChatRequest(
+                        PromptBuilder.SYSTEM,
+                        "Summarize this file in at most two sentences. JSON claims may be empty.\n"
+                                + trim(source, 4000),
+                        true));
         String content = response.explanation().isBlank() ? response.raw() : response.explanation();
         if (content.isBlank()) {
             return Optional.empty();
@@ -150,7 +164,7 @@ public class SummaryService {
         return text.substring(0, max);
     }
 
-    private record FileRow(long id, String hash) {}
+    private record FileRow(long id, String hash, long projectId) {}
 
     private record SummaryRow(String content, String embeddingModel) {}
 }

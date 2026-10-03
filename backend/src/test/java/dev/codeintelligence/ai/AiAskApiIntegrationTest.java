@@ -1,14 +1,19 @@
 package dev.codeintelligence.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.codeintelligence.TestcontainersConfiguration;
 import dev.codeintelligence.testsupport.FakeGithubApi;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.ObjectInserter;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -16,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
@@ -63,6 +69,110 @@ class AiAskApiIntegrationTest {
 
     @Autowired
     private SummaryService summaryService;
+
+    @Autowired
+    private AssistantService assistantService;
+
+    @Autowired
+    private AiRequestPlanService plans;
+
+    @Autowired
+    private AiUsageService usageService;
+
+    @Autowired
+    private org.springframework.transaction.support.TransactionTemplate transactions;
+
+    @Test
+    void usageIsCommittedEvenWhenCallingTransactionRollsBack() throws Exception {
+        ResponseCookie session = loginWithPat();
+        long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
+        long userId = jdbcTemplate.queryForObject("select user_id from projects where id = ?", Long.class, projectId);
+        transactions.executeWithoutResult(status -> {
+            usageService.chat(
+                    userId, projectId, mockAIProvider, "test", new AIProvider.ChatRequest("system", "question", true));
+            status.setRollbackOnly();
+        });
+        assertThat(jdbcTemplate.queryForObject(
+                        "select sum(prompt_tokens + completion_tokens) from ai_usage_logs where project_id = ?",
+                        Long.class,
+                        projectId))
+                .isEqualTo(20L);
+    }
+
+    @Test
+    void fileSummaryCountsOnceAndCacheHitDoesNotSpendAgain() throws Exception {
+        ResponseCookie session = loginWithPat();
+        long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
+        long userId = jdbcTemplate.queryForObject("select user_id from projects where id = ?", Long.class, projectId);
+        long snapshotId = jdbcTemplate.queryForObject(
+                "select current_snapshot_id from projects where id = ?", Long.class, projectId);
+        assertThat(summaryService.ensureFileSummary(userId, snapshotId, "src/App.java", "class App {}"))
+                .isPresent();
+        assertThat(summaryService.ensureFileSummary(userId, snapshotId, "src/App.java", "class App {}"))
+                .isPresent();
+        assertThat(jdbcTemplate.queryForObject(
+                        "select sum(prompt_tokens + completion_tokens) from ai_usage_logs where project_id = ? and purpose = 'summary'",
+                        Long.class,
+                        projectId))
+                .isEqualTo(20L);
+    }
+
+    @Test
+    void completedProviderUsageSurvivesEvidenceValidationFailure() throws Exception {
+        ResponseCookie session = loginWithPat();
+        long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
+        long userId = jdbcTemplate.queryForObject("select user_id from projects where id = ?", Long.class, projectId);
+        // The local mock echoes this numeric reference; validation overflows after the provider returned.
+        var request = prepareRequest(
+                projectId,
+                userId,
+                new AssistantService.AskRequest(
+                        null, "file:src/App.java:999999999999999999999", "EXPLAIN", null, null));
+        assertThatThrownBy(() -> assistantService.ask(projectId, userId, request))
+                .isInstanceOf(NumberFormatException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                        "select sum(prompt_tokens + completion_tokens) from ai_usage_logs where project_id = ?",
+                        Long.class,
+                        projectId))
+                .isEqualTo(20L);
+    }
+
+    @Test
+    void completedProviderUsageSurvivesAnswerPersistenceFailure() throws Exception {
+        ResponseCookie session = loginWithPat();
+        long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
+        long userId = jdbcTemplate.queryForObject("select user_id from projects where id = ?", Long.class, projectId);
+        var request = prepareRequest(
+                projectId,
+                userId,
+                new AssistantService.AskRequest(null, "Explain this project", "EXPLAIN", null, null));
+        // Invalid conversations now fail before spending. Inject an actual answer-write failure
+        // after a valid approval instead, preserving this test's durable-usage contract.
+        jdbcTemplate.execute("""
+                create function ci_answer_write_failure() returns trigger language plpgsql as $$
+                begin
+                  if new.role='ASSISTANT' and exists(select 1 from ai_conversations
+                      where id=new.conversation_id and project_id=%d) then
+                    raise exception 'Synthetic answer write failure';
+                  end if;
+                  return new;
+                end $$
+                """.formatted(projectId));
+        try {
+            jdbcTemplate.execute("create trigger ci_answer_write_failure before insert on ai_messages "
+                    + "for each row execute function ci_answer_write_failure()");
+            assertThatThrownBy(() -> assistantService.ask(projectId, userId, request))
+                    .isInstanceOf(DataAccessException.class);
+        } finally {
+            jdbcTemplate.execute("drop trigger if exists ci_answer_write_failure on ai_messages");
+            jdbcTemplate.execute("drop function if exists ci_answer_write_failure()");
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                        "select sum(prompt_tokens + completion_tokens) from ai_usage_logs where project_id = ?",
+                        Long.class,
+                        projectId))
+                .isEqualTo(20L);
+    }
 
     @Test
     void statusReportsConfiguredMockWithoutKeys() {
@@ -199,6 +309,8 @@ class AiAskApiIntegrationTest {
     void streamEmitsTokenThenResult() throws Exception {
         ResponseCookie session = loginWithPat();
         long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
+        var request =
+                prepareBody(session, projectId, Map.of("question", "stream please", "focusedFile", "src/App.java"));
         ResponseCookie csrf = primeCsrfToken();
         byte[] body = restTestClient
                 .post()
@@ -208,7 +320,7 @@ class AiAskApiIntegrationTest {
                 .cookie("SESSION", session.getValue())
                 .cookie("XSRF-TOKEN", csrf.getValue())
                 .header("X-XSRF-TOKEN", csrf.getValue())
-                .body(Map.of("question", "stream please", "focusedFile", "src/App.java"))
+                .body(request)
                 .exchange()
                 .expectStatus()
                 .isOk()
@@ -229,28 +341,69 @@ class AiAskApiIntegrationTest {
         Path file = clone.resolve(path);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
+        String commit;
+        String hash;
+        try (var git = Git.init().setDirectory(clone.toFile()).call();
+                var formatter = new ObjectInserter.Formatter()) {
+            git.add().addFilepattern(".").call();
+            commit = git.commit()
+                    .setMessage("Synthetic AI request snapshot")
+                    .setAuthor("Fixture", "fixture@example.invalid")
+                    .setCommitter("Fixture", "fixture@example.invalid")
+                    .call()
+                    .name();
+            hash = formatter
+                    .idFor(Constants.OBJ_BLOB, content.getBytes(StandardCharsets.UTF_8))
+                    .name();
+        }
         jdbcTemplate.update("update projects set clone_path = ? where id = ?", clone.toString(), projectId);
         long snapshotId = jdbcTemplate.queryForObject("""
                 insert into snapshots (project_id, commit_sha, status, analyzed_at)
-                values (?, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'READY', now()) returning id
-                """, Long.class, projectId);
+                values (?, ?, 'READY', now()) returning id
+                """, Long.class, projectId, commit);
         jdbcTemplate.update("update projects set current_snapshot_id = ? where id = ?", snapshotId, projectId);
         jdbcTemplate.update("""
                 insert into files (snapshot_id, path, language, size, line_count, content_hash)
-                values (?, ?, 'java', ?, 1, 'hash')
-                """, snapshotId, path, content.getBytes(StandardCharsets.UTF_8).length);
+                values (?, ?, 'java', ?, 1, ?)
+                """, snapshotId, path, content.getBytes(StandardCharsets.UTF_8).length, hash);
         return projectId;
     }
 
+    private AssistantService.AskRequest prepareRequest(
+            long projectId, long userId, AssistantService.AskRequest request) {
+        var prepared = plans.prepare(projectId, userId, request);
+        return new AssistantService.AskRequest(
+                request.conversationId(),
+                request.question(),
+                request.intent(),
+                request.context(),
+                request.excludedContextIds(),
+                prepared.requestPlanToken());
+    }
+
+    private Map<String, Object> prepareBody(ResponseCookie session, long projectId, Map<String, Object> body) {
+        byte[] raw = postJson(session, "/api/projects/" + projectId + "/ai/request-plan", body, HttpStatus.OK);
+        Map<String, Object> prepared = jsonMapper.readValue(raw, Map.class);
+        String token = (String) prepared.get("requestPlanToken");
+        assertThat(token).isNotBlank();
+        var approved = new HashMap<>(body);
+        approved.put("requestPlanToken", token);
+        return approved;
+    }
+
     private byte[] postAsk(ResponseCookie session, long projectId, Map<String, Object> body) {
-        return postAsk(session, projectId, body, HttpStatus.OK);
+        return postAsk(session, projectId, prepareBody(session, projectId, body), HttpStatus.OK);
     }
 
     private byte[] postAsk(ResponseCookie session, long projectId, Map<String, Object> body, HttpStatus expected) {
+        return postJson(session, "/api/projects/" + projectId + "/ai/ask", body, expected);
+    }
+
+    private byte[] postJson(ResponseCookie session, String uri, Map<String, Object> body, HttpStatus expected) {
         ResponseCookie csrf = primeCsrfToken();
         return restTestClient
                 .post()
-                .uri("/api/projects/" + projectId + "/ai/ask")
+                .uri(uri)
                 .contentType(MediaType.APPLICATION_JSON)
                 .cookie("SESSION", session.getValue())
                 .cookie("XSRF-TOKEN", csrf.getValue())

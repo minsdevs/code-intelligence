@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.util.StringUtils;
 
@@ -78,6 +79,9 @@ public record AiProperties(
             @DefaultValue("gpt-4o-mini") String chatModel,
             @DefaultValue("text-embedding-3-small") String embedModel,
             @DefaultValue("") String chatModels) {
+        @ConstructorBinding
+        public OpenAi {}
+
         public OpenAi(String apiKey, String baseUrl, String chatModel, String embedModel) {
             this(apiKey, baseUrl, chatModel, embedModel, "");
         }
@@ -103,6 +107,9 @@ public record AiProperties(
             @DefaultValue("gemini-2.5-flash") String chatModel,
             @DefaultValue("gemini-embedding-001") String embedModel,
             @DefaultValue("") String chatModels) {
+        @ConstructorBinding
+        public Gemini {}
+
         public Gemini(String apiKey, String baseUrl, String chatModel, String embedModel) {
             this(apiKey, baseUrl, chatModel, embedModel, "");
         }
