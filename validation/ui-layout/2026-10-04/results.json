@@ -1,0 +1,104 @@
+{
+  "format": 1,
+  "scope": "Fresh patched frontend production build; isolated Chrome viewport with synthetic GET-only APIs, not Electron/native or real backend acceptance",
+  "frontendSourceAggregateSha256": "c6b53b77ae042c1e32271eb7b322a6d9f750b8dd44a09484cc1d2df4c3dc61ad",
+  "frontendPackageSha256": "b2ba3f52bca45caceea34f293aacfb4bb52035b373b3fe7324516918eeaccfcb",
+  "frontendLockSha256": "bdd68ecb2b06c743727bbd7e3dea9f89af4d238a142bfb3ddef17365e69acc46",
+  "results": [
+    {
+      "width": 980,
+      "height": 700,
+      "metrics": {
+        "width": 980,
+        "height": 700,
+        "documentWidth": 980,
+        "mainWidth": 400,
+        "detailWidth": 400,
+        "detailScrollWidth": 390,
+        "detailClientWidth": 390,
+        "browserBuild": true
+      },
+      "unknownContextRefused": true,
+      "code": {
+        "width": 320,
+        "height": 492.625,
+        "scrollWidth": 320,
+        "clientWidth": 320
+      },
+      "flowsImage": "980x700-flows.png",
+      "sourceImage": "980x700-source.png",
+      "unknownContextImage": "980x700-unknown-context.png"
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "metrics": {
+        "width": 1280,
+        "height": 800,
+        "documentWidth": 1280,
+        "mainWidth": 694,
+        "detailWidth": 406,
+        "detailScrollWidth": 396,
+        "detailClientWidth": 396,
+        "browserBuild": true
+      },
+      "unknownContextRefused": true,
+      "code": {
+        "width": 320,
+        "height": 592.625,
+        "scrollWidth": 320,
+        "clientWidth": 320
+      },
+      "flowsImage": "1280x800-flows.png",
+      "sourceImage": "1280x800-source.png"
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "metrics": {
+        "width": 1440,
+        "height": 900,
+        "documentWidth": 1440,
+        "mainWidth": 854,
+        "detailWidth": 566,
+        "detailScrollWidth": 556,
+        "detailClientWidth": 556,
+        "browserBuild": true
+      },
+      "unknownContextRefused": true,
+      "code": {
+        "width": 320,
+        "height": 702.625,
+        "scrollWidth": 320,
+        "clientWidth": 320
+      },
+      "flowsImage": "1440x900-flows.png",
+      "sourceImage": "1440x900-source.png"
+    }
+  ],
+  "interactions": {
+    "aiKeyboardHomeAndEnd": true,
+    "sidebarCollapseReloadAndExpand": true,
+    "unknownEvidenceNeverReadsCurrentSource": true,
+    "explicitSnapshotMonacoRendering": true
+  },
+  "network": {
+    "backendProxy": false,
+    "unknownApiCount": 0,
+    "nonGetCount": 0,
+    "externalRequestCount": 0,
+    "pageErrorCount": 0,
+    "consoleErrorCount": 0,
+    "staticErrorCount": 0
+  },
+  "cleanup": {
+    "ownedBrowserReleased": true,
+    "staticServerStopped": true
+  },
+  "limitations": [
+    "Synthetic API data, no app registration or analysis job/DB persistence exercised",
+    "No native Electron window/Keychain/Windows/signing/install acceptance",
+    "Initial default browser launch timed out; explicit owned Chrome launch succeeded",
+    "One accessibility observation raced navigation; reacquired state without repeating the action"
+  ]
+}

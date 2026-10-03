@@ -299,6 +299,31 @@ for explicit SQL-write phases rather than counting event-loop turns; shutdown
 checks hold the child open until they have verified that work and close remain
 pending. This focused check does not enable native guardian or product acceptance.
 
+### Dependency security validation (2026-10-04)
+
+Frontend and analyzer lockfiles use Vitest/mocker 4.1.11. The reviewed security
+patches also select DOMPurify 3.4.16, brace-expansion 5.0.12, multer 2.4.0 and
+qs 6.16.0 where applicable; unrelated versions remain unchanged. The two backend
+analysis-only fixture manifests pin Vitest 4.1.11 without installing the fixtures
+or adding lockfiles. Fresh isolated frontend/TS/tree dependency audits reported
+zero vulnerabilities; that is not a repository-wide or release acceptance claim.
+
+Desktop build tooling still includes `http-cache-semantics 4.2.0` through
+`app-builder-lib → @electron/get 3.1.0 → got → cacheable-request`.
+[GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) has no
+published patched version at this check. The locked chain is development-only,
+and the checked Got default has HTTP caching disabled. A packaged runtime exploit
+path was not established; neither observation proves the advisory inapplicable.
+The alert remains open, with no speculative version override or dismissal.
+
+The patched frontend production build was exercised in an owned Chrome instance
+at 980×700, 1280×800 and 1440×900. [Results and seven screenshots](validation/ui-layout/2026-10-04/results.json)
+record responsive controls, explicit-snapshot source rendering, and refusal to
+substitute current source for unknown evidence. APIs were synthetic and GET-only;
+no backend proxy, external request or page error was observed. The browser and
+static server were closed. This is not native Electron, live analysis/DB,
+Keychain, Windows, signing or installation acceptance; release remains **No-Go**.
+
 ## AI providers, models, and cost
 
 AI is optional. Static analysis, graph exploration, history and search work without
