@@ -87,6 +87,18 @@ jobs:
           npm --prefix analyzers/tree-analyzer ci
       - name: Format check, tests, build
         run: ./gradlew spotlessCheck build
+      - name: Summarize failed backend tests
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for report in sorted(Path('build/test-results').glob('**/TEST-*.xml')):
+              for case in ET.parse(report).iter('testcase'):
+                  for failure in list(case.findall('failure')) + list(case.findall('error')):
+                      message = ' '.join(failure.get('message', '').split())[:1000]
+                      print(f"- {case.get('classname')}::{case.get('name')}: {message}")
+          PY
       - name: Install source-viewer gate dependencies
         working-directory: frontend
         run: |
