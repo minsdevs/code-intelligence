@@ -22,5 +22,10 @@
     "@types/node": "^24.13.3",
     "typescript": "~5.9.3",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "@nestjs/platform-express": {
+      "multer": "2.3.0"
+    }
   }
 }
