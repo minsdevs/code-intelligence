@@ -1,5 +1,6 @@
 package dev.codeintelligence.project;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -18,11 +19,13 @@ public class LocalSourceStatusService {
         CHANGED,
         PATH_MISSING,
         REAUTHORIZATION_REQUIRED,
+        INSPECTION_FAILED,
         NOT_LOCAL,
         NO_SNAPSHOT
     }
 
     public record ChangeCounts(int added, int modified, int deleted) {
+        @JsonProperty("total")
         public int total() {
             return added + modified + deleted;
         }
@@ -84,6 +87,14 @@ public class LocalSourceStatusService {
         if (!"LOCAL".equals(project.getSourceType())) {
             return status(State.NOT_LOCAL, project.getCurrentSnapshotId(), new ChangeCounts(0, 0, 0), List.of(), null);
         }
+        if (project.getLocalPath() == null || project.getLocalPath().isBlank()) {
+            return status(
+                    State.REAUTHORIZATION_REQUIRED,
+                    project.getCurrentSnapshotId(),
+                    new ChangeCounts(0, 0, 0),
+                    List.of(),
+                    "Choose the local project folder again before checking or analyzing changes.");
+        }
         if (project.getCurrentSnapshotId() == null) {
             return status(
                     State.NO_SNAPSHOT,
@@ -102,16 +113,27 @@ public class LocalSourceStatusService {
                     "The local project path is missing. Reconnect it before accessing files.");
         }
 
-        Map<String, String> current;
         try {
-            current = localImportService.fingerprint(source);
+            localImportService.validateSource(source);
         } catch (LocalImportException e) {
             return status(
                     State.REAUTHORIZATION_REQUIRED,
                     project.getCurrentSnapshotId(),
                     new ChangeCounts(0, 0, 0),
                     List.of(),
-                    "Local path access is no longer authorized. Reconfirm an allowed path.");
+                    "Local path access must be rechecked. Choose an allowed project folder.");
+        }
+        Map<String, String> current;
+        try {
+            current = localImportService.fingerprint(source);
+        } catch (LocalImportException e) {
+            return status(
+                    State.INSPECTION_FAILED,
+                    project.getCurrentSnapshotId(),
+                    new ChangeCounts(0, 0, 0),
+                    List.of(),
+                    "Files could not be inspected safely. Check file permissions, file types and size limits, "
+                            + "then preview again.");
         }
         Map<String, String> snapshot = snapshotFingerprint(project.getCurrentSnapshotId());
         List<String> paths = new ArrayList<>();

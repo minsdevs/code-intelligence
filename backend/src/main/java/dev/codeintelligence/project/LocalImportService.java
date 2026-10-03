@@ -6,22 +6,36 @@ import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.LinkedHashMap;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.UUID;
-import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.dircache.DirCache;
+import org.eclipse.jgit.dircache.DirCacheBuilder;
+import org.eclipse.jgit.dircache.DirCacheEntry;
+import org.eclipse.jgit.internal.storage.file.ObjectDirectory;
+import org.eclipse.jgit.lib.CommitBuilder;
+import org.eclipse.jgit.lib.Config;
 import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.FileMode;
+import org.eclipse.jgit.lib.ObjectDatabase;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectInserter;
-import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.lib.PersonIdent;
+import org.eclipse.jgit.util.FS;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -32,61 +46,130 @@ import org.springframework.stereotype.Service;
 @Service
 public class LocalImportService {
 
-    static final Set<String> BLOCKED_DIRS = Set.of(
-            ".git",
-            "node_modules",
-            ".gradle",
-            "build",
-            "dist",
-            "target",
-            ".idea",
-            ".vscode",
-            "__pycache__",
-            ".DS_Store");
-
     private static final Set<String> BLOCKED_ROOTS = Set.of("/etc", "/usr", "/bin", "/sbin", "/System");
-    private static final Set<String> BINARY_EXTENSIONS = Set.of(
-            "png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "pdf", "zip", "jar", "war", "ear", "class", "woff",
-            "woff2", "eot", "ttf", "otf", "mp3", "mp4", "webm", "mov", "avi", "wav", "ogg", "exe", "dll", "so", "dylib",
-            "bin", "7z", "tar", "gz", "bz2", "rar", "xz", "sqlite", "db", "wasm", "pyc", "o", "a", "lib");
-    private static final int MAX_COPY_FILES = 50_000;
 
     private final AppProperties appProperties;
     private final LocalImportProperties localImportProperties;
-    private final AnalysisProperties analysisProperties;
     private final DesktopPathAuthorizationService desktopPaths;
+    private final LocalSourcePolicy policy;
+    private final DirectoryMover mover;
+    private final StagingObserver stagingObserver;
 
+    @Autowired
     public LocalImportService(
             AppProperties appProperties,
             LocalImportProperties localImportProperties,
             AnalysisProperties analysisProperties,
             DesktopPathAuthorizationService desktopPaths) {
-        this.appProperties = appProperties;
-        this.localImportProperties = localImportProperties;
-        this.analysisProperties = analysisProperties;
-        this.desktopPaths = desktopPaths;
+        this(
+                appProperties,
+                localImportProperties,
+                desktopPaths,
+                new LocalSourcePolicy(analysisProperties),
+                LocalImportService::moveDirectory);
     }
 
-    public record LocalImportResult(String headSha, String branch, boolean hasUncommittedChanges) {}
+    LocalImportService(
+            AppProperties appProperties,
+            LocalImportProperties localImportProperties,
+            DesktopPathAuthorizationService desktopPaths,
+            LocalSourcePolicy policy,
+            DirectoryMover mover) {
+        this(appProperties, localImportProperties, desktopPaths, policy, mover, staging -> {});
+    }
+
+    LocalImportService(
+            AppProperties appProperties,
+            LocalImportProperties localImportProperties,
+            DesktopPathAuthorizationService desktopPaths,
+            LocalSourcePolicy policy,
+            DirectoryMover mover,
+            StagingObserver stagingObserver) {
+        this.appProperties = appProperties;
+        this.localImportProperties = localImportProperties;
+        this.desktopPaths = desktopPaths;
+        this.policy = policy;
+        this.mover = mover;
+        this.stagingObserver = stagingObserver;
+    }
+
+    /** Count-only local ingest observation; excluded subtrees count once, not their hidden descendants. */
+    public record ImportSummary(
+            int schemaVersion,
+            String policyVersion,
+            int acceptedFiles,
+            long bytesRead,
+            Map<String, Integer> excludedEntriesByReason) {
+        public ImportSummary {
+            excludedEntriesByReason = Map.copyOf(excludedEntriesByReason);
+        }
+    }
+
+    /** Dirty status is unknown for Git sources; ingest never runs source Git status/config/filter logic. */
+    public record LocalImportResult(
+            String headSha, String branch, Boolean hasUncommittedChanges, ImportSummary summary) {}
 
     public record SourceFile(String path, String contentHash) {}
 
     public LocalImportResult importFolder(Path localPath, Path targetDir) {
         Path source = validateSource(localPath);
+        return importSource(source, targetDir, null, () -> {}, null);
+    }
+
+    /** Low-level test/internal overload. Production callers must supply a publication guard. */
+    public LocalImportResult importApproved(LocalSourceBinding expected, Path targetDir) {
+        return importApproved(expected, targetDir, () -> {});
+    }
+
+    /** Imports only the privately persisted approved input, rechecking authorization on every attempt. */
+    public LocalImportResult importApproved(LocalSourceBinding expected, Path targetDir, Runnable beforePublish) {
+        return importApproved(expected, targetDir, beforePublish, null);
+    }
+
+    public LocalImportResult importApproved(
+            LocalSourceBinding expected, Path targetDir, Runnable beforePublish, VerifiedFileSink retainedSource) {
+        validateBinding(expected);
+        Path source;
+        try {
+            source = validateSource(Path.of(expected.canonicalRoot()));
+            requireRootIdentity(expected, source);
+        } catch (LocalImportException e) {
+            throw LocalSourceApprovalException.sourceChanged();
+        } catch (IOException e) {
+            throw LocalSourceApprovalException.sourceChanged();
+        }
+        return importSource(
+                source, targetDir, expected, java.util.Objects.requireNonNull(beforePublish), retainedSource);
+    }
+
+    private LocalImportResult importSource(
+            Path source,
+            Path targetDir,
+            LocalSourceBinding expected,
+            Runnable beforePublish,
+            VerifiedFileSink retainedSource) {
         Path target = targetDir.toAbsolutePath().normalize();
         ensureUnderReposRoot(target);
-        SourceGitInfo sourceGit = readSourceGitInfo(source);
+        ensureDisjointSource(source);
         Path staging = target.resolveSibling(target.getFileName() + ".staging-" + UUID.randomUUID());
         ensureUnderReposRoot(staging);
 
         try {
-            copyTree(source, staging);
-            String snapshotSha = commitSnapshot(staging);
+            Files.createDirectories(staging.getParent());
+            Files.createDirectory(
+                    staging, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+            SnapshotCopy copied = copySnapshot(source, staging, expected, retainedSource);
+            beforePublish.run();
             replaceTarget(staging, target);
-            return new LocalImportResult(snapshotSha, sourceGit.branch(), sourceGit.dirty());
+            return new LocalImportResult(
+                    copied.commit(),
+                    copied.selection().branch(),
+                    copied.selection().dirty(),
+                    copied.selection().summary());
         } catch (IOException e) {
             deleteTreeQuietly(staging);
-            throw new LocalImportException("Failed to copy local folder: " + e.getMessage(), e);
+            throw new LocalImportException(
+                    "Local source could not be imported safely. Review the source limits and exclusions.", e);
         } catch (RuntimeException e) {
             deleteTreeQuietly(staging);
             throw e;
@@ -97,27 +180,53 @@ public class LocalImportService {
     public Path validateSource(Path localPath) {
         Path resolved = localPath.toAbsolutePath().normalize();
         if (!Files.isDirectory(resolved)) {
-            throw new LocalImportException("Path is not a directory: " + resolved, null);
+            throw new LocalImportException("Path is not a directory.", null);
         }
         if (!Files.isReadable(resolved)) {
-            throw new LocalImportException("Path is not readable: " + resolved, null);
+            throw new LocalImportException("Path is not readable.", null);
         }
 
         Path realPath;
         try {
             realPath = resolved.toRealPath();
         } catch (IOException e) {
-            throw new LocalImportException("Failed to resolve path: " + e.getMessage(), e);
+            throw new LocalImportException("Failed to resolve local path.", e);
+        }
+        if (LocalSourcePolicy.secretAncestor(realPath) || LocalSourcePolicy.secretAncestor(resolved)) {
+            throw new LocalImportException("Choose a project folder outside credential directories.", null);
         }
         for (String blocked : BLOCKED_ROOTS) {
-            if (isUnder(realPath, Path.of(blocked)) || isUnder(resolved, Path.of(blocked))) {
-                throw new LocalImportException("System directory is not allowed: " + blocked, null);
+            Path blockedPath = Path.of(blocked);
+            try {
+                if (Files.exists(blockedPath)) blockedPath = blockedPath.toRealPath();
+            } catch (IOException e) {
+                throw new LocalImportException("System directory policy could not be verified.", null);
             }
+            if (isUnder(realPath, blockedPath) || isUnder(resolved, Path.of(blocked))) {
+                throw new LocalImportException("System directory is not allowed.", null);
+            }
+        }
+
+        if (realPath.getParent() == null)
+            throw new LocalImportException("Choose a project folder, not a volume root.", null);
+        try {
+            if (!Files.getFileStore(realPath).equals(Files.getFileStore(realPath.getParent()))) {
+                throw new LocalImportException("Choose a project folder, not a volume root.", null);
+            }
+        } catch (IOException e) {
+            throw new LocalImportException("Local source volume could not be verified.", null);
         }
 
         String home = System.getProperty("user.home");
         if (home != null) {
             Path homePath = Path.of(home).toAbsolutePath().normalize();
+            try {
+                if (Files.exists(homePath)) homePath = homePath.toRealPath();
+            } catch (IOException e) {
+                throw new LocalImportException("Home directory policy could not be verified.", null);
+            }
+            if (realPath.equals(homePath))
+                throw new LocalImportException("Choose a project folder, not your home directory.", null);
             for (String secret : List.of(".ssh", ".aws", ".gnupg", ".config")) {
                 Path secretPath = homePath.resolve(secret);
                 if (isUnder(realPath, secretPath) || isUnder(resolved, secretPath)) {
@@ -146,118 +255,208 @@ public class LocalImportService {
         return realPath;
     }
 
-    /**
-     * Computes Git-compatible blob hashes without retaining file contents. Symlinks, generated
-     * directories and unreadable files are excluded exactly as they are during local copy.
-     */
+    /** Computes exactly the selected source hashes used by local copy, without retaining source bytes. */
     public Map<String, String> fingerprint(Path localPath) {
+        return inspect(localPath).gitFingerprints();
+    }
+
+    /** One bounded preview; the returned binding is for private server-side persistence only. */
+    public LocalSourceInspection inspect(Path localPath) {
         Path source = validateSource(localPath);
-        Map<String, String> candidates = new TreeMap<>();
+        ensureDisjointSource(source);
         try {
-            walkSource(source, (file, relative) -> {
-                long size = Files.size(file);
-                if (size > analysisProperties.maxFileSize()) return;
-                byte[] bytes = Files.readAllBytes(file);
-                if (isBinary(relative, bytes)) return;
-                candidates.put(
-                        relative,
-                        new ObjectInserter.Formatter()
-                                .idFor(Constants.OBJ_BLOB, bytes)
-                                .name());
-            });
-            Map<String, String> result = new LinkedHashMap<>();
-            candidates.entrySet().stream()
-                    .limit(analysisProperties.maxFiles())
-                    .forEach(entry -> result.put(entry.getKey(), entry.getValue()));
-            return Map.copyOf(result);
+            LocalSourcePolicy.Selection selection = policy.select(source, (file, bytes) -> {});
+            Map<String, String> result = new TreeMap<>();
+            selection.files().forEach((path, file) -> result.put(path, file.oid()));
+            return new LocalSourceInspection(selection.binding(), result, selection.summary());
         } catch (IOException e) {
-            throw new LocalImportException("Failed to inspect local folder: " + e.getMessage(), e);
+            throw new LocalImportException(
+                    "Local source could not be inspected safely. Review the source limits and exclusions.", e);
         }
     }
 
-    private void copyTree(Path source, Path target) throws IOException {
-        Files.createDirectories(target);
-        walkSource(source, (file, relative) -> {
-            Path destination = target.resolve(relative).normalize();
-            if (!destination.startsWith(target)) {
-                throw new IOException("Source path escaped staging directory");
-            }
-            Files.createDirectories(destination.getParent());
-            Files.copy(file, destination, StandardCopyOption.REPLACE_EXISTING);
-        });
-    }
-
-    private void walkSource(Path source, SourceFileConsumer consumer) throws IOException {
-        int[] fileCount = {0};
-        Files.walkFileTree(source, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (!dir.equals(source)
-                        && (BLOCKED_DIRS.contains(dir.getFileName().toString()) || Files.isSymbolicLink(dir))) {
-                    return FileVisitResult.SKIP_SUBTREE;
+    private SnapshotCopy copySnapshot(
+            Path source, Path staging, LocalSourceBinding expected, VerifiedFileSink retainedSource)
+            throws IOException {
+        Path git = staging.resolve(Constants.DOT_GIT);
+        LocalSourcePolicy.Selection selection;
+        try {
+            selection = policy.select(source, (file, bytes) -> {
+                Path destination = staging.resolve(file.path()).normalize();
+                if (!destination.startsWith(staging) || destination.startsWith(git)) {
+                    throw LocalSourceApprovalException.sourceChanged();
                 }
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                if (fileCount[0]++ >= MAX_COPY_FILES) {
-                    throw new IOException("Local project exceeds the 50000 file safety limit");
+                try {
+                    Files.createDirectories(destination.getParent());
+                    Files.write(destination, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+                } catch (IOException e) {
+                    throw new StagingWriteException(e);
                 }
-                if (!Files.isSymbolicLink(file) && Files.isReadable(file)) {
-                    consumer.accept(file, source.relativize(file).toString().replace('\\', '/'));
+            });
+        } catch (StagingWriteException e) {
+            throw e;
+        } catch (IOException e) {
+            if (expected != null) throw LocalSourceApprovalException.sourceChanged();
+            throw e;
+        }
+        if (expected != null && !expected.equals(selection.binding()))
+            throw LocalSourceApprovalException.sourceChanged();
+        stagingObserver.afterStaged(staging);
+        LocalStagingVerifier verifier;
+        try {
+            verifier = new LocalStagingVerifier(staging, selection.files(), policy);
+        } catch (IOException e) {
+            if (expected != null) throw LocalSourceApprovalException.sourceChanged();
+            throw e;
+        }
+        // The first verifier scan rejects even an injected .git subtree. Metadata starts here.
+        Files.createDirectory(git);
+        verifier.allowGeneratedGitDirectory();
+        Files.createDirectories(git.resolve("refs/heads"));
+        Files.writeString(
+                git.resolve("config"),
+                "[core]\nrepositoryformatversion = 0\nbare = false\nfilemode = false\n",
+                StandardOpenOption.CREATE_NEW);
+        Files.writeString(git.resolve("HEAD"), "ref: refs/heads/snapshot\n", StandardOpenOption.CREATE_NEW);
+        // ObjectDirectory accepts a plain, parentless Config. Unlike Git.init/open/add/commit,
+        // it does not load ambient user/system config or execute hooks, clean filters or attributes.
+        try (ObjectDatabase objects = new ObjectDirectory(
+                new Config(),
+                git.resolve("objects").toFile(),
+                null,
+                FS.DETECTED,
+                git.resolve("shallow").toFile())) {
+            objects.create();
+            try (ObjectInserter inserter = objects.newInserter()) {
+                List<DirCacheEntry> entries = new ArrayList<>();
+                try {
+                    verifier.verifyAndConsume(selection.binding(), (file, bytes) -> {
+                        ObjectId oid;
+                        try {
+                            oid = inserter.insert(Constants.OBJ_BLOB, bytes);
+                        } catch (IOException e) {
+                            throw new StagingWriteException(e);
+                        }
+                        if (!oid.name().equals(file.oid())) throw LocalSourceApprovalException.sourceChanged();
+                        if (retainedSource != null) retainedSource.accept(file.path(), file.oid(), bytes);
+                        DirCacheEntry entry = new DirCacheEntry(file.path());
+                        entry.setFileMode(FileMode.REGULAR_FILE);
+                        entry.setObjectId(oid);
+                        entry.setLength(bytes.length);
+                        entries.add(entry);
+                    });
+                } catch (StagingWriteException e) {
+                    throw e;
+                } catch (IOException e) {
+                    if (expected != null) throw LocalSourceApprovalException.sourceChanged();
+                    throw e;
                 }
-                return FileVisitResult.CONTINUE;
+                entries.sort((first, second) ->
+                        LocalSourcePolicy.comparePaths(first.getPathString(), second.getPathString()));
+                DirCache index = DirCache.newInCore();
+                DirCacheBuilder builder = index.builder();
+                entries.forEach(builder::add);
+                builder.finish();
+                CommitBuilder commit = new CommitBuilder();
+                commit.setTreeId(index.writeTree(inserter));
+                PersonIdent author = retainedSource == null || retainedSource.commitTime() == null
+                        ? new PersonIdent("Code Intelligence", "local@code-intelligence.invalid")
+                        : new PersonIdent(
+                                "Code Intelligence",
+                                "local@code-intelligence.invalid",
+                                Date.from(retainedSource.commitTime()),
+                                TimeZone.getTimeZone("UTC"));
+                commit.setAuthor(author);
+                commit.setCommitter(author);
+                commit.setMessage("Code Intelligence local snapshot");
+                ObjectId oid = inserter.insert(commit);
+                inserter.flush();
+                Files.writeString(git.resolve("refs/heads/snapshot"), oid.name() + "\n", StandardOpenOption.CREATE_NEW);
+                return new SnapshotCopy(oid.name(), selection);
             }
-
-            @Override
-            public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-                throw new IOException("Unreadable source entry: " + source.relativize(file), exc);
-            }
-        });
-    }
-
-    private String commitSnapshot(Path staging) {
-        try (Git git = Git.init()
-                .setDirectory(staging.toFile())
-                .setInitialBranch("snapshot")
-                .call()) {
-            git.add().addFilepattern(".").call();
-            RevCommit commit = git.commit()
-                    .setMessage("Code Intelligence local snapshot")
-                    .setAuthor("Code Intelligence", "local@code-intelligence.invalid")
-                    .setCommitter("Code Intelligence", "local@code-intelligence.invalid")
-                    .call();
-            return commit.getId().name();
-        } catch (Exception e) {
-            throw new LocalImportException("Failed to create local analysis snapshot", e);
         }
     }
 
-    private SourceGitInfo readSourceGitInfo(Path localPath) {
-        if (!Files.isDirectory(localPath.resolve(Constants.DOT_GIT))) {
-            return new SourceGitInfo(null, false);
+    private void validateBinding(LocalSourceBinding expected) {
+        if (expected == null
+                || expected.schemaVersion() != 1
+                || expected.canonicalRoot() == null
+                || expected.canonicalRoot().isEmpty()
+                || expected.canonicalRoot().length() > 4096
+                || !LocalSourcePolicy.VERSION.equals(expected.policyVersion())
+                || !policy.limitsSha256().equals(expected.limitsSha256())
+                || expected.manifestSha256() == null
+                || !expected.manifestSha256().matches("[0-9a-f]{64}")
+                || expected.selectedFiles() < 0
+                || expected.selectedFiles() > policy.limits().files()
+                || expected.selectedBytes() < 0
+                || expected.selectedBytes() > policy.limits().totalBytes()) {
+            throw LocalSourceApprovalException.sourceChanged();
         }
-        try (Git git = Git.open(localPath.toFile())) {
-            ObjectId head = git.getRepository().resolve(Constants.HEAD);
-            String branch = head == null ? null : git.getRepository().getBranch();
-            return new SourceGitInfo(branch, !git.status().call().isClean());
-        } catch (Exception e) {
-            return new SourceGitInfo(null, false);
+        try {
+            Path root = Path.of(expected.canonicalRoot());
+            if (!root.isAbsolute() || !root.normalize().toString().equals(expected.canonicalRoot())) {
+                throw LocalSourceApprovalException.sourceChanged();
+            }
+        } catch (java.nio.file.InvalidPathException e) {
+            throw LocalSourceApprovalException.sourceChanged();
+        }
+    }
+
+    private static void requireRootIdentity(LocalSourceBinding expected, Path source) throws IOException {
+        if (!source.toString().equals(expected.canonicalRoot())
+                || expected.rootDevice()
+                        != ((Number) Files.getAttribute(source, "unix:dev", LinkOption.NOFOLLOW_LINKS)).longValue()
+                || expected.rootInode()
+                        != ((Number) Files.getAttribute(source, "unix:ino", LinkOption.NOFOLLOW_LINKS)).longValue()) {
+            throw LocalSourceApprovalException.sourceChanged();
         }
     }
 
     private void replaceTarget(Path staging, Path target) throws IOException {
-        if (Files.exists(target)) {
-            if (Files.isSymbolicLink(target)) {
-                throw new IOException("Analysis target must not be a symbolic link");
-            }
-            deleteTree(target);
-        }
+        Path previous = target.resolveSibling(target.getFileName() + ".previous-" + UUID.randomUUID());
+        boolean movedPrevious = false;
         try {
-            Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                if (!Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(target)) {
+                    throw new IOException("Analysis target must be a regular directory.");
+                }
+                mover.move(target, previous);
+                movedPrevious = true;
+            }
+            mover.move(staging, target);
+        } catch (IOException | RuntimeException failure) {
+            if (movedPrevious) {
+                try {
+                    mover.move(previous, target);
+                } catch (IOException | RuntimeException restoreFailure) {
+                    failure.addSuppressed(restoreFailure);
+                }
+            }
+            throw failure;
+        }
+        // The new repository is already published. Cleanup failure must not turn it into a failed job.
+        if (movedPrevious) deleteTreeQuietly(previous);
+    }
+
+    static void moveDirectory(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
         } catch (AtomicMoveNotSupportedException e) {
-            Files.move(staging, target);
+            Files.move(source, target);
+        }
+    }
+
+    private void ensureDisjointSource(Path source) {
+        Path root = appProperties.reposRoot();
+        try {
+            Path parent = Files.exists(root) ? root : nearestExistingParent(root);
+            Path canonical = parent.toRealPath().resolve(parent.relativize(root));
+            if (source.startsWith(canonical) || canonical.startsWith(source)) {
+                throw new LocalImportException("Local source and managed repository storage must be separate.", null);
+            }
+        } catch (IOException e) {
+            throw new LocalImportException("Repository storage could not be verified.", null);
         }
     }
 
@@ -285,19 +484,6 @@ public class LocalImportService {
         while (current != null && !Files.exists(current)) current = current.getParent();
         if (current == null) throw new LocalImportException("Repository storage parent does not exist", null);
         return current;
-    }
-
-    private static boolean isBinary(String path, byte[] bytes) {
-        int dot = path.lastIndexOf('.');
-        if (dot >= 0
-                && dot < path.length() - 1
-                && BINARY_EXTENSIONS.contains(path.substring(dot + 1).toLowerCase(Locale.ROOT))) {
-            return true;
-        }
-        for (int i = 0; i < Math.min(bytes.length, 8192); i++) {
-            if (bytes[i] == 0) return true;
-        }
-        return false;
     }
 
     private static boolean isUnder(Path candidate, Path root) {
@@ -331,9 +517,31 @@ public class LocalImportService {
     }
 
     @FunctionalInterface
-    private interface SourceFileConsumer {
-        void accept(Path file, String relative) throws IOException;
+    interface DirectoryMover {
+        void move(Path source, Path target) throws IOException;
     }
 
-    private record SourceGitInfo(String branch, boolean dirty) {}
+    /** Receives only bytes already verified against the approved staging manifest. */
+    @FunctionalInterface
+    public interface VerifiedFileSink {
+        void accept(String path, String gitOid, byte[] bytes);
+
+        /** A retained job reuses its approval time so its synthetic Git commit is reproducible. */
+        default Instant commitTime() {
+            return null;
+        }
+    }
+
+    @FunctionalInterface
+    interface StagingObserver {
+        void afterStaged(Path staging) throws IOException;
+    }
+
+    private static final class StagingWriteException extends IOException {
+        StagingWriteException(IOException cause) {
+            super("Local staging could not be written.", cause);
+        }
+    }
+
+    private record SnapshotCopy(String commit, LocalSourcePolicy.Selection selection) {}
 }

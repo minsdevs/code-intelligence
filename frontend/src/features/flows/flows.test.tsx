@@ -103,7 +103,7 @@ describe('FlowsPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /TodoController.list/ }))
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/projects/7/code')
-      expect(router.state.location.search).toBe('?path=src%2Fapi%2FTodoController.java&line=14')
+      expect(router.state.location.search).toBe('?path=src%2Fapi%2FTodoController.java&line=14&sourceContext=unknown')
     })
   })
 })

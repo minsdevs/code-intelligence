@@ -18,6 +18,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -34,6 +36,7 @@ public class ProjectService {
     private final GitCloneService gitCloneService;
     private final LocalImportService localImportService;
     private final LocalSourceStatusService localSourceStatusService;
+    private final LocalSourceApprovalService approvals;
     private final AppProperties appProperties;
     private final JdbcClient jdbc;
 
@@ -44,6 +47,7 @@ public class ProjectService {
             GitCloneService gitCloneService,
             LocalImportService localImportService,
             LocalSourceStatusService localSourceStatusService,
+            LocalSourceApprovalService approvals,
             AppProperties appProperties,
             JdbcClient jdbc) {
         this.projectRepository = projectRepository;
@@ -52,6 +56,7 @@ public class ProjectService {
         this.gitCloneService = gitCloneService;
         this.localImportService = localImportService;
         this.localSourceStatusService = localSourceStatusService;
+        this.approvals = approvals;
         this.appProperties = appProperties;
         this.jdbc = jdbc;
     }
@@ -83,22 +88,16 @@ public class ProjectService {
     /** Create a project from a local folder path. */
     @Transactional
     public CreatedProject createFromLocal(long userId, ProjectController.CreateLocalProjectRequest request) {
-        if (request.path() == null || request.path().isBlank()) {
-            throw new LocalImportException("path is required", null);
-        }
-        String name = request.name() != null && !request.name().isBlank()
-                ? request.name()
-                : Path.of(request.path()).getFileName().toString();
-
-        // Validate path before creating any DB rows
-        localImportService.validateSource(Path.of(request.path()));
+        var approval = approvals.prepareInitial(userId, request.previewToken(), request.path(), request.name());
+        String name = approval.projectName();
 
         if (projectRepository.existsByUserIdAndRepoOwnerAndRepoName(userId, "local", name)) {
             throw new ProjectConflictException("A local project with this name already exists.");
         }
         Project project;
         try {
-            project = projectRepository.save(new Project(userId, name, request.path()));
+            project = projectRepository.save(
+                    new Project(userId, name, approval.binding().canonicalRoot()));
         } catch (DataIntegrityViolationException e) {
             throw new ProjectConflictException("A local project with this name already exists.");
         }
@@ -107,6 +106,7 @@ public class ProjectService {
                 .resolve(String.valueOf(project.getId()))
                 .toString());
         long jobId = jobService.enqueue(project.getId(), JobType.IMPORT);
+        approvals.bind(approval, project.getId(), jobId);
         return new CreatedProject(toResponse(project, ProjectSummaries.empty()), jobId);
     }
 
@@ -128,9 +128,14 @@ public class ProjectService {
         if (!StringUtils.hasText(path)) {
             throw new LocalImportException("path is required", null);
         }
+        lockOwnedProject(projectId, userId);
         Project project = requireOwned(projectId, userId);
         if (!"LOCAL".equals(project.getSourceType())) {
             throw new LocalImportException("Only local projects can be relinked.", null);
+        }
+        if (jobService.hasActiveJob(projectId)) {
+            throw new ProjectConflictException(
+                    "Wait for the active analysis to finish before choosing another source.");
         }
         Path authorizedPath = localImportService.validateSource(Path.of(path));
         project.updateLocalPath(authorizedPath.toString());
@@ -147,24 +152,54 @@ public class ProjectService {
         return jobService.listRecent(projectId, limit);
     }
 
-    public long reanalyze(long projectId, long userId, LocalSourceStatusService.RefreshConfirmation confirmation) {
+    @Transactional
+    public long reanalyze(long projectId, long userId, String previewToken) {
+        lockOwnedProject(projectId, userId);
         Project project = requireOwned(projectId, userId);
-        localSourceStatusService.verifyRefresh(projectId, userId, confirmation);
+        if ("LOCAL".equals(project.getSourceType())) {
+            var approval = approvals.prepareRefresh(userId, projectId, previewToken);
+            long jobId = jobService.enqueue(projectId, JobType.REANALYZE);
+            approvals.bind(approval, projectId, jobId);
+            return jobId;
+        }
         return jobService.enqueue(project.getId(), JobType.REANALYZE);
+    }
+
+    private void lockOwnedProject(long projectId, long userId) {
+        jdbc.sql("select id from projects where id = :id and user_id = :userId for update")
+                .param("id", projectId)
+                .param("userId", userId)
+                .query(Long.class)
+                .optional()
+                .orElseThrow(ProjectNotFoundException::new);
     }
 
     /**
      * The row (with cascaded snapshots/jobs) goes first; the clone directory is removed after the
      * delete commits, behind the canonical-path re-validation in GitCloneService.
      */
+    @Transactional
     public void delete(long projectId, long userId) {
+        jdbc.sql("select id from projects where id = :id and user_id = :userId for update")
+                .param("id", projectId)
+                .param("userId", userId)
+                .query(Long.class)
+                .optional()
+                .orElseThrow(ProjectNotFoundException::new);
         Project project = requireOwned(projectId, userId);
         if (jobService.hasActiveJob(projectId)) {
-            throw new ProjectConflictException("An analysis job is active for this project. Cancel it first.");
+            throw new ProjectConflictException(
+                    "An analysis job is still running or stopping. Wait for cancellation to finish.");
         }
         projectRepository.delete(project);
         if (project.getClonePath() != null) {
-            gitCloneService.deleteClone(Path.of(project.getClonePath()));
+            Path clonePath = Path.of(project.getClonePath());
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    gitCloneService.deleteClone(clonePath);
+                }
+            });
         }
     }
 

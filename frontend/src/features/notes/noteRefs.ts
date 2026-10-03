@@ -40,7 +40,7 @@ function addAll(refs: ParsedNoteRef[], markdown: string, pattern: RegExp, type: 
 export function noteRefHref(projectId: number, ref: ParsedNoteRef): string {
   switch (ref.type) {
     case 'FILE':
-      return `/projects/${projectId}/code?path=${encodeURIComponent(ref.rawTarget)}`
+      return `/projects/${projectId}/code?path=${encodeURIComponent(ref.rawTarget)}&sourceContext=current`
     case 'NODE':
       return `/projects/${projectId}/architecture`
     case 'COMMIT':

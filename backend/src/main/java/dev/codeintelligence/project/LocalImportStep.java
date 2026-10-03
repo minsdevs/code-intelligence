@@ -2,12 +2,11 @@ package dev.codeintelligence.project;
 
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
-import java.nio.file.Path;
 
 /**
  * Import step variant for local folder projects. Copies the local folder into the
  * repos storage and creates the snapshot. This is NOT registered in the pipeline
- * (no @Order) — it is invoked directly by ProjectService for local imports.
+ * (no component or @Order). The active pipeline uses ImportStep's LOCAL branch.
  */
 public class LocalImportStep implements JobStep {
 
@@ -16,14 +15,20 @@ public class LocalImportStep implements JobStep {
     private final ProjectRepository projectRepository;
     private final SnapshotRepository snapshotRepository;
     private final LocalImportService localImportService;
+    private final LocalImportDiagnostics diagnostics;
+    private final LocalSourceApprovalService approvals;
 
     public LocalImportStep(
             ProjectRepository projectRepository,
             SnapshotRepository snapshotRepository,
-            LocalImportService localImportService) {
+            LocalImportService localImportService,
+            LocalImportDiagnostics diagnostics,
+            LocalSourceApprovalService approvals) {
         this.projectRepository = projectRepository;
         this.snapshotRepository = snapshotRepository;
         this.localImportService = localImportService;
+        this.diagnostics = diagnostics;
+        this.approvals = approvals;
     }
 
     @Override
@@ -37,15 +42,9 @@ public class LocalImportStep implements JobStep {
                 .findById(ctx.projectId())
                 .orElseThrow(() -> new IllegalStateException("project no longer exists"));
 
-        String localPath = project.getLocalPath();
-        if (localPath == null || localPath.isBlank()) {
-            throw new IllegalStateException("project has no local path configured");
-        }
-
-        Path source = Path.of(localPath);
-        Path target = ctx.clonePath();
-
-        LocalImportService.LocalImportResult result = localImportService.importFolder(source, target);
+        LocalSourceBinding input = approvals.requireJobInput(ctx.jobId(), ctx.projectId());
+        LocalImportService.LocalImportResult result = localImportService.importApproved(
+                input, ctx.clonePath(), () -> approvals.verifyBeforePublish(ctx.jobId(), ctx.projectId()));
 
         if (result.branch() != null && !result.branch().equals(project.getDefaultBranch())) {
             project.updateDefaultBranch(result.branch());
@@ -54,5 +53,6 @@ public class LocalImportStep implements JobStep {
 
         Snapshot snapshot = snapshotRepository.save(new Snapshot(project.getId(), result.headSha()));
         ctx.attachSnapshot(snapshot.getId());
+        diagnostics.record(project.getId(), snapshot.getId(), result.summary());
     }
 }

@@ -207,7 +207,7 @@ describe('ArchitecturePage', () => {
 
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/projects/7/code')
-      expect(router.state.location.search).toBe('?path=src%2Fapi%2FTodoController.java&line=12')
+      expect(router.state.location.search).toBe('?path=src%2Fapi%2FTodoController.java&line=12&sourceContext=unknown')
     })
   })
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { routes } from '../../app/router'
 import { AI_PANEL_DEFAULT_WIDTH, useUiStore } from '../../stores/uiStore'
@@ -11,9 +11,11 @@ vi.mock('@monaco-editor/react', async () => {
 
   function MockEditor({
     value,
+    path,
     onMount,
   }: {
     value?: string
+    path?: string
     onMount?: (
       editor: {
         revealLineInCenter: (line: number) => void
@@ -23,6 +25,7 @@ vi.mock('@monaco-editor/react', async () => {
     ) => void
   }) {
     const [revealed, setRevealed] = React.useState<number | null>(null)
+    const [highlighted, setHighlighted] = React.useState<number[]>([])
 
     React.useEffect(() => {
       onMount?.(
@@ -30,7 +33,10 @@ vi.mock('@monaco-editor/react', async () => {
           revealLineInCenter: (line) => {
             setRevealed(line)
           },
-          deltaDecorations: () => ['dec-1'],
+          deltaDecorations: (_oldDecorations, decorations) => {
+            setHighlighted(decorations.map((decoration) => (decoration as { range: { startLineNumber: number } }).range.startLineNumber))
+            return decorations.map((_, index) => `dec-${index}`)
+          },
         },
         {
           Range: class Range {
@@ -51,10 +57,11 @@ vi.mock('@monaco-editor/react', async () => {
 
     return React.createElement(
       'div',
-      { 'data-testid': 'monaco-editor' },
+      { 'data-testid': 'monaco-editor', 'data-model-path': path },
       revealed != null
         ? React.createElement('span', { 'data-testid': 'revealed-line' }, String(revealed))
         : null,
+      ...highlighted.map((line) => React.createElement('span', { key: line, 'data-testid': 'highlighted-line' }, String(line))),
       React.createElement('pre', null, value),
     )
   }
@@ -87,15 +94,20 @@ const files: FileListItem[] = [
   { path: 'src/service/TodoService.java', language: 'java', size: 300, lineCount: 30 },
 ]
 
+const sourceMeta = { resolvedSnapshotId: 70, contentOid: 'a'.repeat(40), sourceState: 'AVAILABLE' as const,
+  snapshotTime: '2026-10-02T00:00:00Z', currentSnapshot: true, evidenceState: null }
+
 const contents: Record<string, FileContent> = {
-  'README.md': { path: 'README.md', language: 'markdown', content: '# hello' },
-  'src/App.java': { path: 'src/App.java', language: 'java', content: 'class App {\n  void main() {}\n}' },
+  'README.md': { ...sourceMeta, path: 'README.md', language: 'markdown', content: '# hello' },
+  'src/App.java': { ...sourceMeta, path: 'src/App.java', language: 'java', content: 'class App {\n  void main() {}\n}' },
   'src/api/TodoController.java': {
+    ...sourceMeta,
     path: 'src/api/TodoController.java',
     language: 'java',
     content: 'class TodoController {\n  void create() {}\n}',
   },
   'src/service/TodoService.java': {
+    ...sourceMeta,
     path: 'src/service/TodoService.java',
     language: 'java',
     content: 'class TodoService {\n  void save() {}\n}',
@@ -171,15 +183,29 @@ const serviceNodes: GraphNodePage = {
 const emptyNodes: GraphNodePage = { page: 1, size: 100, total: 0, items: [] }
 
 const fetchMock = vi.fn()
+let fileContentOverride: ((url: URL) => Response | Promise<Response> | undefined) | undefined
+
+function fileRequests(): URL[] {
+  return fetchMock.mock.calls
+    .map((call) => requestUrl(call[0] as RequestInfo | URL))
+    .filter((url) => url.pathname.endsWith('/file-content'))
+}
 
 function installFetch() {
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
     const url = requestUrl(input)
     const path = url.pathname
+    if (path === '/api/projects/7') return jsonResponse({ id: 7, name: 'fixture', currentSnapshot: { id: 70 } })
+    if (path === '/api/projects/7/snapshots') return jsonResponse([
+      { id: 69, status: 'READY', analyzedAt: '2026-10-01T00:00:00Z' },
+      { id: 70, status: 'READY', analyzedAt: '2026-10-02T00:00:00Z' },
+    ])
     if (path === '/api/projects/7/files') {
       return jsonResponse(files)
     }
     if (path === '/api/projects/7/file-content') {
+      const overridden = fileContentOverride?.(url)
+      if (overridden !== undefined) return overridden
       const filePath = url.searchParams.get('path') ?? ''
       if (filePath === 'assets/logo.png') {
         return jsonResponse({ title: 'Unsupported Media Type', detail: 'Binary files cannot be displayed.' }, 415)
@@ -267,6 +293,7 @@ beforeEach(() => {
     focusedNode: null,
   })
   fetchMock.mockReset()
+  fileContentOverride = undefined
   installFetch()
 })
 
@@ -288,7 +315,7 @@ describe('buildFileTree', () => {
 
 describe('CodeExplorerPage', () => {
   it('fetches file content when a tree file is selected', async () => {
-    renderCode()
+    const { router } = renderCode()
 
     fireEvent.click(await screen.findByRole('treeitem', { name: 'src' }))
     fireEvent.click(await screen.findByRole('treeitem', { name: 'src/App.java' }))
@@ -299,11 +326,15 @@ describe('CodeExplorerPage', () => {
         const url = requestUrl(call[0] as RequestInfo | URL)
         return (
           url.pathname === '/api/projects/7/file-content' && url.searchParams.get('path') === 'src/App.java'
+          && url.searchParams.get('snapshotId') === '70'
         )
       })
       expect(fetched).toBe(true)
     })
     expect(useUiStore.getState().focusedFile).toBe('src/App.java')
+    const params = new URLSearchParams(router.state.location.search)
+    expect(params.get('sourceContext')).toBe('snapshot')
+    expect(params.get('snapshotId')).toBe('70')
   })
 
   it('reveals the requested line when entering with path and line query', async () => {
@@ -311,9 +342,10 @@ describe('CodeExplorerPage', () => {
 
     expect(await screen.findByTestId('monaco-editor')).toHaveTextContent('class App')
     expect(await screen.findByTestId('revealed-line')).toHaveTextContent('2')
+    expect(screen.getByTestId('highlighted-line')).toHaveTextContent('2')
   })
 
-  it('navigates to the caller file and line when a callers item is clicked', async () => {
+  it('opens the caller snapshot without applying an unverified historical line', async () => {
     const { router } = renderCode('/projects/7/code?path=src/api/TodoController.java')
 
     fireEvent.click(await screen.findByRole('button', { name: /create/ }))
@@ -323,10 +355,171 @@ describe('CodeExplorerPage', () => {
     await waitFor(() => {
       const params = new URLSearchParams(router.state.location.search)
       expect(params.get('path')).toBe('src/service/TodoService.java')
-      expect(params.get('line')).toBe('14')
+      expect(params.get('line')).toBeNull()
+      expect(params.get('snapshotId')).toBe('70')
+      expect(params.get('sourceContext')).toBe('evidence')
     })
     expect(await screen.findByTestId('monaco-editor')).toHaveTextContent('class TodoService')
+    expect(screen.getByText(/LEGACY_SOURCE_UNVERIFIED/)).toBeInTheDocument()
+    expect(screen.queryByTestId('highlighted-line')).not.toBeInTheDocument()
     expect(useUiStore.getState().focusedNode?.id).toBe(21)
+  })
+
+  it('keeps graph symbols unverified after leaving a feature evidence link', async () => {
+    const { router } = renderCode('/projects/7/code?path=src/api/TodoController.java&line=1&snapshotId=70&evidenceId=901&sourceContext=evidence')
+
+    expect(await screen.findByTestId('monaco-editor')).toHaveTextContent('class TodoController')
+    expect(screen.getByText(/LEGACY_SOURCE_UNVERIFIED/)).toBeInTheDocument()
+    expect(screen.queryByTestId('highlighted-line')).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: /^TodoController/ }))
+
+    await waitFor(() => {
+      const params = new URLSearchParams(router.state.location.search)
+      expect(params.get('snapshotId')).toBe('70')
+      expect(params.get('sourceContext')).toBe('evidence')
+      expect(params.get('evidenceId')).toBeNull()
+    })
+    expect(await screen.findByTestId('monaco-editor')).toHaveTextContent('class TodoController')
+    expect(screen.getByText(/LEGACY_SOURCE_UNVERIFIED/)).toBeInTheDocument()
+    expect(screen.queryByTestId('highlighted-line')).not.toBeInTheDocument()
+  })
+
+  it.each(['./src/App.java', 'src//App.java', 'src/./App.java', 'src\\App.java'])(
+    'opens a current-source link with harmless relative spelling: %s',
+    async (path) => {
+      renderCode(`/projects/7/code?${new URLSearchParams({ path, sourceContext: 'current' })}`)
+
+      expect(await screen.findByTestId('monaco-editor')).toHaveTextContent('class App')
+      expect(screen.getByTestId('source-context')).toHaveTextContent('현재 소스')
+      expect(fileRequests()).not.toHaveLength(0)
+      for (const request of fileRequests()) {
+        expect(request.searchParams.get('path')).toBe('src/App.java')
+        expect(request.searchParams.get('snapshotId')).toBe('70')
+      }
+      expect(screen.queryByTestId('source-unavailable')).not.toBeInTheDocument()
+    },
+  )
+
+  it.each(['../src/App.java', 'src/../App.java', '/src/App.java', 'C:\\src\\App.java', 'src/%2e%2e/App.java'])(
+    'preserves unsafe input for server rejection: %s',
+    async (path) => {
+      fileContentOverride = () => jsonResponse({ detail: 'Invalid source path' }, 400)
+      renderCode(`/projects/7/code?${new URLSearchParams({ path, line: '2', sourceContext: 'current' })}`)
+
+      expect(await screen.findByText('Invalid source path')).toBeInTheDocument()
+      expect(fileRequests()).not.toHaveLength(0)
+      for (const request of fileRequests()) expect(request.searchParams.get('path')).toBe(path)
+      expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('highlighted-line')).not.toBeInTheDocument()
+    },
+  )
+
+  it.each([
+    ['evidence', null],
+    ['snapshot', null],
+    ['evidence', ''],
+    ['snapshot', ''],
+    ['evidence', '0'],
+    ['snapshot', '-1'],
+    ['evidence', '9007199254740992'],
+    ['snapshot', 'invalid'],
+  ])('treats %s context with snapshot %s as unknown', async (sourceContext, snapshotId) => {
+    const params = new URLSearchParams({ path: 'src/App.java', line: '2', sourceContext: sourceContext! })
+    if (snapshotId != null) params.set('snapshotId', snapshotId)
+    const { router } = renderCode(`/projects/7/code?${params}`)
+
+    expect(await screen.findByTestId('source-unavailable')).toHaveTextContent('SOURCE_CONTEXT_UNKNOWN')
+    await screen.findByRole('heading', { name: 'fixture' })
+    expect(fileRequests()).toHaveLength(0)
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('highlighted-line')).not.toBeInTheDocument()
+    expect(new URLSearchParams(router.state.location.search).get('sourceContext')).toBe(sourceContext)
+  })
+
+  it('hides existing source and highlights until unknown evidence explicitly opens current source', async () => {
+    const { router } = renderCode('/projects/7/code?path=src/App.java&line=2&sourceContext=current')
+    expect(await screen.findByTestId('highlighted-line')).toHaveTextContent('2')
+    const requestCount = fileRequests().length
+
+    await act(async () => {
+      await router.navigate('/projects/7/code?path=src/App.java&line=2&snapshotId=70&sourceContext=unknown')
+    })
+    expect(await screen.findByTestId('source-unavailable')).toHaveTextContent('SOURCE_CONTEXT_UNKNOWN')
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('highlighted-line')).not.toBeInTheDocument()
+    expect(fileRequests()).toHaveLength(requestCount)
+
+    fireEvent.click(screen.getByRole('button', { name: /Open current source/ }))
+    expect(await screen.findByTestId('monaco-editor')).toHaveTextContent('class App')
+    const params = new URLSearchParams(router.state.location.search)
+    expect(params.get('sourceContext')).toBe('current')
+    expect(params.get('line')).toBeNull()
+    expect(screen.queryByTestId('highlighted-line')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { mismatch: 'snapshot', change: { resolvedSnapshotId: 71 } },
+    { mismatch: 'path', change: { path: 'src/Other.java' } },
+  ])('hides source whose response $mismatch does not match the request', async ({ change }) => {
+    fileContentOverride = () => jsonResponse({ ...contents['src/App.java'], ...change, content: 'MISMATCHED SOURCE' })
+    renderCode('/projects/7/code?path=src/App.java&line=2&snapshotId=70&sourceContext=snapshot')
+
+    expect(await screen.findByTestId('source-unavailable')).toHaveTextContent('EVIDENCE_STALE')
+    expect(screen.queryByText('MISMATCHED SOURCE')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('highlighted-line')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { status: 409, code: 'EVIDENCE_STALE' },
+    { status: 410, code: 'SOURCE_UNAVAILABLE' },
+  ])('clears previously displayed source and highlights on $status $code', async ({ status, code }) => {
+    const { router } = renderCode('/projects/7/code?path=src/App.java&line=2&sourceContext=current')
+    expect(await screen.findByTestId('highlighted-line')).toHaveTextContent('2')
+    fileContentOverride = () => jsonResponse({ code, detail: 'Snapshot source cannot be read' }, status)
+
+    await act(async () => {
+      await router.navigate('/projects/7/code?path=src/App.java&line=2&snapshotId=69&sourceContext=snapshot')
+    })
+    expect(await screen.findByTestId('source-unavailable')).toHaveTextContent(code)
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('highlighted-line')).not.toBeInTheDocument()
+    expect(screen.queryByText(/class App/)).not.toBeInTheDocument()
+  })
+
+  it('keeps current bytes after a delayed historical response and separates the models when switching back', async () => {
+    let releaseOld!: (response: Response) => void
+    const delayedOld = new Promise<Response>((resolve) => { releaseOld = resolve })
+    const oldContent = { ...contents['src/App.java'], resolvedSnapshotId: 69, contentOid: 'b'.repeat(40), currentSnapshot: false, content: 'class Historical_A {}' }
+    const currentContent = { ...contents['src/App.java'], content: 'class Current_B {}' }
+    let holdOldOnce = true
+    fileContentOverride = (url) => {
+      if (url.searchParams.get('snapshotId') === '69') {
+        if (holdOldOnce) {
+          holdOldOnce = false
+          return delayedOld
+        }
+        return jsonResponse(oldContent)
+      }
+      return jsonResponse(currentContent)
+    }
+    const { router } = renderCode('/projects/7/code?path=src/App.java&snapshotId=69&sourceContext=snapshot')
+    await waitFor(() => expect(fileRequests().some((url) => url.searchParams.get('snapshotId') === '69')).toBe(true))
+
+    await act(async () => { await router.navigate('/projects/7/code?path=src/App.java&sourceContext=current') })
+    expect(await screen.findByTestId('monaco-editor')).toHaveTextContent('Current_B')
+    expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-model-path', expect.stringContaining('snapshot://7/70/'))
+    await act(async () => { releaseOld(jsonResponse(oldContent)) })
+    expect(screen.getByTestId('monaco-editor')).toHaveTextContent('Current_B')
+    expect(screen.queryByText(/Historical_A/)).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Source snapshot' }), { target: { value: '69' } })
+    expect(await screen.findByTestId('monaco-editor')).toHaveTextContent('Historical_A')
+    expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-model-path', expect.stringContaining('snapshot://7/69/'))
+    expect(screen.queryByText(/Current_B/)).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Source snapshot' }), { target: { value: 'current' } })
+    expect(await screen.findByTestId('monaco-editor')).toHaveTextContent('Current_B')
+    expect(screen.queryByText(/Historical_A/)).not.toBeInTheDocument()
   })
 
   it('shows guidance for oversized files', async () => {

@@ -6,6 +6,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.dircache.DirCache;
+import org.eclipse.jgit.dircache.DirCacheBuilder;
+import org.eclipse.jgit.dircache.DirCacheEntry;
+import org.eclipse.jgit.lib.FileMode;
+import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -41,6 +46,36 @@ class FileInventoryScannerTest {
         assertThat(result.skippedBinary()).isEqualTo(1);
         assertThat(result.skippedForSize()).isEqualTo(1);
         assertThat(result.skippedForCount()).isZero();
+    }
+
+    @Test
+    void missingSubmoduleCommitDoesNotAbortParentInventory() throws Exception {
+        Files.writeString(dir.resolve("main.ts"), "export const app = 1;\n");
+        try (Git git =
+                Git.init().setInitialBranch("main").setDirectory(dir.toFile()).call()) {
+            git.add().addFilepattern(".").call();
+            DirCache cache = git.getRepository().lockDirCache();
+            try {
+                DirCacheBuilder builder = cache.builder();
+                builder.add(cache.getEntry("main.ts"));
+                DirCacheEntry submodule = new DirCacheEntry("vendor/library");
+                submodule.setFileMode(FileMode.GITLINK);
+                submodule.setObjectId(ObjectId.fromString("1111111111111111111111111111111111111111"));
+                builder.add(submodule);
+                assertThat(builder.commit()).isTrue();
+            } finally {
+                cache.unlock();
+            }
+            git.commit()
+                    .setMessage("parent with unavailable submodule")
+                    .setAuthor(IDENT)
+                    .setCommitter(IDENT)
+                    .setSign(false)
+                    .call();
+        }
+        InventoryResult result = new FileInventoryScanner().scan(dir, 20_000, 1_000_000);
+        assertThat(result.files()).extracting(InventoriedFile::path).containsExactly("main.ts");
+        assertThat(result.skippedSubmodules()).isEqualTo(1);
     }
 
     @Test

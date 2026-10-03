@@ -32,8 +32,9 @@ public class FileController {
             @PathVariable long projectId,
             @RequestParam String path,
             @RequestParam(required = false) Long snapshotId,
+            @RequestParam(required = false) Long evidenceId,
             @AuthenticationPrincipal AuthenticatedUser user) {
-        return fileService.fileContent(projectId, user.userId(), path, snapshotId);
+        return fileService.fileContent(projectId, user.userId(), path, snapshotId, evidenceId);
     }
 
     @GetMapping("/{projectId}/stats")

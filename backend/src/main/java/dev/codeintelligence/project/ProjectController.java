@@ -22,25 +22,26 @@ public class ProjectController {
 
     public record CreateProjectRequest(String repoOwner, String repoName, String url, String branch) {}
 
-    public record CreateLocalProjectRequest(String path, String name) {}
+    public record CreateLocalProjectRequest(String path, String name, String previewToken) {}
+
+    public record LocalPreviewRequest(String path, String name) {}
+
+    public record PreviewTokenRequest(String previewToken) {}
 
     public record RelinkLocalProjectRequest(String path) {}
 
     public record CreateProjectResponse(ProjectResponse project, long jobId) {}
 
-    public record ReanalyzeRequest(Long snapshotId, Integer added, Integer modified, Integer deleted) {
-        LocalSourceStatusService.RefreshConfirmation confirmation() {
-            if (snapshotId == null || added == null || modified == null || deleted == null) return null;
-            return new LocalSourceStatusService.RefreshConfirmation(snapshotId, added, modified, deleted);
-        }
-    }
+    public record ReanalyzeRequest(String previewToken) {}
 
     public record ReanalyzeResponse(long jobId) {}
 
     private final ProjectService projectService;
+    private final LocalSourceApprovalService approvals;
 
-    public ProjectController(ProjectService projectService) {
+    public ProjectController(ProjectService projectService, LocalSourceApprovalService approvals) {
         this.projectService = projectService;
+        this.approvals = approvals;
     }
 
     @PostMapping
@@ -57,6 +58,24 @@ public class ProjectController {
             @RequestBody CreateLocalProjectRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
         ProjectService.CreatedProject created = projectService.createFromLocal(user.userId(), request);
         return new CreateProjectResponse(created.project(), created.jobId());
+    }
+
+    @PostMapping("/local/preview")
+    public LocalSourcePreview previewLocal(
+            @RequestBody LocalPreviewRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
+        return approvals.previewInitial(user.userId(), request.path(), request.name());
+    }
+
+    @PostMapping("/{projectId}/local-preview")
+    public LocalSourcePreview previewLocalRefresh(
+            @PathVariable long projectId, @AuthenticationPrincipal AuthenticatedUser user) {
+        return approvals.previewRefresh(projectId, user.userId());
+    }
+
+    @PostMapping("/local/preview-outcome")
+    public LocalSourceApprovalService.Outcome previewOutcome(
+            @RequestBody PreviewTokenRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
+        return approvals.outcome(user.userId(), request.previewToken());
     }
 
     @GetMapping
@@ -104,6 +123,6 @@ public class ProjectController {
             @RequestBody(required = false) ReanalyzeRequest request,
             @AuthenticationPrincipal AuthenticatedUser user) {
         return new ReanalyzeResponse(
-                projectService.reanalyze(projectId, user.userId(), request == null ? null : request.confirmation()));
+                projectService.reanalyze(projectId, user.userId(), request == null ? null : request.previewToken()));
     }
 }

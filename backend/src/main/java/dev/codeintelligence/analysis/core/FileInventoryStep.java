@@ -75,6 +75,18 @@ public class FileInventoryStep implements JobStep {
 
     private void recordSkipWarnings(long projectId, long snapshotId, InventoryResult result) {
         evidenceService.deleteLinked(EvidenceSubjects.SNAPSHOT, snapshotId);
+        if (result.skippedSubmodules() > 0) {
+            long id = evidenceService.insertStatic(
+                    projectId,
+                    new NewEvidence(
+                            EvidenceKind.CONFIG,
+                            null,
+                            null,
+                            null,
+                            "Skipped " + result.skippedSubmodules()
+                                    + " Git submodules; their contents are not analyzed."));
+            evidenceService.link(id, EvidenceSubjects.SNAPSHOT, snapshotId);
+        }
         if (result.skippedForCount() > 0) {
             long id = evidenceService.insertStatic(
                     projectId,

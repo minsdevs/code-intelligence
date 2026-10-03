@@ -5,10 +5,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import dev.codeintelligence.auth.TokenCryptoService;
 import dev.codeintelligence.testsupport.FakeGithubApi;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Base64;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -36,6 +39,10 @@ class AuthIntegrationTest {
     @DynamicPropertySource
     static void githubBaseUrl(DynamicPropertyRegistry registry) {
         registry.add("app.github.base-url", fakeGithub::baseUrl);
+        registry.add("app.desktop.api-token", () -> "fixture-renderer-token");
+        registry.add("app.desktop.path-token", () -> "fixture-main-only-token");
+        registry.add("app.desktop.local-identity", () -> "fixture-desktop-identity");
+        registry.add("app.desktop.allowed-origin", () -> ALLOWED_ORIGIN);
     }
 
     @AfterAll
@@ -54,6 +61,65 @@ class AuthIntegrationTest {
 
     @Autowired
     private TokenCryptoService tokenCryptoService;
+
+    @Test
+    void folderGrantsRequireMainProcessCapability(@TempDir Path directory) throws Exception {
+        Path folder = Files.createDirectory(directory.resolve("selected"));
+        restTestClient
+                .post()
+                .uri("/api/desktop/paths")
+                .header("X-Code-Intelligence-Token", "fixture-renderer-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("path", folder.toString()))
+                .exchange()
+                .expectStatus()
+                .isForbidden();
+        restTestClient
+                .post()
+                .uri("/api/desktop/paths")
+                .header("X-Code-Intelligence-Token", "fixture-renderer-token")
+                .header("X-Code-Intelligence-Path-Token", "wrong-main-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("path", folder.toString()))
+                .exchange()
+                .expectStatus()
+                .isForbidden();
+        restTestClient
+                .post()
+                .uri("/api/desktop/paths")
+                .header("X-Code-Intelligence-Path-Token", "fixture-main-only-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("path", folder.toString()))
+                .exchange()
+                .expectStatus()
+                .isUnauthorized();
+        restTestClient
+                .post()
+                .uri("/api/desktop/paths")
+                .header("X-Code-Intelligence-Token", "fixture-renderer-token")
+                .header("X-Code-Intelligence-Path-Token", "fixture-main-only-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("path", folder.toString()))
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.path")
+                .isEqualTo(folder.toRealPath().toString());
+    }
+
+    @Test
+    void bundledAssetsArePublicButProjectDataStillRequiresAuthentication() {
+        restTestClient
+                .get()
+                .uri("/assets/audit-bootstrap.js")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody(String.class)
+                .isEqualTo("/* test bootstrap asset */\n");
+        restTestClient.get().uri("/api/projects").exchange().expectStatus().isUnauthorized();
+    }
 
     @Test
     void meWithoutSessionReturns200AuthenticatedFalse() {
