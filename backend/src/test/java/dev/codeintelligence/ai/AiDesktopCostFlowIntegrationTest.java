@@ -755,7 +755,13 @@ class AiDesktopCostFlowIntegrationTest {
                     .as("Only the running disposable Testcontainer may be connected")
                     .isTrue();
             assertThat(postgres.getHost()).isIn("localhost", "127.0.0.1");
-            Path psql = executable(List.of("/opt/homebrew/bin/psql", "/usr/local/bin/psql", "/usr/bin/psql"));
+            // Ubuntu's /usr/bin/psql resolves to pg_wrapper, which requires its symlink name.
+            // Pass the real PostgreSQL 16 binary from the CI image to the strict main adapter.
+            Path psql = executable(List.of(
+                    "/opt/homebrew/bin/psql",
+                    "/usr/local/bin/psql",
+                    "/usr/lib/postgresql/16/bin/psql",
+                    "/usr/bin/psql"));
             Path node = executable(List.of("/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"));
             Path script = Path.of("../desktop/test/fixtures/ai-desktop-cost-runtime.cjs")
                     .toRealPath();
