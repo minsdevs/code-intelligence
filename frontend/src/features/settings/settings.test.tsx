@@ -33,6 +33,7 @@ function deferred<T>() {
 
 function installDesktopBridge(runtime: () => Promise<RuntimeStatus>) {
   const bridge = {
+    appVersion: '0.1.0',
     platform: 'darwin', apiBaseUrl: 'http://127.0.0.1:4311', apiToken: 'synthetic-token',
     pickFolder: vi.fn(), authorizeDroppedFolder: vi.fn(), openExternal: vi.fn(),
     backup: vi.fn(() => Promise.resolve('/tmp/synthetic-backup')),
@@ -216,6 +217,7 @@ describe('SettingsPage', () => {
 
   it('uses the desktop runtime bridge and requires restore confirmation', async () => {
     const bridge = {
+      appVersion: '0.1.0',
       platform: 'darwin',
       apiBaseUrl: 'http://127.0.0.1:4311',
       apiToken: 'test-token',

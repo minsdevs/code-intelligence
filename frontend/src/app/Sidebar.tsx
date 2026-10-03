@@ -29,6 +29,9 @@ function SectionLabel({ children }: { children: ReactNode }) {
 
 export default function Sidebar() {
   const t = useT()
+  const versionLabel = window.codeIntelligenceDesktop
+    ? `v${window.codeIntelligenceDesktop.appVersion}`
+    : import.meta.env.DEV ? 'Browser development' : 'Browser build'
   const projectMatch = useMatch('/projects/:projectId/*')
   const rawProjectId = projectMatch?.params.projectId
   const projectId = parseProjectId(rawProjectId)
@@ -158,7 +161,7 @@ export default function Sidebar() {
       </div>
 
       <div className="shrink-0 border-t border-line px-4 py-2.5 font-mono text-[10px] tracking-wide text-ink-faint">
-        v0.0.0
+        {versionLabel}
       </div>
     </aside>
   )

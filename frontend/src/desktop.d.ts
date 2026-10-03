@@ -10,6 +10,7 @@ export type RuntimeStatus = {
 
 export type DesktopBridge = {
   platform: string
+  appVersion: string
   apiBaseUrl: string
   apiToken: string
   pickFolder(): Promise<string | null>

@@ -28,6 +28,7 @@ function harness(options = {}) {
   const disk = { mkdirSync() {}, openSync: () => 1, closeSync() {}, existsSync: () => false, ...options.disk };
   const electron = {
     app: {
+      getVersion: () => '0.1.0',
       requestSingleInstanceLock: () => options.ownsInstance !== false,
       on: (name, callback) => appEvents.set(name, callback),
       whenReady: () => new Promise(() => {}), getPath: () => '/test',
@@ -203,7 +204,7 @@ test('renderer runtime configuration never includes the path authorization token
   h.run('assertTrustedRenderer = () => {}; registerIpc();');
   const event = {};
   h.handlers.get('runtime:config')(event);
-  assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken']);
+  assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken', 'appVersion']);
   assert.equal(JSON.stringify(event.returnValue).includes('main-only-token'), false);
 });
 
@@ -532,7 +533,7 @@ test('no new safety key or admission capability reaches backend environment or r
   assert.equal(JSON.stringify(h.spawned[0].args).includes('synthetic-private-gateway-capability'), false);
   assert.equal(h.bootstrapWrites.length, 1);
   assert.equal(h.bootstrapWrites[0].toString(), 'synthetic-private-gateway-capability\n');
-  assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken']);
+  assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken', 'appVersion']);
 });
 
 test('a secondary process that lost the single-instance lock never starts safety or children', async () => {

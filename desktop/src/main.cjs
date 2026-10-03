@@ -833,7 +833,7 @@ async function restoreWithDialog() {
 function registerIpc() {
   ipcMain.on('runtime:config', (event) => {
     assertTrustedRenderer(event);
-    event.returnValue = { apiBaseUrl: runtime.apiBaseUrl, apiToken: runtime.apiToken };
+    event.returnValue = { apiBaseUrl: runtime.apiBaseUrl, apiToken: runtime.apiToken, appVersion: app.getVersion() };
   });
   ipcMain.handle('runtime:status', (event) => {
     assertTrustedRenderer(event);

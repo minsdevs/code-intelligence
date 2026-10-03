@@ -18,6 +18,7 @@ function requireExternalUrl(url) {
 
 contextBridge.exposeInMainWorld('codeIntelligenceDesktop', Object.freeze({
   platform: process.platform,
+  appVersion: config.appVersion,
   apiBaseUrl: config.apiBaseUrl,
   apiToken: config.apiToken,
   pickFolder: () => ipcRenderer.invoke('folder:pick'),
