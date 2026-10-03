@@ -24,11 +24,22 @@ class JobServiceRetryTest {
                         ((TransactionCallback<?>) call.getArgument(0)).doInTransaction(new SimpleTransactionStatus()));
         when(repository.findOwnedJob(1, 7))
                 .thenReturn(Optional.of(new JobRecord(
-                        1, 2, 9L, JobType.IMPORT, JobStatus.FAILED, "syntax error", null, null, null, "TS_SYNTAX_ERROR")));
+                        1,
+                        2,
+                        9L,
+                        JobType.IMPORT,
+                        JobStatus.FAILED,
+                        "syntax error",
+                        null,
+                        null,
+                        null,
+                        "TS_SYNTAX_ERROR")));
         JobService service = new JobService(repository, mock(Pipeline.class), worker, publisher, tx, guard);
         assertThatThrownBy(() -> service.retry(1, 7))
-                .isInstanceOfSatisfying(JobConflictException.class, error ->
-                        org.assertj.core.api.Assertions.assertThat(error.getBody().getProperties())
+                .isInstanceOfSatisfying(
+                        JobConflictException.class,
+                        error -> org.assertj.core.api.Assertions.assertThat(
+                                        error.getBody().getProperties())
                                 .containsEntry("code", "TS_SYNTAX_ERROR"));
         verify(repository, never()).markJobQueuedForRetry(1);
         verify(repository, never()).resetStepsForRetry(1);
