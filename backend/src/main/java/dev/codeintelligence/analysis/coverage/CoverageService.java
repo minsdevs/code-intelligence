@@ -2,6 +2,7 @@ package dev.codeintelligence.analysis.coverage;
 
 import dev.codeintelligence.analysis.tree.TreeAnalyzerProperties;
 import dev.codeintelligence.analysis.ts.TsAnalyzerProperties;
+import dev.codeintelligence.evidence.EvidenceSubjects;
 import dev.codeintelligence.job.JobRepository;
 import dev.codeintelligence.job.JobStepRecord;
 import dev.codeintelligence.job.StepStatus;
@@ -11,23 +12,59 @@ import dev.codeintelligence.project.ProjectRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.StreamReadConstraints;
+import tools.jackson.core.StreamReadFeature;
+import tools.jackson.core.json.JsonFactory;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
-/**
- * Computes an analysis coverage report for a given snapshot by aggregating existing
- * file inventory, job step, and evidence data. No new analysis is triggered.
- */
+/** Reads inventory and persisted job steps without inferring per-file analyzer outcomes. */
 @Service
 public class CoverageService {
+
+    // Versioned evidence bounds; changing today's import configuration must not rewrite old facts.
+    private static final int LOCAL_IMPORT_MAX_EXCERPT_BYTES = 2048;
+    private static final int LOCAL_IMPORT_MAX_FILES = 50_000;
+    private static final int LOCAL_IMPORT_MAX_ENTRIES = 200_000;
+    private static final long LOCAL_IMPORT_MAX_BYTES_READ = 536_870_912L;
+    private static final String LOCAL_IMPORT_POLICY = "local-ingest-v1";
+    private static final Set<String> LOCAL_IMPORT_FIELDS =
+            Set.of("schemaVersion", "policyVersion", "acceptedFiles", "bytesRead", "excludedEntriesByReason");
+    private static final Set<String> LOCAL_IMPORT_REASONS = Set.of(
+            "GENERATED_DIRECTORY",
+            "SECRET_PATH",
+            "IGNORED",
+            "BINARY",
+            "OVERSIZED",
+            "FILE_LIMIT",
+            "SYMLINK",
+            "HARD_LINK",
+            "SECRET_CONTENT");
+    private static final JsonMapper LOCAL_IMPORT_JSON = JsonMapper.builder(JsonFactory.builder()
+                    .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                    .streamReadConstraints(StreamReadConstraints.builder()
+                            .maxDocumentLength(LOCAL_IMPORT_MAX_EXCERPT_BYTES)
+                            .maxNestingDepth(2)
+                            .maxTokenCount(64)
+                            .maxNameLength(32)
+                            .maxStringLength(64)
+                            .maxNumberLength(10)
+                            .build())
+                    .build())
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+            .build();
 
     private final JdbcClient jdbc;
     private final JobRepository jobRepository;
     private final ProjectRepository projectRepository;
-    private final TsAnalyzerProperties tsProps;
-    private final TreeAnalyzerProperties treeProps;
 
     public CoverageService(
             JdbcClient jdbc,
@@ -38,13 +75,9 @@ public class CoverageService {
         this.jdbc = jdbc;
         this.jobRepository = jobRepository;
         this.projectRepository = projectRepository;
-        this.tsProps = tsProps;
-        this.treeProps = treeProps;
+        // Keep the constructor compatible; today's sidecar configuration is not historical evidence.
     }
 
-    /**
-     * Retrieves the coverage report for a project, verifying ownership.
-     */
     @Transactional(readOnly = true)
     public CoverageReport getReport(long projectId, long userId) {
         Project project =
@@ -58,138 +91,135 @@ public class CoverageService {
 
     @Transactional(readOnly = true)
     public CoverageReport buildReport(long projectId, long snapshotId) {
-        CoverageReport.FileCoverage fileCoverage = computeFileCoverage(snapshotId);
-        List<CoverageReport.LanguageCoverage> languageCoverage = computeLanguageCoverage(snapshotId, projectId);
-        List<CoverageReport.ExcludedFolder> excludedFolders = computeExcludedFolders(snapshotId);
         List<CoverageReport.AnalyzerStatus> analyzerStatuses = computeAnalyzerStatuses(projectId, snapshotId);
-        CoverageReport.PartialResultInfo partialResults = computePartialResults(projectId, snapshotId);
-        List<String> retryableIssues = computeRetryableIssues(projectId, analyzerStatuses);
-        List<String> unsupportedItems = computeUnsupported(snapshotId);
-
         return new CoverageReport(
-                fileCoverage,
-                languageCoverage,
-                excludedFolders,
+                computeFileCoverage(projectId, snapshotId),
+                computeLanguageInventory(snapshotId),
+                // The exclusion policy for a past snapshot was not persisted.
+                List.of(),
                 analyzerStatuses,
-                partialResults,
-                retryableIssues,
-                unsupportedItems);
+                new CoverageReport.PartialResultInfo(
+                        false, false, false, CoverageReport.COMPLETENESS_UNKNOWN, "UNKNOWN"),
+                computeRetryableIssues(analyzerStatuses),
+                // No capability was verified by these inventory rows, regardless of language.
+                List.of(),
+                CoverageReport.LEGACY_UNMEASURED,
+                CoverageReport.SUPPORT_UNVERIFIED,
+                readLocalImportSummary(projectId, snapshotId));
     }
 
-    private CoverageReport.FileCoverage computeFileCoverage(long snapshotId) {
-        int analyzedFiles = jdbc.sql("select count(*) from files where snapshot_id = :sid")
+    private CoverageReport.LocalImportSummary readLocalImportSummary(long projectId, long snapshotId) {
+        List<String> excerpts = jdbc.sql("""
+                        select distinct case when octet_length(e.excerpt) <= :maxBytes
+                                             then e.excerpt else null end as excerpt
+                        from evidences e
+                        join evidence_links l on l.evidence_id = e.id
+                        where e.project_id = :pid and e.kind = 'CONFIG'
+                          and l.subject_type = :subjectType and l.subject_id = :sid
+                        limit 2
+                        """)
+                .param("pid", projectId)
+                .param("sid", snapshotId)
+                .param("subjectType", EvidenceSubjects.LOCAL_IMPORT)
+                .param("maxBytes", LOCAL_IMPORT_MAX_EXCERPT_BYTES)
+                .query(String.class)
+                .list();
+        // Missing, oversized, or multiple distinct observations do not establish a summary.
+        if (excerpts.size() != 1 || excerpts.getFirst() == null) return null;
+        try {
+            JsonNode root = LOCAL_IMPORT_JSON.readTree(excerpts.getFirst());
+            if (root == null
+                    || !root.isObject()
+                    || root.size() != LOCAL_IMPORT_FIELDS.size()
+                    || !LOCAL_IMPORT_FIELDS.containsAll(root.propertyNames())) return null;
+            JsonNode schema = root.get("schemaVersion");
+            JsonNode policy = root.get("policyVersion");
+            JsonNode accepted = root.get("acceptedFiles");
+            JsonNode bytes = root.get("bytesRead");
+            JsonNode reasons = root.get("excludedEntriesByReason");
+            if (!boundedInteger(schema, 1)
+                    || schema.intValue() != 1
+                    || !policy.isString()
+                    || !LOCAL_IMPORT_POLICY.equals(policy.asString())
+                    || !boundedInteger(accepted, LOCAL_IMPORT_MAX_FILES)
+                    || !boundedInteger(bytes, LOCAL_IMPORT_MAX_BYTES_READ)
+                    || !reasons.isObject()
+                    || !LOCAL_IMPORT_REASONS.containsAll(reasons.propertyNames())) return null;
+            Map<String, Integer> counts = new LinkedHashMap<>();
+            long entries = accepted.longValue();
+            for (var entry : reasons.properties()) {
+                if (!boundedInteger(entry.getValue(), LOCAL_IMPORT_MAX_ENTRIES)) return null;
+                entries += entry.getValue().longValue();
+                if (entries > LOCAL_IMPORT_MAX_ENTRIES) return null;
+                counts.put(entry.getKey(), entry.getValue().intValue());
+            }
+            return new CoverageReport.LocalImportSummary(
+                    1, LOCAL_IMPORT_POLICY, accepted.intValue(), bytes.longValue(), counts);
+        } catch (JacksonException ignored) {
+            // Do not log or expose malformed evidence text, which might include local paths.
+            return null;
+        }
+    }
+
+    private static boolean boundedInteger(JsonNode node, long maximum) {
+        return node != null
+                && node.isIntegralNumber()
+                && node.canConvertToLong()
+                && node.longValue() >= 0
+                && node.longValue() <= maximum;
+    }
+
+    private CoverageReport.FileCoverage computeFileCoverage(long projectId, long snapshotId) {
+        int inventoriedFiles = jdbc.sql("select count(*) from files where snapshot_id = :sid")
                 .param("sid", snapshotId)
                 .query(Integer.class)
                 .single();
-
-        // Check evidence for skip info
-        int skippedForCount = countEvidenceWithPattern(snapshotId, "Skipped%files over app.analysis.max-files");
-        int skippedForSize = countEvidenceWithPattern(snapshotId, "Skipped%files over app.analysis.max-file-size");
-        int discoveredFiles = analyzedFiles + skippedForCount + skippedForSize;
-
-        return new CoverageReport.FileCoverage(discoveredFiles, analyzedFiles, skippedForCount, skippedForSize, 0);
+        Integer skippedForCount = recordedInventorySkipCount(projectId, snapshotId, "max-files");
+        Integer skippedForSize = recordedInventorySkipCount(projectId, snapshotId, "max-file-size");
+        return new CoverageReport.FileCoverage(
+                inventoriedFiles, null, skippedForCount, skippedForSize, null, inventoriedFiles);
     }
 
-    private int countEvidenceWithPattern(long snapshotId, String pattern) {
-        String excerpt = jdbc.sql("""
-                        select e.excerpt from evidences e
+    private Integer recordedInventorySkipCount(long projectId, long snapshotId, String budget) {
+        List<String> excerpts = jdbc.sql("""
+                        select distinct e.excerpt from evidences e
                         join evidence_links l on l.evidence_id = e.id
-                        where l.subject_type = 'SNAPSHOT' and l.subject_id = :sid
+                        where e.project_id = :pid and l.subject_type = 'SNAPSHOT' and l.subject_id = :sid
                           and e.excerpt like :pattern
                         """)
+                .param("pid", projectId)
                 .param("sid", snapshotId)
-                .param("pattern", pattern)
+                .param("pattern", "Skipped%files over app.analysis." + budget + "%")
                 .query(String.class)
-                .optional()
-                .orElse(null);
-        if (excerpt == null) return 0;
-        // Extract number from "Skipped 42 files over ..."
+                .list();
+        // Legacy retries can leave more than one observation. Do not sum or select an arbitrary one.
+        if (excerpts.size() != 1) return null;
+        String excerpt = excerpts.getFirst();
+        if (!excerpt.matches("Skipped [0-9]+ files over app\\.analysis\\." + budget + "\\.")) return null;
         try {
-            String[] parts = excerpt.split(" ");
-            return Integer.parseInt(parts[1]);
-        } catch (Exception e) {
-            return 0;
+            return Integer.valueOf(excerpt.split(" ")[1]);
+        } catch (NumberFormatException ignored) {
+            return null;
         }
     }
 
-    private List<CoverageReport.LanguageCoverage> computeLanguageCoverage(long snapshotId, long projectId) {
-        // Group files by language and count analyzed
-        Map<String, int[]> langMap = new LinkedHashMap<>();
-        jdbc.sql("""
+    private List<CoverageReport.LanguageCoverage> computeLanguageInventory(long snapshotId) {
+        return jdbc.sql("""
                         select coalesce(language, 'unknown') as lang, count(*) as cnt
                         from files where snapshot_id = :sid
-                        group by language order by cnt desc
+                        group by coalesce(language, 'unknown') order by cnt desc, lang
                         """)
                 .param("sid", snapshotId)
-                .query((rs, rowNum) -> {
-                    String lang = rs.getString("lang");
-                    int cnt = rs.getInt("cnt");
-                    langMap.put(lang, new int[] {cnt, cnt, 0, 0}); // total, analyzed, skipped, failed
-                    return 0;
-                })
+                .query((rs, rowNum) -> new CoverageReport.LanguageCoverage(
+                        rs.getString("lang"), rs.getInt("cnt"), null, null, null, rs.getInt("cnt")))
                 .list();
-
-        // Count parsing failures from evidence
-        jdbc.sql("""
-                        select e.file_path, count(*) as cnt
-                        from evidences e
-                        join evidence_links l on l.evidence_id = e.id
-                        where l.subject_type = 'SOURCE_PARSING' and l.subject_id = :sid
-                          and e.excerpt like 'Parse failed:%'
-                        group by e.file_path
-                        """)
-                .param("sid", snapshotId)
-                .query((rs, rowNum) -> {
-                    // We can't easily map back to language here without joining files,
-                    // but we track total failures
-                    return 0;
-                })
-                .list();
-
-        List<CoverageReport.LanguageCoverage> result = new ArrayList<>();
-        for (var entry : langMap.entrySet()) {
-            int[] counts = entry.getValue();
-            result.add(new CoverageReport.LanguageCoverage(entry.getKey(), counts[0], counts[1], counts[2], counts[3]));
-        }
-        return result;
-    }
-
-    private List<CoverageReport.ExcludedFolder> computeExcludedFolders(long snapshotId) {
-        // Standard exclusions applied by PathGlobs and BinaryFiles
-        List<CoverageReport.ExcludedFolder> exclusions = new ArrayList<>();
-        exclusions.add(new CoverageReport.ExcludedFolder("node_modules/", "dependency folder"));
-        exclusions.add(new CoverageReport.ExcludedFolder(".git/", "version control"));
-        exclusions.add(new CoverageReport.ExcludedFolder("build/", "build output"));
-        exclusions.add(new CoverageReport.ExcludedFolder("dist/", "build output"));
-        exclusions.add(new CoverageReport.ExcludedFolder("target/", "build output"));
-        exclusions.add(new CoverageReport.ExcludedFolder(".gradle/", "build cache"));
-        exclusions.add(new CoverageReport.ExcludedFolder("vendor/", "dependency folder"));
-        return exclusions;
     }
 
     private List<CoverageReport.AnalyzerStatus> computeAnalyzerStatuses(long projectId, long snapshotId) {
-        List<CoverageReport.AnalyzerStatus> statuses = new ArrayList<>();
-
-        // Java analyzer is always active (built-in)
-        statuses.add(new CoverageReport.AnalyzerStatus("Java Analyzer", "active", null));
-
-        // TS analyzer
-        if (tsProps.enabled()) {
-            statuses.add(new CoverageReport.AnalyzerStatus("TypeScript Analyzer", "active", null));
-        } else {
-            statuses.add(new CoverageReport.AnalyzerStatus(
-                    "TypeScript Analyzer", "disabled", "TS_ANALYZER_BASE_URL not configured"));
+        Map<String, CoverageReport.AnalyzerStatus> statuses = new LinkedHashMap<>();
+        for (String name : List.of("Java Analyzer", "TypeScript Analyzer", "Tree-sitter Analyzer")) {
+            statuses.put(name, new CoverageReport.AnalyzerStatus(name, "unknown", null));
         }
-
-        // Tree-sitter analyzer
-        if (treeProps.enabled()) {
-            statuses.add(new CoverageReport.AnalyzerStatus("Tree-sitter Analyzer", "active", null));
-        } else {
-            statuses.add(new CoverageReport.AnalyzerStatus(
-                    "Tree-sitter Analyzer", "disabled", "TREE_ANALYZER_BASE_URL not configured"));
-        }
-
-        // Check latest job steps for actual failures
         Long latestJobId = jdbc.sql("""
                         select id from analysis_jobs
                         where project_id = :pid and snapshot_id = :sid
@@ -200,22 +230,20 @@ public class CoverageService {
                 .query(Long.class)
                 .optional()
                 .orElse(null);
-
         if (latestJobId != null) {
-            List<JobStepRecord> steps = jobRepository.findSteps(latestJobId);
-            for (JobStepRecord step : steps) {
-                if (step.status() == StepStatus.FAILED) {
-                    String analyzerName = mapStepToAnalyzer(step.stepKey());
-                    if (analyzerName != null) {
-                        // Override status with failure info
-                        statuses.removeIf(s -> s.name().equals(analyzerName));
-                        statuses.add(new CoverageReport.AnalyzerStatus(analyzerName, "failed", step.error()));
-                    }
+            for (JobStepRecord step : jobRepository.findSteps(latestJobId)) {
+                String name = mapStepToAnalyzer(step.stepKey());
+                if (name != null) {
+                    statuses.put(
+                            name,
+                            new CoverageReport.AnalyzerStatus(
+                                    name,
+                                    step.status().name().toLowerCase(Locale.ROOT),
+                                    step.status() == StepStatus.FAILED ? step.error() : null));
                 }
             }
         }
-
-        return statuses;
+        return List.copyOf(statuses.values());
     }
 
     private String mapStepToAnalyzer(String stepKey) {
@@ -227,78 +255,14 @@ public class CoverageService {
         };
     }
 
-    private CoverageReport.PartialResultInfo computePartialResults(long projectId, long snapshotId) {
-        int featureCount = jdbc.sql("select count(*) from features where snapshot_id = :sid")
-                .param("sid", snapshotId)
-                .query(Integer.class)
-                .single();
-        int flowCount = jdbc.sql("select count(*) from flows where snapshot_id = :sid")
-                .param("sid", snapshotId)
-                .query(Integer.class)
-                .single();
-        int nodeCount = jdbc.sql("select count(*) from graph_nodes where snapshot_id = :sid")
-                .param("sid", snapshotId)
-                .query(Integer.class)
-                .single();
-
-        // Check if any analyzer was disabled — makes results partial
-        boolean tsDisabled = !tsProps.enabled();
-        boolean treeDisabled = !treeProps.enabled();
-        boolean partial = tsDisabled || treeDisabled;
-        String reason = partial ? "Some analyzers are disabled; results may be incomplete." : null;
-
-        return new CoverageReport.PartialResultInfo(
-                partial && featureCount > 0, partial && flowCount > 0, partial && nodeCount > 0, reason);
-    }
-
-    private List<String> computeRetryableIssues(long projectId, List<CoverageReport.AnalyzerStatus> statuses) {
+    private List<String> computeRetryableIssues(List<CoverageReport.AnalyzerStatus> statuses) {
         List<String> issues = new ArrayList<>();
         for (CoverageReport.AnalyzerStatus status : statuses) {
             if ("failed".equals(status.status())) {
-                issues.add("Retry may resolve: " + status.name() + " — " + status.failureReason());
+                issues.add("Recorded step failure: " + status.name()
+                        + (status.failureReason() == null ? "" : " — " + status.failureReason()));
             }
         }
-        return issues;
-    }
-
-    private List<String> computeUnsupported(long snapshotId) {
-        List<String> unsupported = new ArrayList<>();
-        // Check languages that have no analyzer support
-        List<String> langs =
-                jdbc.sql("""
-                        select distinct language from files
-                        where snapshot_id = :sid and language is not null
-                        """).param("sid", snapshotId).query(String.class).list();
-
-        for (String lang : langs) {
-            if (!isSupportedLanguage(lang)) {
-                long count = jdbc.sql("select count(*) from files where snapshot_id = :sid and language = :lang")
-                        .param("sid", snapshotId)
-                        .param("lang", lang)
-                        .query(Long.class)
-                        .single();
-                unsupported.add(lang + " (" + count + " files) — no dedicated analyzer");
-            }
-        }
-        return unsupported;
-    }
-
-    private boolean isSupportedLanguage(String language) {
-        return switch (language.toLowerCase()) {
-            case "java",
-                    "kotlin",
-                    "typescript",
-                    "javascript",
-                    "tsx",
-                    "jsx",
-                    "python",
-                    "go",
-                    "rust",
-                    "c",
-                    "cpp",
-                    "ruby",
-                    "php" -> true;
-            default -> false;
-        };
+        return List.copyOf(issues);
     }
 }

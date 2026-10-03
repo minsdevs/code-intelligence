@@ -33,9 +33,7 @@ export default function FeaturesPage() {
   })
 
   if (projectId == null) {
-    return (
-      <EmptyState title="Features" description={t('features.desc')} />
-    )
+    return <EmptyState title="Features" description={t('features.desc')} />
   }
 
   const treeError = queryError(treeQuery.error)
@@ -52,13 +50,23 @@ export default function FeaturesPage() {
             {treeError}
           </p>
         )}
-        {treeQuery.isLoading && <p className="px-3 py-3 text-[13px] text-ink-muted">{t('features.loading')}</p>}
+        {treeQuery.isLoading && (
+          <p className="px-3 py-3 text-[13px] text-ink-muted">{t('features.loading')}</p>
+        )}
         {!treeQuery.isLoading && tree.length === 0 && !treeError && (
           <p className="px-3 py-3 text-[13px] text-ink-muted">{t('features.empty')}</p>
         )}
-        <ul aria-label={t('features.treeLabel')} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        <ul
+          aria-label={t('features.treeLabel')}
+          className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
+        >
           {tree.map((node) => (
-            <FeatureNode key={node.id} node={node} selectedId={resolvedId} onSelect={setSelectedId} />
+            <FeatureNode
+              key={node.id}
+              node={node}
+              selectedId={resolvedId}
+              onSelect={setSelectedId}
+            />
           ))}
         </ul>
       </section>
@@ -70,7 +78,9 @@ export default function FeaturesPage() {
             <span>{detail.detection}</span>
             <span>{Math.round(detail.confidence * 100)}%</span>
           </p>
-          <h4 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">{t('features.links')}</h4>
+          <h4 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
+            {t('features.links')}
+          </h4>
           {detail.links.length === 0 ? (
             <p className="mt-2 text-[13px] text-ink-muted">{t('features.noLinks')}</p>
           ) : (
@@ -81,7 +91,9 @@ export default function FeaturesPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        navigate(`/projects/${projectId}/code${codeLocationSearch(link.filePath!, null)}`)
+                        navigate(
+                          `/projects/${projectId}/code${codeLocationSearch(link.filePath!, null, { snapshotId: detail.resolvedSnapshotId, versioned: true })}`,
+                        )
                       }
                       className="flex w-full flex-col rounded-md px-2 py-1.5 text-left hover:bg-surface-2"
                     >
@@ -103,8 +115,10 @@ export default function FeaturesPage() {
           <EvidenceList
             evidences={detail.evidences}
             projectId={projectId}
-            onOpen={(path, line) =>
-              navigate(`/projects/${projectId}/code${codeLocationSearch(path, line)}`)
+            onOpen={(path, line, evidence) =>
+              navigate(
+                `/projects/${projectId}/code${codeLocationSearch(path, line, { snapshotId: evidence.snapshotId, evidenceId: evidence.evidenceId, versioned: true })}`,
+              )
             }
           />
         </article>

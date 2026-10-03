@@ -279,10 +279,9 @@ public class SnapshotComparisonService {
                 warnings.add(label + " decreased by more than 30% (" + values[0] + " → " + values[1] + ").");
             }
         });
-        if (coverage.partialResults().featuresPartial()
-                || coverage.partialResults().flowsPartial()
-                || coverage.partialResults().graphPartial()) {
-            warnings.add("The target snapshot is partial; decreases may be analyzer coverage regressions.");
+        if (coverage.analyzerStatuses().stream().anyMatch(status -> "failed".equals(status.status()))) {
+            warnings.add(
+                    "The target snapshot has a recorded analyzer step failure; per-file coverage remains unknown.");
         }
         return List.copyOf(warnings);
     }

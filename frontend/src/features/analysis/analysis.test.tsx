@@ -201,7 +201,7 @@ describe('AnalysisPage', () => {
     const panel = await screen.findByRole('region', { name: 'Snapshot comparison' })
     expect(within(panel).getByText('Features')).toBeInTheDocument()
     expect(within(panel).getByText('+1 ~0 -0')).toBeInTheDocument()
-    expect(within(panel).getByText(/coverage 10 → 10/)).toBeInTheDocument()
+    expect(within(panel).getByText(/Inventory: unknown → unknown files\. Analysis coverage unmeasured\./)).toBeInTheDocument()
     expect(within(panel).getByRole('alert')).toHaveTextContent('flows decreased')
   })
 

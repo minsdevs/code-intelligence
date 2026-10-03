@@ -77,10 +77,12 @@ public class ExportService {
                 : "N/A";
 
         List<ExportArea> areas = jdbc.sql("""
-                        select area_type, confidence, technologies
-                        from areas
-                        where snapshot_id = :snapshotId
-                        order by confidence desc
+                        select a.area_type, a.confidence,
+                               (select string_agg(t.name, ', ' order by t.name)
+                                from area_technologies t where t.area_id = a.id) as technologies
+                        from project_areas a
+                        where a.snapshot_id = :snapshotId
+                        order by a.confidence desc, a.area_type
                         """)
                 .param("snapshotId", snapshotId)
                 .query((rs, rowNum) -> new ExportArea(
@@ -134,7 +136,7 @@ public class ExportService {
                         SecretMask.redact(rs.getString("title"))))
                 .list();
 
-        CoverageReport coverage = coverageService.getReport(projectId, userId);
+        CoverageReport coverage = coverageService.buildReport(projectId, snapshotId);
 
         return new ExportData(
                 SecretMask.redact(project.getName()),
@@ -232,10 +234,10 @@ public class ExportService {
         var cov = data.coverage();
         if (cov != null) {
             var fc = cov.fileCoverage();
-            md.append("- Files discovered: ").append(fc.discoveredFiles()).append('\n');
-            md.append("- Files analyzed: ").append(fc.analyzedFiles()).append('\n');
-            md.append("- Skipped (size): ").append(fc.skippedForSize()).append('\n');
-            md.append("- Skipped (binary): ").append(fc.skippedBinary()).append('\n');
+            md.append("- Inventoried files: ").append(fc.inventoriedFiles()).append('\n');
+            md.append("- Analysis coverage: unmeasured (per-file outcomes were not recorded).\n");
+            md.append("- Result completeness: unknown.\n");
+            md.append("- Public capability support: unverified.\n");
         }
         md.append('\n');
 

@@ -13,7 +13,7 @@ import dev.codeintelligence.analysis.core.GraphNodeType;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.NaturalKeys;
 import dev.codeintelligence.evidence.EvidenceKind;
-import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -123,7 +123,7 @@ public class DockerAnalyzer implements CodeAnalyzer {
                 if (!dependsOn.isEmpty()) {
                     metadata.put("dependsOn", dependsOn);
                 }
-                String dockerfilePath = resolveDockerfile(ctx.clonePath(), path, body.get("build"), dockerfiles);
+                String dockerfilePath = resolveDockerfile(ctx, path, body.get("build"), dockerfiles);
                 if (dockerfilePath != null) {
                     DockerfileInfo info = dockerfiles.get(dockerfilePath);
                     metadata.put("dockerfile", dockerfilePath);
@@ -175,7 +175,7 @@ public class DockerAnalyzer implements CodeAnalyzer {
     }
 
     private String resolveDockerfile(
-            Path clonePath, String composePath, Object build, Map<String, DockerfileInfo> dockerfiles) {
+            AnalysisContext ctx, String composePath, Object build, Map<String, DockerfileInfo> dockerfiles) {
         if (build == null) {
             return null;
         }
@@ -183,29 +183,55 @@ public class DockerAnalyzer implements CodeAnalyzer {
         String dockerfileName = "Dockerfile";
         if (build instanceof String raw) {
             context = raw;
-        } else {
+        } else if (build instanceof Map<?, ?>) {
             Map<String, Object> map = YamlSupport.asMap(build);
+            // Inline content is not a reference to a file on disk.
+            if (map.containsKey("dockerfile_inline")) return null;
             if (map.get("context") != null) {
-                context = String.valueOf(map.get("context"));
+                if (!(map.get("context") instanceof String raw)) return null;
+                context = raw;
             }
             if (map.get("dockerfile") != null) {
-                dockerfileName = String.valueOf(map.get("dockerfile"));
+                if (!(map.get("dockerfile") instanceof String raw)) return null;
+                dockerfileName = raw;
             }
+        } else {
+            return null;
         }
-        Path composeDir = Path.of(composePath.replace('\\', '/')).getParent();
-        Path relative = (composeDir == null ? Path.of(context) : composeDir.resolve(context)).resolve(dockerfileName);
-        String normalized = relative.normalize().toString().replace('\\', '/');
-        if (normalized.startsWith("./")) {
-            normalized = normalized.substring(2);
-        }
-        if (dockerfiles.containsKey(normalized)) {
+        if (!literalRelativePath(context) || !literalRelativePath(dockerfileName)) return null;
+        try {
+            Path compose = Path.of(composePath.replace('\\', '/'));
+            if (compose.isAbsolute() || compose.normalize().startsWith("..")) return null;
+            Path composeDir = compose.getParent();
+            Path relative = (composeDir == null ? Path.of(context) : composeDir.resolve(context))
+                    .resolve(dockerfileName)
+                    .normalize();
+            if (relative.isAbsolute() || relative.startsWith("..")) return null;
+            String normalized = relative.toString().replace('\\', '/');
+            // Never probe unlisted working files or substitute an unrelated root Dockerfile.
+            boolean inventoried = ctx.inventory().files().stream()
+                    .anyMatch(file -> file.path().replace('\\', '/').equals(normalized));
+            if (!inventoried) return null;
+            if (!dockerfiles.containsKey(normalized)) {
+                String text = ConfigFileSupport.read(ctx.clonePath(), normalized);
+                if (text == null) return null;
+                dockerfiles.put(normalized, parseDockerfile(normalized, text));
+            }
             return normalized;
+        } catch (InvalidPathException e) {
+            return null;
         }
-        Path absolute = clonePath.resolve(normalized).normalize();
-        if (Files.isRegularFile(absolute)) {
-            return normalized;
-        }
-        return dockerfiles.containsKey(dockerfileName) ? dockerfileName : null;
+    }
+
+    private static boolean literalRelativePath(String path) {
+        // Remote, home-expanded, interpolated, or platform-dependent references are unresolved.
+        return !path.isBlank()
+                && !path.startsWith("/")
+                && !path.startsWith("~")
+                && path.indexOf('$') < 0
+                && path.indexOf(':') < 0
+                && path.indexOf('\\') < 0
+                && path.chars().noneMatch(Character::isISOControl);
     }
 
     private DockerfileInfo parseDockerfile(String path, String text) {

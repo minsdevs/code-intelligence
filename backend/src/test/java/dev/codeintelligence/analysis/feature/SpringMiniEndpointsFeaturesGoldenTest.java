@@ -138,7 +138,7 @@ class SpringMiniEndpointsFeaturesGoldenTest {
                 insert into snapshots (project_id, commit_sha, status)
                 values (?, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ANALYZING') returning id
                 """, Long.class, projectId);
-        TestJobContext ctx = new TestJobContext(1, projectId, snapshotId, clone);
+        TestJobContext ctx = TestJobContext.running(jdbcTemplate, projectId, snapshotId, clone);
         fileInventoryStep.run(ctx);
         sourceParsingStep.run(ctx);
         graphBuildStep.run(ctx);
