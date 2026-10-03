@@ -8,7 +8,7 @@ export default function AppLayout() {
     <AppQueryProvider>
       <div className="flex h-full overflow-hidden text-[13px] leading-relaxed">
         <Sidebar />
-        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-surface-0">
+        <main className="@container flex min-w-0 flex-1 flex-col overflow-y-auto bg-surface-0">
           <Outlet />
         </main>
         <AiPanel />

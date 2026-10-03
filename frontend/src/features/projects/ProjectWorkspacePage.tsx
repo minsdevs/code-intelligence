@@ -18,11 +18,11 @@ export default function ProjectWorkspacePage() {
   const workspaceBasePath = projectId != null ? `/projects/${projectId}` : null
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <header className="sticky top-0 z-10 shrink-0 border-b border-line bg-surface-0/95 px-5 pt-4 backdrop-blur">
-        <div className="flex items-baseline gap-1.5 pb-3">
-          <span className="text-[12px] text-ink-faint">Projects /</span>
-          <h1 className="truncate font-mono text-[15px] font-semibold text-ink">{projectName}</h1>
+        <div className="flex min-w-0 items-baseline gap-1.5 pb-3">
+          <span className="shrink-0 text-[12px] text-ink-faint">Projects /</span>
+          <h1 title={projectName} className="min-w-0 truncate font-mono text-[15px] font-semibold text-ink">{projectName}</h1>
         </div>
         <nav aria-label="Workspace tabs" className="flex gap-0.5 overflow-x-auto">
           {workspaceTabs.map((tab) => (
@@ -45,7 +45,7 @@ export default function ProjectWorkspacePage() {
       {projectQuery.data?.sourceType === 'LOCAL' && (
         <LocalSourceStatus key={projectQuery.data.id} projectId={projectQuery.data.id} details />
       )}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Outlet />
       </div>
     </div>

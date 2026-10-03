@@ -5,6 +5,8 @@ import type { AreaType } from '../api/types'
 export const AI_PANEL_MIN_WIDTH = 280
 export const AI_PANEL_MAX_WIDTH = 560
 export const AI_PANEL_DEFAULT_WIDTH = 340
+export const SIDEBAR_WIDTH = 240
+export const SIDEBAR_COLLAPSED_WIDTH = 56
 
 export type FocusedNode = {
   id: number
@@ -15,6 +17,8 @@ export type FocusedNode = {
 }
 
 type UiState = {
+  sidebarCollapsed: boolean
+  toggleSidebar: () => void
   aiPanelOpen: boolean
   aiPanelWidth: number
   selectedAreas: AreaType[]
@@ -44,6 +48,8 @@ const clampWidth = (width: number) =>
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
+      sidebarCollapsed: false,
+      toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       aiPanelOpen: true,
       aiPanelWidth: AI_PANEL_DEFAULT_WIDTH,
       selectedAreas: [],
@@ -72,6 +78,7 @@ export const useUiStore = create<UiState>()(
       // so reference window.localStorage explicitly for both browser and jsdom.
       storage: createJSONStorage(() => window.localStorage),
       partialize: (state) => ({
+        sidebarCollapsed: state.sidebarCollapsed,
         aiPanelOpen: state.aiPanelOpen,
         aiPanelWidth: state.aiPanelWidth,
       }),
