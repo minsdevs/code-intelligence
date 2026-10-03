@@ -1,0 +1,709 @@
+{
+  "contractVersion": "1.0.0",
+  "manifestId": "r1-required-v1.1",
+  "publicSupportPolicy": "NO_PROMOTION_IN_T00A",
+  "thresholds": {
+    "parseSuccess": 0.99,
+    "invalidDiagnostics": 1,
+    "symbolPrecision": 0.99,
+    "symbolRecall": 0.95,
+    "resolvedPrecision": 0.99,
+    "resolvedRecall": 0.9,
+    "wilsonLower": 0.95,
+    "candidatePrecision": 0.9,
+    "candidateRecall": 0.9,
+    "candidateExactSet": 0.85,
+    "falseResolved": 0
+  },
+  "policyReferences": [
+    {
+      "document": "06-benchmarks-validation.md",
+      "sha256": "68bccb856e1ec818a9c465b054a3d0523c9ee20ced48fa6b1dc66e35ec8087d1"
+    },
+    {
+      "document": "10-r1-public-cells.md",
+      "sha256": "6e8fab2541e71b08f6b9640293fd84a5e55dd15f52e3afe5fea9adb187127826"
+    }
+  ],
+  "toolInventory": [
+    {
+      "producer": "javaparser",
+      "declaredVersion": "3.28.2",
+      "lockedVersion": null,
+      "observedVersion": null,
+      "artifactSha256": null,
+      "packagingStatus": "NOT_VERIFIED"
+    },
+    {
+      "producer": "ts-morph",
+      "declaredVersion": "^27.0.2",
+      "lockedVersion": null,
+      "observedVersion": null,
+      "artifactSha256": null,
+      "packagingStatus": "NOT_VERIFIED"
+    },
+    {
+      "producer": "typescript",
+      "declaredVersion": "~5.9.3",
+      "lockedVersion": null,
+      "observedVersion": null,
+      "artifactSha256": null,
+      "packagingStatus": "NOT_VERIFIED"
+    }
+  ],
+  "cells": [
+    {
+      "cellId": "J-P",
+      "capability": "P",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "java",
+          "prefix": "21"
+        }
+      ],
+      "patterns": [
+        "valid-syntax",
+        "invalid-syntax"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 50,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "J-S",
+      "capability": "S",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "java",
+          "prefix": "21"
+        }
+      ],
+      "patterns": [
+        "type-declaration",
+        "method-declaration",
+        "inheritance-span"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "J-C",
+      "capability": "C",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "java",
+          "prefix": "21"
+        }
+      ],
+      "patterns": [
+        "direct-source-call",
+        "overload",
+        "external-unresolved",
+        "dynamic-unresolved"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "J-F",
+      "capability": "F",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "java",
+          "prefix": "21"
+        },
+        {
+          "name": "spring-mvc",
+          "prefix": "6.2"
+        },
+        {
+          "name": "spring-boot",
+          "prefix": "3.4"
+        }
+      ],
+      "patterns": [
+        "literal-route",
+        "mapping-conditions",
+        "composed-mapping",
+        "inherited-mapping",
+        "dynamic-bean-unresolved"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "J-D",
+      "capability": "F",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "java",
+          "prefix": "21"
+        },
+        {
+          "name": "jakarta-persistence",
+          "prefix": "3.1"
+        }
+      ],
+      "patterns": [
+        "entity",
+        "schema-table",
+        "runtime-naming-unresolved"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "T-P",
+      "capability": "P",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "typescript",
+          "prefix": "5.9"
+        }
+      ],
+      "patterns": [
+        "valid-syntax",
+        "invalid-syntax"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 50,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "T-S",
+      "capability": "S",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "typescript",
+          "prefix": "5.9"
+        }
+      ],
+      "patterns": [
+        "function",
+        "type",
+        "module",
+        "component-span"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "T-C",
+      "capability": "C",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "typescript",
+          "prefix": "5.9"
+        }
+      ],
+      "patterns": [
+        "direct-source-call",
+        "config-alias",
+        "reexport",
+        "dynamic-unresolved"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "T-F",
+      "capability": "F",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "typescript",
+          "prefix": "5.9"
+        },
+        {
+          "name": "nest",
+          "prefix": "11"
+        }
+      ],
+      "patterns": [
+        "controller-route",
+        "global-prefix",
+        "module",
+        "dynamic-unresolved"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "T-UI",
+      "capability": "F",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "typescript",
+          "prefix": "5.9"
+        },
+        {
+          "name": "react",
+          "prefix": "19"
+        },
+        {
+          "name": "react-router",
+          "prefix": "7"
+        }
+      ],
+      "patterns": [
+        "component",
+        "literal-route",
+        "http-callsite",
+        "dynamic-url-unresolved"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "JS-P",
+      "capability": "P",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "ecmascript",
+          "prefix": "2022"
+        }
+      ],
+      "patterns": [
+        "valid-syntax",
+        "invalid-syntax"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 50,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "JS-S",
+      "capability": "S",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "ecmascript",
+          "prefix": "2022"
+        }
+      ],
+      "patterns": [
+        "function",
+        "module",
+        "component-span"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "JS-C",
+      "capability": "C",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "ecmascript",
+          "prefix": "2022"
+        }
+      ],
+      "patterns": [
+        "direct-source-call",
+        "explicit-import",
+        "prototype-unresolved",
+        "computed-unresolved"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "JS-UI",
+      "capability": "F",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "ecmascript",
+          "prefix": "2022"
+        },
+        {
+          "name": "react",
+          "prefix": "19"
+        },
+        {
+          "name": "react-router",
+          "prefix": "7"
+        }
+      ],
+      "patterns": [
+        "literal-route",
+        "http-callsite",
+        "dynamic-url-unresolved"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "SQL-P",
+      "capability": "P",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "postgresql",
+          "prefix": "16"
+        }
+      ],
+      "patterns": [
+        "create-table",
+        "alter-add-column",
+        "alter-drop-column",
+        "invalid-syntax"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 50,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "SQL-S",
+      "capability": "S",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "postgresql",
+          "prefix": "16"
+        }
+      ],
+      "patterns": [
+        "schema-table",
+        "column-span"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    },
+    {
+      "cellId": "X-HTTP",
+      "capability": "X",
+      "required": true,
+      "publicSupported": false,
+      "versions": [],
+      "patterns": [
+        "service-origin-method-path",
+        "conditions",
+        "ambiguous-service"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": [
+        {
+          "stratumId": "TSX_SPRING",
+          "minimumPositive": 50,
+          "minimumNegative": 25,
+          "versions": [
+            {
+              "name": "typescript",
+              "prefix": "5.9"
+            },
+            {
+              "name": "java",
+              "prefix": "21"
+            },
+            {
+              "name": "spring-mvc",
+              "prefix": "6.2"
+            },
+            {
+              "name": "spring-boot",
+              "prefix": "3.4"
+            },
+            {
+              "name": "react",
+              "prefix": "19"
+            },
+            {
+              "name": "react-router",
+              "prefix": "7"
+            }
+          ]
+        },
+        {
+          "stratumId": "TSX_NEST",
+          "minimumPositive": 50,
+          "minimumNegative": 25,
+          "versions": [
+            {
+              "name": "typescript",
+              "prefix": "5.9"
+            },
+            {
+              "name": "nest",
+              "prefix": "11"
+            },
+            {
+              "name": "react",
+              "prefix": "19"
+            },
+            {
+              "name": "react-router",
+              "prefix": "7"
+            }
+          ]
+        },
+        {
+          "stratumId": "JSX_SPRING",
+          "minimumPositive": 50,
+          "minimumNegative": 25,
+          "versions": [
+            {
+              "name": "ecmascript",
+              "prefix": "2022"
+            },
+            {
+              "name": "java",
+              "prefix": "21"
+            },
+            {
+              "name": "spring-mvc",
+              "prefix": "6.2"
+            },
+            {
+              "name": "spring-boot",
+              "prefix": "3.4"
+            },
+            {
+              "name": "react",
+              "prefix": "19"
+            },
+            {
+              "name": "react-router",
+              "prefix": "7"
+            }
+          ]
+        },
+        {
+          "stratumId": "JSX_NEST",
+          "minimumPositive": 50,
+          "minimumNegative": 25,
+          "versions": [
+            {
+              "name": "ecmascript",
+              "prefix": "2022"
+            },
+            {
+              "name": "nest",
+              "prefix": "11"
+            },
+            {
+              "name": "react",
+              "prefix": "19"
+            },
+            {
+              "name": "react-router",
+              "prefix": "7"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cellId": "X-DATA",
+      "capability": "X",
+      "required": true,
+      "publicSupported": false,
+      "versions": [
+        {
+          "name": "java",
+          "prefix": "21"
+        },
+        {
+          "name": "jakarta-persistence",
+          "prefix": "3.1"
+        },
+        {
+          "name": "postgresql",
+          "prefix": "16"
+        }
+      ],
+      "patterns": [
+        "datasource-schema-table",
+        "name-only",
+        "different-database"
+      ],
+      "patternAllocationStatus": "PENDING_INDEPENDENT_REVIEW",
+      "sampleRequirements": {
+        "positive": 200,
+        "negative": 100,
+        "independentProjects": 3,
+        "scenarios": 10,
+        "parserFiles": 0,
+        "holdoutPositive": 50,
+        "holdoutNegative": 25
+      },
+      "strata": []
+    }
+  ]
+}

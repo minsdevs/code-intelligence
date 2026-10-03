@@ -1,0 +1,304 @@
+{
+  "contractVersion": "1.0.0",
+  "bundleId": "t00-authored-known-good",
+  "provenance": {
+    "kind": "SYNTHETIC_SELF_TEST",
+    "producerVersion": "t00-authored-1.0.0",
+    "captureAttestation": "UNVERIFIED",
+    "productBuildSha256": "834b361f59ad3a3f02ce51eeb3bcab6c66f0374bde84cfa6c4874adfd772a0c8"
+  },
+  "corpusSha256": "3c6ea1565013e50ea75bd29bfc5b1c67d4532bf2ca76ef6627f8e776a3531766",
+  "capabilityManifestSha256": "e4ccb98e14e929e77986d0d13292d4d5d7a47cf0962c7aaa7fbd2b90e9ed4b73",
+  "runs": [
+    {
+      "fixtureId": "java-calls",
+      "sourceDigest": "736a6106dc1de98700dec047cdd83d25d1a54bc9b80a4d7ce3bba4c6e29434e6",
+      "executionState": "COMPLETED",
+      "reasonCode": null,
+      "versions": [
+        {
+          "name": "java",
+          "version": "21"
+        }
+      ],
+      "facts": [
+        {
+          "observationId": "authored.java-calls.valid",
+          "cellId": "J-P",
+          "kind": "PARSER",
+          "relationKind": "PARSE",
+          "source": {
+            "path": "source/Calls.java",
+            "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+            "namespace": "synthetic-java-calls",
+            "start": 0,
+            "end": 414
+          },
+          "resolution": "NOT_APPLICABLE",
+          "targets": [],
+          "valid": true,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        {
+          "observationId": "authored.java-calls.direct",
+          "cellId": "J-C",
+          "kind": "FACT",
+          "relationKind": "CALLS",
+          "source": {
+            "path": "source/Calls.java",
+            "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+            "namespace": "synthetic-java-calls",
+            "start": 267,
+            "end": 275
+          },
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "demo.Calls.twice.int"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        {
+          "observationId": "authored.java-calls.candidates",
+          "cellId": "J-C",
+          "kind": "CANDIDATES",
+          "relationKind": "CALLS",
+          "source": {
+            "path": "source/Calls.java",
+            "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+            "namespace": "synthetic-java-calls",
+            "start": 319,
+            "end": 331
+          },
+          "resolution": "INFERRED",
+          "targets": [
+            "demo.FirstAction.run",
+            "demo.SecondAction.run"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        {
+          "observationId": "authored.java-calls.invalid",
+          "cellId": "J-P",
+          "kind": "PARSER",
+          "relationKind": "PARSE",
+          "source": {
+            "path": "source/Invalid.java",
+            "sha256": "64c7b144c720916de595df0e2837ca78049f2f33e52965fe1daa4e51deabdf04",
+            "namespace": "synthetic-java-calls",
+            "start": 0,
+            "end": 28
+          },
+          "resolution": "NOT_APPLICABLE",
+          "targets": [],
+          "valid": false,
+          "diagnostics": [
+            "SYNTAX_ERROR"
+          ],
+          "reasonCode": null
+        },
+        {
+          "observationId": "authored.java-calls.dynamic",
+          "cellId": "J-C",
+          "kind": "FACT",
+          "relationKind": "CALLS",
+          "source": {
+            "path": "source/Calls.java",
+            "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+            "namespace": "synthetic-java-calls",
+            "start": 389,
+            "end": 408
+          },
+          "resolution": "UNRESOLVED",
+          "targets": [],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": "EXTERNAL_CONTEXT_MISSING"
+        }
+      ],
+      "outcomes": [
+        {
+          "path": "source/Calls.java",
+          "cellId": "J-P",
+          "owner": "synthetic-authored-producer",
+          "status": "SUCCESS",
+          "bytesRead": 414,
+          "reasonCode": null
+        },
+        {
+          "path": "source/Calls.java",
+          "cellId": "J-C",
+          "owner": "synthetic-authored-producer",
+          "status": "SUCCESS",
+          "bytesRead": 414,
+          "reasonCode": null
+        },
+        {
+          "path": "source/Invalid.java",
+          "cellId": "J-P",
+          "owner": "synthetic-authored-producer",
+          "status": "SUCCESS",
+          "bytesRead": 28,
+          "reasonCode": null
+        },
+        {
+          "path": "source/Invalid.java",
+          "cellId": "J-C",
+          "owner": "synthetic-authored-producer",
+          "status": "EXCLUDED",
+          "bytesRead": 0,
+          "reasonCode": "INVALID_SYNTAX"
+        }
+      ]
+    },
+    {
+      "fixtureId": "typescript-calls",
+      "sourceDigest": "ed1e491679f332a01f0137a2504f27ce594aa9d8b6968828d32a613b7901b0aa",
+      "executionState": "COMPLETED",
+      "reasonCode": null,
+      "versions": [
+        {
+          "name": "typescript",
+          "version": "5.9.3"
+        }
+      ],
+      "facts": [
+        {
+          "observationId": "authored.typescript-calls.valid",
+          "cellId": "T-P",
+          "kind": "PARSER",
+          "relationKind": "PARSE",
+          "source": {
+            "path": "source/calls.ts",
+            "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+            "namespace": "synthetic-typescript-calls",
+            "start": 0,
+            "end": 418
+          },
+          "resolution": "NOT_APPLICABLE",
+          "targets": [],
+          "valid": true,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        {
+          "observationId": "authored.typescript-calls.direct",
+          "cellId": "T-C",
+          "kind": "FACT",
+          "relationKind": "CALLS",
+          "source": {
+            "path": "source/calls.ts",
+            "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+            "namespace": "synthetic-typescript-calls",
+            "start": 254,
+            "end": 262
+          },
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "calls.twice.number"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        {
+          "observationId": "authored.typescript-calls.candidates",
+          "cellId": "T-C",
+          "kind": "CANDIDATES",
+          "relationKind": "CALLS",
+          "source": {
+            "path": "source/calls.ts",
+            "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+            "namespace": "synthetic-typescript-calls",
+            "start": 310,
+            "end": 322
+          },
+          "resolution": "INFERRED",
+          "targets": [
+            "first.run",
+            "second.run"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        {
+          "observationId": "authored.typescript-calls.invalid",
+          "cellId": "T-P",
+          "kind": "PARSER",
+          "relationKind": "PARSE",
+          "source": {
+            "path": "source/invalid.ts",
+            "sha256": "a3fb1bf706e21f00ff73d9143b409bc650fc8c59d1f35d5e1a9e349f7c2d721c",
+            "namespace": "synthetic-typescript-calls",
+            "start": 0,
+            "end": 26
+          },
+          "resolution": "NOT_APPLICABLE",
+          "targets": [],
+          "valid": false,
+          "diagnostics": [
+            "SYNTAX_ERROR"
+          ],
+          "reasonCode": null
+        },
+        {
+          "observationId": "authored.typescript-calls.dynamic",
+          "cellId": "T-C",
+          "kind": "FACT",
+          "relationKind": "CALLS",
+          "source": {
+            "path": "source/calls.ts",
+            "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+            "namespace": "synthetic-typescript-calls",
+            "start": 397,
+            "end": 413
+          },
+          "resolution": "UNRESOLVED",
+          "targets": [],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": "DYNAMIC_TARGET"
+        }
+      ],
+      "outcomes": [
+        {
+          "path": "source/calls.ts",
+          "cellId": "T-P",
+          "owner": "synthetic-authored-producer",
+          "status": "SUCCESS",
+          "bytesRead": 418,
+          "reasonCode": null
+        },
+        {
+          "path": "source/calls.ts",
+          "cellId": "T-C",
+          "owner": "synthetic-authored-producer",
+          "status": "SUCCESS",
+          "bytesRead": 418,
+          "reasonCode": null
+        },
+        {
+          "path": "source/invalid.ts",
+          "cellId": "T-P",
+          "owner": "synthetic-authored-producer",
+          "status": "SUCCESS",
+          "bytesRead": 26,
+          "reasonCode": null
+        },
+        {
+          "path": "source/invalid.ts",
+          "cellId": "T-C",
+          "owner": "synthetic-authored-producer",
+          "status": "EXCLUDED",
+          "bytesRead": 0,
+          "reasonCode": "INVALID_SYNTAX"
+        }
+      ]
+    }
+  ]
+}

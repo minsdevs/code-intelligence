@@ -1,0 +1,86 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "typescript-calls",
+  "cases": [
+    {
+      "caseId": "typescript-calls.valid",
+      "cellId": "T-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "source": {
+        "path": "source/calls.ts",
+        "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+        "namespace": "synthetic-typescript-calls",
+        "start": 0,
+        "end": 418
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Hand-authored valid syntax; no parser was run to create this expectation."
+    },
+    {
+      "caseId": "typescript-calls.direct",
+      "cellId": "T-C",
+      "patternId": "direct-source-call",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "source": {
+        "path": "source/calls.ts",
+        "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+        "namespace": "synthetic-typescript-calls",
+        "start": 254,
+        "end": 262
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "calls.twice.number"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "The literal direct call names the local twice function with one numeric argument."
+    },
+    {
+      "caseId": "typescript-calls.candidates",
+      "cellId": "T-C",
+      "patternId": "dynamic-unresolved",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "source": {
+        "path": "source/calls.ts",
+        "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+        "namespace": "synthetic-typescript-calls",
+        "start": 310,
+        "end": 322
+      },
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "first.run",
+          "second.run"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Two local implementations are authored candidate targets only; this is not proof of a unique runtime dispatch target."
+    }
+  ]
+}

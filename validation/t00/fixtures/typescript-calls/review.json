@@ -1,0 +1,14 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "typescript-calls",
+  "author": {
+    "id": "t00-agent-author",
+    "kind": "AGENT",
+    "method": "SOURCE_AUTHORED"
+  },
+  "status": "AUTHOR_PROVISIONAL",
+  "goldSha256": "5ef7aaa7f97a28f4b59ef60e09b1cd0c4f66573ecd4d8373df832d0355b68bf7",
+  "negativesSha256": "dbf57be153ecacc85bbfb0a189f54acd4689a03dcb2dcc35fd3c8613be7892b8",
+  "reviews": [],
+  "adjudicator": null
+}
