@@ -31,9 +31,31 @@ jobs:
         working-directory: desktop
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Prepare private Java runtime for native lock tests
+        shell: bash
+        run: |
+          ci_java_home="$(mktemp -d "$RUNNER_TEMP/desktop-java.XXXXXX")"
+          cp -a "$JAVA_HOME/." "$ci_java_home/"
+          for executable in java javac jar; do
+            resolved="$(realpath "$ci_java_home/bin/$executable")"
+            case "$resolved" in "$ci_java_home"/*) ;; *) exit 1 ;; esac
+            test -f "$resolved" && test -x "$resolved"
+          done
+          chmod -R go-w "$ci_java_home"
+          "$ci_java_home/bin/java" -version
+          echo "JAVA_HOME=$ci_java_home" >> "$GITHUB_ENV"
+          echo "$ci_java_home/bin" >> "$GITHUB_PATH"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install desktop test dependencies without native install hooks
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - run: node --check src/main.cjs && node --check src/preload.cjs && node --check src/backup.cjs && node --check scripts/stage-runtime.mjs && node --check scripts/runtime-stage.cjs
       - run: npm test
 
@@ -65,6 +87,18 @@ jobs:
           npm --prefix analyzers/tree-analyzer ci
       - name: Format check, tests, build
         run: ./gradlew spotlessCheck build
+      - name: Summarize failed backend tests
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for report in sorted(Path('build/test-results').glob('**/TEST-*.xml')):
+              for case in ET.parse(report).iter('testcase'):
+                  for failure in list(case.findall('failure')) + list(case.findall('error')):
+                      message = ' '.join(failure.get('message', '').split())[:1000]
+                      print(f"- {case.get('classname')}::{case.get('name')}: {message}")
+          PY
       - name: Install source-viewer gate dependencies
         working-directory: frontend
         run: |

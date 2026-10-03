@@ -45,6 +45,7 @@ test.before(async () => {
     path.join(repo, 'backend/src/main/java/dev/codeintelligence/desktop/NativeLeaseWorker.java')]);
   jarPath = path.join(compiled, 'native-lease.jar');
   await execFile(jar, ['--create', '--file', jarPath, '--main-class', 'dev.codeintelligence.desktop.NativeLeaseWorker', '-C', compiled, 'dev']);
+  await fs.chmod(jarPath, 0o600);
 });
 test.after(async () => { if (compiled) await fs.rm(compiled, { recursive: true, force: true }); });
 

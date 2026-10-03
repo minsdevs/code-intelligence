@@ -25,28 +25,44 @@ class TsSyntaxInputExceptionTest {
 
     @Test
     void rejectsMalformedUnknownOversizedAndDuplicateKeyBodiesWithoutForwardingTheirText() {
-        for (String body : List.of("", "{", "{}", "[]", "\"source-content\"", "x".repeat(65_537),
+        for (String body : List.of(
+                "",
+                "{",
+                "{}",
+                "[]",
+                "\"source-content\"",
+                "x".repeat(65_537),
                 "{\"code\":\"TS_SYNTAX_ERROR\",\"code\":\"OTHER\"}")) {
-            assertThat(TsSyntaxInputException.fromResponse(body.getBytes(StandardCharsets.UTF_8))).isNull();
+            assertThat(TsSyntaxInputException.fromResponse(body.getBytes(StandardCharsets.UTF_8)))
+                    .isNull();
         }
         var body = validBody();
         body.put("totalDiagnostics", 0);
-        assertThat(TsSyntaxInputException.fromResponse(JSON.writeValueAsBytes(body))).isNull();
+        assertThat(TsSyntaxInputException.fromResponse(JSON.writeValueAsBytes(body)))
+                .isNull();
         body.put("totalDiagnostics", 1);
         body.put("retryable", true);
-        assertThat(TsSyntaxInputException.fromResponse(JSON.writeValueAsBytes(body))).isNull();
+        assertThat(TsSyntaxInputException.fromResponse(JSON.writeValueAsBytes(body)))
+                .isNull();
     }
 
     @Test
     void keepsTheFailureCodeButOmitsUnsafePathsAndAllUntrustedMessageText() {
-        for (String path : List.of("/private/secret.ts", "../secret.ts", "C:\\private\\secret.ts", "line\nsecret.ts",
-                "src/\u202esecret.ts", "x".repeat(241))) {
+        for (String path : List.of(
+                "/private/secret.ts",
+                "../secret.ts",
+                "C:\\private\\secret.ts",
+                "line\nsecret.ts",
+                "src/\u202esecret.ts",
+                "x".repeat(241))) {
             var body = validBody();
             body.put("message", "SYNTHETIC_SECRET_MARKER");
             ((tools.jackson.databind.node.ObjectNode) body.get("diagnostics").get(0)).put("filePath", path);
             var error = TsSyntaxInputException.fromResponse(JSON.writeValueAsBytes(body));
             assertThat(error).isNotNull();
-            assertThat(error.getMessage()).contains("Location unavailable").doesNotContain("SYNTHETIC_SECRET_MARKER", path);
+            assertThat(error.getMessage())
+                    .contains("Location unavailable")
+                    .doesNotContain("SYNTHETIC_SECRET_MARKER", path);
             assertThat(error.getMessage()).hasSizeLessThan(500);
         }
     }
