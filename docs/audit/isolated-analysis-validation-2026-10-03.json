@@ -1,0 +1,150 @@
+{
+  "format": 1,
+  "verifiedAt": "2026-10-03T14:12:28.272Z",
+  "scope": "Fresh synthetic parser HTTP/database/SSE validation; desktop end-to-end blocked",
+  "sourceBase": "4785ea35e71bf949a39710db463295a6bd071547",
+  "sourceSha256": {
+    "backend/src/main/java/dev/codeintelligence/analysis/ts/TsAnalyzeDtos.java": "2ed0ee85372bfc373d055879d9ea9449fdc636093009cd144b3a08d902debfe3",
+    "backend/src/test/java/dev/codeintelligence/analysis/ts/TsAnalyzeDtosTest.java": "badc3cbb641c1cb687101ef9e9334ecc2a383f96ab8dd43209e34b3fc6af06e5",
+    "backend/src/test/resources/fixtures/ts-nullable-metadata.json": "4e37cdf589fad413b753c0ee47bd3beaa42781471904e6313592314d7a56fe99",
+    "validation/parser-flow-integration/prepare.mjs": "d10d96830be829e0935ae8da1e8d8aa4bc7243cc2112576f369e5893aea6162a",
+    "validation/parser-flow-integration/run.mjs": "68638b8ba8d6215db0c16eaf9bec58ae41c480651d61b8296167a1bd7517694a",
+    "validation/parser-flow-integration/ParserFlowIntegration.java": "140ff17afa687d183931a9aef4998987278e7c856fe1e9ec7678228703a91ac6"
+  },
+  "compile": {
+    "productionJavaSources": 363,
+    "integrationRunnerSources": 1,
+    "analyzerTypeScriptSources": 11,
+    "dependencyJars": 164
+  },
+  "dtoJUnit": {
+    "tests": 5,
+    "passed": 5,
+    "failed": 0
+  },
+  "integration": {
+    "checks": [
+      {
+        "name": "fresh database applies all 25 migrations",
+        "passed": true
+      },
+      {
+        "name": "real analyzer HTTP 400 persists a bounded syntax code and location",
+        "passed": true
+      },
+      {
+        "name": "database, GET and live Redis SSE agree on syntax failure",
+        "passed": true
+      },
+      {
+        "name": "invalid syntax publishes no partial graph",
+        "passed": true
+      },
+      {
+        "name": "HTTP retry returns coded 409 without requeueing or resetting the checkpoint",
+        "passed": true
+      },
+      {
+        "name": "production job ownership rejects other synthetic principal for GET SSE and retry",
+        "passed": true
+      },
+      {
+        "name": "SSE reconnect restores terminal failure from database and closes",
+        "passed": true
+      },
+      {
+        "name": "new repaired .mts job stores graph while prior failure remains unchanged",
+        "passed": true
+      },
+      {
+        "name": "new repaired .cts job stores graph while prior failure remains unchanged",
+        "passed": true
+      },
+      {
+        "name": "Nest controller with unknown return type completes through HTTP database and SSE",
+        "passed": true
+      },
+      {
+        "name": "persisted endpoint omits unknown response type and preserves unknown parameter position",
+        "passed": true
+      },
+      {
+        "name": "persisted method preserves nested unknown parameter type without DTO failure",
+        "passed": true
+      },
+      {
+        "name": "nullable Nest endpoint retains linked source evidence",
+        "passed": true
+      },
+      {
+        "name": "ordinary failure still accepts HTTP retry",
+        "passed": true
+      },
+      {
+        "name": "ordinary retry completes on its second attempt",
+        "passed": true
+      },
+      {
+        "name": "running job accepts HTTP cancellation",
+        "passed": true
+      },
+      {
+        "name": "cancellation retains active-project exclusivity until worker returns",
+        "passed": true
+      },
+      {
+        "name": "late syntax failure cannot replace cancellation or leave active job behind",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "isolation": {
+    "freshRun": true,
+    "freshDatabaseMigrations": "V1-V25",
+    "loopbackOnly": true,
+    "temporaryMemoryStorage": true,
+    "hostMounts": false,
+    "ownershipVerifiedCleanup": true,
+    "networkEgressIsolation": false,
+    "allOwnedResourcesClosed": true
+  },
+  "evidenceSha256": {
+    "integration.json": "b15de32247211a3dff118f3a110607ce6db35c788573c9d57c6b06a74e092384",
+    "lifecycle.json": "619c8058999ae750fc57a3a738e034ac240eb3147e5811276da6dfac57397232"
+  },
+  "unexecuted": [
+    "Full Electron project registration to result/source navigation",
+    "Production SecurityConfig, CSRF, OAuth and local-import approval flow",
+    "Existing user database V20 migration",
+    "Windows native execution",
+    "Signing, notarization, install, update and rollback"
+  ],
+  "desktopBlockers": [
+    {
+      "file": "desktop/src/main.cjs",
+      "reason": "No explicit isolated userData/sessionData/logs setup before single-instance lock; DATA_DIR is assigned under default userData."
+    },
+    {
+      "file": "desktop/src/safety-lifecycle.cjs",
+      "reason": "Fresh enrollment requires OS safeStorage encryption. No verified boundary prevents host Keychain use or mutation."
+    },
+    {
+      "file": "desktop/scripts/stage-runtime.mjs",
+      "reason": "Full product stage has build/install side effects and requires compatible independent Java 21/native runtime inputs; old stage cannot be relabelled or mixed."
+    }
+  ],
+  "preserved": [
+    "Existing installed application and its data",
+    "Existing database and credentials",
+    "Quarantined native guardian test",
+    "Prior test-run folders"
+  ],
+  "requiredBeforeFullDesktopFlow": [
+    "Provide a verified disposable OS credential-store boundary without access to the host Keychain; any new account, VM or security permission needs user approval.",
+    "Select independent output, userData, sessionData, logs and temp paths before the Electron singleton lock.",
+    "Build a fresh compatible native bundle under its own output; do not mix the old stage or bypass runtime manifest and native policy gates.",
+    "Reserve isolated loopback service endpoints and verify each owned service before sending any bootstrap credentials.",
+    "Run synthetic project registration, analysis progress, stored results and source navigation through the complete production desktop only after the isolation preflight passes."
+  ]
+}
