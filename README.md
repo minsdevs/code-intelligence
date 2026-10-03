@@ -143,6 +143,40 @@ pending; this POSIX preparation path refuses Windows. Full desktop flow validati
 still requires a separately approved credential-store boundary and authenticated
 connections to owned services.
 
+Independent code builds use a clean committed source snapshot and their own writable
+work copy, dependency copies, HOME, temporary directories and caches:
+
+```bash
+node desktop/scripts/build-isolated.cjs \
+  --source-root "$SOURCE_CHECKOUT" --build-parent "$ISOLATED_BUILD_PARENT"
+# Include the backend using explicitly selected existing JDK 21 and Gradle inputs:
+node desktop/scripts/build-isolated.cjs \
+  --source-root "$SOURCE_CHECKOUT" --build-parent "$ISOLATED_BUILD_PARENT" \
+  --java-home "$JDK21_HOME" --gradle-distribution "$GRADLE_DISTRIBUTION" \
+  --gradle-modules-cache "$GRADLE_MODULES_CACHE"
+```
+
+The parent must be an existing canonical private `0700` directory outside the source
+checkout and app-data roots. Every invocation creates a new claimed run; failed runs
+are retained. Only allowlisted files from a clean tracked Git HEAD enter the source
+snapshot; local `.env`, npm configuration, untracked files and prior build outputs
+are excluded. Installed node dependencies are copied with bounded reads, internal
+relative links only, and byte checks; they are never linked back to the original.
+This reuses local dependencies without proving their lockfile provenance or supply-chain
+integrity. Build commands receive a fixed tool PATH and explicit private environment.
+
+The default command compiles frontend/analyzer code and creates a **desktop source
+ASAR**, with byte-verified readback. The three optional backend inputs are required
+together: an existing JDK 21, the distribution matching the committed Gradle wrapper,
+and its `modules-2` cache directory. Gradle uses private copies, excludes lock files
+and user initialization/configuration, and runs offline without automatic toolchain
+downloads. JAR frontend assets and migrations are verified in a separate Node process.
+The commands retain JSON results and logs under the new run's output directory. They
+do not stage a native runtime, produce an installable application, start services,
+access OS credential storage, sign, notarize or publish. Offline dependency resolution
+and path checks are not an OS network/process sandbox. Native packaging and desktop
+acceptance remain required before release; Windows execution is unverified.
+
 On macOS, Electron's default app-data directory is
 `~/Library/Application Support/code-intelligence-desktop` (the desktop package
 name is `code-intelligence-desktop`). Based on `desktop/src/main.cjs`, the
