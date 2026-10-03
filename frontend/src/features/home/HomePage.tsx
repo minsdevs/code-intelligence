@@ -169,5 +169,5 @@ function ProjectCard({ project }: { project: Project }) {
 
 function isAnalyzing(project: Project): boolean {
   const job = project.latestJob?.status
-  return project.currentSnapshot?.status === 'ANALYZING' || job === 'QUEUED' || job === 'RUNNING'
+  return project.currentSnapshot?.status === 'ANALYZING' || job === 'QUEUED' || job === 'RUNNING' || job === 'CANCELLING'
 }

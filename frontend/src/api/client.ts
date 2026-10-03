@@ -14,11 +14,13 @@ export function desktopApiHeaders(headers = new Headers()): Headers {
 
 export class ApiError extends Error {
   readonly status: number
+  readonly code?: string
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -48,22 +50,25 @@ export async function primeCsrf(): Promise<void> {
   })
 }
 
-export async function readApiError(response: Response): Promise<string> {
+async function readApiProblem(response: Response): Promise<{ message: string; code?: string }> {
   try {
     const body: unknown = await response.json()
     if (body && typeof body === 'object') {
-      const problem = body as { detail?: unknown; title?: unknown }
-      if (typeof problem.detail === 'string' && problem.detail.length > 0) {
-        return problem.detail
-      }
-      if (typeof problem.title === 'string' && problem.title.length > 0) {
-        return problem.title
-      }
+      const problem = body as { detail?: unknown; title?: unknown; code?: unknown }
+      const code = typeof problem.code === 'string' ? problem.code : undefined
+      if (typeof problem.detail === 'string' && problem.detail)
+        return { message: problem.detail, code }
+      if (typeof problem.title === 'string' && problem.title)
+        return { message: problem.title, code }
     }
   } catch {
-    // ignore non-JSON error bodies
+    /* non-JSON error */
   }
-  return `Request failed (${response.status})`
+  return { message: `Request failed (${response.status})` }
+}
+
+export async function readApiError(response: Response): Promise<string> {
+  return (await readApiProblem(response)).message
 }
 
 async function request<T>(path: string, init: { method: string; body?: unknown }): Promise<T> {
@@ -89,7 +94,8 @@ async function request<T>(path: string, init: { method: string; body?: unknown }
     throw new UnauthorizedError()
   }
   if (!response.ok) {
-    throw new ApiError(response.status, await readApiError(response))
+    const problem = await readApiProblem(response)
+    throw new ApiError(response.status, problem.message, problem.code)
   }
   if (response.status === 204 || response.status === 202) {
     const text = await response.text()
@@ -104,7 +110,12 @@ export function apiGet<T>(path: string): Promise<T> {
 
 export async function apiSend<T = void>(
   path: string,
-  options: { method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: unknown },
+  options: {
+    method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+    body?: unknown
+    /** One-use approvals must reconcile their outcome instead of resending a mutation. */
+    retryOnCsrfFailure?: boolean
+  },
 ): Promise<T> {
   await primeCsrf()
   try {
@@ -112,7 +123,11 @@ export async function apiSend<T = void>(
   } catch (error) {
     // A browser can retain an old XSRF-TOKEN after the backend restarts. Refresh it once
     // before surfacing a 403; do not disable CSRF or retry other failures indefinitely.
-    if (!(error instanceof ApiError) || error.status !== 403) {
+    if (
+      options.retryOnCsrfFailure === false ||
+      !(error instanceof ApiError) ||
+      error.status !== 403
+    ) {
       throw error
     }
     await primeCsrf()

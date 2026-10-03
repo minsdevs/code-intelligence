@@ -208,7 +208,10 @@ function NoteEditor({
         className="min-h-0 flex-1 resize-none bg-surface-0 px-4 py-3 font-mono text-[13px] text-ink outline-none"
       />
       {refs.length > 0 && (
-        <ul aria-label={t('notes.refsLabel')} className="flex flex-wrap gap-2 border-t border-line px-4 py-3">
+        <ul
+          aria-label={t('notes.refsLabel')}
+          className="flex flex-wrap gap-2 border-t border-line px-4 py-3"
+        >
           {refs.map((ref, index) => (
             <li key={`${ref.type}-${ref.rawTarget}-${index}`}>
               <button
@@ -216,7 +219,8 @@ function NoteEditor({
                 onClick={() => onNavigate(noteRefHref(projectId, ref))}
                 className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-accent hover:underline"
               >
-                {ref.type.toLowerCase()}:{ref.label}
+                {ref.type.toLowerCase()}:
+                {ref.type === 'FILE' ? `${ref.label} · 현재 소스` : ref.label}
               </button>
             </li>
           ))}

@@ -14,7 +14,7 @@ export default function ProjectWorkspacePage() {
     queryFn: () => getProject(projectId!),
     enabled: projectId != null,
   })
-  const projectName = projectQuery.data?.name ?? (rawId ?? '')
+  const projectName = projectQuery.data?.name ?? rawId ?? ''
   const workspaceBasePath = projectId != null ? `/projects/${projectId}` : null
 
   return (
@@ -43,7 +43,7 @@ export default function ProjectWorkspacePage() {
         </nav>
       </header>
       {projectQuery.data?.sourceType === 'LOCAL' && (
-        <LocalSourceStatus projectId={projectQuery.data.id} details />
+        <LocalSourceStatus key={projectQuery.data.id} projectId={projectQuery.data.id} details />
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <Outlet />

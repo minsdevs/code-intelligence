@@ -6,6 +6,7 @@ import dev.codeintelligence.github.GithubTokenProvider;
 import dev.codeintelligence.github.RepoRef;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
+import dev.codeintelligence.job.JobWorkspaceProvider;
 import java.util.Objects;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -28,6 +29,10 @@ public class ImportStep implements JobStep {
     private final GithubTokenProvider tokenProvider;
     private final GithubProperties githubProperties;
     private final LocalImportService localImportService;
+    private final LocalImportDiagnostics localImportDiagnostics;
+    private final LocalSourceApprovalService approvals;
+    private final LocalSnapshotStore retainedSource;
+    private final JobWorkspaceProvider workspaces;
 
     public ImportStep(
             ProjectRepository projectRepository,
@@ -35,13 +40,21 @@ public class ImportStep implements JobStep {
             GitCloneService gitCloneService,
             GithubTokenProvider tokenProvider,
             GithubProperties githubProperties,
-            LocalImportService localImportService) {
+            LocalImportService localImportService,
+            LocalImportDiagnostics localImportDiagnostics,
+            LocalSourceApprovalService approvals,
+            LocalSnapshotStore retainedSource,
+            JobWorkspaceProvider workspaces) {
         this.projectRepository = projectRepository;
         this.snapshotRepository = snapshotRepository;
         this.gitCloneService = gitCloneService;
         this.tokenProvider = tokenProvider;
         this.githubProperties = githubProperties;
         this.localImportService = localImportService;
+        this.localImportDiagnostics = localImportDiagnostics;
+        this.approvals = approvals;
+        this.retainedSource = retainedSource;
+        this.workspaces = workspaces;
     }
 
     @Override
@@ -76,19 +89,30 @@ public class ImportStep implements JobStep {
     }
 
     private void runLocalImport(Project project, JobContext ctx) {
-        String localPath = project.getLocalPath();
-        if (localPath == null || localPath.isBlank()) {
-            throw new IllegalStateException("LOCAL project has no local_path");
+        // Source publication and the import checkpoint are separate crash boundaries. The worker
+        // has already reconstructed a retained input lease; completing this checkpoint must not
+        // reopen a changed or missing original folder, or rewrite its committed diagnostics.
+        if (ctx.snapshotId().isPresent()
+                && workspaces.verifyRetainedCheckpoint(
+                        ctx.projectId(), ctx.jobId(), ctx.snapshotId().orElseThrow())) {
+            ctx.updateProgress(100);
+            return;
         }
-        java.nio.file.Path source = java.nio.file.Path.of(localPath);
-        localImportService.validateSource(source);
-        LocalImportService.LocalImportResult result = localImportService.importFolder(source, ctx.clonePath());
+        LocalSourceBinding input = approvals.requireJobInput(ctx.jobId(), ctx.projectId());
+        var capture = retainedSource.enabled() ? retainedSource.begin(ctx.projectId(), ctx.jobId(), input) : null;
+        LocalImportService.LocalImportResult result = localImportService.importApproved(
+                input, ctx.clonePath(), () -> approvals.verifyBeforePublish(ctx.jobId(), ctx.projectId()), capture);
 
         if (result.branch() != null && !Objects.equals(project.getDefaultBranch(), result.branch())) {
             project.updateDefaultBranch(result.branch());
         }
         projectRepository.save(project);
-        Snapshot snapshot = snapshotRepository.save(new Snapshot(project.getId(), result.headSha()));
-        ctx.attachSnapshot(snapshot.getId());
+        long snapshotId = capture == null
+                ? snapshotRepository
+                        .save(new Snapshot(project.getId(), result.headSha()))
+                        .getId()
+                : capture.publish(result.headSha(), result.summary());
+        ctx.attachSnapshot(snapshotId);
+        if (capture == null) localImportDiagnostics.record(project.getId(), snapshotId, result.summary());
     }
 }

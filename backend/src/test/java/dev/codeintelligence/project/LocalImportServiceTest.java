@@ -234,13 +234,13 @@ class LocalImportServiceTest {
 
         assertThat(result.headSha()).hasSize(40); // full SHA
         assertThat(result.branch()).isNotNull();
-        assertThat(result.hasUncommittedChanges()).isFalse();
+        assertThat(result.hasUncommittedChanges()).isNull(); // no unbounded Git status inspection
 
         git.close();
     }
 
     @Test
-    void importFolder_detectsUncommittedChanges() throws Exception {
+    void importFolder_keepsDirtyStatusUnknownAndImportsWorkingBytes() throws Exception {
         Path source = tempDir.resolve("dirty-project");
         Files.createDirectories(source);
         Files.writeString(source.resolve("Main.java"), "class Main {}");
@@ -256,7 +256,8 @@ class LocalImportServiceTest {
         Path target = tempDir.resolve("data/repos/4");
         LocalImportService.LocalImportResult result = service.importFolder(source, target);
 
-        assertThat(result.hasUncommittedChanges()).isTrue();
+        assertThat(result.hasUncommittedChanges()).isNull();
+        assertThat(Files.readString(target.resolve("New.java"))).isEqualTo("class New {}");
 
         git.close();
     }

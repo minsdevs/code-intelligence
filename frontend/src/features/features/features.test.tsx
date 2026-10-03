@@ -106,7 +106,7 @@ describe('FeaturesPage', () => {
     fireEvent.click(within(screen.getByRole('article', { name: 'Feature detail' })).getByRole('button', { name: /UI ·/ }))
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/projects/7/code')
-      expect(router.state.location.search).toBe('?path=src%2Fpages%2FTodosPage.tsx')
+      expect(router.state.location.search).toBe('?path=src%2Fpages%2FTodosPage.tsx&sourceContext=unknown')
     })
   })
 })

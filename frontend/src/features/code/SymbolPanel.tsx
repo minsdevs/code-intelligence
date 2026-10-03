@@ -7,35 +7,51 @@ import { isFileSymbol, queryError, toFocusedNode } from './codeLocation'
 
 type SymbolPanelProps = {
   projectId: number
+  snapshotId: number | null
   path: string | null
   onOpenLocation: (path: string, line: number | null) => void
 }
 
-export default function SymbolPanel({ projectId, path, onOpenLocation }: SymbolPanelProps) {
+export default function SymbolPanel({
+  projectId,
+  snapshotId,
+  path,
+  onOpenLocation,
+}: SymbolPanelProps) {
   const t = useT()
   const focusedNode = useUiStore((state) => state.focusedNode)
   const setFocusedNode = useUiStore((state) => state.setFocusedNode)
 
   const nodesQuery = useQuery({
-    queryKey: ['graph-nodes', projectId, path],
-    queryFn: () => listGraphNodes(projectId, { path: path! }),
-    enabled: path != null && path.length > 0,
+    queryKey: ['graph-nodes', projectId, snapshotId, path],
+    queryFn: () => listGraphNodes(projectId, { path: path!, snapshotId }),
+    enabled: snapshotId != null && path != null && path.length > 0,
   })
 
   const symbols = (nodesQuery.data?.items ?? []).filter(isFileSymbol)
   const selected = symbols.find((node) => node.id === focusedNode?.id) ?? null
 
   const callersQuery = useQuery({
-    queryKey: ['graph-relations', projectId, selected?.id, 'in', 'CALLS'],
+    queryKey: ['graph-relations', projectId, snapshotId, selected?.id, 'in', 'CALLS'],
     queryFn: () =>
-      getGraphRelations(projectId, selected!.id, { direction: 'in', edgeType: 'CALLS', depth: 1 }),
+      getGraphRelations(projectId, selected!.id, {
+        snapshotId,
+        direction: 'in',
+        edgeType: 'CALLS',
+        depth: 1,
+      }),
     enabled: selected != null,
   })
 
   const calleesQuery = useQuery({
-    queryKey: ['graph-relations', projectId, selected?.id, 'out', 'CALLS'],
+    queryKey: ['graph-relations', projectId, snapshotId, selected?.id, 'out', 'CALLS'],
     queryFn: () =>
-      getGraphRelations(projectId, selected!.id, { direction: 'out', edgeType: 'CALLS', depth: 1 }),
+      getGraphRelations(projectId, selected!.id, {
+        snapshotId,
+        direction: 'out',
+        edgeType: 'CALLS',
+        depth: 1,
+      }),
     enabled: selected != null,
   })
 
@@ -68,7 +84,9 @@ export default function SymbolPanel({ projectId, path, onOpenLocation }: SymbolP
               {queryError(nodesQuery.error)}
             </p>
           )}
-          {nodesQuery.isLoading && <p className="px-3 py-3 text-[13px] text-ink-muted">{t('code.symbolsLoading')}</p>}
+          {nodesQuery.isLoading && (
+            <p className="px-3 py-3 text-[13px] text-ink-muted">{t('code.symbolsLoading')}</p>
+          )}
           {!nodesQuery.isLoading && symbols.length === 0 && !nodesQuery.error && (
             <p className="px-3 py-3 text-[13px] text-ink-muted">{t('code.noSymbols')}</p>
           )}
@@ -82,7 +100,9 @@ export default function SymbolPanel({ projectId, path, onOpenLocation }: SymbolP
                     onClick={() => selectSymbol(node)}
                     aria-current={active ? 'true' : undefined}
                     className={`mb-0.5 flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left ${
-                      active ? 'bg-surface-3 text-ink' : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
+                      active
+                        ? 'bg-surface-3 text-ink'
+                        : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
                     }`}
                   >
                     <span className="truncate text-[13px] text-ink">{node.name}</span>
@@ -136,15 +156,21 @@ function RelationList({
   const t = useT()
   return (
     <section className="flex min-h-0 flex-1 flex-col border-t border-line">
-      <h3 className="px-3 pt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">{title}</h3>
-      {loading && <p className="px-3 py-2 text-[12px] text-ink-muted">{t('code.relationsLoading')}</p>}
+      <h3 className="px-3 pt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+        {title}
+      </h3>
+      {loading && (
+        <p className="px-3 py-2 text-[12px] text-ink-muted">{t('code.relationsLoading')}</p>
+      )}
       {error && (
         <p role="alert" className="px-3 py-2 text-[12px] text-danger">
           {error}
         </p>
       )}
       {!loading && !error && empty && relations.length === 0 && (
-        <p className="px-3 py-2 text-[12px] text-ink-muted">{t('code.noRelations').replace('{title}', title)}</p>
+        <p className="px-3 py-2 text-[12px] text-ink-muted">
+          {t('code.noRelations').replace('{title}', title)}
+        </p>
       )}
       <ul aria-label={title} className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
         {relations.map((relation) => {

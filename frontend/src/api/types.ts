@@ -38,7 +38,7 @@ export type GithubBranchList = {
   hasNext: boolean
 }
 
-export type JobStatus = 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED' | 'CANCELLED'
+export type JobStatus = 'QUEUED' | 'RUNNING' | 'CANCELLING' | 'DONE' | 'FAILED' | 'CANCELLED'
 
 export type StepStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | 'SKIPPED'
 
@@ -60,6 +60,8 @@ export type JobDetail = {
   type: string
   status: JobStatus
   error: string | null
+  /** Input recovery codes (e.g. LOCAL_PREVIEW_REQUIRED, TS_SYNTAX_ERROR) disable same-snapshot retry. */
+  failureCode?: string | null
   createdAt: string | null
   startedAt: string | null
   finishedAt: string | null
@@ -203,6 +205,7 @@ export type PullRequest = {
 }
 
 export type FileListItem = {
+  resolvedSnapshotId?: number
   path: string
   language: string | null
   size: number
@@ -210,6 +213,12 @@ export type FileListItem = {
 }
 
 export type FileContent = {
+  resolvedSnapshotId: number
+  contentOid: string
+  sourceState: 'AVAILABLE'
+  snapshotTime: string | null
+  currentSnapshot: boolean
+  evidenceState: 'LEGACY_SOURCE_UNVERIFIED' | null
   path: string
   language: string | null
   content: string
@@ -303,6 +312,9 @@ export type FeatureLinkView = {
 }
 
 export type FeatureEvidenceView = {
+  evidenceId?: number
+  snapshotId?: number
+  sourceState?: 'LEGACY_SOURCE_UNVERIFIED' | 'SOURCE_CONTEXT_UNKNOWN'
   filePath: string | null
   lineStart: number | null
   lineEnd: number | null
@@ -310,6 +322,7 @@ export type FeatureEvidenceView = {
 }
 
 export type FeatureDetailView = {
+  resolvedSnapshotId?: number
   id: number
   name: string
   detection: string
@@ -377,6 +390,7 @@ export type LocalSourceStatus = {
     | 'CHANGED'
     | 'PATH_MISSING'
     | 'REAUTHORIZATION_REQUIRED'
+    | 'INSPECTION_FAILED'
     | 'NOT_LOCAL'
     | 'NO_SNAPSHOT'
   snapshotId: number | null
@@ -385,6 +399,22 @@ export type LocalSourceStatus = {
   fullAnalysisRequired: boolean
   message: string | null
 }
+
+/** Short-lived approval: keep only in component memory, never in URLs, storage, or query caches. */
+export type LocalSourcePreview = {
+  previewToken: string
+  expiresAt: string
+  operation: 'INITIAL' | 'REFRESH'
+  sourceName: string
+  snapshotId: number | null
+  changes: LocalSourceStatus['changes']
+  changedPaths: string[]
+  localImport: LocalImportSummary
+}
+
+export type LocalPreviewOutcome =
+  | { state: 'CONSUMED'; projectId: number; jobId: number }
+  | { state: 'ABANDONED'; projectId: null; jobId: null }
 
 export type SnapshotOption = {
   id: number
@@ -448,6 +478,7 @@ export type AiStatus = {
   configured: boolean
   provider: string | null
   model: string | null
+  blockedReason?: string | null
 }
 
 export type AiClaim = {
@@ -472,6 +503,7 @@ export type AiAskResponse = {
 }
 
 export type AiAskBody = {
+  requestPlanToken?: string
   conversationId?: number | null
   question: string
   intent?: string | null
@@ -484,6 +516,30 @@ export type AiAskBody = {
   focusedTaskId?: number | null
   selectedAreas?: string[]
   excludedContextIds?: string[]
+}
+
+export type AiRequestPlanResponse = {
+  requestPlanToken: string
+  requestId: string
+  expiresAt: string
+  snapshotId: number
+  provider: string
+  model: string
+  intent: string
+  contextItems: Array<ContextItem & { fileRefs: string[] }>
+  fileRefs: string[]
+  systemPrompt: string
+  userPrompt: string
+  payloadSha256: string
+  costStatus: 'UNAVAILABLE' | 'AVAILABLE'
+  cost?: {
+    reservedMicroUsd: string
+    inputTokenUpperBound: string
+    outputTokenMax: string
+    priceVersion: string
+    validUntil: string
+    policyRevision: string
+  } | null
 }
 
 export type NoteRefView = {
@@ -645,19 +701,29 @@ export type WhatIfView = {
 }
 
 export type FileCoverage = {
+  /** Missing on old responses; never substitute analyzedFiles for a measurement. */
+  inventoriedFiles?: number
+  /** @deprecated Inventory alias, not a complete discovery denominator. */
   discoveredFiles: number
-  analyzedFiles: number
-  skippedForCount: number
-  skippedForSize: number
-  skippedBinary: number
+  /** @deprecated Null for legacy snapshots without per-file outcomes. */
+  analyzedFiles: number | null
+  /** Recorded inventory omissions only; null means absent or ambiguous evidence. */
+  skippedForCount: number | null
+  skippedForSize: number | null
+  skippedBinary: number | null
 }
 
 export type LanguageCoverage = {
   language: string
+  inventoriedFiles?: number
+  /** @deprecated Inventory alias; does not establish language support. */
   total: number
-  analyzed: number
-  skipped: number
-  failed: number
+  /** @deprecated Null when per-file outcomes were not recorded. */
+  analyzed: number | null
+  /** @deprecated Null when per-file outcomes were not recorded. */
+  skipped: number | null
+  /** @deprecated Null when per-file outcomes were not recorded. */
+  failed: number | null
 }
 
 export type ExcludedFolder = {
@@ -667,18 +733,51 @@ export type ExcludedFolder = {
 
 export type AnalyzerStatusView = {
   name: string
+  /** Persisted step status or unknown. Old active/disabled values are not historical evidence. */
   status: string
   failureReason: string | null
 }
 
 export type PartialResultInfo = {
+  /** Missing on old responses also means unknown. Deprecated flags do not prove completeness. */
+  status?: 'UNKNOWN'
+  /** @deprecated Use status; false does not establish completeness. */
   featuresPartial: boolean
+  /** @deprecated Use status; false does not establish completeness. */
   flowsPartial: boolean
+  /** @deprecated Use status; false does not establish completeness. */
   graphPartial: boolean
   reason: string | null
 }
 
+export type LocalImportExclusionReason =
+  | 'GENERATED_DIRECTORY'
+  | 'SECRET_PATH'
+  | 'IGNORED'
+  | 'BINARY'
+  | 'OVERSIZED'
+  | 'FILE_LIMIT'
+  | 'SYMLINK'
+  | 'HARD_LINK'
+  | 'SECRET_CONTENT'
+
+/** Recorded import counts only. Excluded directories count once; descendants are unmeasured. */
+export type LocalImportSummary = {
+  schemaVersion: 1
+  policyVersion: 'local-ingest-v1'
+  acceptedFiles: number
+  /** Bytes read during selection, including policy files; not stored-source size. */
+  bytesRead: number
+  excludedEntriesByReason: Partial<Record<LocalImportExclusionReason, number>>
+}
+
 export type CoverageReport = {
+  /** Missing on old responses must be treated as unmeasured. */
+  measurementStatus?: 'LEGACY_UNMEASURED'
+  /** Inventory and parser presence do not verify public capability support. */
+  supportStatus?: 'UNVERIFIED'
+  /** Missing, malformed, or conflicting import evidence remains unavailable, never inferred zero. */
+  localImport?: LocalImportSummary | null
   fileCoverage: FileCoverage
   languageCoverage: LanguageCoverage[]
   excludedFolders: ExcludedFolder[]

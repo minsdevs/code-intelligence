@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectLoader;
 import org.eclipse.jgit.revwalk.RevCommit;
@@ -21,17 +22,23 @@ public class FileInventoryScanner {
         int skippedForCount = 0;
         int skippedForSize = 0;
         int skippedBinary = 0;
+        int skippedSubmodules = 0;
         try (Git git = Git.open(clonePath.toFile());
                 RevWalk revWalk = new RevWalk(git.getRepository());
                 TreeWalk treeWalk = new TreeWalk(git.getRepository())) {
             ObjectId head = git.getRepository().resolve(Constants.HEAD);
             if (head == null) {
-                return new InventoryResult(List.of(), 0, 0, 0);
+                return new InventoryResult(List.of(), 0, 0, 0, 0);
             }
             RevCommit commit = revWalk.parseCommit(head);
             treeWalk.addTree(commit.getTree());
             treeWalk.setRecursive(true);
             while (treeWalk.next()) {
+                // Gitlinks refer to commits in another repository, not blobs in this object database.
+                if (FileMode.GITLINK.equals(treeWalk.getFileMode(0))) {
+                    skippedSubmodules++;
+                    continue;
+                }
                 long size = git.getRepository().open(treeWalk.getObjectId(0)).getSize();
                 if (files.size() >= maxFiles) {
                     skippedForCount++;
@@ -56,7 +63,8 @@ public class FileInventoryScanner {
                         treeWalk.getObjectId(0).name()));
             }
         }
-        return new InventoryResult(List.copyOf(files), skippedForCount, skippedForSize, skippedBinary);
+        return new InventoryResult(
+                List.copyOf(files), skippedForCount, skippedForSize, skippedBinary, skippedSubmodules);
     }
 
     static int countLines(byte[] bytes) {

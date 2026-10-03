@@ -247,11 +247,13 @@ class ProjectJobApiIntegrationTest {
         CreatedProject created = createProject(session, "octocat", "re1");
         awaitJobDone(created.jobId());
         assertThat(currentSnapshotSha(session, created.projectId())).isEqualTo(sha1);
+        long firstImportEvidence = attachLocalImportEvidence(created.projectId(), sha1);
 
         String sha2 = GitRepoFixtures.addCommit(bare, "second.txt", "second");
         long firstReanalyze = reanalyze(session, created.projectId());
         awaitJobDone(firstReanalyze);
         assertThat(currentSnapshotSha(session, created.projectId())).isEqualTo(sha2);
+        long retainedImportEvidence = attachLocalImportEvidence(created.projectId(), sha2);
 
         String sha3 = GitRepoFixtures.addCommit(bare, "third.txt", "third");
         long secondReanalyze = reanalyze(session, created.projectId());
@@ -264,6 +266,16 @@ class ProjectJobApiIntegrationTest {
                         "select count(*) from snapshots where project_id = ?", Integer.class, created.projectId()))
                 .as("retention keeps the two most recent snapshots")
                 .isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+                        "select count(*) from evidences where id = ?", Integer.class, firstImportEvidence))
+                .as("import diagnostics of a pruned snapshot do not become orphan records")
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                        "select count(*) from evidence_links where subject_type = 'LOCAL_IMPORT' and evidence_id = ?",
+                        Integer.class,
+                        retainedImportEvidence))
+                .as("the retained snapshot keeps its own import diagnostics")
+                .isEqualTo(1);
 
         List<Map<String, Object>> jobs =
                 readJsonList(getAs(session, "/api/projects/" + created.projectId() + "/jobs", HttpStatus.OK));
@@ -272,6 +284,21 @@ class ProjectJobApiIntegrationTest {
                 readJsonList(getAs(session, "/api/projects/" + created.projectId() + "/jobs?limit=1", HttpStatus.OK));
         assertThat(limited).hasSize(1);
         assertThat(((Number) limited.getFirst().get("id")).longValue()).isEqualTo(secondReanalyze);
+    }
+
+    private long attachLocalImportEvidence(long projectId, String commitSha) {
+        Long snapshotId = jdbcTemplate.queryForObject(
+                "select id from snapshots where project_id = ? and commit_sha = ?", Long.class, projectId, commitSha);
+        Long evidenceId = jdbcTemplate.queryForObject(
+                "insert into evidences (project_id, kind, excerpt, created_by) "
+                        + "values (?, 'CONFIG', 'local-import retention fixture', 'STATIC') returning id",
+                Long.class,
+                projectId);
+        jdbcTemplate.update(
+                "insert into evidence_links (evidence_id, subject_type, subject_id) values (?, 'LOCAL_IMPORT', ?)",
+                evidenceId,
+                snapshotId);
+        return evidenceId;
     }
 
     @Test
@@ -321,6 +348,8 @@ class ProjectJobApiIntegrationTest {
         awaitStepStatus(created.jobId(), "T_GATE", "RUNNING");
 
         postEmpty(session, "/api/jobs/" + created.jobId() + "/cancel", HttpStatus.ACCEPTED);
+        assertThat(jobStatus(created.jobId())).isEqualTo("CANCELLING");
+        deleteAs(session, "/api/projects/" + created.projectId(), HttpStatus.CONFLICT);
         gateStep.release();
         Awaitility.await()
                 .atMost(TIMEOUT)
@@ -374,6 +403,8 @@ class ProjectJobApiIntegrationTest {
         deleteAs(session, "/api/projects/" + created.projectId(), HttpStatus.CONFLICT);
 
         postEmpty(session, "/api/jobs/" + created.jobId() + "/cancel", HttpStatus.ACCEPTED);
+        assertThat(jobStatus(created.jobId())).isEqualTo("CANCELLING");
+        deleteAs(session, "/api/projects/" + created.projectId(), HttpStatus.CONFLICT);
         gateStep.release();
         Awaitility.await().atMost(TIMEOUT).until(() -> "CANCELLED".equals(jobStatus(created.jobId())));
         deleteAs(session, "/api/projects/" + created.projectId(), HttpStatus.NO_CONTENT);

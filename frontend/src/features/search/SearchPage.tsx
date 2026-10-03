@@ -53,13 +53,18 @@ export default function SearchPage() {
           {error}
         </p>
       )}
-      {searchQuery.isFetching && <p className="mt-4 text-[13px] text-ink-muted">{t('search.searching')}</p>}
+      {searchQuery.isFetching && (
+        <p className="mt-4 text-[13px] text-ink-muted">{t('search.searching')}</p>
+      )}
       {qParam && !searchQuery.isFetching && groups.length === 0 && !error && (
         <p className="mt-4 text-[13px] text-ink-muted">{t('search.noResults')}</p>
       )}
       <div className="mt-6 space-y-5">
         {groups.map((group) => (
-          <section key={group.type} aria-label={t('search.groupLabel').replace('{type}', group.type)}>
+          <section
+            key={group.type}
+            aria-label={t('search.groupLabel').replace('{type}', group.type)}
+          >
             <h2 className="font-mono text-[11px] uppercase tracking-wide text-ink-faint">
               {group.type}
             </h2>
@@ -92,11 +97,12 @@ function hitHref(hit: SearchHit): string {
   const id = hit.projectId
   switch (hit.type) {
     case 'FILE':
+      return hit.path
+        ? `/projects/${id}/code${codeLocationSearch(hit.path, null, { current: true })}`
+        : `/projects/${id}/code`
     case 'SYMBOL':
     case 'EVIDENCE':
-      return hit.path
-        ? `/projects/${id}/code${codeLocationSearch(hit.path, null)}`
-        : `/projects/${id}/code`
+      return `/projects/${id}/code${codeLocationSearch(hit.path ?? '', null)}`
     case 'FEATURE':
       return `/projects/${id}/features`
     case 'FLOW':

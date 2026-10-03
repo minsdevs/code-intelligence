@@ -1,5 +1,11 @@
 import { apiGet, apiSend } from './client'
-import type { CreateProjectResponse, LocalSourceStatus, Project } from './types'
+import type {
+  CreateProjectResponse,
+  LocalPreviewOutcome,
+  LocalSourcePreview,
+  LocalSourceStatus,
+  Project,
+} from './types'
 
 export function listProjects(): Promise<Project[]> {
   return apiGet<Project[]>('/api/projects')
@@ -20,10 +26,39 @@ export function createProject(
   })
 }
 
-export function createLocalProject(path: string, name?: string): Promise<CreateProjectResponse> {
-  return apiSend<CreateProjectResponse>('/api/projects/local', {
+export function previewLocalProject(path: string, name?: string): Promise<LocalSourcePreview> {
+  return apiSend<LocalSourcePreview>('/api/projects/local/preview', {
     method: 'POST',
     body: { path, name: name || undefined },
+    retryOnCsrfFailure: false,
+  })
+}
+
+export function previewLocalRefresh(projectId: number): Promise<LocalSourcePreview> {
+  return apiSend<LocalSourcePreview>(`/api/projects/${projectId}/local-preview`, {
+    method: 'POST',
+    body: {},
+    retryOnCsrfFailure: false,
+  })
+}
+
+/** Reconciles a consumed approval or atomically abandons it; never starts a job. */
+export function getLocalPreviewOutcome(previewToken: string): Promise<LocalPreviewOutcome> {
+  return apiSend<LocalPreviewOutcome>('/api/projects/local/preview-outcome', {
+    method: 'POST',
+    body: { previewToken },
+  })
+}
+
+export function createLocalProject(
+  path: string,
+  previewToken: string,
+  name?: string,
+): Promise<CreateProjectResponse> {
+  return apiSend<CreateProjectResponse>('/api/projects/local', {
+    method: 'POST',
+    body: { path, name: name || undefined, previewToken },
+    retryOnCsrfFailure: false,
   })
 }
 export function deleteProject(projectId: number): Promise<void> {
@@ -42,15 +77,11 @@ export function getLocalSourceStatus(projectId: number): Promise<LocalSourceStat
 
 export function reanalyzeLocalProject(
   projectId: number,
-  status: LocalSourceStatus,
+  previewToken: string,
 ): Promise<{ jobId: number }> {
   return apiSend<{ jobId: number }>(`/api/projects/${projectId}/reanalyze`, {
     method: 'POST',
-    body: {
-      snapshotId: status.snapshotId,
-      added: status.changes.added,
-      modified: status.changes.modified,
-      deleted: status.changes.deleted,
-    },
+    body: { previewToken },
+    retryOnCsrfFailure: false,
   })
 }

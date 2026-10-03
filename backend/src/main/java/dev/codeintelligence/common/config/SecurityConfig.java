@@ -6,6 +6,7 @@ import dev.codeintelligence.auth.DesktopAuthProperties;
 import dev.codeintelligence.auth.DesktopAuthenticationFilter;
 import dev.codeintelligence.auth.GithubOAuth2UserService;
 import dev.codeintelligence.auth.PatLoginRateLimitFilter;
+import dev.codeintelligence.maintenance.MaintenanceFilter;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -81,7 +82,8 @@ public class SecurityConfig {
         http.cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
-                        .ignoringRequestMatchers("/api/desktop/paths"))
+                        .ignoringRequestMatchers("/api/desktop/paths")
+                        .ignoringRequestMatchers(MaintenanceFilter::isControlRequest))
                 .addFilterBefore(
                         new DesktopAuthenticationFilter(desktopAuthProperties, accountService),
                         BasicAuthenticationFilter.class)
@@ -104,6 +106,10 @@ public class SecurityConfig {
                                 .requestMatchers(EndpointRequest.to(HealthEndpoint.class, InfoEndpoint.class))
                                 .permitAll()
                                 .requestMatchers(HttpMethod.GET, "/api/csrf", "/api/auth/me")
+                                .permitAll()
+                                // Bundled scripts, styles and workers carry no project data. They
+                                // must load before the preload-authenticated API client can run.
+                                .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/vite.svg")
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/auth/pat")
                                 .permitAll()

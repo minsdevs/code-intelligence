@@ -87,7 +87,7 @@ describe('NotesPage', () => {
     expect(await screen.findByRole('heading', { name: 'Notes' })).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: 'Auth' }))
     expect(await screen.findByDisplayValue('See @file:src/App.java')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'file:src/App.java' }))
+    fireEvent.click(screen.getByRole('button', { name: 'file:src/App.java · 현재 소스' }))
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/projects/7/code')
       expect(router.state.location.search).toContain('path=src%2FApp.java')

@@ -7,6 +7,25 @@ import org.junit.jupiter.api.Test;
 class SecretMaskTest {
 
     @Test
+    void redactsEntirePrivateKeyIncludingTruncatedBlocks() {
+        String key = "-----BEGIN RSA PRIVATE KEY-----\nfixture-key-material\n-----END RSA PRIVATE KEY-----";
+        assertThat(SecretMask.redact("before\n" + key + "\nafter")).isEqualTo("before\n[REDACTED]\nafter");
+        assertThat(SecretMask.redact("-----BEGIN PRIVATE KEY-----\nfixture-truncated-key"))
+                .isEqualTo("[REDACTED]");
+    }
+
+    @Test
+    void redactsQuotedJsonAndYamlCredentialsWithSpaces() {
+        assertThat(SecretMask.redact("{\"api_key\": \"fixture secret with spaces\", \"name\": \"public\"}"))
+                .contains("[REDACTED]", "public")
+                .doesNotContain("fixture secret", "with spaces");
+        assertThat(SecretMask.redact("password: 'fixture secret value'\nname: public"))
+                .isEqualTo("password: [REDACTED]\nname: public");
+        assertThat(SecretMask.redact("token = \"fixture \\\"escaped\\\" value\"; next();"))
+                .isEqualTo("token = [REDACTED]; next();");
+    }
+
+    @Test
     void redactsGithubPatsAndAssignmentValues() {
         assertThat(SecretMask.redact("token=ghp_abcdefghijklmnopqrstuvwxyz012345"))
                 .contains("[REDACTED]")

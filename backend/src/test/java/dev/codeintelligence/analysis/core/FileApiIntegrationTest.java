@@ -10,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.lib.Constants;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -70,26 +72,25 @@ class FileApiIntegrationTest {
     }
 
     @Test
-    void fileContentRejectsSymlinkEscape() throws Exception {
+    void fileContentNeverFollowsWorkingTreeSymlinks() throws Exception {
         ResponseCookie session = loginWithPat();
         long projectId = seedOwnedProject(session, "readme.md", "hello\n");
         Path clone = root.resolve("data").resolve("repos").resolve(String.valueOf(projectId));
         Path outside = root.resolve("outside-secret.txt");
         Files.writeString(outside, "leaked-token\n");
-        Path link = clone.resolve("escaped.md");
+        Path link = clone.resolve("readme.md");
+        Files.delete(link);
         try {
             Files.createSymbolicLink(link, outside);
         } catch (UnsupportedOperationException | IOException ignored) {
             return;
         }
         org.junit.jupiter.api.Assumptions.assumeTrue(Files.isSymbolicLink(link));
-        long snapshotId = jdbcTemplate.queryForObject(
-                "select current_snapshot_id from projects where id = ?", Long.class, projectId);
-        jdbcTemplate.update("""
-                insert into files (snapshot_id, path, language, size, line_count, content_hash)
-                values (?, 'escaped.md', 'markdown', 13, 1, 'sy')
-                """, snapshotId);
-        getAs(session, "/api/projects/" + projectId + "/file-content?path=escaped.md", HttpStatus.BAD_REQUEST);
+        Map<String, Object> body = jsonMapper.readValue(
+                getAs(session, "/api/projects/" + projectId + "/file-content?path=readme.md", HttpStatus.OK),
+                Map.class);
+        assertThat(body.get("content")).isEqualTo("hello\n");
+        assertThat(body.toString()).doesNotContain("leaked-token");
     }
 
     @Test
@@ -122,16 +123,16 @@ class FileApiIntegrationTest {
         Files.write(clone.resolve("blob.bin"), new byte[] {1, 0, 2});
         jdbcTemplate.update("""
                 insert into files (snapshot_id, path, language, size, line_count, content_hash)
-                values (?, 'blob.bin', null, 3, null, 'ab')
-                """, snapshotId);
+                values (?, 'blob.bin', null, 3, null, ?)
+                """, snapshotId, insertBlob(clone, new byte[] {1, 0, 2}));
         getAs(session, "/api/projects/" + projectId + "/file-content?path=blob.bin", HttpStatus.UNSUPPORTED_MEDIA_TYPE);
 
         byte[] huge = new byte[1_048_577];
         Files.write(clone.resolve("huge.txt"), huge);
         jdbcTemplate.update("""
                 insert into files (snapshot_id, path, language, size, line_count, content_hash)
-                values (?, 'huge.txt', null, ?, 1, 'cd')
-                """, snapshotId, huge.length);
+                values (?, 'huge.txt', null, ?, 1, ?)
+                """, snapshotId, huge.length, insertBlob(clone, huge));
         getAs(session, "/api/projects/" + projectId + "/file-content?path=huge.txt", HttpStatus.CONTENT_TOO_LARGE);
     }
 
@@ -218,6 +219,7 @@ class FileApiIntegrationTest {
         Path file = clone.resolve(path);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
+        Git.init().setDirectory(clone.toFile()).call().close();
         jdbcTemplate.update("update projects set clone_path = ? where id = ?", clone.toString(), projectId);
         long snapshotId = jdbcTemplate.queryForObject("""
                 insert into snapshots (project_id, commit_sha, status, analyzed_at)
@@ -227,14 +229,24 @@ class FileApiIntegrationTest {
         jdbcTemplate.update(
                 """
                 insert into files (snapshot_id, path, language, size, line_count, content_hash)
-                values (?, ?, ?, ?, ?, 'hash')
+                values (?, ?, ?, ?, ?, ?)
                 """,
                 snapshotId,
                 path,
                 LanguageDetector.detect(path),
                 content.getBytes(StandardCharsets.UTF_8).length,
-                FileInventoryScanner.countLines(content.getBytes(StandardCharsets.UTF_8)));
+                FileInventoryScanner.countLines(content.getBytes(StandardCharsets.UTF_8)),
+                insertBlob(clone, content.getBytes(StandardCharsets.UTF_8)));
         return projectId;
+    }
+
+    private String insertBlob(Path clone, byte[] bytes) throws Exception {
+        try (Git git = Git.open(clone.toFile());
+                var insert = git.getRepository().newObjectInserter()) {
+            String oid = insert.insert(Constants.OBJ_BLOB, bytes).name();
+            insert.flush();
+            return oid;
+        }
     }
 
     private byte[] getAs(ResponseCookie session, String uri, HttpStatus expected) {

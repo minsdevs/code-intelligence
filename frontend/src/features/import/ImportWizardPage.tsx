@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getMe } from '../../api/auth'
-import { createLocalProject } from '../../api/projects'
 import { useT } from '../../lib/i18n'
 import type { MeResponse } from '../../api/types'
 import AreasStep from './AreasStep'
@@ -9,20 +8,24 @@ import ConnectStep from './ConnectStep'
 import ProgressStep from './ProgressStep'
 import RepoStep from './RepoStep'
 import { WIZARD_STEPS, type WizardStepId } from './wizard'
+import LocalSourceApproval from '../projects/LocalSourceApproval'
 
 export default function ImportWizardPage() {
+  const [searchParams] = useSearchParams()
+  const initialPath = searchParams.get('path')
+  return <ImportWizard key={initialPath ?? ''} initialPath={initialPath} />
+}
+
+function ImportWizard({ initialPath }: { initialPath: string | null }) {
   const t = useT()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const [step, setStep] = useState<WizardStepId>('connect')
   const [me, setMe] = useState<MeResponse | null>(null)
   const [bootstrapping, setBootstrapping] = useState(true)
   const [projectId, setProjectId] = useState<number | null>(null)
   const [jobId, setJobId] = useState<number | null>(null)
 
-  const [localPath, setLocalPath] = useState<string | null>(() => searchParams.get('path'))
-  const [localImporting, setLocalImporting] = useState(false)
-  const [localError, setLocalError] = useState<string | null>(null)
+  const [localPath, setLocalPath] = useState<string | null>(initialPath)
 
   const goConnect = useCallback(() => {
     setStep('connect')
@@ -71,24 +74,6 @@ export default function ImportWizardPage() {
   }
   const handleLocalPath = (path: string) => {
     setLocalPath(path)
-    setLocalError(null)
-  }
-
-  const handleLocalImport = async () => {
-    if (!localPath) return
-    setLocalImporting(true)
-    setLocalError(null)
-    try {
-      const created = await createLocalProject(localPath)
-      setProjectId(created.project.id)
-      setJobId(created.jobId)
-      setStep('progress')
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      setLocalError(message)
-    } finally {
-      setLocalImporting(false)
-    }
   }
 
   const handleImported = (nextProjectId: number, nextJobId: number) => {
@@ -145,14 +130,10 @@ export default function ImportWizardPage() {
         <>
           {showLocalConfirm && (
             <LocalImportConfirm
+              key={localPath}
               path={localPath}
-              importing={localImporting}
-              error={localError}
-              onConfirm={() => void handleLocalImport()}
-              onCancel={() => {
-                setLocalPath(null)
-                setLocalError(null)
-              }}
+              onStarted={handleImported}
+              onCancel={() => setLocalPath(null)}
             />
           )}
           {!showLocalConfirm && step === 'connect' && (
@@ -162,7 +143,13 @@ export default function ImportWizardPage() {
             <RepoStep onImported={handleImported} onUnauthorized={goConnect} />
           )}
           {step === 'progress' && jobId != null && (
-            <ProgressStep jobId={jobId} onDone={handleProgressDone} onUnauthorized={goConnect} />
+            <ProgressStep
+              key={jobId}
+              jobId={jobId}
+              onDone={handleProgressDone}
+              onUnauthorized={goConnect}
+              onSourcePreviewRequired={(id) => navigate(`/projects/${id}`)}
+            />
           )}
           {step === 'areas' && projectId != null && (
             <AreasStep
@@ -177,27 +164,24 @@ export default function ImportWizardPage() {
   )
 }
 
-/** Confirmation dialog for importing a local project path from external tools. */
+/** A supplied path starts no operation until the user requests and approves a preview. */
 function LocalImportConfirm({
   path,
-  importing,
-  error,
-  onConfirm,
+  onStarted,
   onCancel,
 }: {
   path: string
-  importing: boolean
-  error: string | null
-  onConfirm: () => void
+  onStarted: (projectId: number, jobId: number) => void
   onCancel: () => void
 }) {
+  const [busy, setBusy] = useState(false)
   return (
     <div className="flex max-w-lg flex-col gap-4">
       <div>
-        <h2 className="text-[15px] font-semibold text-ink">Confirm local import</h2>
+        <h2 className="text-[15px] font-semibold text-ink">로컬 가져오기 확인</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
-          An external tool wants to import the following local project for analysis. Please review
-          the path and confirm.
+          폴더를 확인하고 미리보기를 요청하세요. 가져올 파일을 검토한 뒤 별도로 승인하면 분석을
+          시작합니다.
         </p>
       </div>
 
@@ -206,27 +190,16 @@ function LocalImportConfirm({
         <p className="mt-0.5 break-all font-mono text-[13px] text-ink">{path}</p>
       </div>
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-[12px] text-danger"
-        >
-          {error}
-        </p>
-      )}
+      <LocalSourceApproval
+        source={{ operation: 'INITIAL', path }}
+        onStarted={onStarted}
+        onBusyChange={setBusy}
+      />
 
       <div className="flex gap-2">
         <button
           type="button"
-          disabled={importing}
-          onClick={onConfirm}
-          className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 disabled:opacity-60"
-        >
-          {importing ? 'Importing…' : 'Import & Analyze'}
-        </button>
-        <button
-          type="button"
-          disabled={importing}
+          disabled={busy}
           onClick={onCancel}
           className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink-muted"
         >

@@ -4,6 +4,8 @@ export type RuntimeStatus = {
   ready: boolean
   error: string | null
   services: string[]
+  backupAvailable?: boolean
+  restoreAvailable?: boolean
 }
 
 export type DesktopBridge = {
