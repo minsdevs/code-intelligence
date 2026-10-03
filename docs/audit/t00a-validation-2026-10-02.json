@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-02",
+  "scope": "T00A_CONTRACT_FRAMEWORK_ONLY",
+  "environment": {
+    "node": "v26.5.0",
+    "platform": "darwin",
+    "architecture": "arm64"
+  },
+  "selfTests": {
+    "result": "PASS",
+    "tests": 104,
+    "failures": 0,
+    "skipped": 0,
+    "junitSha256": "844b89e12c5edb821dba679c943ad867045ab57414d9f0c1a605a31541656694"
+  },
+  "independentReview": {
+    "result": "PASS_WITHIN_SCOPE",
+    "initialHigh": 2,
+    "initialMedium": 3,
+    "remainingCritical": 0,
+    "remainingHigh": 0,
+    "remainingMedium": 0,
+    "independentCliProbes": 6
+  },
+  "demonstrations": [
+    {
+      "name": "contract",
+      "exitCode": 0,
+      "summary": {
+        "contractVersion": "1.0.0",
+        "scope": "CONTRACT_ONLY",
+        "result": "PASS",
+        "exitCode": 0,
+        "code": null
+      },
+      "observationEvaluation": "NOT_RUN",
+      "productEvaluation": "NOT_RUN",
+      "reportSha256": "ea76cd3f23a1985edd162e47fe365d4a9c9a81b0ed323cad5265e52d073269e5",
+      "artifactManifestSha256": "14e074a1924d61c5891beb345d29c8d0b7273d219c4e7b81c6dd65367556adf7"
+    },
+    {
+      "name": "missing",
+      "exitCode": 2,
+      "summary": {
+        "contractVersion": "1.0.0",
+        "scope": "PRODUCT_GATE",
+        "result": "BLOCKED",
+        "exitCode": 2,
+        "code": null
+      },
+      "observationEvaluation": "NOT_RUN",
+      "productEvaluation": "BLOCKED",
+      "reportSha256": "4cf7568537c48616578746f9846277c73e645e99e53370f90310605a9531442a",
+      "artifactManifestSha256": "6dfccd36679d61573f60dddda05b609ca133b85cbb203f9b654d9dbc8b001c50"
+    },
+    {
+      "name": "good-authored",
+      "exitCode": 2,
+      "summary": {
+        "contractVersion": "1.0.0",
+        "scope": "PRODUCT_GATE",
+        "result": "BLOCKED",
+        "exitCode": 2,
+        "code": null
+      },
+      "observationEvaluation": "PASS",
+      "productEvaluation": "BLOCKED",
+      "reportSha256": "75eac85b5f17087cb13576eb15e6af192cff9e4cec52db28e3b281a3058cd5a0",
+      "artifactManifestSha256": "d50f0f8560775b936f3eb551e4c4ece28150b31653bad303043380c27db71bf0"
+    },
+    {
+      "name": "bad-authored",
+      "exitCode": 1,
+      "summary": {
+        "contractVersion": "1.0.0",
+        "scope": "PRODUCT_GATE",
+        "result": "FAIL",
+        "exitCode": 1,
+        "code": null
+      },
+      "observationEvaluation": "FAIL",
+      "productEvaluation": "BLOCKED",
+      "reportSha256": "c850ee233c48a66e462a1c89bbafc29581c81903b96ddab19c42e01f8b9ceba8",
+      "artifactManifestSha256": "948d3c0029b0fda28cd14555e994a8b3143016f9eade32ce0492ac05b3dbba34"
+    }
+  ],
+  "artifactOutputHashesVerified": true,
+  "syntheticDescriptorSha256": "834b361f59ad3a3f02ce51eeb3bcab6c66f0374bde84cfa6c4874adfd772a0c8",
+  "syntheticDescriptorIsProductProof": false,
+  "publicSupportedCells": 0,
+  "requiredCells": 18,
+  "independentlyReviewedAnnotations": 0,
+  "planned300AnnotationPilot": "NOT_RUN",
+  "realProductExecution": "NOT_RUN",
+  "resourceMeasurement": "NOT_RUN",
+  "accuracyReleaseGate": "BLOCKED",
+  "remoteNode24CI": "NOT_RUN",
+  "runnerSha256": "ccf29699b49e7915c01ce8213d6ffed530380b5c718c39257ee4216afa521045",
+  "runnerSha256Scope": "Ordered implementation/schema digest, not the runner.cjs file hash: SHA256(UTF8(join(relativePath + colon + SHA256(fileBytes), newline))), with no trailing newline; same algorithm as runner.cjs:50-52.",
+  "runnerEntryFileSha256": "ad652759c47c27871d22326f8fafd3d47535fbe77fba7a392a97edf59fd2bbd4",
+  "runnerImplementationFiles": [
+    {
+      "path": "runner.cjs",
+      "sha256": "ad652759c47c27871d22326f8fafd3d47535fbe77fba7a392a97edf59fd2bbd4"
+    },
+    {
+      "path": "lib/errors.cjs",
+      "sha256": "67d8352cfc0cc3549808d7b91fd48908e0e0a968b85d922151cbc1259ce85d5c"
+    },
+    {
+      "path": "lib/json.cjs",
+      "sha256": "a4516ac457afb072f573473b1701ce27c9c4cdb5d146d6c8cfb2d342d0cf68bd"
+    },
+    {
+      "path": "lib/safe-io.cjs",
+      "sha256": "1aeeeb9f79bd56330b6d21e13e0e52110df39e60ec8f91b0f92ea72623ba55f5"
+    },
+    {
+      "path": "lib/policy.cjs",
+      "sha256": "20fabc638a5e8ce3aff52afdf62158a128246442e7b7ae1ad96548685ca0f076"
+    },
+    {
+      "path": "lib/contracts.cjs",
+      "sha256": "b8c686f8e802468a72c5091c9d7445df269d485fe0d8e818926543bab8a5b5d0"
+    },
+    {
+      "path": "lib/metrics.cjs",
+      "sha256": "6d576a8fa8684c895e5bcda1d55234915240a664eceb39aab26fb6d315952dbb"
+    },
+    {
+      "path": "schemas/contracts.schema.json",
+      "sha256": "7a7b847c1adec9d95a8d0463a2babd1a596f20e5c95e2d1de74ba38ff90fbd1f"
+    }
+  ],
+  "runnerImplementationDigestRecomputedAgainstFinalSource": true
+}

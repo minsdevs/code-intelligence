@@ -1,0 +1,187 @@
+{
+  "createdAt": "2026-10-03T11:45:49.640Z",
+  "scope": "Focused synthetic TypeScript parser follow-up; not a production release gate",
+  "environment": {
+    "node": "v26.5.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "vitest": "4.1.10",
+    "vite": "8.2.1"
+  },
+  "branch": "codex/e2e-docs-scripts",
+  "head": "ebe3ab135ce6dbaa454b29db6e5ab5c678557070",
+  "baseline": {
+    "artifact": "/tmp/ci-parser-gaps-EudHOF/baseline-sources.json",
+    "sha256": "b6b181217a0fe79bb1134630014ccab143399103b55538060e744eeaf5f99f14",
+    "changedPaths": [
+      "src/ts-extractor.ts",
+      "src/semantic-extractor.ts",
+      "src/paths.ts",
+      "src/ts-extractor.test.ts",
+      "src/semantic-extractor.test.ts",
+      "README.md",
+      "vitest.parser.config.mjs"
+    ]
+  },
+  "commands": {
+    "cwd": "analyzers/ts-analyzer",
+    "tests": "env -u NODE_OPTIONS -u NAPI_RS_NATIVE_LIBRARY_PATH -u NAPI_RS_FORCE_WASI -u NAPI_RS_WASI_FLAVOR node node_modules/vitest/vitest.mjs run --config vitest.parser.config.mjs --configLoader native --reporter=default --reporter=json --outputFile.json=<stage artifact>",
+    "typecheck": "env -u NODE_OPTIONS node node_modules/typescript/bin/tsc --noEmit --target ES2022 --lib ES2022 --module ESNext --moduleResolution Bundler --strict --esModuleInterop --skipLibCheck src/ts-extractor.ts src/semantic-extractor.ts src/syntax-diagnostics.ts src/paths.ts src/types.ts src/generic-extractor.ts src/ts-extractor.test.ts src/semantic-extractor.test.ts src/http-boundary.test.ts"
+  },
+  "tests": [
+    {
+      "artifact": "/tmp/ci-parser-gaps-EudHOF/baseline-tests.json",
+      "sha256": "f671bddc11a78b9b76c43921a4dc7425eb3475c7eecb1fa7255b181433819d3a",
+      "exitCode": 0,
+      "total": 106,
+      "passed": 106,
+      "failed": 0,
+      "skipped": 0,
+      "success": true,
+      "files": [
+        {
+          "path": "src/http-boundary.test.ts",
+          "status": "passed",
+          "total": 51
+        },
+        {
+          "path": "src/semantic-extractor.test.ts",
+          "status": "passed",
+          "total": 46
+        },
+        {
+          "path": "src/ts-extractor.test.ts",
+          "status": "passed",
+          "total": 9
+        }
+      ]
+    },
+    {
+      "artifact": "/tmp/ci-parser-gaps-EudHOF/red-tests.json",
+      "sha256": "03d030445837a6dd34cbe2b510effdb671373926deaa4725c5e3638ab89aad44",
+      "exitCode": 1,
+      "total": 151,
+      "passed": 128,
+      "failed": 23,
+      "skipped": 0,
+      "success": false,
+      "files": [
+        {
+          "path": "src/http-boundary.test.ts",
+          "status": "passed",
+          "total": 51
+        },
+        {
+          "path": "src/semantic-extractor.test.ts",
+          "status": "failed",
+          "total": 70
+        },
+        {
+          "path": "src/ts-extractor.test.ts",
+          "status": "failed",
+          "total": 30
+        }
+      ]
+    },
+    {
+      "artifact": "/tmp/ci-parser-gaps-EudHOF/green-attempt-1.json",
+      "sha256": "7c8aad63a516deeaaf96d9b01eb79a5d9e47dbe0108b712bc4ed1f34dacf93fa",
+      "exitCode": 0,
+      "total": 151,
+      "passed": 151,
+      "failed": 0,
+      "skipped": 0,
+      "success": true,
+      "files": [
+        {
+          "path": "src/http-boundary.test.ts",
+          "status": "passed",
+          "total": 51
+        },
+        {
+          "path": "src/semantic-extractor.test.ts",
+          "status": "passed",
+          "total": 70
+        },
+        {
+          "path": "src/ts-extractor.test.ts",
+          "status": "passed",
+          "total": 30
+        }
+      ]
+    },
+    {
+      "artifact": "/tmp/ci-parser-gaps-EudHOF/final-tests.json",
+      "sha256": "a5dbc33c529a5dea216411e2f12474bf065701c87906e17faca029f26d7f2c6c",
+      "exitCode": 0,
+      "total": 152,
+      "passed": 152,
+      "failed": 0,
+      "skipped": 0,
+      "success": true,
+      "files": [
+        {
+          "path": "src/http-boundary.test.ts",
+          "status": "passed",
+          "total": 51
+        },
+        {
+          "path": "src/semantic-extractor.test.ts",
+          "status": "passed",
+          "total": 70
+        },
+        {
+          "path": "src/ts-extractor.test.ts",
+          "status": "passed",
+          "total": 31
+        }
+      ]
+    }
+  ],
+  "typecheck": {
+    "exitCode": 0,
+    "artifact": "/tmp/ci-parser-gaps-EudHOF/final-typecheck.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sourceHashCapture": "After final focused tests and typecheck; no subsequent parser source edit",
+  "sourceHashes": {
+    "src/ts-extractor.ts": "71f58ff7edfab1c89a6290db55f23dcc7598c44c8e463904c8be3822603fddad",
+    "src/semantic-extractor.ts": "938671c12169465e8dd18e90cc713a6e3a062b8c54fccc5858d2e15a90e5c420",
+    "src/paths.ts": "4d2d8b48f25a4f105f0f585d1d047654e927d5a1bf3d5d32639f66d464b21c56",
+    "src/types.ts": "f2619a9a813a97bea1c82af2be996b18c6c27cbe7318c77904139c489c632cae",
+    "src/generic-extractor.ts": "e630de84e1be8d79524924cdaec7c859fe97a082bdbd06b9b522593219e263dc",
+    "src/ts-extractor.test.ts": "53f34bf48a6191aa877b328bcdfda1a261498c144b3d17be8b3b46f24c6c2bcb",
+    "src/semantic-extractor.test.ts": "b2177aecf17f9f69b6f693215a1eeded84b3112be9378c624f7b4a607e52e640",
+    "src/http-boundary.test.ts": "e56d6c69a0deb9d588d81daecd2a25c68403bd6dd5ea997ac853425ab6441836",
+    "src/analyze.service.ts": "8016457d61d104a3255596b88d38afb30a5b0a814585c9dc5b8ef18de0b22915",
+    "README.md": "7086ccd3756a45606611b507d352002f046b953e43faddc7b7c7ce228e451284",
+    "vitest.config.ts": "e10b186d5408639b4c87f8db2431a0f3eba3492716e380e12d17d5cf2c807cbb",
+    "vitest.parser.config.mjs": "93ca8203d351d777ec4db622dcb09a1b7f163eaefaf41c911714e3e79b130369",
+    "package.json": "22cd2c6fb444d5c744748979a443b1341659245d168e40c673ebad127d725df6",
+    "package-lock.json": "2e4e4faf6335bf580b55e860ebb598835b593fcb280b8c6a946fb13ce2efaf4d",
+    "tsconfig.json": "c3afae120c702362c06de2f1294ab0ac6de8273f484ae36ff2e9524e1e9d0c9f",
+    "src/syntax-diagnostics.ts": "c940902b6c096821e91fb3e0eba93c606a1771e280bb814133d947e0a44dd042"
+  },
+  "reports": {
+    "docs/audit/parser-gaps-2026-10-03.md": "8fcbdd25d55228e336ca83bde66444e27c673d28edac5352a301df509471edd4",
+    "docs/audit/restart-recovery-audit-2026-10-03.md": "4339cfd6c7da3e286021f48376e466d6084c7d9a693eea1504f162f6fbc122c5"
+  },
+  "notRun": [
+    "Java/backend/DB/HTTP integration",
+    "full suites and builds",
+    "guardian/native helper execution",
+    "PID query/signaling or AX",
+    "browser or installed desktop UI",
+    "OAuth production flow",
+    "signing/notarization/update deployment",
+    "historical 39-check holdout harness",
+    "representative performance or product accuracy gate"
+  ],
+  "remainingBoundaries": [
+    "Backend LanguageDetector/TsParsingStep exclude mts/cts",
+    "ParserSyntaxError HTTP/UI diagnostic mapping not implemented or tested",
+    "Prior release blockers remain"
+  ],
+  "releaseDecision": "NO_GO",
+  "historicalProofUnchanged": "docs/audit/restart-recovery-validation-2026-10-03.json"
+}

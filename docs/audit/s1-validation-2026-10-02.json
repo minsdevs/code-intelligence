@@ -1,0 +1,505 @@
+{
+  "recorded_at": "2026-10-02T13:21:28.833774+00:00",
+  "scope": "S1 snapshot source contract only; general product release remains No-Go",
+  "aggregation": "Latest successful scenario selections after focused fixes, not a single all-green 12-test invocation. Failed attempts are retained per run below; unchanged passing scenarios were not rerun.",
+  "s1": {
+    "unique_variants": 12,
+    "passed": 12,
+    "remaining_failed_variants": 0,
+    "variants": [
+      {
+        "run": "core",
+        "name": "S1 group 1 import/refresh/preservation [\"java\"]",
+        "result": "passed",
+        "seconds": 0.892
+      },
+      {
+        "run": "core",
+        "name": "S1 group 1 import/refresh/preservation [\"typescript\"]",
+        "result": "passed",
+        "seconds": 0.812
+      },
+      {
+        "run": "core",
+        "name": "S1 group 2 blob/encoding/bounds/integrity [\"java\"]",
+        "result": "passed",
+        "seconds": 0.463
+      },
+      {
+        "run": "core",
+        "name": "S1 group 2 blob/encoding/bounds/integrity [\"typescript\"]",
+        "result": "passed",
+        "seconds": 0.433
+      },
+      {
+        "run": "authorization",
+        "name": "S1 group 3 ownership/path/evidence context [\"java\"]",
+        "result": "passed",
+        "seconds": 0.648
+      },
+      {
+        "run": "authorization",
+        "name": "S1 group 3 ownership/path/evidence context [\"typescript\"]",
+        "result": "passed",
+        "seconds": 0.618
+      },
+      {
+        "run": "browser",
+        "name": "S1 group 4 real UI races/cache/errors [\"java\"]",
+        "result": "passed",
+        "seconds": 3.728
+      },
+      {
+        "run": "browser",
+        "name": "S1 group 4 real UI races/cache/errors [\"typescript\"]",
+        "result": "passed",
+        "seconds": 3.619
+      },
+      {
+        "run": "browser",
+        "name": "S1 group 5 real UI code/feature/note navigation [\"java\"]",
+        "result": "passed",
+        "seconds": 6.404
+      },
+      {
+        "run": "browser",
+        "name": "S1 group 5 real UI code/feature/note navigation [\"typescript\"]",
+        "result": "passed",
+        "seconds": 5.189
+      },
+      {
+        "run": "core",
+        "name": "S1 group 6 current API/notes/tasks compatibility [\"java\"]",
+        "result": "passed",
+        "seconds": 0.461
+      },
+      {
+        "run": "core",
+        "name": "S1 group 6 current API/notes/tasks compatibility [\"typescript\"]",
+        "result": "passed",
+        "seconds": 0.344
+      }
+    ],
+    "runs": [
+      {
+        "id": "core",
+        "xml_evidence": "/tmp/ci-s1-full-first.xml",
+        "xml_sha256": "bd42ede4fc5bc37b736a93dea5546ba05490d9a7c3d3862d4477d8247e750f32",
+        "tests": 12,
+        "failures": 6,
+        "skipped": 0,
+        "cases": [
+          {
+            "name": "S1 group 5 real UI code/feature/note navigation [\"java\"]",
+            "result": "failed",
+            "seconds": 32.673
+          },
+          {
+            "name": "S1 group 5 real UI code/feature/note navigation [\"typescript\"]",
+            "result": "failed",
+            "seconds": 30.918
+          },
+          {
+            "name": "S1 group 1 import/refresh/preservation [\"java\"]",
+            "result": "passed",
+            "seconds": 0.892
+          },
+          {
+            "name": "S1 group 1 import/refresh/preservation [\"typescript\"]",
+            "result": "passed",
+            "seconds": 0.812
+          },
+          {
+            "name": "S1 group 6 current API/notes/tasks compatibility [\"java\"]",
+            "result": "passed",
+            "seconds": 0.461
+          },
+          {
+            "name": "S1 group 6 current API/notes/tasks compatibility [\"typescript\"]",
+            "result": "passed",
+            "seconds": 0.344
+          },
+          {
+            "name": "S1 group 4 real UI races/cache/errors [\"java\"]",
+            "result": "failed",
+            "seconds": 16.287
+          },
+          {
+            "name": "S1 group 4 real UI races/cache/errors [\"typescript\"]",
+            "result": "failed",
+            "seconds": 16.067
+          },
+          {
+            "name": "S1 group 3 ownership/path/evidence context [\"java\"]",
+            "result": "failed",
+            "seconds": 0.693
+          },
+          {
+            "name": "S1 group 3 ownership/path/evidence context [\"typescript\"]",
+            "result": "failed",
+            "seconds": 0.585
+          },
+          {
+            "name": "S1 group 2 blob/encoding/bounds/integrity [\"java\"]",
+            "result": "passed",
+            "seconds": 0.463
+          },
+          {
+            "name": "S1 group 2 blob/encoding/bounds/integrity [\"typescript\"]",
+            "result": "passed",
+            "seconds": 0.433
+          }
+        ]
+      },
+      {
+        "id": "authorization",
+        "xml_evidence": "/tmp/ci-s1-ui-first.xml",
+        "xml_sha256": "7078083dc97076f098c10386cb84b30802af369d53771cf5bfe001a640ffc6a1",
+        "tests": 6,
+        "failures": 4,
+        "skipped": 0,
+        "cases": [
+          {
+            "name": "S1 group 5 real UI code/feature/note navigation [\"java\"]",
+            "result": "failed",
+            "seconds": 6.66
+          },
+          {
+            "name": "S1 group 5 real UI code/feature/note navigation [\"typescript\"]",
+            "result": "failed",
+            "seconds": 5.204
+          },
+          {
+            "name": "S1 group 4 real UI races/cache/errors [\"java\"]",
+            "result": "failed",
+            "seconds": 3.728
+          },
+          {
+            "name": "S1 group 4 real UI races/cache/errors [\"typescript\"]",
+            "result": "failed",
+            "seconds": 3.75
+          },
+          {
+            "name": "S1 group 3 ownership/path/evidence context [\"java\"]",
+            "result": "passed",
+            "seconds": 0.648
+          },
+          {
+            "name": "S1 group 3 ownership/path/evidence context [\"typescript\"]",
+            "result": "passed",
+            "seconds": 0.618
+          }
+        ]
+      },
+      {
+        "id": "browser",
+        "xml_evidence": "/tmp/ci-s1-ui-final.xml",
+        "xml_sha256": "2be4336fed2ba46df442d1cff7d5cff93f20bd0b2d20f49f34f52c32506dd49f",
+        "tests": 4,
+        "failures": 0,
+        "skipped": 0,
+        "cases": [
+          {
+            "name": "S1 group 5 real UI code/feature/note navigation [\"java\"]",
+            "result": "passed",
+            "seconds": 6.404
+          },
+          {
+            "name": "S1 group 5 real UI code/feature/note navigation [\"typescript\"]",
+            "result": "passed",
+            "seconds": 5.189
+          },
+          {
+            "name": "S1 group 4 real UI races/cache/errors [\"java\"]",
+            "result": "passed",
+            "seconds": 3.728
+          },
+          {
+            "name": "S1 group 4 real UI races/cache/errors [\"typescript\"]",
+            "result": "passed",
+            "seconds": 3.619
+          }
+        ]
+      }
+    ]
+  },
+  "existing_backend_regression": {
+    "suites": [
+      {
+        "suite": "dev.codeintelligence.ProjectJobApiIntegrationTest",
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "dev.codeintelligence.analysis.core.FileApiIntegrationTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "dev.codeintelligence.analysis.feature.SpringMiniEndpointsFeaturesGoldenTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "dev.codeintelligence.analysis.graph.GraphApiIntegrationTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "dev.codeintelligence.note.NotesTasksApiIntegrationTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "dev.codeintelligence.project.LocalImportServiceTest",
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "dev.codeintelligence.project.LocalSourceStatusServiceTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "dev.codeintelligence.search.SearchApiIntegrationTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ],
+    "totals": {
+      "tests": 47,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "frontend": {
+    "tests": 93,
+    "passed": 93,
+    "failed": 0,
+    "pending": 0,
+    "files": 22,
+    "lint": "PASS",
+    "typecheck_and_build": "PASS",
+    "typecheck_e2e": "PASS",
+    "browser_script_syntax": "PASS"
+  },
+  "backend_format_compilation_bootJar": "PASS",
+  "real_ui": {
+    "fixture_languages": [
+      "java",
+      "typescript"
+    ],
+    "scenario_invocations": 4,
+    "entrypoints_per_fixture": [
+      "code explorer file tree",
+      "snapshot-bound feature evidence across current B",
+      "existing note current-source link"
+    ],
+    "legacy_flow_evidence": "unknown, zero source fetch until explicit current choice",
+    "page_errors": 0,
+    "source_api_mocking": false,
+    "metadata_replay": "Unmodified real feature responses replayed after actual refresh, modeling a stale tab"
+  },
+  "concurrent_reads": {
+    "java": {
+      "total": 25,
+      "gone": 20
+    },
+    "typescript": {
+      "total": 29,
+      "gone": 24
+    },
+    "allowed_outcomes": "exact A bytes or 410 only",
+    "limitation": "Read loop spans real refresh, but exact overlap with the filesystem replacement micro-window is not deterministic; missing repo is tested separately."
+  },
+  "not_run": [
+    "remote CI workflow",
+    "native installed app/clean Mac",
+    "real OAuth/operational registration",
+    "signing/notarization/updater",
+    "whole-language semantic accuracy gate",
+    "full-product backup/restore release gate"
+  ],
+  "implementation_sha256": {
+    ".github/workflows/ci.yml": "9a9427b57e6d3773053e5d3b94626d7ddb17bdd3e1041a2368fab0573eeacad3",
+    "backend/build.gradle.kts": "237dba3fde7fcfa2e6f691452ece24e5fb286e26878f629e1ff9133ecea6bbc4",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/FileController.java": "76718f07064eb2aae33c07af656552cc74765349388ebe81dd4e7cc1e7ab0a50",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/FileService.java": "3e3a8eeabe112f04ed1e5ae5c0d6532491c157fba038399dd73b7fbc1536d2d6",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/SnapshotBlobReader.java": "77942d2ab80c12af22411b7fc0b851e7e0b959862b36396d0bfca0ee8d9eb03a",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/SnapshotSourceException.java": "ad153351d3b4abbd9a9343200edbf45950d4d53115750a181a7d042bac7496a5",
+    "backend/src/main/java/dev/codeintelligence/analysis/feature/FeatureService.java": "593f34b9f1a0da79b9202b1ce4105720e6afbdc7f80314c04cc8ebb2cb45922c",
+    "backend/src/test/java/dev/codeintelligence/analysis/core/FileApiIntegrationTest.java": "2b7114d3a1a9e211929d7531ae56d3beecc96f861906df600246f7bad5a142fc",
+    "backend/src/test/java/dev/codeintelligence/analysis/core/SnapshotSourceContractIntegrationTest.java": "0790fdf24965970d688d9d67d548f48868d6dbef9ebfe9a5a9b443f413c36ffb",
+    "frontend/e2e/snapshot-source-real.cjs": "0acce2881c2df331c192de382ec3c4a043c9808df4c3a5781b97ef35c3f90069",
+    "frontend/src/api/client.ts": "7e3ba067ce95d4a0c2cb3cc3490a1005b6758d40d9233b83373a952246b5ba47",
+    "frontend/src/api/files.ts": "79c530900e63e7571760a988832f0a2c707464ab851b35f933277249cbff8b02",
+    "frontend/src/api/graph.ts": "501b59c4e368efe123bb00c58cae443da2919c8ad240b99ba4841d3b3cbf9316",
+    "frontend/src/api/types.ts": "4a6f2917e108b74847ca784140a546c6397c0952905a24011666b0fbed2a9b43",
+    "frontend/src/app/AiPanel.test.tsx": "41730bf85cf452747aff9c16aedafd39cb671cad872349536334c6a6aae84b8f",
+    "frontend/src/components/EvidenceList.test.tsx": "ecdfcac6a8b528ff118779aac6af744859ea33d97daba8dde0d09e50cda3fb35",
+    "frontend/src/components/EvidenceList.tsx": "9f81d5b8bf9bf498abcb640593e2af2ce9b0efa3ab9c976f9d759acf15d57c7f",
+    "frontend/src/features/architecture/architecture.test.tsx": "11bcd5571dc0c7f4f1c02463bb5714c2ce76ffc7296d9dc5edb46801cda4304b",
+    "frontend/src/features/code/CodeExplorerPage.tsx": "6fdf0dfc081570bd25d296310944e305ce6aa54036ab5cd2a39998f9e5cf5f2e",
+    "frontend/src/features/code/CodeViewer.tsx": "5dfc9d1571679e9147a48bccaadcead2793539377478950e09e64d37dd64b036",
+    "frontend/src/features/code/SymbolPanel.tsx": "6712985787c7a4ed28ff79ef5a8a364e74723b5c0a806065ddba0c0369e10de4",
+    "frontend/src/features/code/codeExplorer.test.tsx": "80460abe8ae17a5a11c4484e88de1de04df74ff10e74627a2b4e870b8898a3f7",
+    "frontend/src/features/code/codeLocation.ts": "90c0d2c3de0182295e847e5ca037593ae97dfb180e9455b04b64ecedf68c7a80",
+    "frontend/src/features/features/FeaturesPage.tsx": "7c5c3a84001c9878c9defc19a81fb0b9ca19b2d2976e9f7fadde7aed32cad013",
+    "frontend/src/features/features/features.test.tsx": "65edc18238ff2e2f276afcd6a4166cc569f2e36d4c22059d8638eb266c73aedc",
+    "frontend/src/features/flows/flows.test.tsx": "a88640bd6102e8f3e31a78362ed6eccd35be0d06aab134422a4a57fe8ed1df55",
+    "frontend/src/features/notes/NotesPage.tsx": "421533ada2153c5b0f0880e6621032cad8b6285165d04eb238305c1732217602",
+    "frontend/src/features/notes/noteRefs.ts": "6fe919e257b6beef72e116ba3a0f95213a6b1a5eb4b1a1585c0a70b259e835ea",
+    "frontend/src/features/notes/notes.test.tsx": "7881d80899827e7d7d7a4a2f3ee1023223c78b63e508bac3f996686ada7f5d95",
+    "frontend/src/features/projects/LocalSourceStatus.tsx": "fe17eed306b9970c6f612de7915c9191da5a7a94d5a3f827fe8f06f6b3922466",
+    "frontend/src/features/projects/ProjectWorkspacePage.tsx": "431f7ce7d1629db52eaa0ff6f1602639468117319ace1c8efa7bc421c58ad9c0",
+    "frontend/src/features/search/SearchPage.tsx": "7c3600c2f1d9350965f8e7fb397ce5512c5b804be5bb1ad529169c5666085870",
+    "frontend/src/features/search/search.test.tsx": "a414982874069982e01c557263eaa5347ea7c9a73da8fe9762694e42c3aaf2ed",
+    "frontend/src/lib/monacoSetup.ts": "494a21602a89eae4fdfbc3525efdb95b9dbfc94c5313277e781b178fc3525f0e"
+  },
+  "preservation": {
+    "baseline_files": 735,
+    "baseline_sha256": "b26e2b5b18c008c958ceaa3b4b726176f6e0098367d1b90e5a99e5c9ca95bf6c",
+    "deleted_baseline_files": [],
+    "changed_baseline_files": [
+      ".github/workflows/ci.yml",
+      "backend/build.gradle.kts",
+      "backend/src/main/java/dev/codeintelligence/analysis/core/FileController.java",
+      "backend/src/main/java/dev/codeintelligence/analysis/core/FileService.java",
+      "backend/src/main/java/dev/codeintelligence/analysis/feature/FeatureService.java",
+      "backend/src/test/java/dev/codeintelligence/analysis/core/FileApiIntegrationTest.java",
+      "frontend/src/api/client.ts",
+      "frontend/src/api/files.ts",
+      "frontend/src/api/graph.ts",
+      "frontend/src/api/types.ts",
+      "frontend/src/app/AiPanel.test.tsx",
+      "frontend/src/components/EvidenceList.tsx",
+      "frontend/src/features/architecture/architecture.test.tsx",
+      "frontend/src/features/code/CodeExplorerPage.tsx",
+      "frontend/src/features/code/CodeViewer.tsx",
+      "frontend/src/features/code/SymbolPanel.tsx",
+      "frontend/src/features/code/codeExplorer.test.tsx",
+      "frontend/src/features/code/codeLocation.ts",
+      "frontend/src/features/features/FeaturesPage.tsx",
+      "frontend/src/features/features/features.test.tsx",
+      "frontend/src/features/flows/flows.test.tsx",
+      "frontend/src/features/notes/NotesPage.tsx",
+      "frontend/src/features/notes/noteRefs.ts",
+      "frontend/src/features/notes/notes.test.tsx",
+      "frontend/src/features/projects/LocalSourceStatus.tsx",
+      "frontend/src/features/projects/ProjectWorkspacePage.tsx",
+      "frontend/src/features/search/SearchPage.tsx",
+      "frontend/src/features/search/search.test.tsx",
+      "frontend/src/lib/monacoSetup.ts"
+    ],
+    "new_files": [
+      "backend/src/main/java/dev/codeintelligence/analysis/core/SnapshotBlobReader.java",
+      "backend/src/main/java/dev/codeintelligence/analysis/core/SnapshotSourceException.java",
+      "backend/src/test/java/dev/codeintelligence/analysis/core/SnapshotSourceContractIntegrationTest.java",
+      "docs/audit/s1-implementation-2026-10-02.md",
+      "docs/audit/s1-status-2026-10-02.md",
+      "docs/audit/s1-validation-2026-10-02.json",
+      "frontend/e2e/snapshot-source-real.cjs",
+      "frontend/src/components/EvidenceList.test.tsx"
+    ],
+    "planning_files": {
+      "docs/multilanguage-plan-2026-10-02/00-rubric-v1.md": {
+        "before": "7db6405e61e8ea5cc3669fb95ef7fb866cea0e339fa5a72808a94e486785a794",
+        "after": "7db6405e61e8ea5cc3669fb95ef7fb866cea0e339fa5a72808a94e486785a794"
+      },
+      "docs/multilanguage-plan-2026-10-02/01-prd.md": {
+        "before": "fb5998926c59864db5d2e6a74c1433e629936cf65b1be312f63ef3748e9f9b75",
+        "after": "fb5998926c59864db5d2e6a74c1433e629936cf65b1be312f63ef3748e9f9b75"
+      },
+      "docs/multilanguage-plan-2026-10-02/02-language-support.md": {
+        "before": "ba90b1f7d77c715f9eb0f50ef6238b4aeeed1b2f89466450897856d01cb21497",
+        "after": "ba90b1f7d77c715f9eb0f50ef6238b4aeeed1b2f89466450897856d01cb21497"
+      },
+      "docs/multilanguage-plan-2026-10-02/03-architecture-contracts.md": {
+        "before": "35583bfb1dbcfe98b0263ba1eec79746bd176eac3c2d0ba97e5741d4676bad69",
+        "after": "35583bfb1dbcfe98b0263ba1eec79746bd176eac3c2d0ba97e5741d4676bad69"
+      },
+      "docs/multilanguage-plan-2026-10-02/04-user-flows.md": {
+        "before": "da988d8c6966bb5ea871220d086cde3e7c664c5f0e160057b80ca2695d3f1bec",
+        "after": "da988d8c6966bb5ea871220d086cde3e7c664c5f0e160057b80ca2695d3f1bec"
+      },
+      "docs/multilanguage-plan-2026-10-02/05-security-performance-operations.md": {
+        "before": "5303824929d4f098185cf57caffe30f6b79b96835e34a5bd5cb2a35848939105",
+        "after": "5303824929d4f098185cf57caffe30f6b79b96835e34a5bd5cb2a35848939105"
+      },
+      "docs/multilanguage-plan-2026-10-02/06-benchmarks-validation.md": {
+        "before": "68bccb856e1ec818a9c465b054a3d0523c9ee20ced48fa6b1dc66e35ec8087d1",
+        "after": "68bccb856e1ec818a9c465b054a3d0523c9ee20ced48fa6b1dc66e35ec8087d1"
+      },
+      "docs/multilanguage-plan-2026-10-02/07-delivery-release-gates.md": {
+        "before": "abcc0770b62b54af8ad765b2b737d11ae4a0a8b3e7e7ed7d641069a5475b0a21",
+        "after": "abcc0770b62b54af8ad765b2b737d11ae4a0a8b3e7e7ed7d641069a5475b0a21"
+      },
+      "docs/multilanguage-plan-2026-10-02/08-evaluation.md": {
+        "before": "05fd59c118eb0cef91106eb104ff70a353e91a803a73046fd6a30b208b4b35fa",
+        "after": "05fd59c118eb0cef91106eb104ff70a353e91a803a73046fd6a30b208b4b35fa"
+      },
+      "docs/multilanguage-plan-2026-10-02/09-evidence-register.md": {
+        "before": "93cd398d60f45bd0c9f3930b27c0c0ad96ed2423ccb10de16e8ff5088439747c",
+        "after": "93cd398d60f45bd0c9f3930b27c0c0ad96ed2423ccb10de16e8ff5088439747c"
+      },
+      "docs/multilanguage-plan-2026-10-02/10-r1-public-cells.md": {
+        "before": "6e8fab2541e71b08f6b9640293fd84a5e55dd15f52e3afe5fea9adb187127826",
+        "after": "6e8fab2541e71b08f6b9640293fd84a5e55dd15f52e3afe5fea9adb187127826"
+      },
+      "docs/multilanguage-plan-2026-10-02/11-first-implementation.md": {
+        "before": "426d6b541fc92b71a15b3e6b604ceb993922bdf687642f5aa348fbe4d87a7597",
+        "after": "426d6b541fc92b71a15b3e6b604ceb993922bdf687642f5aa348fbe4d87a7597"
+      },
+      "docs/multilanguage-plan-2026-10-02/README.md": {
+        "before": "a818920edfb2d2bc0bf01d2d100b186de2152c2d65b8457f88c214c4552ef3a3",
+        "after": "a818920edfb2d2bc0bf01d2d100b186de2152c2d65b8457f88c214c4552ef3a3"
+      },
+      "docs/multilanguage-plan-2026-10-02/review-records/input-baseline-sha256.json": {
+        "before": "b9356b79901f7d9b3031b76208f53fe9d86d8cc1db47d150573d459946127fb8",
+        "after": "b9356b79901f7d9b3031b76208f53fe9d86d8cc1db47d150573d459946127fb8"
+      },
+      "docs/multilanguage-plan-2026-10-02/review-records/preservation-report.json": {
+        "before": "39b182abfd964674e042920f5515a5cb50b9ec6a3d89ff64c489c857b946ab10",
+        "after": "39b182abfd964674e042920f5515a5cb50b9ec6a3d89ff64c489c857b946ab10"
+      },
+      "docs/multilanguage-plan-2026-10-02/review-records/v0.9-independent-review.md": {
+        "before": "2ada2e4d8eadcdb453b5391d2a9bc1583ad9858e543d859f1343900d53289cd9",
+        "after": "2ada2e4d8eadcdb453b5391d2a9bc1583ad9858e543d859f1343900d53289cd9"
+      },
+      "docs/multilanguage-plan-2026-10-02/review-records/v0.9-manifest.json": {
+        "before": "d8fbb5630e5aa952b371c2cc6386d8096385866bbb90b75958be3d1727779a28",
+        "after": "d8fbb5630e5aa952b371c2cc6386d8096385866bbb90b75958be3d1727779a28"
+      },
+      "docs/multilanguage-plan-2026-10-02/review-records/v1.0-manifest.json": {
+        "before": "6c74c8185cede388487b86039caf6cfe4b80fe8d535ad43cdf4e81b11d7a9e33",
+        "after": "6c74c8185cede388487b86039caf6cfe4b80fe8d535ad43cdf4e81b11d7a9e33"
+      },
+      "docs/multilanguage-plan-2026-10-02/review-records/v1.1-independent-review.md": {
+        "before": "be794bf3914326f695ee305d1614abf735e1a366e08fca283c0a100107b0fcb2",
+        "after": "be794bf3914326f695ee305d1614abf735e1a366e08fca283c0a100107b0fcb2"
+      },
+      "docs/multilanguage-plan-2026-10-02/review-records/v1.1-manifest.json": {
+        "before": "8c20a48e26d56aa98fe095576193d21816a7a9dacb012800fdc0fe04b7ba25af",
+        "after": "8c20a48e26d56aa98fe095576193d21816a7a9dacb012800fdc0fe04b7ba25af"
+      }
+    },
+    "all_planning_files_unchanged": true
+  }
+}
