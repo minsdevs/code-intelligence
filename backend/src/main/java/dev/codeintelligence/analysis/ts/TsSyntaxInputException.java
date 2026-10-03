@@ -38,12 +38,20 @@ public final class TsSyntaxInputException extends TsAnalyzerException implements
             if (root == null || !root.isObject()) return null;
             JsonNode failureCode = root.get("code");
             JsonNode retryable = root.get("retryable");
-            if (failureCode == null || !failureCode.isTextual() || !CODE.equals(failureCode.stringValue())
-                    || retryable == null || !retryable.isBoolean() || retryable.booleanValue()) return null;
+            if (failureCode == null
+                    || !failureCode.isTextual()
+                    || !CODE.equals(failureCode.stringValue())
+                    || retryable == null
+                    || !retryable.isBoolean()
+                    || retryable.booleanValue()) return null;
             JsonNode total = root.get("totalDiagnostics");
             JsonNode diagnostics = root.get("diagnostics");
-            if (!positiveInteger(total) || diagnostics == null || !diagnostics.isArray() || diagnostics.isEmpty()
-                    || diagnostics.size() > 100 || diagnostics.size() > total.intValue()) return null;
+            if (!positiveInteger(total)
+                    || diagnostics == null
+                    || !diagnostics.isArray()
+                    || diagnostics.isEmpty()
+                    || diagnostics.size() > 100
+                    || diagnostics.size() > total.intValue()) return null;
             JsonNode first = diagnostics.get(0);
             String location = safeLocation(first);
             return new TsSyntaxInputException("TypeScript/JavaScript syntax errors: " + total.intValue() + ". "
@@ -60,11 +68,21 @@ public final class TsSyntaxInputException extends TsAnalyzerException implements
         JsonNode code = diagnostic.get("code");
         JsonNode line = diagnostic.get("lineStart");
         JsonNode column = diagnostic.get("columnStart");
-        if (file == null || !file.isTextual() || !positiveInteger(code) || !positiveInteger(line) || !positiveInteger(column)) return null;
+        if (file == null
+                || !file.isTextual()
+                || !positiveInteger(code)
+                || !positiveInteger(line)
+                || !positiveInteger(column)) return null;
         String path = file.stringValue();
-        if (path.isBlank() || path.length() > 240 || path.startsWith("/") || path.contains("\\")
-                || path.contains(":") || path.codePoints().anyMatch(value -> Character.isISOControl(value)
-                        || Character.getType(value) == Character.FORMAT)) return null;
+        if (path.isBlank()
+                || path.length() > 240
+                || path.startsWith("/")
+                || path.contains("\\")
+                || path.contains(":")
+                || path.codePoints()
+                        .anyMatch(
+                                value -> Character.isISOControl(value) || Character.getType(value) == Character.FORMAT))
+            return null;
         for (String segment : path.split("/", -1)) {
             if (segment.isBlank() || segment.equals(".") || segment.equals("..")) return null;
         }
