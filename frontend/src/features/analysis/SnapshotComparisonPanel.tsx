@@ -43,8 +43,8 @@ export default function SnapshotComparisonPanel({ projectId }: { projectId: numb
             <ChangeCount label="Relations" value={comparison.structure.relationships} />
           </div>
           <p className="mt-2 font-mono text-[11px] text-ink-muted">
-            coverage {comparison.coverage.before.fileCoverage.analyzedFiles} →{' '}
-            {comparison.coverage.after.fileCoverage.analyzedFiles} analyzed files
+            Inventory: {inventoryCount(comparison.coverage.before.fileCoverage.inventoriedFiles)} →{' '}
+            {inventoryCount(comparison.coverage.after.fileCoverage.inventoriedFiles)} files. Analysis coverage unmeasured.
           </p>
           {comparison.renameCandidates.length > 0 && (
             <p className="mt-1 text-[11px] text-warn">
@@ -58,6 +58,10 @@ export default function SnapshotComparisonPanel({ projectId }: { projectId: numb
       )}
     </section>
   )
+}
+
+function inventoryCount(count: number | undefined): number | string {
+  return count != null && Number.isSafeInteger(count) && count >= 0 ? count : 'unknown'
 }
 
 function SnapshotSelect({

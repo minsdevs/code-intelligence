@@ -21,7 +21,14 @@ public class FeatureService {
 
     public record FeatureLinkView(String role, long nodeId, String name, String filePath) {}
 
-    public record FeatureEvidenceView(String filePath, Integer lineStart, Integer lineEnd, String excerpt) {}
+    public record FeatureEvidenceView(
+            String filePath,
+            Integer lineStart,
+            Integer lineEnd,
+            String excerpt,
+            long evidenceId,
+            long snapshotId,
+            String sourceState) {}
 
     public record FeatureDetailView(
             long id,
@@ -29,7 +36,8 @@ public class FeatureService {
             String detection,
             double confidence,
             List<FeatureLinkView> links,
-            List<FeatureEvidenceView> evidences) {}
+            List<FeatureEvidenceView> evidences,
+            long resolvedSnapshotId) {}
 
     private final ProjectRepository projectRepository;
     private final SnapshotRepository snapshotRepository;
@@ -102,21 +110,25 @@ public class FeatureService {
                         rs.getString("role"), rs.getLong("node_id"), rs.getString("name"), rs.getString("file_path")))
                 .list();
         List<FeatureEvidenceView> evidences = jdbc.sql("""
-                        select e.file_path, e.line_start, e.line_end, e.excerpt
+                        select e.id, e.file_path, e.line_start, e.line_end, e.excerpt
                         from evidence_links l
                         join evidences e on e.id = l.evidence_id
-                        where l.subject_type = 'FEATURE' and l.subject_id = :featureId
+                        where l.subject_type = 'FEATURE' and l.subject_id = :featureId and e.project_id = :projectId
                         order by e.file_path, e.line_start
                         """)
                 .param("featureId", feature.id())
+                .param("projectId", projectId)
                 .query((rs, rowNum) -> new FeatureEvidenceView(
                         rs.getString("file_path"),
                         (Integer) rs.getObject("line_start"),
                         (Integer) rs.getObject("line_end"),
-                        rs.getString("excerpt")))
+                        rs.getString("excerpt"),
+                        rs.getLong("id"),
+                        resolved,
+                        "LEGACY_SOURCE_UNVERIFIED"))
                 .list();
         return new FeatureDetailView(
-                feature.id(), feature.name(), feature.detection(), feature.confidence(), links, evidences);
+                feature.id(), feature.name(), feature.detection(), feature.confidence(), links, evidences, resolved);
     }
 
     private FeatureChildView toTree(FeatureRow row, Map<Long, List<FeatureRow>> byParent) {
