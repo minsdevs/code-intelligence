@@ -533,7 +533,7 @@ test('no new safety key or admission capability reaches backend environment or r
   assert.equal(JSON.stringify(h.spawned[0].args).includes('synthetic-private-gateway-capability'), false);
   assert.equal(h.bootstrapWrites.length, 1);
   assert.equal(h.bootstrapWrites[0].toString(), 'synthetic-private-gateway-capability\n');
-  assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken']);
+  assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken', 'appVersion']);
 });
 
 test('a secondary process that lost the single-instance lock never starts safety or children', async () => {
