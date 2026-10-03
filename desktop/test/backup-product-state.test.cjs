@@ -37,6 +37,9 @@ async function fixture(t, create = true, patch = {}) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ci-product-state-unit-')));
   const pg = path.join(root, 'postgres'), data = path.join(root, 'data');
   await fs.mkdir(pg, { mode: 0o700 }); await fs.mkdir(data, { mode: 0o700 });
+  // Spawn is faked; use an owned executable fixture instead of the runner's Node permissions.
+  const psqlPath = path.join(root, 'psql-bin');
+  await fs.writeFile(psqlPath, '#!/bin/sh\nexit 1\n', { mode: 0o700 });
   const pidPath = path.join(pg, 'postmaster.pid');
   const pidText = `${PID}\n${pg}\n${START}\n${PORT}\n/tmp\n127.0.0.1\n 1 2\nready   \n`;
   await fs.writeFile(pidPath, pidText, { mode: 0o600 });
@@ -91,7 +94,7 @@ async function fixture(t, create = true, patch = {}) {
     } });
     return child;
   };
-  const options = { psqlPath: await fs.realpath(process.execPath), connection: { host: '127.0.0.1', port: PORT, user: 'codeintel' },
+  const options = { psqlPath, connection: { host: '127.0.0.1', port: PORT, user: 'codeintel' },
     env: { PGPASSWORD: 'synthetic-private-password' }, expectedDataDirectory: pg, ownedPostgres: owned,
     dataRoot: data, spawn, timeoutMs: 2000, ...patch };
   const f = { root, pg, data, pidPath, pidText, owned, controls, calls, options, adapter: null };
@@ -228,6 +231,8 @@ for (const [name, change] of [
   ['PG data directory symlink', async f => { const link = path.join(f.root, 'pg-link'); await fs.symlink(f.pg, link); f.options.expectedDataDirectory = link; }],
   ['data root symlink', async f => { const link = path.join(f.root, 'data-link'); await fs.symlink(f.data, link); f.options.dataRoot = link; }],
   ['psql symlink', async f => { const link = path.join(f.root, 'psql'); await fs.symlink(f.options.psqlPath, link); f.options.psqlPath = link; }],
+  ['group writable psql', async f => { await fs.chmod(f.options.psqlPath, 0o775); }],
+  ['non-executable psql', async f => { await fs.chmod(f.options.psqlPath, 0o600); }],
   ['PID symlink', async f => { const other = path.join(f.root, 'pid-copy'); await fs.rename(f.pidPath, other); await fs.symlink(other, f.pidPath); }],
   ['PID hard link', async f => { await fs.link(f.pidPath, path.join(f.root, 'pid-link')); }],
   ['public PID file', async f => { await fs.chmod(f.pidPath, 0o644); }],
