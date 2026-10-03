@@ -1,0 +1,12 @@
+{
+  "input": { "files": [{ "path": "src/broken.mts", "content": "export const value = ;" }] },
+  "response": {
+    "statusCode": 400,
+    "code": "TS_SYNTAX_ERROR",
+    "message": "Input contains syntax errors. Fix the source and start a new analysis.",
+    "retryable": false,
+    "totalDiagnostics": 1,
+    "diagnostics": [{ "filePath": "src/broken.mts", "code": 1109, "lineStart": 1, "columnStart": 22 }]
+  },
+  "jobError": "TypeScript/JavaScript syntax errors: 1. First diagnostic: src/broken.mts:1:22 (TS1109). Fix the source and start a new analysis."
+}

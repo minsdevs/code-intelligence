@@ -32,6 +32,10 @@ public class JobStartupRecovery implements ApplicationRunner {
     public int recover() {
         int steps = repository.failInterruptedSteps(INTERRUPTED_ERROR);
         int jobs = repository.failInterruptedJobs(INTERRUPTED_ERROR);
+        int cancelled = repository.finishInterruptedCancellations();
+        if (cancelled > 0) {
+            log.warn("Startup recovery completed {} interrupted cancellation(s)", cancelled);
+        }
         if (jobs > 0 || steps > 0) {
             log.warn("Startup recovery marked {} job(s) and {} step(s) left RUNNING as FAILED", jobs, steps);
         }

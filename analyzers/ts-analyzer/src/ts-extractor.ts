@@ -3,6 +3,7 @@ import type { AnalyzeFile, AnalyzeResponse, ApiCallHit, EndpointHit, RouteHit, S
 import { isTsJs } from './paths'
 import { extractGeneric } from './generic-extractor'
 import { extractSemanticGraph } from './semantic-extractor'
+import { assertParseable } from './syntax-diagnostics'
 
 const HTTP_METHODS: Record<string, true> = {
   GET: true,
@@ -49,13 +50,19 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
   const apiCalls: ApiCallHit[] = []
   const symbols: SymbolHit[] = []
 
-  for (const source of project.getSourceFiles()) {
+  const sourceFiles = project.getSourceFiles()
+  assertParseable(project, sourceFiles)
+  const httpBindings: HttpBindings = {
+    inputSources: new Set(sourceFiles),
+    globalFetchShadowed: sourceFiles.some(hasGlobalFetchBinding),
+  }
+  for (const source of sourceFiles) {
     const filePath = source.getFilePath().replace(/^\//, '')
     collectRoutes(source, filePath, routes)
     collectVueRouter(source, filePath, routes)
     collectFileBasedRoutes(source, filePath, routes, endpoints, symbols)
     collectDeclarations(source, filePath, components, hooks, stores)
-    collectApiCalls(source, filePath, apiCalls)
+    collectApiCalls(source, filePath, apiCalls, httpBindings)
   }
   symbols.push(...extractGeneric(files))
   const semantic = extractSemanticGraph(project, files)
@@ -89,8 +96,7 @@ function collectRoutes(source: SourceFile, filePath: string, routes: RouteHit[])
     if (!Node.isJsxOpeningElement(node) && !Node.isJsxSelfClosingElement(node)) {
       return
     }
-    const tag = node.getTagNameNode().getText()
-    if (tag !== 'Route' && !tag.endsWith('.Route')) {
+    if (!isReactRoute(node.getTagNameNode())) {
       return
     }
     const pathAttr = node.getAttribute('path')
@@ -114,6 +120,20 @@ function collectRoutes(source: SourceFile, filePath: string, routes: RouteHit[])
       lineEnd: node.getEndLineNumber(),
     })
   })
+}
+
+function isReactRoute(tag: Node): boolean {
+  const namespaceMember = Node.isPropertyAccessExpression(tag) && tag.getName() === 'Route'
+  const local = namespaceMember ? tag.getExpression() : tag
+  if (!Node.isIdentifier(local)) return false
+  const declarations = local.getSymbol()?.getDeclarations()
+  if (declarations?.length !== 1) return false
+  const declaration = declarations[0]
+  if (namespaceMember ? !Node.isNamespaceImport(declaration)
+    : !Node.isImportSpecifier(declaration) || declaration.getName() !== 'Route' || declaration.isTypeOnly()) return false
+  const imported = declaration.getFirstAncestorByKind(SyntaxKind.ImportDeclaration)
+  return !!imported && !imported.isTypeOnly()
+    && ['react-router-dom', 'react-router'].includes(imported.getModuleSpecifierValue())
 }
 
 /**
@@ -392,12 +412,85 @@ function isImportedStoreFactory(node: Node, source: SourceFile): boolean {
   return false
 }
 
-function collectApiCalls(source: SourceFile, filePath: string, apiCalls: ApiCallHit[]): void {
+type HttpBindings = { inputSources: Set<SourceFile>; globalFetchShadowed: boolean }
+
+// A script-level runtime binding can collide with lib.dom's global fetch declaration.
+// In that case the checker may report only lib.dom, so keep this narrow syntactic guard too.
+function hasGlobalFetchBinding(source: SourceFile): boolean {
+  if (ts.isExternalModule(source.compilerNode)) return false
+  if (source.getEnums().some((declaration) => declaration.getName() === 'fetch')) return true
+  const bindsFetch = (name: Node): boolean => {
+    if (Node.isIdentifier(name)) return name.getText() === 'fetch'
+    if (Node.isObjectBindingPattern(name) || Node.isArrayBindingPattern(name)) {
+      return name.getElements().some((element) => Node.isBindingElement(element) && bindsFetch(element.getNameNode()))
+    }
+    return false
+  }
+  return source.getDescendantsOfKind(SyntaxKind.VariableDeclaration).some((declaration) => {
+    if (!bindsFetch(declaration.getNameNode())) return false
+    const lexical = declaration.getFirstAncestorByKind(SyntaxKind.VariableDeclarationList)?.getDeclarationKind() !== 'var'
+    const scope = declaration.getFirstAncestor((ancestor) =>
+      Node.isSourceFile(ancestor) || Node.isModuleBlock(ancestor) || ts.isFunctionLike(ancestor.compilerNode)
+      || lexical && (Node.isBlock(ancestor) || Node.isCaseBlock(ancestor) || Node.isForStatement(ancestor)
+        || Node.isForInStatement(ancestor) || Node.isForOfStatement(ancestor)),
+    )
+    return scope === source
+  })
+}
+
+function builtinFetch(expression: Node, bindings: HttpBindings): boolean {
+  if (!Node.isIdentifier(expression) || expression.getText() !== 'fetch' || bindings.globalFetchShadowed
+      || expression.getFirstAncestorByKind(SyntaxKind.WithStatement)) return false
+  const declarations = expression.getSymbol()?.getDeclarations() ?? []
+  const program = expression.getProject().getProgram().compilerObject
+  return declarations.every((declaration) => !bindings.inputSources.has(declaration.getSourceFile())
+    && program.isSourceFileDefaultLibrary(declaration.getSourceFile().compilerNode))
+}
+
+function axiosDefaultImport(expression: Node): boolean {
+  if (!Node.isIdentifier(expression)) return false
+  const declarations = expression.getSymbol()?.getDeclarations() ?? []
+  if (declarations.length !== 1) return false
+  const declaration = declarations[0]
+  if (!Node.isImportClause(declaration)
+      && !(Node.isImportSpecifier(declaration) && declaration.getName() === 'default' && !declaration.isTypeOnly())) return false
+  const imported = declaration.getFirstAncestorByKind(SyntaxKind.ImportDeclaration)
+  return imported?.getModuleSpecifierValue() === 'axios' && !imported.isTypeOnly()
+}
+
+// Ordered object properties matter: a later spread/computed key may replace a literal method.
+// A later explicit property can in turn establish the final own value without executing code.
+function httpConfigProperty(object: Node, name: string): { present: boolean; value: Node | undefined } {
+  let result = { present: false, value: undefined as Node | undefined }
+  if (!Node.isObjectLiteralExpression(object)) return { present: true, value: undefined }
+  for (const property of object.getProperties()) {
+    if (Node.isSpreadAssignment(property)) { result = { present: true, value: undefined }; continue }
+    const key = property.getNameNode()
+    const computed = Node.isComputedPropertyName(key)
+    const keyExpression = computed ? key.getExpression() : key
+    const keyName = Node.isIdentifier(keyExpression) && !computed ? keyExpression.getText()
+      : Node.isStringLiteral(keyExpression) || Node.isNoSubstitutionTemplateLiteral(keyExpression) ? keyExpression.getLiteralText() : null
+    if (keyName === null || keyName === '__proto__') { result = { present: true, value: undefined }; continue }
+    if (keyName === name) result = { present: true, value: Node.isPropertyAssignment(property) ? property.getInitializer() : undefined }
+  }
+  return result
+}
+
+function httpMethod(options: Node | undefined): string {
+  if (!options) return 'GET'
+  const method = httpConfigProperty(options, 'method')
+  if (!method.present) return 'GET'
+  const value = method.value
+  return value && (Node.isStringLiteral(value) || Node.isNoSubstitutionTemplateLiteral(value))
+    ? value.getLiteralText().toUpperCase() : 'UNKNOWN'
+}
+
+function collectApiCalls(source: SourceFile, filePath: string, apiCalls: ApiCallHit[], bindings: HttpBindings): void {
   source.forEachDescendant((node) => {
     if (!Node.isCallExpression(node)) {
       return
     }
-    const parsed = parseApiCall(node)
+    const parsed = parseApiCall(node, bindings)
     if (!parsed) {
       return
     }
@@ -412,47 +505,32 @@ function collectApiCalls(source: SourceFile, filePath: string, apiCalls: ApiCall
 }
 
 
-function parseApiCall(node: Node): { method: string; url: string } | null {
+function parseApiCall(node: Node, bindings: HttpBindings): { method: string; url: string } | null {
   if (!Node.isCallExpression(node)) {
     return null
   }
   const expr = node.getExpression()
   const args = node.getArguments()
-  if (Node.isIdentifier(expr) && expr.getText() === 'fetch') {
+  if (builtinFetch(expr, bindings)) {
     const url = stringFromNode(args[0])
     if (!url) {
       return null
     }
-    let method = 'GET'
-    if (args[1] && Node.isObjectLiteralExpression(args[1])) {
-      const methodProp = args[1].getProperty('method')
-      if (methodProp && Node.isPropertyAssignment(methodProp)) {
-        method = (stringFromNode(methodProp.getInitializer()) ?? 'GET').toUpperCase()
-      }
-    }
-    return { method, url }
+    return { method: httpMethod(args[1]), url }
   }
   if (Node.isPropertyAccessExpression(expr)) {
     const name = expr.getName()
-    const objectText = expr.getExpression().getText()
-    if (objectText === 'axios' || objectText.endsWith('axios')) {
-      const http = name.toUpperCase()
-      if (['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(http)) {
-        const url = stringFromNode(args[0])
-        if (url) {
-          return { method: http, url }
-        }
+    const http = name.toUpperCase()
+    if (['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(http) && axiosDefaultImport(expr.getExpression())) {
+      const url = stringFromNode(args[0])
+      if (url) {
+        return { method: http, url }
       }
     }
   }
-  if (Node.isIdentifier(expr) && expr.getText() === 'axios' && args[0] && Node.isObjectLiteralExpression(args[0])) {
-    const urlProp = args[0].getProperty('url')
-    const methodProp = args[0].getProperty('method')
-    const url = urlProp && Node.isPropertyAssignment(urlProp) ? stringFromNode(urlProp.getInitializer()) : null
-    const method =
-      methodProp && Node.isPropertyAssignment(methodProp)
-        ? (stringFromNode(methodProp.getInitializer()) ?? 'GET').toUpperCase()
-        : 'GET'
+  if (args[0] && Node.isObjectLiteralExpression(args[0]) && axiosDefaultImport(expr)) {
+    const url = stringFromNode(httpConfigProperty(args[0], 'url').value)
+    const method = httpMethod(args[0])
     if (url) {
       return { method, url }
     }

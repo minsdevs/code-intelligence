@@ -5,6 +5,7 @@ import {
   type ClassDeclaration,
   type Decorator,
   type Expression,
+  type FunctionDeclaration,
   type MethodDeclaration,
   type Project,
   type SourceFile,
@@ -32,6 +33,7 @@ type DeclarationRef = {
   name: string
   filePath: string
   classDeclaration?: ClassDeclaration
+  functionDeclaration?: FunctionDeclaration
 }
 
 type SemanticResult = {
@@ -113,9 +115,9 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[]): Se
   const unresolvedCalls: UnresolvedCallHit[] = []
   const classesByName = new Map<string, DeclarationRef[]>()
   const declarationsByFileAndName = new Map<string, DeclarationRef>()
-  const methodsByClassAndName = new Map<string, DeclarationRef>()
-  const functionsByName = new Map<string, DeclarationRef[]>()
+  const methodsByOwnerAndName = new Map<string, DeclarationRef>()
   const nodeKeys = new Set<string>()
+  const edgeKeys = new Set<string>()
 
   const addNode = (node: SemanticNodeHit): void => {
     if (!nodeKeys.has(node.key)) {
@@ -124,9 +126,9 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[]): Se
     }
   }
   const addEdge = (edge: SemanticEdgeHit): void => {
-    if (!edges.some((candidate) =>
-      candidate.sourceKey === edge.sourceKey && candidate.targetKey === edge.targetKey && candidate.type === edge.type
-    )) {
+    const key = JSON.stringify([edge.sourceKey, edge.targetKey, edge.type])
+    if (!edgeKeys.has(key)) {
+      edgeKeys.add(key)
       edges.push(edge)
     }
   }
@@ -173,7 +175,7 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[]): Se
         }
         addNode(hit(methodKey, 'METHOD', methodName, filePath, method, 'BACKEND', methodMetadata))
         addEdge(edge(key, methodKey, 'DECLARES', 'CONFIRMED', filePath, method, {}))
-        methodsByClassAndName.set(`${name}.${methodName}`, { key: methodKey, name: methodName, filePath })
+        methodsByOwnerAndName.set(`${key}.${methodName}`, { key: methodKey, name: methodName, filePath })
       }
     }
 
@@ -208,8 +210,9 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[]): Se
         async: declaration.isAsync(),
       }))
       addEdge(edge(fileKey(filePath), key, 'CONTAINS', 'CONFIRMED', filePath, declaration, { relation: 'DECLARES' }))
-      addRef(functionsByName, name, { key, name, filePath })
-      declarationsByFileAndName.set(refKey(filePath, name), { key, name, filePath })
+      const ref = { key, name, filePath, functionDeclaration: declaration }
+      declarationsByFileAndName.set(refKey(filePath, name), ref)
+      if (declaration.isDefaultExport()) declarationsByFileAndName.set(refKey(filePath, 'default'), ref)
     }
   }
 
@@ -232,7 +235,7 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[]): Se
       if (!className) continue
       const classKey = symbolKey(filePath, className)
       const controller = findImportedDecorator(declaration.getDecorators(), bindings, NEST_COMMON, 'Controller')
-      const controllerPath = controller ? staticString(controller.getArguments()[0]) ?? '' : null
+      const controllerPath = controller ? decoratorPath(controller) : null
       const injectionTargets = constructorInjectionTargets(
         declaration,
         bindings,
@@ -254,7 +257,7 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[]): Se
       for (const method of declaration.getMethods()) {
         const methodKey = symbolKey(filePath, `${className}.${method.getName()}`)
         collectCrossCuttingEdges(method.getDecorators(), methodKey, filePath, bindings, resolveImport, declarationsByFileAndName, classesByName, addEdge)
-        if (controllerPath !== null) {
+        if (controller) {
           collectControllerEndpoints(
             method,
             classKey,
@@ -265,21 +268,29 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[]): Se
             bindings,
             endpoints,
             addEdge,
+            unresolvedCalls,
           )
         }
-        collectMethodCalls(
+        collectCallableCalls(
           method,
-          className,
+          classKey,
           methodKey,
           filePath,
           injectionTargets,
-          methodsByClassAndName,
-          functionsByName,
+          methodsByOwnerAndName,
+          resolveImport,
+          declarationsByFileAndName,
           addNode,
           addEdge,
           unresolvedCalls,
         )
       }
+    }
+    for (const declaration of source.getFunctions()) {
+      const name = declaration.getName()
+      if (!name || !declaration.getBody()) continue
+      collectCallableCalls(declaration, '', symbolKey(filePath, name), filePath, new Map(), new Map(),
+        resolveImport, declarationsByFileAndName, addNode, addEdge, unresolvedCalls)
     }
   }
 
@@ -358,7 +369,8 @@ function collectResolvedImports(
 }
 
 function createImportResolver(files: AnalyzeFile[], pathSet: Set<string>): Resolver {
-  const aliases: { pattern: string; targets: string[]; baseDir: string }[] = []
+  type Alias = { pattern: string; targets: string[]; baseDir: string }
+  const configs: { directory: string; aliases: Alias[] | null }[] = []
   const packages = new Map<string, string>()
   for (const file of files) {
     const normalizedPath = normalize(file.path)
@@ -366,10 +378,27 @@ function createImportResolver(files: AnalyzeFile[], pathSet: Set<string>): Resol
       const parsed = ts.parseConfigFileTextToJson(normalizedPath, file.content)
       const config = parsed.config as { compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> } } | undefined
       const configDir = posix.dirname(normalizedPath)
-      const baseDir = normalize(posix.join(configDir === '.' ? '' : configDir, config?.compilerOptions?.baseUrl ?? '.'))
-      for (const [pattern, targets] of Object.entries(config?.compilerOptions?.paths ?? {})) {
+      const directory = configDir === '.' ? '' : `${configDir}/`
+      const options = config?.compilerOptions
+      if (parsed.error || !config || typeof config !== 'object' ||
+        options != null && (typeof options !== 'object' ||
+          options.baseUrl != null && typeof options.baseUrl !== 'string' ||
+          options.paths != null && (typeof options.paths !== 'object' || Array.isArray(options.paths)))) {
+        configs.push({ directory, aliases: null })
+        continue
+      }
+      const baseDir = normalize(posix.join(configDir, options?.baseUrl ?? '.'))
+      const aliases: Alias[] = []
+      let invalid = false
+      for (const [pattern, targets] of Object.entries(options?.paths ?? {})) {
+        if (pattern.split('*').length > 2 || !Array.isArray(targets) ||
+          targets.some((target) => typeof target !== 'string' || target.split('*').length > 2)) {
+          invalid = true
+          break
+        }
         aliases.push({ pattern, targets, baseDir })
       }
+      configs.push({ directory, aliases: invalid ? null : aliases })
     }
     if (posix.basename(normalizedPath) === 'package.json') {
       try {
@@ -384,17 +413,35 @@ function createImportResolver(files: AnalyzeFile[], pathSet: Set<string>): Resol
   return (specifier: string, fromPath: string): string | null => {
     const relative = resolveRelativeImport(fromPath, specifier)
     if (relative) return resolveCandidate(relative, pathSet)
-    for (const alias of aliases) {
-      const wildcard = alias.pattern.indexOf('*')
-      const prefix = wildcard < 0 ? alias.pattern : alias.pattern.slice(0, wildcard)
-      const suffix = wildcard < 0 ? '' : alias.pattern.slice(wildcard + 1)
-      if (!specifier.startsWith(prefix) || !specifier.endsWith(suffix)) continue
-      const capture = specifier.slice(prefix.length, specifier.length - suffix.length)
-      for (const target of alias.targets) {
-        const candidate = normalize(posix.join(alias.baseDir, target.replace('*', capture)))
-        const resolved = resolveCandidate(candidate, pathSet)
-        if (resolved) return resolved
-      }
+    const applicable = configs.filter((config) => fromPath.startsWith(config.directory))
+    const nearestLength = Math.max(-1, ...applicable.map((config) => config.directory.length))
+    const nearest = applicable.filter((config) => config.directory.length === nearestLength)
+    const resolutions: (string | null)[] = []
+    let matched = false
+    for (const config of nearest) {
+      if (config.aliases === null) return null
+      const matches = config.aliases.flatMap((alias) => {
+        const wildcard = alias.pattern.indexOf('*')
+        if (wildcard < 0) return specifier === alias.pattern ? [{ alias, capture: '', priority: Infinity }] : []
+        const prefix = alias.pattern.slice(0, wildcard)
+        const suffix = alias.pattern.slice(wildcard + 1)
+        if (specifier.length < prefix.length + suffix.length || !specifier.startsWith(prefix) || !specifier.endsWith(suffix)) return []
+        return [{ alias, capture: specifier.slice(prefix.length, specifier.length - suffix.length), priority: prefix.length }]
+      })
+      matched ||= matches.length > 0
+      const priority = Math.max(-1, ...matches.map((match) => match.priority))
+      const candidates = matches.filter((match) => match.priority === priority).map(({ alias, capture }) => {
+        for (const target of alias.targets) {
+          const resolved = resolveCandidate(normalize(posix.join(alias.baseDir, target.replace('*', capture))), pathSet)
+          if (resolved) return resolved
+        }
+        return null
+      })
+      resolutions.push(candidates.length > 0 && candidates.every((candidate) => candidate === candidates[0]) ? candidates[0] : null)
+    }
+    if (matched) {
+      // Same-directory config variants must agree; input order is not configuration selection.
+      return resolutions.length > 0 && resolutions.every((value) => value === resolutions[0]) ? resolutions[0] : null
     }
     for (const [packageName, packageDir] of packages) {
       if (specifier !== packageName && !specifier.startsWith(`${packageName}/`)) continue
@@ -409,6 +456,16 @@ function createImportResolver(files: AnalyzeFile[], pathSet: Set<string>): Resol
 
 function resolveCandidate(candidate: string, pathSet: Set<string>): string | null {
   if (candidate.startsWith('../') || candidate === '..') return null
+  // Node ESM/CJS runtime specifiers point back to TypeScript source when supplied.
+  const moduleExtension = candidate.match(/\.(mjs|cjs)$/)
+  if (moduleExtension) {
+    const stem = candidate.slice(0, -4)
+    const extension = moduleExtension[1] === 'mjs' ? 'mts' : 'cts'
+    for (const value of [`${stem}.${extension}`, `${stem}.d.${extension}`, candidate]) {
+      if (pathSet.has(value)) return value
+    }
+    return null
+  }
   for (const value of [
     candidate,
     `${candidate}.ts`,
@@ -547,8 +604,9 @@ function resolveExpressionRef(
     if (resolved) {
       return declarations.get(refKey(resolved, binding.imported === 'default' ? localName : binding.imported)) ?? null
     }
+    return null
   }
-  return declarations.get(refKey(filePath, localName)) ?? unique(classesByName.get(localName))
+  return declarations.get(refKey(filePath, localName)) ?? null
 }
 
 function constructorInjectionTargets(
@@ -598,7 +656,7 @@ function constructorInjectionTargets(
         const resolved = resolveImport(binding.source, filePath)
         if (resolved) target = declarations.get(refKey(resolved, binding.imported === 'default' ? typeName : binding.imported)) ?? null
       } else {
-        target = declarations.get(refKey(filePath, typeName)) ?? unique(classesByName.get(typeName))
+        target = declarations.get(refKey(filePath, typeName)) ?? null
       }
       if (target) {
         targets.set(parameter.getName(), {
@@ -618,19 +676,30 @@ function collectControllerEndpoints(
   method: MethodDeclaration,
   controllerKey: string,
   methodKey: string,
-  controllerPath: string,
-  globalPrefix: string,
+  controllerPath: string | null,
+  globalPrefix: string | null,
   filePath: string,
   bindings: Map<string, ImportBinding>,
   endpoints: EndpointHit[],
   addEdge: (edge: SemanticEdgeHit) => void,
+  unresolvedCalls: UnresolvedCallHit[],
 ): void {
   for (const decorator of method.getDecorators()) {
     const imported = importedDecoratorName(decorator, bindings)
     if (!imported || imported.source !== NEST_COMMON) continue
     const httpMethod = HTTP_DECORATORS[imported.name]
     if (!httpMethod) continue
-    const methodPath = staticString(decorator.getArguments()[0]) ?? ''
+    const methodPath = decoratorPath(decorator)
+    if (controllerPath === null || methodPath === null || globalPrefix === null) {
+      unresolvedCalls.push({
+        sourceKey: methodKey,
+        expression: decorator.getText(),
+        filePath,
+        lineStart: decorator.getStartLineNumber(),
+        reason: globalPrefix === null ? 'UNRESOLVED_GLOBAL_PREFIX' : 'UNRESOLVED_ROUTE_PATH',
+      })
+      continue
+    }
     const path = joinUrl(globalPrefix, controllerPath, methodPath)
     const versionDecorator = findImportedDecorator(method.getDecorators(), bindings, NEST_COMMON, 'Version')
     const metadata: Record<string, unknown> = {
@@ -698,23 +767,46 @@ function collectMiddlewareEdges(
   }
 }
 
-function collectMethodCalls(
-  method: MethodDeclaration,
-  className: string,
+function collectCallableCalls(
+  method: MethodDeclaration | FunctionDeclaration,
+  classKey: string,
   sourceKey: string,
   filePath: string,
   injectionTargets: Map<string, { key: string; className: string | null; token: string; confidence: 'CONFIRMED' | 'LIKELY'; node: Node }>,
-  methodsByClassAndName: Map<string, DeclarationRef>,
-  functionsByName: Map<string, DeclarationRef[]>,
+  methodsByOwnerAndName: Map<string, DeclarationRef>,
+  resolveImport: Resolver,
+  declarations: Map<string, DeclarationRef>,
   addNode: (node: SemanticNodeHit) => void,
   addEdge: (edge: SemanticEdgeHit) => void,
   unresolvedCalls: UnresolvedCallHit[],
 ): void {
   for (const call of method.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    // Nested callbacks/functions have their own execution owner. Until they have graph
+    // identities, do not attribute their calls to the surrounding top-level function.
+    if (Node.isFunctionDeclaration(method)
+      && call.getFirstAncestor(ancestor => ts.isFunctionLike(ancestor.compilerNode)) !== method) continue
+    // A decorator factory runs while declaring the class, not as this method's call.
+    if (call.getFirstAncestorByKind(SyntaxKind.Decorator)) continue
     const expression = call.getExpression()
     const text = expression.getText()
+    const classThis = Node.isMethodDeclaration(method) && !method.isStatic() && hasMethodThis(call, method)
+    if (classThis && Node.isPropertyAccessExpression(expression) && Node.isThisExpression(expression.getExpression())) {
+      const targets = expression.getNameNode().getSymbol()?.getDeclarations()
+      const target = targets?.length === 1 ? targets[0] : undefined
+      // Symbol identity rejects property/parameter shadows, overload ambiguity,
+      // inheritance and static/instance collisions in the current graph key scheme.
+      if (target && Node.isMethodDeclaration(target) && !target.isStatic() && target.getBody()
+        && target.getParent() === method.getParent()
+        && method.getParentIfKind(SyntaxKind.ClassDeclaration)?.getMethods().filter(item => item.getName() === target.getName()).length === 1) {
+        const own = methodsByOwnerAndName.get(`${classKey}.${target.getName()}`)
+        if (own) {
+          addEdge(edge(sourceKey, own.key, 'CALLS', 'CONFIRMED', filePath, call, callMetadata(call)))
+          continue
+        }
+      }
+    }
     const prisma = text.match(/^this\.([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/)
-    if (prisma && PRISMA_OPERATIONS[prisma[3]] && (prisma[1].toLowerCase().includes('prisma') || injectionTargets.get(prisma[1])?.className?.includes('Prisma'))) {
+    if (classThis && prisma && PRISMA_OPERATIONS[prisma[3]] && (prisma[1].toLowerCase().includes('prisma') || injectionTargets.get(prisma[1])?.className?.includes('Prisma'))) {
       const dataKey = `data:prisma:${prisma[2]}`
       addNode({
         key: dataKey,
@@ -731,7 +823,7 @@ function collectMethodCalls(
     }
 
     const member = text.match(/^this\.([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/)
-    if (member) {
+    if (classThis && member) {
       const injected = injectionTargets.get(member[1])
       if (injected?.key.startsWith('data:typeorm:') && TYPEORM_OPERATIONS[member[2]]) {
         addNode({
@@ -748,27 +840,22 @@ function collectMethodCalls(
         continue
       }
       if (injected?.className) {
-        const target = methodsByClassAndName.get(`${injected.className}.${member[2]}`)
+        const target = methodsByOwnerAndName.get(`${injected.key}.${member[2]}`)
         if (target) {
           addEdge(edge(sourceKey, target.key, 'CALLS', injected.confidence, filePath, call, callMetadata(call)))
           continue
         }
       }
-      const own = methodsByClassAndName.get(`${className}.${member[2]}`)
-      if (member[1] === 'this' && own) {
-        addEdge(edge(sourceKey, own.key, 'CALLS', 'CONFIRMED', filePath, call, callMetadata(call)))
-        continue
-      }
     }
 
     if (Node.isIdentifier(expression)) {
-      const target = unique(functionsByName.get(expression.getText()))
+      const target = resolveFunctionTarget(expression, filePath, resolveImport, declarations)
       if (target) {
         addEdge(edge(sourceKey, target.key, 'CALLS', 'CONFIRMED', filePath, call, callMetadata(call)))
         continue
       }
     }
-    if (Node.isPropertyAccessExpression(expression) || Node.isElementAccessExpression(expression)) {
+    if (Node.isIdentifier(expression) || Node.isPropertyAccessExpression(expression) || Node.isElementAccessExpression(expression)) {
       unresolvedCalls.push({
         sourceKey,
         expression: text,
@@ -778,6 +865,42 @@ function collectMethodCalls(
       })
     }
   }
+}
+
+function hasMethodThis(call: CallExpression, method: MethodDeclaration): boolean {
+  for (const ancestor of call.getAncestors()) {
+    if (ancestor === method) return true
+    if (Node.isClassDeclaration(ancestor) || Node.isClassExpression(ancestor)
+      || ts.isFunctionLike(ancestor.compilerNode) && !Node.isArrowFunction(ancestor)) return false
+  }
+  return false
+}
+
+function resolveFunctionTarget(
+  expression: Node,
+  filePath: string,
+  resolveImport: Resolver,
+  declarations: Map<string, DeclarationRef>,
+): DeclarationRef | null {
+  const targets = expression.getSymbol()?.getDeclarations()
+  if (targets?.length !== 1) return null
+  const target = targets[0]
+  if (Node.isFunctionDeclaration(target)) {
+    if (filePathOf(target.getSourceFile()) !== filePath) return null
+    const ref = declarations.get(refKey(filePath, target.getName() ?? ''))
+    return ref?.functionDeclaration === target ? ref : null
+  }
+  if (!Node.isImportSpecifier(target) && !Node.isImportClause(target)) return null
+  if (Node.isImportSpecifier(target) && target.isTypeOnly()) return null
+  const imported = target.getFirstAncestorByKind(SyntaxKind.ImportDeclaration)
+  if (!imported || imported.isTypeOnly()) return null
+  const resolved = resolveImport(imported.getModuleSpecifierValue(), filePath)
+  if (!resolved) return null
+  const importedName = Node.isImportSpecifier(target) ? target.getName() : 'default'
+  const ref = declarations.get(refKey(resolved, importedName))
+  const fn = ref?.functionDeclaration
+  if (!fn || (importedName === 'default' ? !fn.isDefaultExport() : !fn.isExported() || fn.isDefaultExport())) return null
+  return ref ?? null
 }
 
 function callMetadata(call: CallExpression): Record<string, unknown> {
@@ -841,16 +964,148 @@ function collectReExports(
   }
 }
 
-function findGlobalPrefix(sourceFiles: SourceFile[]): string {
-  for (const source of sourceFiles) {
-    for (const call of source.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-      const expression = call.getExpression()
-      if (!Node.isPropertyAccessExpression(expression) || expression.getName() !== 'setGlobalPrefix') continue
-      const prefix = staticString(call.getArguments()[0])
-      if (prefix != null) return prefix
+function findGlobalPrefix(sourceFiles: SourceFile[]): string | null {
+  const calls = sourceFiles.flatMap((source) => source.getDescendantsOfKind(SyntaxKind.CallExpression))
+  const applications = new Set<CallExpression>()
+  for (const call of calls) {
+    const factory = factoryCreation(call)
+    if (factory === 'UNKNOWN') return null
+    if (factory === 'NEST') applications.add(call)
+  }
+  // There is no controller-to-bootstrap ownership proof for multiple applications yet.
+  if (applications.size > 1) return null
+  const prefixes = new Set<string>()
+  const origins = new Map<Node, ApplicationOrigin>()
+  for (const call of calls) {
+    const expression = call.getExpression()
+    if (!Node.isPropertyAccessExpression(expression) || expression.getName() !== 'setGlobalPrefix') continue
+    const application = applicationOrigin(expression.getExpression(), origins)
+    if (application === 'UNKNOWN') return null
+    if (!application) continue
+    if (!applications.has(application)) return null
+    const prefix = staticString(call.getArguments()[0])
+    // Options (e.g. excluded routes) and dynamic values require wider analysis.
+    if (prefix === null || call.getArguments().length !== 1) return null
+    prefixes.add(prefix)
+  }
+  return prefixes.size > 1 ? null : prefixes.values().next().value ?? ''
+}
+
+type FactoryOrigin = 'NEST' | 'UNKNOWN' | null
+type ApplicationOrigin = CallExpression | 'UNKNOWN' | null
+
+function unwrapExpression(node: Node): Node {
+  while (Node.isParenthesizedExpression(node) || Node.isAsExpression(node) ||
+    Node.isTypeAssertion(node) || Node.isNonNullExpression(node)) node = node.getExpression()
+  return node
+}
+
+function factoryCreation(call: CallExpression): FactoryOrigin {
+  const expression = call.getExpression()
+  return Node.isPropertyAccessExpression(expression) && expression.getName() === 'create'
+    ? factoryOrigin(expression.getExpression()) : null
+}
+
+function factoryOrigin(value: Node, seen = new Set<Node>(), depth = 0): FactoryOrigin {
+  if (depth >= 64) return 'UNKNOWN'
+  const factory = unwrapExpression(value)
+  if (Node.isIdentifier(factory)) {
+    const declarations = factory.getSymbol()?.getDeclarations()
+    if (!declarations?.length) return factory.getText() === 'NestFactory' ? 'UNKNOWN' : null
+    if (declarations.length !== 1) return null
+    const target = declarations[0]
+    if (Node.isVariableDeclaration(target)) {
+      if (seen.has(target)) return 'UNKNOWN'
+      const initializer = target.getInitializer()
+      if (!initializer) return null
+      const origin = factoryOrigin(initializer, new Set([...seen, target]), depth + 1)
+      return origin === 'NEST' && target.getVariableStatement()?.getDeclarationKind() !== 'const' ? 'UNKNOWN' : origin
+    }
+    if (Node.isBindingElement(target)) {
+      const variable = target.getFirstAncestorByKind(SyntaxKind.VariableDeclaration)
+      const initializer = variable?.getInitializer()
+      if (!initializer) return null
+      const namespace = namespaceOrigin(initializer, seen, depth + 1)
+      if (namespace === null) return null
+      const property = target.getPropertyNameNode() ?? target.getNameNode()
+      const name = Node.isIdentifier(property) ? property.getText() : staticString(property)
+      if (namespace === 'UNKNOWN' || !Node.isObjectBindingPattern(target.getParent()) ||
+        target.getParent().getParent() !== variable || target.getDotDotDotToken() || target.getInitializer() ||
+        variable?.getVariableStatement()?.getDeclarationKind() !== 'const' || name !== 'NestFactory') return 'UNKNOWN'
+      return 'NEST'
+    }
+    if (Node.isNamespaceImport(target)) return namespaceOrigin(factory, seen, depth + 1) === null ? null : 'UNKNOWN'
+    if (!Node.isImportSpecifier(target)) return null
+    const imported = target.getImportDeclaration()
+    return target.getName() === 'NestFactory' && !target.isTypeOnly() &&
+      !imported.isTypeOnly() && imported.getModuleSpecifierValue() === '@nestjs/core' ? 'NEST' : null
+  }
+  if (Node.isPropertyAccessExpression(factory) || Node.isElementAccessExpression(factory)) {
+    const namespace = namespaceOrigin(factory.getExpression(), seen, depth + 1)
+    if (namespace === null) return null
+    const name = Node.isPropertyAccessExpression(factory) ? factory.getName() : staticString(factory.getArgumentExpression())
+    return name === 'NestFactory' ? namespace : 'UNKNOWN'
+  }
+  return null
+}
+
+function namespaceOrigin(value: Node, seen = new Set<Node>(), depth = 0): FactoryOrigin {
+  if (depth >= 64) return 'UNKNOWN'
+  const namespace = unwrapExpression(value)
+  if (!Node.isIdentifier(namespace)) return null
+  const declarations = namespace.getSymbol()?.getDeclarations()
+  if (declarations?.length !== 1) return null
+  const target = declarations[0]
+  if (Node.isVariableDeclaration(target)) {
+    if (seen.has(target)) return 'UNKNOWN'
+    const initializer = target.getInitializer()
+    if (!initializer) return null
+    const origin = namespaceOrigin(initializer, new Set([...seen, target]), depth + 1)
+    return origin === 'NEST' && target.getVariableStatement()?.getDeclarationKind() !== 'const' ? 'UNKNOWN' : origin
+  }
+  if (!Node.isNamespaceImport(target)) return null
+  const imported = target.getFirstAncestorByKind(SyntaxKind.ImportDeclaration)
+  return imported?.getModuleSpecifierValue() === '@nestjs/core' && !imported.isTypeOnly() ? 'NEST' : null
+}
+
+function applicationOrigin(value: Node, cache: Map<Node, ApplicationOrigin>, seen = new Set<Node>(), depth = 0): ApplicationOrigin {
+  const cached = cache.get(value)
+  if (cached !== undefined) return cached
+  if (depth >= 64) return 'UNKNOWN'
+  const origin = resolveApplicationOrigin(value, cache, seen, depth)
+  cache.set(value, origin)
+  return origin
+}
+
+function resolveApplicationOrigin(value: Node, cache: Map<Node, ApplicationOrigin>, seen: Set<Node>, depth: number): ApplicationOrigin {
+  const receiver = unwrapExpression(value)
+  if (Node.isIdentifier(receiver)) {
+    const declarations = receiver.getSymbol()?.getDeclarations()
+    if (declarations?.length !== 1) return null
+    const target = declarations[0]
+    if (!Node.isVariableDeclaration(target)) {
+      return factoryOrigin(receiver) !== null || namespaceOrigin(receiver) !== null ? 'UNKNOWN' : null
+    }
+    if (seen.has(target)) return 'UNKNOWN'
+    const initializer = target.getInitializer()
+    if (!initializer) return null
+    const origin = applicationOrigin(initializer, cache, new Set([...seen, target]), depth + 1)
+    return origin !== null && target.getVariableStatement()?.getDeclarationKind() !== 'const' ? 'UNKNOWN' : origin
+  }
+  if (Node.isAwaitExpression(receiver)) {
+    const awaited = unwrapExpression(receiver.getExpression())
+    if (Node.isCallExpression(awaited)) {
+      const factory = factoryCreation(awaited)
+      if (factory === 'NEST') return awaited
+      if (factory === 'UNKNOWN') return 'UNKNOWN'
     }
   }
-  return ''
+  if (Node.isCallExpression(receiver) && factoryCreation(receiver) !== null) return 'UNKNOWN'
+  // A transformation of a proven application is unsupported, not proof of an empty prefix.
+  for (const child of receiver.getChildren()) {
+    if (applicationOrigin(child, cache, seen, depth + 1) !== null) return 'UNKNOWN'
+  }
+  return null
 }
 
 function findImportedDecorator(
@@ -891,6 +1146,27 @@ function staticString(node: Node | undefined): string | null {
   return null
 }
 
+function decoratorPath(decorator: Decorator): string | null {
+  return decorator.getArguments().length === 0 ? '' : constantRouteString(decorator.getArguments()[0])
+}
+
+function constantRouteString(node: Node | undefined, seen = new Set<Node>(), depth = 0): string | null {
+  if (!node || depth >= 64) return null
+  const value = unwrapExpression(node)
+  const literal = staticString(value)
+  if (literal !== null) return literal
+  if (!Node.isIdentifier(value)) return null
+  const declarations = value.getSymbol()?.getDeclarations()
+  if (declarations?.length !== 1) return null
+  const target = declarations[0]
+  if (!Node.isVariableDeclaration(target) || seen.has(target)
+    || target.getSourceFile() !== value.getSourceFile() || target.getEnd() >= value.getStart()) return null
+  const statement = target.getVariableStatement()
+  // Top-level immutable literals only: no execution, cross-file initialization or control-flow guesses.
+  if (statement?.getDeclarationKind() !== 'const' || !Node.isSourceFile(statement.getParent())) return null
+  return constantRouteString(target.getInitializer(), new Set([...seen, target]), depth + 1)
+}
+
 function repositoryTypeArgument(typeText: string): string | null {
   const match = typeText.match(/(?:Repository|MongoRepository|TreeRepository)\s*<\s*([A-Za-z_$][\w$]*)/)
   return match?.[1] ?? null
@@ -900,10 +1176,6 @@ function addRef(map: Map<string, DeclarationRef[]>, name: string, ref: Declarati
   const values = map.get(name) ?? []
   values.push(ref)
   map.set(name, values)
-}
-
-function unique(values: DeclarationRef[] | undefined): DeclarationRef | null {
-  return values?.length === 1 ? values[0] : null
 }
 
 function hit(

@@ -49,7 +49,7 @@ export function resolveRelativeImport(fromPath: string, specifier: string): stri
 }
 
 export function isTsJs(path: string): boolean {
-  return /\.(tsx?|jsx?|mjs|cjs)$/i.test(path)
+  return /\.(tsx?|jsx?|[mc][jt]s)$/i.test(path)
 }
 
 export function isPython(path: string): boolean {

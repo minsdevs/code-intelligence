@@ -1,0 +1,108 @@
+{
+  "input": {
+    "files": [
+      {
+        "path": "src/audit.controller.ts",
+        "content": "import { Controller, Get } from '@nestjs/common';\n@Controller('audit') export class AuditController { @Get() list(value) { return value; } }"
+      }
+    ]
+  },
+  "response": {
+    "routes": [],
+    "components": [],
+    "hooks": [],
+    "stores": [],
+    "apiCalls": [],
+    "imports": [],
+    "symbols": [],
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/audit",
+        "handlerKey": "ts:src/audit.controller.ts#AuditController.list",
+        "handler": "list",
+        "ownerKey": "ts:src/audit.controller.ts#AuditController",
+        "filePath": "src/audit.controller.ts",
+        "lineStart": 2,
+        "lineEnd": 2,
+        "metadata": {
+          "controllerKey": "ts:src/audit.controller.ts#AuditController",
+          "parameterTypes": [
+            null
+          ],
+          "responseType": null
+        }
+      }
+    ],
+    "nodes": [
+      {
+        "key": "ts:src/audit.controller.ts#AuditController",
+        "type": "CLASS",
+        "name": "AuditController",
+        "filePath": "src/audit.controller.ts",
+        "lineStart": 2,
+        "lineEnd": 2,
+        "layer": "BACKEND",
+        "metadata": {
+          "exported": true,
+          "nestRole": "CONTROLLER"
+        }
+      },
+      {
+        "key": "ts:src/audit.controller.ts#AuditController.list",
+        "type": "METHOD",
+        "name": "list",
+        "filePath": "src/audit.controller.ts",
+        "lineStart": 2,
+        "lineEnd": 2,
+        "layer": "BACKEND",
+        "metadata": {
+          "async": false,
+          "parameters": [
+            {
+              "name": "value",
+              "type": null,
+              "decorators": []
+            }
+          ],
+          "returnType": null
+        }
+      }
+    ],
+    "edges": [
+      {
+        "sourceKey": "file:src/audit.controller.ts",
+        "targetKey": "ts:src/audit.controller.ts#AuditController",
+        "type": "CONTAINS",
+        "confidence": "CONFIRMED",
+        "filePath": "src/audit.controller.ts",
+        "lineStart": 2,
+        "lineEnd": 2,
+        "metadata": {
+          "relation": "DECLARES"
+        }
+      },
+      {
+        "sourceKey": "ts:src/audit.controller.ts#AuditController",
+        "targetKey": "ts:src/audit.controller.ts#AuditController.list",
+        "type": "DECLARES",
+        "confidence": "CONFIRMED",
+        "filePath": "src/audit.controller.ts",
+        "lineStart": 2,
+        "lineEnd": 2,
+        "metadata": {}
+      },
+      {
+        "sourceKey": "ts:src/audit.controller.ts#AuditController",
+        "targetKey": "endpoint:GET:/audit",
+        "type": "EXPOSES",
+        "confidence": "CONFIRMED",
+        "filePath": "src/audit.controller.ts",
+        "lineStart": 2,
+        "lineEnd": 2,
+        "metadata": {}
+      }
+    ],
+    "unresolvedCalls": []
+  }
+}

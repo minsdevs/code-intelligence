@@ -24,18 +24,21 @@ public class JobService {
     private final JobWorker worker;
     private final JobProgressPublisher publisher;
     private final TransactionTemplate transactionTemplate;
+    private final RetrySourceGuard retrySourceGuard;
 
     public JobService(
             JobRepository repository,
             Pipeline pipeline,
             JobWorker worker,
             JobProgressPublisher publisher,
-            TransactionTemplate transactionTemplate) {
+            TransactionTemplate transactionTemplate,
+            RetrySourceGuard retrySourceGuard) {
         this.repository = repository;
         this.pipeline = pipeline;
         this.worker = worker;
         this.publisher = publisher;
         this.transactionTemplate = transactionTemplate;
+        this.retrySourceGuard = retrySourceGuard;
     }
 
     /**
@@ -45,6 +48,7 @@ public class JobService {
      */
     @Transactional
     public long enqueue(long projectId, JobType type) {
+        repository.lockProject(projectId);
         long jobId;
         try {
             jobId = repository.insertJob(projectId, type);
@@ -67,8 +71,30 @@ public class JobService {
         }
         try {
             Boolean requeued = transactionTemplate.execute(tx -> {
+                repository.lockProject(job.projectId());
+                JobRecord current = requireOwnedJob(jobId, userId);
+                if (current.status() != JobStatus.FAILED || current.projectId() != job.projectId()) {
+                    throw new JobConflictException("Only FAILED jobs can be retried.");
+                }
+                if (repository.hasActiveJob(current.projectId())) {
+                    throw new JobConflictException(ACTIVE_JOB_CONFLICT);
+                }
+                if ("LOCAL_PREVIEW_REQUIRED".equals(current.failureCode())) {
+                    throw new JobConflictException(
+                            "Create and confirm a new local preview before starting another analysis.");
+                }
+                if ("TS_SYNTAX_ERROR".equals(current.failureCode())) {
+                    throw new JobConflictException(
+                            "Fix the source syntax errors and start a new analysis instead of retrying this snapshot.",
+                            "TS_SYNTAX_ERROR");
+                }
+                retrySourceGuard.verify(current);
+                if (!repository.markJobQueuedForRetry(jobId)) {
+                    throw new JobConflictException("Only FAILED jobs can be retried.");
+                }
                 repository.resetStepsForRetry(jobId);
-                return repository.markJobQueuedForRetry(jobId);
+                dispatchAfterCommit(jobId);
+                return true;
             });
             if (!Boolean.TRUE.equals(requeued)) {
                 throw new JobConflictException("Only FAILED jobs can be retried.");
@@ -76,11 +102,9 @@ public class JobService {
         } catch (DataIntegrityViolationException e) {
             throw new JobConflictException(ACTIVE_JOB_CONFLICT);
         }
-        publisher.publish(jobId);
-        worker.dispatch(jobId);
     }
 
-    /** The currently RUNNING step finishes; the worker stops before starting the next one. */
+    /** CANCELLING retains exclusivity until the RUNNING step finishes and the worker exits. */
     public void cancel(long jobId, long userId) {
         requireOwnedJob(jobId, userId);
         if (!repository.markJobCancelled(jobId)) {

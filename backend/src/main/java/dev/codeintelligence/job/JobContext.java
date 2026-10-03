@@ -18,7 +18,7 @@ public interface JobContext {
     /** Present once the IMPORT step has attached the snapshot for this run. */
     Optional<Long> snapshotId();
 
-    /** Clone working directory for the project: {@code ${app.data-dir}/repos/{projectId}}. */
+    /** The input directory leased to this run; retained imports use disposable private scratch. */
     Path clonePath();
 
     void updateProgress(int progressPct);

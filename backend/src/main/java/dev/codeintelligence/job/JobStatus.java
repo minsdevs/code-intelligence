@@ -3,6 +3,7 @@ package dev.codeintelligence.job;
 public enum JobStatus {
     QUEUED,
     RUNNING,
+    CANCELLING,
     DONE,
     FAILED,
     CANCELLED;

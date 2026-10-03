@@ -27,7 +27,6 @@ public class TsParsingStep implements JobStep {
 
     public static final String KEY = "TS_PARSING";
     public static final int ORDER = 750;
-    static final int BATCH_SIZE = 500;
 
     private static final Logger log = LoggerFactory.getLogger(TsParsingStep.class);
 
@@ -73,13 +72,11 @@ public class TsParsingStep implements JobStep {
             ctx.updateProgress(100);
             return;
         }
-        for (int start = 0; start < payloads.size(); start += BATCH_SIZE) {
-            int end = Math.min(payloads.size(), start + BATCH_SIZE);
-            TsAnalyzeDtos.Response response = client.analyze(new TsAnalyzeDtos.Request(payloads.subList(start, end)));
-            AnalysisResult result = TsGraphMapper.toGraph(response);
-            persistence.persist(ctx.projectId(), snapshotId, result);
-            ctx.updateProgress(20 + Math.min(75, (75 * end) / payloads.size()));
-        }
+        // The analyzer resolves project-wide imports, DI and route prefixes. Independent
+        // batches silently change their meaning; reject oversized projects before sending.
+        TsAnalyzeDtos.Response response = client.analyze(new TsAnalyzeDtos.Request(payloads));
+        AnalysisResult result = TsGraphMapper.toGraph(response);
+        persistence.persist(ctx.projectId(), snapshotId, result);
         ctx.updateProgress(100);
     }
 
@@ -104,6 +101,7 @@ public class TsParsingStep implements JobStep {
 
     private List<TsAnalyzeDtos.FilePayload> readPayloads(Path clonePath, List<InventoriedFile> files) {
         List<TsAnalyzeDtos.FilePayload> payloads = new ArrayList<>();
+        TsRequestBudget budget = new TsRequestBudget();
         for (InventoriedFile file : files) {
             if (file.size() > analysisProperties.maxFileSize()) {
                 continue;
@@ -114,7 +112,9 @@ public class TsParsingStep implements JobStep {
                     continue;
                 }
                 String content = Files.readString(resolved, StandardCharsets.UTF_8);
-                payloads.add(new TsAnalyzeDtos.FilePayload(file.path(), content));
+                TsAnalyzeDtos.FilePayload payload = new TsAnalyzeDtos.FilePayload(file.path(), content);
+                budget.add(payload);
+                payloads.add(payload);
             } catch (InvalidFilePathException | IOException e) {
                 log.warn("Skipping TS file {}: {}", file.path(), e.toString());
             }
@@ -134,6 +134,8 @@ public class TsParsingStep implements JobStep {
         String name = path.substring(path.lastIndexOf('/') + 1);
         return path.endsWith(".ts")
                 || path.endsWith(".tsx")
+                || path.endsWith(".mts")
+                || path.endsWith(".cts")
                 || path.endsWith(".js")
                 || path.endsWith(".jsx")
                 || path.endsWith(".py")
