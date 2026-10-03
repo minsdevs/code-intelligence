@@ -292,6 +292,13 @@ gates on every pull request. The backend job also runs `./quality-gate`, so its
 runner must provide Docker. Baseline changes are explicit reviewed edits to
 `quality-baseline.env`; `QUALITY_BASELINE_UPDATE` is intentionally rejected.
 
+The desktop backup-state lifecycle regression can be run independently with
+`node --test desktop/test/backup-product-state.test.cjs`. It uses fresh private
+filesystem fixtures and synthetic child processes, not a real database. Tests wait
+for explicit SQL-write phases rather than counting event-loop turns; shutdown
+checks hold the child open until they have verified that work and close remain
+pending. This focused check does not enable native guardian or product acceptance.
+
 ## AI providers, models, and cost
 
 AI is optional. Static analysis, graph exploration, history and search work without
