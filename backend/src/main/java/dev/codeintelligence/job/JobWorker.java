@@ -1,11 +1,13 @@
 package dev.codeintelligence.job;
 
 import dev.codeintelligence.common.AppProperties;
+import dev.codeintelligence.maintenance.MaintenanceGate;
 import jakarta.annotation.PreDestroy;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.stereotype.Component;
 
@@ -25,14 +27,33 @@ public class JobWorker {
     private final Pipeline pipeline;
     private final JobProgressPublisher publisher;
     private final AppProperties appProperties;
+    private final JobWorkspaceProvider workspaces;
+    private final MaintenanceGate maintenance;
     private final SimpleAsyncTaskExecutor executor;
 
     public JobWorker(
-            JobRepository repository, Pipeline pipeline, JobProgressPublisher publisher, AppProperties appProperties) {
+            JobRepository repository,
+            Pipeline pipeline,
+            JobProgressPublisher publisher,
+            AppProperties appProperties,
+            JobWorkspaceProvider workspaces) {
+        this(repository, pipeline, publisher, appProperties, workspaces, new MaintenanceGate());
+    }
+
+    @Autowired
+    public JobWorker(
+            JobRepository repository,
+            Pipeline pipeline,
+            JobProgressPublisher publisher,
+            AppProperties appProperties,
+            JobWorkspaceProvider workspaces,
+            MaintenanceGate maintenance) {
         this.repository = repository;
         this.pipeline = pipeline;
         this.publisher = publisher;
         this.appProperties = appProperties;
+        this.workspaces = workspaces;
+        this.maintenance = maintenance;
         this.executor = new SimpleAsyncTaskExecutor("job-");
         this.executor.setVirtualThreads(true);
     }
@@ -43,35 +64,51 @@ public class JobWorker {
     }
 
     public void dispatch(long jobId) {
-        executor.execute(() -> runJob(jobId));
+        MaintenanceGate.Lease lease = maintenance.admitJob();
+        try {
+            executor.execute(() -> {
+                try (lease) {
+                    runJob(jobId);
+                }
+            });
+        } catch (RuntimeException | Error error) {
+            lease.close();
+            throw error;
+        }
     }
 
     void runJob(long jobId) {
         if (!repository.markJobRunning(jobId)) {
             return;
         }
-        publisher.publish(jobId);
-        JobRecord job = repository.findJob(jobId).orElseThrow();
-        Path clonePath = appProperties.reposRoot().resolve(String.valueOf(job.projectId()));
         try {
-            for (JobStepRecord step : repository.findSteps(jobId)) {
-                if (step.status() == StepStatus.DONE || step.status() == StepStatus.SKIPPED) {
-                    continue;
-                }
-                if (repository.findJobStatus(jobId).orElse(JobStatus.CANCELLED) != JobStatus.RUNNING) {
-                    publisher.publish(jobId);
-                    return;
-                }
-                if (!runStep(job, step, clonePath)) {
-                    return;
-                }
-            }
-            repository.markJobDone(jobId);
             publisher.publish(jobId);
+            JobRecord job = repository.findJob(jobId).orElseThrow();
+            try (var workspace = workspaces.open(job)) {
+                Path clonePath = workspace.clonePath();
+                for (JobStepRecord step : repository.findSteps(jobId)) {
+                    if (step.status() == StepStatus.DONE || step.status() == StepStatus.SKIPPED) {
+                        continue;
+                    }
+                    if (repository.findJobStatus(jobId).orElse(JobStatus.CANCELLED) != JobStatus.RUNNING) {
+                        publisher.publish(jobId);
+                        return;
+                    }
+                    if (!runStep(job, step, clonePath)) {
+                        return;
+                    }
+                }
+                repository.markJobDone(jobId);
+                publisher.publish(jobId);
+            }
         } catch (RuntimeException ex) {
             log.error("Job {} aborted by an unexpected framework error", jobId, ex);
             repository.markJobFailed(jobId, "internal error");
             publisher.publish(jobId);
+        } finally {
+            if (repository.finishCancellation(jobId)) {
+                publisher.publish(jobId);
+            }
         }
     }
 
@@ -80,9 +117,9 @@ public class JobWorker {
         if (implementation == null) {
             return failStep(job, step, "no step registered for key '" + step.stepKey() + "'", null);
         }
-        repository.markStepRunning(step.id());
-        publisher.publish(job.id());
         try {
+            repository.markStepRunning(step.id());
+            publisher.publish(job.id());
             implementation.run(new WorkerJobContext(job, step.id(), clonePath));
             repository.markStepDone(step.id());
             publisher.publish(job.id());
@@ -99,7 +136,10 @@ public class JobWorker {
             log.error("Job {} step '{}' failed", job.id(), step.stepKey(), cause);
         }
         repository.markStepFailed(step.id(), message);
-        repository.markJobFailed(job.id(), "step '%s' failed: %s".formatted(step.stepKey(), message));
+        repository.markJobFailed(
+                job.id(),
+                "step '%s' failed: %s".formatted(step.stepKey(), message),
+                cause instanceof JobInputFailure inputFailure ? inputFailure.failureCode() : null);
         publisher.publish(job.id());
         return false;
     }

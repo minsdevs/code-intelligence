@@ -41,13 +41,20 @@ public class TsAnalyzerClient {
         if (restClient == null) {
             return TsAnalyzeDtos.Response.EMPTY;
         }
+        byte[] payload = TsRequestBudget.encode(request);
         try {
             TsAnalyzeDtos.Response body = restClient
                     .post()
                     .uri("/analyze")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(request)
+                    .body(payload)
                     .retrieve()
+                    .onStatus(status -> status.value() == 400, (requestIgnored, response) -> {
+                        byte[] errorBody = response.getBody().readNBytes(TsSyntaxInputException.MAX_ERROR_BYTES + 1);
+                        TsSyntaxInputException syntax = TsSyntaxInputException.fromResponse(errorBody);
+                        if (syntax != null) throw syntax;
+                        throw new TsAnalyzerException("ts-analyzer rejected input without a recognized diagnostic", null);
+                    })
                     .body(TsAnalyzeDtos.Response.class);
             return body == null ? TsAnalyzeDtos.Response.EMPTY : body;
         } catch (RestClientException e) {

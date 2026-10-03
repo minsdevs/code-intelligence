@@ -9,4 +9,9 @@ public class JobConflictException extends ErrorResponseException {
     public JobConflictException(String detail) {
         super(HttpStatus.CONFLICT, ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, detail), null);
     }
+
+    public JobConflictException(String detail, String code) {
+        this(detail);
+        getBody().setProperty("code", code);
+    }
 }

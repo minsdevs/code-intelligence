@@ -11,6 +11,8 @@ public final class LanguageDetector {
             Map.entry("kts", "kotlin"),
             Map.entry("ts", "typescript"),
             Map.entry("tsx", "typescript"),
+            Map.entry("mts", "typescript"),
+            Map.entry("cts", "typescript"),
             Map.entry("js", "javascript"),
             Map.entry("jsx", "javascript"),
             Map.entry("mjs", "javascript"),

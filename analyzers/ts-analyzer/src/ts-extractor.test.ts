@@ -8,6 +8,99 @@ import { assertSafeRelativePath } from './paths'
 const here = dirname(fileURLToPath(import.meta.url))
 const fixtures = join(here, '../../../backend/src/test/resources/fixtures')
 
+describe('React Route binding provenance', () => {
+  it.each(['react-router-dom', 'react-router'])('recognizes a named Route alias from %s', (source) => {
+    const result = extractTs([{ path: 'view.tsx', content: `import { Route as ScreenRoute } from '${source}';
+      export function View() { return <ScreenRoute path="/orders" element={<Orders />} /> }` }])
+    expect(result.routes).toEqual([expect.objectContaining({ path: '/orders', component: 'Orders', filePath: 'view.tsx', lineStart: 2 })])
+  })
+
+  it('recognizes a namespace Route only through its value import', () => {
+    const result = extractTs([{ path: 'view.tsx', content: `import * as Router from 'react-router-dom';
+      export function View() { return <Router.Route path="/orders" /> }` }])
+    expect(result.routes.map(route => route.path)).toEqual(['/orders'])
+  })
+
+  it.each([
+    "function Route(props: any) { return null }; export const view = <Route path='/fake' />",
+    "import { Route } from './unrelated'; export const view = <Route path='/fake' />",
+    "import type { Route } from 'react-router-dom'; export const view = <Route path='/fake' />",
+    "import { type Route } from 'react-router-dom'; export const view = <Route path='/fake' />",
+    "import * as Router from './unrelated'; export const view = <Router.Route path='/fake' />",
+    "import type * as Router from 'react-router-dom'; export const view = <Router.Route path='/fake' />",
+    "import { Route } from 'react-router-dom'; export function View(Route: any) { return <Route path='/fake' /> }",
+    "import { Route as ScreenRoute } from 'react-router-dom'; export function View(ScreenRoute: any) { return <ScreenRoute path='/fake' /> }",
+    "import * as Router from 'react-router-dom'; export function View(Router: any) { return <Router.Route path='/fake' /> }",
+  ])('does not identify an unproven or shadowed Route: %s', (content) => {
+    expect(extractTs([{ path: 'view.tsx', content }]).routes).toEqual([])
+  })
+})
+
+describe('explicit TypeScript module extensions', () => {
+  it.each([['mts', 'mjs'], ['cts', 'cjs']])('parses .%s and resolves its runtime .%s import', (sourceExt, importExt) => {
+    const result = extractTs([
+      { path: `worker.${sourceExt}`, content: 'export function execute() {}' },
+      { path: `consumer.${sourceExt}`, content: `import { execute } from './worker.${importExt}';
+        export class Consumer { run() { execute(); fetch('/module') } }` },
+    ])
+    expect(result.imports).toContainEqual(expect.objectContaining({ fromPath: `consumer.${sourceExt}`, toPath: `worker.${sourceExt}` }))
+    expect(result.edges.filter(edge => edge.type === 'CALLS')).toEqual([
+      expect.objectContaining({ targetKey: `ts:worker.${sourceExt}#execute` }),
+    ])
+    expect(result.apiCalls).toEqual([expect.objectContaining({ url: '/module', filePath: `consumer.${sourceExt}` })])
+  })
+
+  it('prefers TypeScript source to emitted mjs for a runtime extension import', () => {
+    const result = extractTs([
+      { path: 'worker.mts', content: 'export function execute() {}' },
+      { path: 'worker.mjs', content: 'export function execute() {}' },
+      { path: 'consumer.ts', content: "import { execute } from './worker.mjs'; class Consumer { run() { execute() } }" },
+    ])
+    expect(result.edges.filter(edge => edge.type === 'CALLS')).toEqual([
+      expect.objectContaining({ targetKey: 'ts:worker.mts#execute' }),
+    ])
+  })
+})
+
+describe('syntax uncertainty', () => {
+  it.each([
+    ['broken.ts', "export const SYNTHETIC_SECRET_MARKER = ;"],
+    ['broken.tsx', 'export const view = <div>'],
+    ['broken.mts', 'export class Broken {'],
+    ['broken.cts', 'export const value = ;'],
+  ])('rejects a syntactically broken %s with location-only diagnostics', (path, content) => {
+    let failure: unknown
+    try { extractTs([{ path, content }]) } catch (error) { failure = error }
+    expect(failure).toMatchObject({
+      name: 'ParserSyntaxError',
+      diagnostics: expect.arrayContaining([expect.objectContaining({ filePath: path, code: expect.any(Number), lineStart: 1, columnStart: expect.any(Number) })]),
+    })
+    expect(String(failure)).not.toContain('SYNTHETIC_SECRET_MARKER')
+    expect(JSON.stringify(failure)).not.toContain('SYNTHETIC_SECRET_MARKER')
+  })
+
+  it('does not return apparently complete endpoints when another bootstrap file cannot parse', () => {
+    expect(() => extractTs([
+      { path: 'controller.ts', content: "import { Controller, Get } from '@nestjs/common'; @Controller('orders') class Orders { @Get() read() {} }" },
+      { path: 'main.ts', content: "import { NestFactory } from '@nestjs/core'; const app = await NestFactory.create( ;" },
+    ])).toThrowError(expect.objectContaining({ name: 'ParserSyntaxError' }))
+  })
+
+  it('bounds returned diagnostics while retaining the total across files', () => {
+    let failure: unknown
+    try {
+      extractTs(['a.ts', 'b.ts'].map(path => ({ path, content: 'const value = ;\n'.repeat(80) })))
+    } catch (error) { failure = error }
+    expect(failure).toMatchObject({ name: 'ParserSyntaxError', totalDiagnostics: 160 })
+    expect((failure as { diagnostics: unknown[] }).diagnostics).toHaveLength(100)
+  })
+
+  it('does not execute valid input or conflate missing imports/types with parse errors', () => {
+    expect(() => extractTs([{ path: 'not-executed.ts', content: `import { missing } from './not-provided';
+      throw new Error('must never run'); const value: MissingType = missing();` }])).not.toThrow()
+  })
+})
+
 function read(rel: string): string {
   return readFileSync(join(fixtures, rel), 'utf8')
 }
@@ -135,7 +228,7 @@ describe('extractTs', () => {
       },
       {
         path: 'src/main.ts',
-        content: `const app = await NestFactory.create(AppModule); app.setGlobalPrefix('api')`,
+        content: `import { NestFactory } from '@nestjs/core'; const app = await NestFactory.create(AppModule); app.setGlobalPrefix('api')`,
       },
       {
         path: 'src/app.module.ts',

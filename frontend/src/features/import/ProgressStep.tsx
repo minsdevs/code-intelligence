@@ -9,6 +9,7 @@ type ProgressStepProps = {
   jobId: number
   onDone: () => void
   onUnauthorized: () => void
+  onSourcePreviewRequired?: (projectId: number) => void
 }
 
 function isTerminal(status: JobDetail['status']): boolean {
@@ -46,13 +47,24 @@ function statusLabel(status: StepStatus, t: (key: string) => string): string {
   }
 }
 
-export default function ProgressStep({ jobId, onDone, onUnauthorized }: ProgressStepProps) {
+export default function ProgressStep(props: ProgressStepProps) {
+  return <JobProgress key={props.jobId} {...props} />
+}
+
+function JobProgress({
+  jobId,
+  onDone,
+  onUnauthorized,
+  onSourcePreviewRequired,
+}: ProgressStepProps) {
   const t = useT()
   const [job, setJob] = useState<JobDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [retrying, setRetrying] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [streamEpoch, setStreamEpoch] = useState(0)
+  const [retryNeedsPreview, setRetryNeedsPreview] = useState(false)
+  const [retryNeedsSourceFix, setRetryNeedsSourceFix] = useState(false)
   const onDoneRef = useRef(onDone)
 
   useEffect(() => {
@@ -129,6 +141,10 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
   }, [jobId, streamEpoch, onUnauthorized, t])
 
   const handleRetry = async () => {
+    if (
+      retryNeedsPreview || job?.failureCode === 'LOCAL_PREVIEW_REQUIRED'
+      || retryNeedsSourceFix || job?.failureCode === 'TS_SYNTAX_ERROR'
+    ) return
     setRetrying(true)
     setError(null)
     try {
@@ -143,6 +159,10 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
         onUnauthorized()
         return
       }
+      if (err instanceof ApiError && err.code === 'LOCAL_PREVIEW_REQUIRED')
+        setRetryNeedsPreview(true)
+      if (err instanceof ApiError && err.code === 'TS_SYNTAX_ERROR')
+        setRetryNeedsSourceFix(true)
       setError(err instanceof ApiError ? err.message : t('progress.retryError'))
     } finally {
       setRetrying(false)
@@ -166,6 +186,8 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
   }
 
   const steps = displaySteps(job)
+  const needsPreview = retryNeedsPreview || job?.failureCode === 'LOCAL_PREVIEW_REQUIRED'
+  const needsSourceFix = retryNeedsSourceFix || job?.failureCode === 'TS_SYNTAX_ERROR'
 
   return (
     <div className="flex max-w-xl flex-col gap-4">
@@ -197,18 +219,51 @@ export default function ProgressStep({ jobId, onDone, onUnauthorized }: Progress
       {job && !isTerminal(job.status) && (
         <button
           type="button"
-          disabled={cancelling}
+          disabled={cancelling || job.status === 'CANCELLING'}
           onClick={() => void handleCancel()}
           className="w-fit rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink-muted disabled:opacity-60"
         >
-          {cancelling ? 'Cancelling…' : 'Cancel analysis'}
+          {cancelling || job.status === 'CANCELLING' ? 'Cancelling…' : 'Cancel analysis'}
         </button>
       )}
 
       {(error || job?.status === 'FAILED') && (
         <div role="alert" className="rounded-md border border-danger/40 bg-surface-1 px-3 py-2.5">
-          <p className="text-[13px] text-danger">{error ?? job?.error ?? t('progress.failed')}</p>
-          {job?.status === 'FAILED' && (
+          <p className="text-[13px] text-danger">
+            {needsPreview
+              ? '승인한 원본을 사용할 수 없어 분석을 중단했습니다. 기존 프로젝트에서 새 미리보기를 확인한 뒤 다시 승인하세요.'
+              : (error ?? job?.error ?? t('progress.failed'))}
+          </p>
+          {job?.status === 'FAILED' &&
+            needsPreview &&
+            (onSourcePreviewRequired ? (
+              <button
+                type="button"
+                className="mt-2 rounded-md border border-line-strong px-3 py-1.5 text-[13px]"
+                onClick={() => onSourcePreviewRequired(job.projectId)}
+              >
+                기존 프로젝트에서 새 미리보기
+              </button>
+            ) : (
+              <a
+                className="mt-2 inline-block text-[13px] underline"
+                href={`/projects/${job.projectId}`}
+              >
+                기존 프로젝트에서 새 미리보기
+              </a>
+            ))}
+          {job?.status === 'FAILED' && needsSourceFix && (
+            <>
+              <p className="mt-2 text-[13px] text-ink-muted">{t('progress.syntaxFix')}</p>
+              <a
+                className="mt-2 inline-block text-[13px] underline"
+                href={`/projects/${job.projectId}`}
+              >
+                {t('progress.backToProject')}
+              </a>
+            </>
+          )}
+          {job?.status === 'FAILED' && !needsPreview && !needsSourceFix && (
             <button
               type="button"
               onClick={() => void handleRetry()}

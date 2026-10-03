@@ -14,7 +14,8 @@ public record JobDetailResponse(
         Instant createdAt,
         Instant startedAt,
         Instant finishedAt,
-        List<JobStepResponse> steps) {
+        List<JobStepResponse> steps,
+        String failureCode) {
 
     public static JobDetailResponse of(JobRecord job, List<JobStepRecord> steps) {
         return new JobDetailResponse(
@@ -27,6 +28,7 @@ public record JobDetailResponse(
                 job.createdAt(),
                 job.startedAt(),
                 job.finishedAt(),
-                steps.stream().map(JobStepResponse::of).toList());
+                steps.stream().map(JobStepResponse::of).toList(),
+                job.failureCode());
     }
 }

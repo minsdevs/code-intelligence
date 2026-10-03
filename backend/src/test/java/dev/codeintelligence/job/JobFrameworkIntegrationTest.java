@@ -222,6 +222,29 @@ class JobFrameworkIntegrationTest {
     }
 
     @Test
+    void cancelRetainsExclusiveProjectOwnershipUntilTheWriterActuallyStops() {
+        Fixture fixture = newProject();
+        fakeStepTwo.blockUntilReleased();
+        long jobId = jobService.enqueue(fixture.projectId(), JobType.IMPORT);
+        awaitStepStatus(jobId, "S2", StepStatus.RUNNING);
+        try {
+            jobService.cancel(jobId, fixture.userId());
+            assertThat(jobRepository.findJob(jobId).orElseThrow().status().name())
+                    .isEqualTo("CANCELLING");
+            assertThat(jobService.hasActiveJob(fixture.projectId())).isTrue();
+            assertThatThrownBy(() -> jobService.enqueue(fixture.projectId(), JobType.REANALYZE))
+                    .isInstanceOf(JobConflictException.class);
+        } finally {
+            fakeStepTwo.release();
+        }
+        assertThat(awaitTerminal(jobId).status()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(jobService.hasActiveJob(fixture.projectId())).isFalse();
+        assertThat(awaitTerminal(jobService.enqueue(fixture.projectId(), JobType.REANALYZE))
+                        .status())
+                .isEqualTo(JobStatus.DONE);
+    }
+
+    @Test
     void cancelStopsAfterTheRunningStepCompletes() {
         Fixture fixture = newProject();
         fakeStepTwo.blockUntilReleased();
@@ -230,18 +253,56 @@ class JobFrameworkIntegrationTest {
         awaitStepStatus(jobId, "S2", StepStatus.RUNNING);
 
         jobService.cancel(jobId, fixture.userId());
-        assertThat(jobRepository.findJob(jobId).orElseThrow().status()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(jobRepository.findJob(jobId).orElseThrow().status()).isEqualTo(JobStatus.CANCELLING);
 
         fakeStepTwo.release();
         awaitStepStatus(jobId, "S2", StepStatus.DONE);
 
-        JobRecord job = jobRepository.findJob(jobId).orElseThrow();
+        JobRecord job = awaitTerminal(jobId);
         assertThat(job.status()).isEqualTo(JobStatus.CANCELLED);
         assertThat(job.finishedAt()).isNotNull();
         assertThat(stepByKey(jobId, "S3").status()).isEqualTo(StepStatus.PENDING);
         assertThat(fakeStepThree.runCount()).isZero();
 
         assertThatThrownBy(() -> jobService.cancel(jobId, fixture.userId())).isInstanceOf(JobConflictException.class);
+    }
+
+    @Test
+    void failedRunningStepStillCompletesCancellationAndReleasesExclusivity() {
+        Fixture fixture = newProject();
+        fakeStepTwo.blockUntilReleased();
+        fakeStepTwo.failOnce();
+        long jobId = jobService.enqueue(fixture.projectId(), JobType.IMPORT);
+        awaitStepStatus(jobId, "S2", StepStatus.RUNNING);
+        jobService.cancel(jobId, fixture.userId());
+        fakeStepTwo.release();
+        assertThat(awaitTerminal(jobId).status()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(stepByKey(jobId, "S2").status()).isEqualTo(StepStatus.FAILED);
+        assertThat(jobService.hasActiveJob(fixture.projectId())).isFalse();
+    }
+
+    @Test
+    void restartCompletesAnInterruptedCancellationWithoutRetryingIt() {
+        Fixture fixture = newProject();
+        Long id = jdbcTemplate.queryForObject(
+                "insert into analysis_jobs(project_id, type, status) values (?, 'IMPORT', 'CANCELLING') returning id",
+                Long.class,
+                fixture.projectId());
+        assertThat(jobService.hasActiveJob(fixture.projectId())).isTrue();
+        startupRecovery.recover();
+        assertThat(jobRepository.findJob(id).orElseThrow().status()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(jobService.hasActiveJob(fixture.projectId())).isFalse();
+        assertThatThrownBy(() -> jobService.retry(id, fixture.userId())).isInstanceOf(JobConflictException.class);
+    }
+
+    @Test
+    void queuedCancellationFinishesImmediatelyWithoutStartingAWorker() {
+        Fixture fixture = newProject();
+        long id = jobRepository.insertJob(fixture.projectId(), JobType.IMPORT);
+        jobService.cancel(id, fixture.userId());
+        assertThat(jobRepository.findJob(id).orElseThrow().status()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(jobRepository.findJob(id).orElseThrow().finishedAt()).isNotNull();
+        assertThat(jobService.hasActiveJob(fixture.projectId())).isFalse();
     }
 
     @Test

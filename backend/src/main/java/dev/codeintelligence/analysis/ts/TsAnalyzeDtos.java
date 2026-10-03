@@ -1,11 +1,28 @@
 package dev.codeintelligence.analysis.ts;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public final class TsAnalyzeDtos {
 
     private TsAnalyzeDtos() {}
+
+    /**
+     * Analyzer metadata uses JSON null for unknown optional fields (e.g. an inferred return
+     * type). Omit those top-level fields at the graph boundary, whose immutable maps reject
+     * null values. Preserve nested parameter positions and their explicit unknown types.
+     */
+    private static Map<String, Object> immutableMetadata(Map<String, Object> metadata) {
+        if (metadata == null) return Map.of();
+        Map<String, Object> copy = new LinkedHashMap<>();
+        metadata.forEach((key, value) -> {
+            Objects.requireNonNull(key);
+            if (value != null) copy.put(key, value);
+        });
+        return Map.copyOf(copy);
+    }
 
     public record FilePayload(String path, String content) {}
 
@@ -31,7 +48,7 @@ public final class TsAnalyzeDtos {
             Map<String, Object> metadata) {
 
         public EndpointHit {
-            metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+            metadata = immutableMetadata(metadata);
         }
     }
 
@@ -46,7 +63,7 @@ public final class TsAnalyzeDtos {
             Map<String, Object> metadata) {
 
         public SemanticNodeHit {
-            metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+            metadata = immutableMetadata(metadata);
         }
     }
 
@@ -61,7 +78,7 @@ public final class TsAnalyzeDtos {
             Map<String, Object> metadata) {
 
         public SemanticEdgeHit {
-            metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+            metadata = immutableMetadata(metadata);
         }
     }
 
