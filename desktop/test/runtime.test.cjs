@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
@@ -16,6 +17,8 @@ function harness(options = {}) {
   const dialogs = [];
   const bootstrapWrites = [];
   const productCalls = [];
+  const effects = [];
+  const appPaths = { userData: '/test', sessionData: '/test', ...options.appPaths };
   // Constructor boundaries stay synthetic: no socket, PostgreSQL process, or admission is opened.
   const gateway = {
     bootstrap: () => Buffer.from('synthetic-private-gateway-capability\n'),
@@ -28,10 +31,15 @@ function harness(options = {}) {
   const disk = { mkdirSync() {}, openSync: () => 1, closeSync() {}, existsSync: () => false, ...options.disk };
   const electron = {
     app: {
+      isPackaged: options.isPackaged === true,
       getVersion: () => '0.1.0',
-      requestSingleInstanceLock: () => options.ownsInstance !== false,
+      requestSingleInstanceLock: () => { effects.push(['singleton', { ...appPaths }]); return options.ownsInstance !== false; },
       on: (name, callback) => appEvents.set(name, callback),
-      whenReady: () => new Promise(() => {}), getPath: () => '/test',
+      whenReady: () => { effects.push(['whenReady']); return new Promise(() => {}); },
+      getPath: name => appPaths[name] || '/test',
+      setPath(name, value) { effects.push(['setPath', name, value]); appPaths[name] = value; },
+      setAppLogsPath(value) { effects.push(['setAppLogsPath', value]); appPaths.logs = value; },
+      exit(code) { effects.push(['exit', code]); },
       quit() { quitCalls++; appEvents.get('before-quit')?.({ preventDefault() {} }); },
     },
     dialog: {
@@ -39,7 +47,8 @@ function harness(options = {}) {
       showOpenDialog: async () => { dialogs.push('open'); return { canceled: false, filePaths: ['/synthetic/selection'] }; },
       showMessageBox: async () => { dialogs.push('confirmation'); return { response: 1 }; },
     },
-    safeStorage: {},
+    safeStorage: Object.fromEntries(['isEncryptionAvailable', 'encryptString', 'decryptString'].map(name =>
+      [name, () => { effects.push(['safeStorage', name]); assert.fail(`Unexpected safeStorage call: ${name}`); }])),
     ipcMain: { on: (name, fn) => handlers.set(name, fn), handle: (name, fn) => handlers.set(name, fn) },
   };
   const context = vm.createContext({
@@ -57,6 +66,8 @@ function harness(options = {}) {
       if (name.startsWith('./')) return require(path.resolve(__dirname, '../src', name));
       if (name === 'node:fs') return disk;
       if (name === 'node:fs/promises') return { mkdir: async () => {}, realpath: async (p) => p, ...options.fsp };
+      if (name === 'node:net') return Object.fromEntries(['createServer', 'createConnection'].map(operation =>
+        [operation, () => { effects.push(['network', operation]); assert.fail(`Unexpected network call: ${operation}`); }]));
       if (name === 'node:child_process') return {
         spawn(command, args, options) {
           const child = new EventEmitter();
@@ -83,17 +94,24 @@ function harness(options = {}) {
       };
       return require(name);
     },
-    process: { env: { ...options.env }, pid: 42, platform: 'darwin', arch: 'arm64', execPath: '/synthetic/electron', getuid: process.getuid.bind(process) },
+    process: { env: { ...options.env }, argv: options.argv || [], resourcesPath: options.resourcesPath,
+      pid: 42, platform: 'darwin', arch: 'arm64', execPath: '/synthetic/electron', getuid: process.getuid.bind(process) },
     __dirname: path.resolve(__dirname, '../src'),
-    Buffer, URL, AbortSignal, console, fetch: async (url, value) => {
+    Buffer, URL, AbortSignal, console: { ...console, error: (...args) => effects.push(['console.error', ...args]) }, fetch: async (url, value) => {
       sent.push({ url, options: value });
       return options.fetch ? options.fetch(url, value) : { ok: true, json: async () => ({ path: '/selected/project' }) };
     },
     setTimeout: (fn, delay) => { const timer = { fn, delay }; timers.add(timer); return timer; },
     clearTimeout: (timer) => timers.delete(timer),
   });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/main.cjs'), 'utf8'), context);
   const run = (source) => vm.runInContext(source, context);
+  const result = { run, context, timers, handlers, appEvents, spawned, synchronous, bootstrapWrites, productCalls, disk, sent, dialogs,
+    effects, appPaths, get quitCalls() { return quitCalls; } };
+  try { vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/main.cjs'), 'utf8'), context); }
+  catch (error) {
+    if (!options.captureBootstrapError) throw error;
+    return { ...result, bootstrapError: error };
+  }
   run("runtime = { ready: true, apiToken: 'renderer-token', pathToken: 'main-only-token', apiBaseUrl: 'http://127.0.0.1:43219', ports: {backend: 43219}, secrets: {}, authorizedRoots: [], pathsFile: '/test/paths.enc' }");
   // This harness exercises the supported legacy manifest without the guardian protocol.
   // Protocol-1 service ownership is covered by main-runtime-gateway and the real crash fixture.
@@ -101,7 +119,7 @@ function harness(options = {}) {
   run("safetyLifecycle = { diagnostics: () => ({aiOff: true, recoveryOnly: false}), latch: async () => {}, close: async () => {} }");
   context.fixtureAiGateway = gateway;
   run('aiGateway = fixtureAiGateway');
-  return { run, context, timers, handlers, appEvents, spawned, synchronous, bootstrapWrites, productCalls, disk, sent, dialogs, get quitCalls() { return quitCalls; } };
+  return result;
 }
 
 test('intentional child shutdown never schedules automatic restart', async () => {
@@ -541,3 +559,103 @@ test('a secondary process that lost the single-instance lock never starts safety
   await h.run('withRuntimeOperation(startApplication)');
   assert.deepEqual(h.calls, []); assert.equal(h.spawned.length, 0);
 });
+
+function assertBlockedBootstrap(h, code) {
+  assert.equal(h.bootstrapError?.code, code);
+  assert.deepEqual(h.effects.filter(item => item[0] === 'exit'), [['exit', 1]]);
+  assert.equal(h.effects.some(item => ['singleton', 'whenReady', 'safeStorage', 'network'].includes(item[0])), false);
+  assert.equal(h.handlers.size, 0); assert.equal(h.appEvents.size, 0);
+  assert.equal(h.spawned.length, 0); assert.equal(h.synchronous.length, 0);
+  assert.equal(h.sent.length, 0); assert.equal(h.productCalls.length, 0);
+  assert.equal(h.timers.size, 0); assert.deepEqual(h.dialogs, []);
+}
+
+for (const argv of [
+  ['--isolated-run'],
+  ['--isolated-run-parent=/private/synthetic'],
+  ['--isolated-run-parent=/private/synthetic', '--isolated-runtime-root=/private/runtime', '--isolated-run-parent=/private/other'],
+  ['--isolated-run-parent=relative', '--isolated-runtime-root=/private/runtime'],
+]) {
+  test(`invalid isolated configuration exits before any normal startup effect: ${JSON.stringify(argv)}`, () => {
+    const h = harness({ argv, captureBootstrapError: true });
+    assertBlockedBootstrap(h, 'ISOLATED_RUN_INVALID');
+    assert.equal(h.effects.some(item => ['setPath', 'setAppLogsPath'].includes(item[0])), false);
+    assert.equal(JSON.stringify(h.effects).includes('/private/synthetic'), false);
+  });
+}
+
+test('actual main prepares isolated paths then blocks before singleton, readiness, credentials and runtime effects', t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-isolation-main-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const parentDirectory = path.join(root, 'runs'); const runtimeDirectory = path.join(root, 'runtime');
+  fs.mkdirSync(parentDirectory, { mode: 0o700 }); fs.mkdirSync(runtimeDirectory, { mode: 0o700 });
+  const touched = [];
+  const noAccess = operation => () => { touched.push(operation); assert.fail(`Blocked startup reached ${operation}`); };
+  const h = harness({
+    argv: ['electron', '.', '--isolated-run-parent', parentDirectory, '--isolated-runtime-root', runtimeDirectory],
+    env: { CODE_INTELLIGENCE_ISOLATION_VERIFIED: '1', CODE_INTELLIGENCE_CREDENTIAL_STORE_VERIFIED: 'true',
+      ISOLATED_RUN_VERIFIED: '1', HOME: '/synthetic/production-home' },
+    captureBootstrapError: true,
+    disk: { existsSync: noAccess('main filesystem'), mkdirSync: noAccess('main mkdir') },
+    modules: {
+      './safety-lifecycle.cjs': { loadDesktopSecrets: noAccess('secrets'), openSafetyLifecycle: noAccess('safety') },
+      './native-owner-locks.cjs': { createNativeOwnerLocks: noAccess('owner locks') },
+      './managed-process.cjs': { spawnManagedProcess: noAccess('guardian') },
+      './ai-desktop-gateway.cjs': { openDesktopAiGateway: noAccess('gateway') },
+      './ai-egress-postgres.cjs': { createAiEgressPostgres: noAccess('postgres adapter') },
+    },
+  });
+  assertBlockedBootstrap(h, 'ISOLATED_LAUNCH_BLOCKED');
+  assert.deepEqual(touched, []);
+  const [runName] = fs.readdirSync(parentDirectory); assert.ok(runName);
+  const runRoot = path.join(parentDirectory, runName);
+  assert.deepEqual(h.effects.filter(item => ['setPath', 'setAppLogsPath'].includes(item[0])), [
+    ['setPath', 'userData', path.join(runRoot, 'userData')],
+    ['setPath', 'sessionData', path.join(runRoot, 'sessionData')],
+    ['setPath', 'temp', path.join(runRoot, 'temp')],
+    ['setPath', 'crashDumps', path.join(runRoot, 'crashDumps')],
+    ['setAppLogsPath', path.join(runRoot, 'logs')],
+  ]);
+  assert.ok(h.effects.findIndex(item => item[0] === 'setAppLogsPath') < h.effects.findIndex(item => item[0] === 'exit'));
+  const claim = JSON.parse(fs.readFileSync(path.join(runRoot, '.isolated-run.json'), 'utf8'));
+  assert.equal(claim.launchAllowed, false);
+  assert.equal(JSON.stringify(h.effects.filter(item => item[0] === 'console.error')).includes(root), false);
+});
+
+test('ordinary startup ignores isolation-like environment values and preserves default Electron paths', async () => {
+  const h = startupHarness({ env: { CODE_INTELLIGENCE_ISOLATION_VERIFIED: '1', ISOLATED_RUN_PARENT: '/synthetic/unused' } });
+  assert.deepEqual(h.effects, [['singleton', { userData: '/test', sessionData: '/test' }], ['whenReady']]);
+  await h.run('withRuntimeOperation(startApplication)');
+  assert.deepEqual(h.calls, ['secrets.load', 'safety.open', 'postgres.start', 'redis.start', 'analyzer.start', 'backend.start', 'window.create']);
+  assert.equal(h.run('runtime.ready'), true);
+  assert.equal(h.effects.some(item => ['setPath', 'setAppLogsPath', 'exit'].includes(item[0])), false);
+});
+
+for (const overlap of ['parent-userData', 'runtime-sessionData', 'runtime-packaged-resources']) {
+  test(`main refuses ${overlap} overlap before creating a run or changing Electron paths`, t => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-isolation-protected-main-')));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const parentDirectory = path.join(root, 'runs'); const runtimeDirectory = path.join(root, 'runtime');
+    fs.mkdirSync(parentDirectory, { mode: 0o700 }); fs.mkdirSync(runtimeDirectory, { mode: 0o700 });
+    const protectedRoot = overlap === 'parent-userData' ? path.join(parentDirectory, 'production-user-data')
+      : path.join(runtimeDirectory, 'protected');
+    fs.mkdirSync(protectedRoot, { mode: 0o700 });
+    const sentinel = path.join(protectedRoot, 'existing-data');
+    fs.writeFileSync(sentinel, 'synthetic existing data must remain unchanged', { mode: 0o600 });
+    const before = fs.statSync(sentinel);
+    const parentEntries = fs.readdirSync(parentDirectory); const runtimeEntries = fs.readdirSync(runtimeDirectory);
+    const config = overlap === 'parent-userData' ? { appPaths: { userData: protectedRoot } }
+      : overlap === 'runtime-sessionData' ? { appPaths: { sessionData: protectedRoot } }
+      : { isPackaged: true, resourcesPath: protectedRoot };
+    const h = harness({ ...config, captureBootstrapError: true,
+      argv: ['--isolated-run-parent', parentDirectory, '--isolated-runtime-root', runtimeDirectory] });
+    assertBlockedBootstrap(h, 'ISOLATED_RUN_INVALID');
+    assert.equal(h.effects.some(item => ['setPath', 'setAppLogsPath'].includes(item[0])), false);
+    assert.deepEqual(fs.readdirSync(parentDirectory), parentEntries);
+    assert.deepEqual(fs.readdirSync(runtimeDirectory), runtimeEntries);
+    assert.deepEqual(fs.readdirSync(protectedRoot), ['existing-data']);
+    assert.equal(fs.readFileSync(sentinel, 'utf8'), 'synthetic existing data must remain unchanged');
+    assert.equal(fs.statSync(sentinel).mtimeMs, before.mtimeMs);
+    assert.equal(JSON.stringify(h.effects.filter(item => item[0] === 'console.error')).includes(root), false);
+  });
+}
