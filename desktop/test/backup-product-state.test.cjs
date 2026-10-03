@@ -20,7 +20,21 @@ const RESULT = { kind: 'result', githubCredentials: '0', aiCredentials: '0', loc
 const COMMIT_SQL = "commit;\nselect pg_catalog.jsonb_build_object('kind','committed');\n";
 const copy = value => JSON.parse(JSON.stringify(value));
 const tick = () => new Promise(resolve => setImmediate(resolve));
-async function until(check) { for (let i = 0; i < 200; i++) { if (check()) return; await tick(); } assert.fail('fake process did not reach expected phase'); }
+function nextWrite(f, count = 1) {
+  let reached;
+  const phase = new Promise(resolve => { reached = resolve; });
+  f.controls.onWrite = call => { if (call.writes.length === count) reached(call); };
+  return async work => {
+    let timer;
+    try {
+      return await Promise.race([
+        phase,
+        work.then(() => assert.fail('operation completed before expected SQL phase')),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('SQL phase was not reached')), 5000); }),
+      ]);
+    } finally { clearTimeout(timer); f.controls.onWrite = null; }
+  };
+}
 function decodeInput(sql) {
   const match = sql.match(/decode\('([A-Za-z0-9+/=]+)','base64'\)/); assert(match);
   return JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'));
@@ -65,6 +79,7 @@ async function fixture(t, create = true, patch = {}) {
     }
     child.stdin = new Writable({ write(chunk, _encoding, done) {
       const text = chunk.toString(); call.sql += text; call.writes.push(text); done();
+      controls.onWrite?.(call);
       queueMicrotask(() => {
         if (stopped) return;
         if (text.startsWith('begin')) {
@@ -161,10 +176,10 @@ test('empty verified Git-store set clears all archived clone and local roots', a
 });
 test('caller mutation cannot replace copied connection, environment, or confirmed IDs during handshake', async t => {
   const f = await fixture(t); f.options.connection.host = 'remote.invalid'; f.options.env.PGPASSWORD = 'changed';
-  f.controls.hangOrigin = true; const ids = ['2'];
+  f.controls.hangOrigin = true; const ids = ['2']; const ready = nextWrite(f);
   const work = f.adapter.rebindClonePaths({ database: 'codeintel', confirmedGitProjectIds: ids });
-  await until(() => f.calls.length === 1); ids[0] = '9';
-  f.controls.hangOrigin = false; f.calls[0].child.stdout.write(JSON.stringify({ kind: 'origin', systemIdentifier: SYS,
+  const call = await ready(work); ids[0] = '9';
+  f.controls.hangOrigin = false; call.child.stdout.write(JSON.stringify({ kind: 'origin', systemIdentifier: SYS,
     dataDirectory: f.pg, startEpochSeconds: START, port: PORT, database: 'codeintel', user: 'codeintel', sessionUser: 'codeintel' }) + '\n');
   assert.deepEqual((await work).projectIds, ['2']); assert.equal(f.calls[0].options.env.PGPASSWORD, 'synthetic-private-password');
 });
@@ -337,34 +352,41 @@ test('psql failure rolls back pending work and does not expose raw stderr', asyn
   await rejects(f.adapter.revokeCredentials({ database: 'codeintel' }), 'FAILED'); assert.equal(f.calls[0].committed, false);
 });
 for (const stream of ['stdin', 'stdout', 'stderr']) test(`psql ${stream} error is sanitized and reaped`, async t => {
-  const f = await fixture(t); f.controls.hangOrigin = true;
+  const f = await fixture(t); f.controls.hangOrigin = true; const ready = nextWrite(f);
   const work = f.adapter.verifyOrigin(); const rejected = rejects(work, 'FAILED');
-  await until(() => f.calls.length === 1); f.calls[0].child[stream].emit('error', new Error('synthetic-private stream details'));
-  await rejected; assert(f.calls[0].signals.includes('SIGTERM')); assert.equal(f.calls[0].committed, false);
+  const call = await ready(work); call.child[stream].emit('error', new Error('synthetic-private stream details'));
+  await rejected; assert(call.signals.includes('SIGTERM')); assert.equal(call.committed, false);
 });
 test('psql process error with an assigned PID must terminate and reap before returning', async t => {
-  const f = await fixture(t); f.controls.hangOrigin = true;
+  const f = await fixture(t); f.controls.hangOrigin = true; const ready = nextWrite(f);
   const work = f.adapter.verifyOrigin(); const rejected = rejects(work, 'FAILED');
-  await until(() => f.calls.length === 1); f.calls[0].child.emit('error', new Error('synthetic-private process details'));
-  await rejected; assert(f.calls[0].signals.includes('SIGTERM'));
+  const call = await ready(work); call.child.emit('error', new Error('synthetic-private process details'));
+  await rejected; assert(call.signals.includes('SIGTERM'));
 });
 test('pending origin authorizes no second SQL write', async t => {
-  const f = await fixture(t); f.controls.hangOrigin = true;
+  const f = await fixture(t); f.controls.hangOrigin = true; const ready = nextWrite(f);
   const work = f.adapter.verifyOrigin(); const rejected = rejects(work, 'CLOSED');
-  await until(() => f.calls.length === 1); assert.equal(f.calls[0].writes.length, 1);
-  f.calls[0].child.stdin.write = () => { assert.fail('origin backpressure was bypassed'); };
-  await tick(); assert.equal(f.calls[0].writes.length, 1); await f.adapter.close(); await rejected;
+  const call = await ready(work); assert.equal(call.writes.length, 1);
+  call.child.stdin.write = () => { assert.fail('origin backpressure was bypassed'); };
+  await tick(); assert.equal(call.writes.length, 1); await f.adapter.close(); await rejected;
 });
 test('COMMIT failure is not acknowledged even after a valid readback', async t => {
   const f = await fixture(t); f.controls.exitCode = 1;
   await rejects(f.adapter.revokeCredentials({ database: 'codeintel' }), 'FAILED'); assert.equal(f.calls[0].committed, true);
 });
 test('single active operation bounds the queue; close waits for psql to be reaped', async t => {
-  const f = await fixture(t); f.controls.hangResult = true; f.controls.killDelay = 20;
+  const f = await fixture(t); f.controls.hangResult = true; f.controls.unreaped = true;
+  const ready = nextWrite(f, 2);
   const work = f.adapter.revokeCredentials({ database: 'codeintel' }); const rejected = rejects(work, 'CLOSED');
-  await until(() => f.calls[0]?.writes.length === 2);
+  const call = await ready(work);
   await rejects(f.adapter.verifyOrigin(), 'BUSY'); assert.equal(f.calls.length, 1);
-  await f.adapter.close(); await rejected; assert(f.calls[0].signals.includes('SIGTERM'));
+  let workSettled = false, closeSettled = false;
+  work.then(() => { workSettled = true; }, () => { workSettled = true; });
+  const closing = f.adapter.close().then(() => { closeSettled = true; });
+  try {
+    await tick(); assert.equal(workSettled, false); assert.equal(closeSettled, false);
+    assert(call.signals.includes('SIGTERM'));
+  } finally { call.finish(null); await Promise.all([closing, rejected]); }
   assert.equal(f.owned.listenerCount('exit'), 0); assert.equal(f.owned.listenerCount('close'), 0);
   await rejects(f.adapter.verifyOrigin(), 'CLOSED'); await f.adapter.close();
 });
