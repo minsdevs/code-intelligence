@@ -177,6 +177,41 @@ access OS credential storage, sign, notarize or publish. Offline dependency reso
 and path checks are not an OS network/process sandbox. Native packaging and desktop
 acceptance remain required before release; Windows execution is unverified.
 
+The analyzer also supports an explicitly configured authenticated HTTPS connection.
+On the analyzer, set all of `TS_ANALYZER_TLS_CERT_FILE`, `TS_ANALYZER_TLS_KEY_FILE`
+and `TS_ANALYZER_AUTH_TOKEN`. The certificate/key must be canonical absolute paths
+to owned regular files; the private key must have no group/other permissions. Bind
+`TS_ANALYZER_HOST` to `127.0.0.1` or `::1`. On the backend, set
+`TS_ANALYZER_BASE_URL` to that HTTPS loopback origin with its explicit port,
+`TS_ANALYZER_TLS_CERT_SHA256` to the SHA-256 fingerprint of the DER leaf certificate,
+and the same `TS_ANALYZER_AUTH_TOKEN` (64 hexadecimal characters).
+
+The backend checks the exact certificate, validity and IP subject alternative name
+before sending the caller token or source; it does not use a proxy, follow redirects
+or fall back to HTTP. The analyzer authenticates before parsing request JSON.
+Incomplete TLS configuration is rejected, including HTTPS without a pin. Development
+HTTP remains available when no TLS settings are supplied. No certificate or token is
+generated or trusted automatically. Protected TLS file loading currently refuses
+Windows pending native file-access validation.
+
+This connection is not yet wired into Electron startup. It does not establish
+PostgreSQL, Redis or backend endpoint ownership, isolate the OS credential store,
+or remove either isolated-launch blocker above.
+
+The explicit macOS integration fixture below compiles private copies of the actual
+Java client and Nest analyzer using existing dependencies, generates short-lived
+self-signed test certificates and a test token in a new private run, and checks
+their connection using synthetic source only. It starts no Electron, PostgreSQL or
+Redis and does not register certificates with system trust. Run it only when that
+test credential generation is authorized; it retains its private artifacts and
+failure evidence and never reuses an earlier run.
+
+```bash
+node validation/analyzer-transport-integration/run.cjs \
+  --build-parent "$PRIVATE_FRESH_PARENT" --java-home "$JDK21_HOME" \
+  --gradle-modules-cache "$GRADLE_MODULES_CACHE"
+```
+
 On macOS, Electron's default app-data directory is
 `~/Library/Application Support/code-intelligence-desktop` (the desktop package
 name is `code-intelligence-desktop`). Based on `desktop/src/main.cjs`, the
