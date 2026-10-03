@@ -1,0 +1,1238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:code-intelligence:t00:contracts:1",
+  "title": "T00a input contracts; select the named $defs entry",
+  "$defs": {
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$"
+        }
+      }
+    },
+    "versionRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "prefix"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "prefix": {
+          "type": "string",
+          "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$"
+        }
+      }
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "namespace"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "namespace": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        }
+      }
+    },
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "namespace",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "namespace": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "pattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cellId",
+        "patternId",
+        "stratum"
+      ],
+      "properties": {
+        "cellId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "patternId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "stratum": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        }
+      }
+    },
+    "eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "cellId",
+        "owner",
+        "eligible",
+        "exclusionReason"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "cellId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "owner": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "eligible": {
+          "type": "boolean"
+        },
+        "exclusionReason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+        }
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "corpusId",
+        "purpose",
+        "fixtures"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "corpusId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "purpose": {
+          "enum": [
+            "SYNTHETIC_SELF_TEST",
+            "PRODUCT_EVALUATION"
+          ]
+        },
+        "fixtures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reference"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "fixtureId",
+        "fixtureVersion",
+        "corpusId",
+        "license",
+        "origin",
+        "scenarioFamilyId",
+        "generatorFamilyId",
+        "split",
+        "versions",
+        "capabilities",
+        "patterns",
+        "source",
+        "eligibility",
+        "gold",
+        "negatives",
+        "review"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "fixtureId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "fixtureVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "corpusId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "license": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "spdx",
+            "status"
+          ],
+          "properties": {
+            "spdx": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+            },
+            "status": {
+              "enum": [
+                "AUTHOR_DECLARED",
+                "INDEPENDENTLY_REVIEWED"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "projectId",
+            "uri",
+            "commit"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "SYNTHETIC",
+                "PUBLIC_REPOSITORY"
+              ]
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+            },
+            "uri": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "commit": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 64
+            }
+          }
+        },
+        "scenarioFamilyId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "generatorFamilyId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "split": {
+          "enum": [
+            "DEVELOPMENT",
+            "VALIDATION",
+            "HOLDOUT"
+          ]
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/version"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+          },
+          "minItems": 1,
+          "maxItems": 18
+        },
+        "patterns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pattern"
+          },
+          "minItems": 1,
+          "maxItems": 128
+        },
+        "source": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 512
+        },
+        "eligibility": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/eligibility"
+          },
+          "minItems": 1,
+          "maxItems": 9216
+        },
+        "gold": {
+          "$ref": "#/$defs/reference"
+        },
+        "negatives": {
+          "$ref": "#/$defs/reference"
+        },
+        "review": {
+          "$ref": "#/$defs/reference"
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caseId",
+        "cellId",
+        "patternId",
+        "stratum",
+        "kind",
+        "relationKind",
+        "polarity",
+        "source",
+        "expected",
+        "mustNotEmitResolved",
+        "rationale"
+      ],
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "cellId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "patternId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "stratum": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "kind": {
+          "enum": [
+            "PARSER",
+            "FACT",
+            "CANDIDATES"
+          ]
+        },
+        "relationKind": {
+          "enum": [
+            "PARSE",
+            "SYMBOL",
+            "CALLS",
+            "FRAMEWORK",
+            "HTTP_CONTRACT",
+            "DATA_CONTRACT"
+          ]
+        },
+        "polarity": {
+          "enum": [
+            "POSITIVE",
+            "NEGATIVE",
+            "AMBIGUOUS"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/span"
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resolution",
+            "targets",
+            "valid",
+            "diagnostics",
+            "reasonCode"
+          ],
+          "properties": {
+            "resolution": {
+              "enum": [
+                "STATIC_RESOLVED",
+                "INFERRED",
+                "UNRESOLVED",
+                "UNSUPPORTED",
+                "NOT_APPLICABLE"
+              ]
+            },
+            "targets": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "minItems": 0,
+              "maxItems": 20
+            },
+            "valid": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+              },
+              "minItems": 0,
+              "maxItems": 32
+            },
+            "reasonCode": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+            }
+          }
+        },
+        "mustNotEmitResolved": {
+          "type": "boolean"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "cases": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "fixtureId",
+        "cases"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "fixtureId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/case"
+          },
+          "minItems": 0,
+          "maxItems": 10000
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewerId",
+        "kind",
+        "independentFromAuthor",
+        "independentFromImplementers",
+        "decision",
+        "goldSha256",
+        "negativesSha256"
+      ],
+      "properties": {
+        "reviewerId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "kind": {
+          "enum": [
+            "HUMAN",
+            "AGENT"
+          ]
+        },
+        "independentFromAuthor": {
+          "type": "boolean"
+        },
+        "independentFromImplementers": {
+          "type": "boolean"
+        },
+        "decision": {
+          "enum": [
+            "APPROVE",
+            "CHANGES_REQUIRED"
+          ]
+        },
+        "goldSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "negativesSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "fixtureId",
+        "author",
+        "status",
+        "goldSha256",
+        "negativesSha256",
+        "reviews",
+        "adjudicator"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "fixtureId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "author": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "kind",
+            "method"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+            },
+            "kind": {
+              "enum": [
+                "HUMAN",
+                "AGENT"
+              ]
+            },
+            "method": {
+              "const": "SOURCE_AUTHORED"
+            }
+          }
+        },
+        "status": {
+          "enum": [
+            "AUTHOR_PROVISIONAL",
+            "INDEPENDENT_REVIEWED",
+            "ADJUDICATED"
+          ]
+        },
+        "goldSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "negativesSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "reviews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/decision"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "adjudicator": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "reviewerId",
+            "kind",
+            "decision",
+            "goldSha256",
+            "negativesSha256"
+          ],
+          "properties": {
+            "reviewerId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+            },
+            "kind": {
+              "enum": [
+                "HUMAN",
+                "AGENT"
+              ]
+            },
+            "decision": {
+              "const": "APPROVE"
+            },
+            "goldSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "negativesSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observationId",
+        "cellId",
+        "kind",
+        "relationKind",
+        "source",
+        "resolution",
+        "targets",
+        "valid",
+        "diagnostics",
+        "reasonCode"
+      ],
+      "properties": {
+        "observationId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "cellId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "kind": {
+          "enum": [
+            "PARSER",
+            "FACT",
+            "CANDIDATES"
+          ]
+        },
+        "relationKind": {
+          "enum": [
+            "PARSE",
+            "SYMBOL",
+            "CALLS",
+            "FRAMEWORK",
+            "HTTP_CONTRACT",
+            "DATA_CONTRACT"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/span"
+        },
+        "resolution": {
+          "enum": [
+            "STATIC_RESOLVED",
+            "INFERRED",
+            "UNRESOLVED",
+            "UNSUPPORTED",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "minItems": 0,
+          "maxItems": 20
+        },
+        "valid": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "reasonCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "cellId",
+        "owner",
+        "status",
+        "bytesRead",
+        "reasonCode"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "cellId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "owner": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "status": {
+          "enum": [
+            "SUCCESS",
+            "PARTIAL",
+            "FAILED",
+            "UNSUPPORTED",
+            "CANCELLED",
+            "PENDING",
+            "EXCLUDED"
+          ]
+        },
+        "bytesRead": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "reasonCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixtureId",
+        "sourceDigest",
+        "executionState",
+        "reasonCode",
+        "versions",
+        "facts",
+        "outcomes"
+      ],
+      "properties": {
+        "fixtureId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "sourceDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "executionState": {
+          "enum": [
+            "COMPLETED",
+            "FAILED",
+            "CANCELLED",
+            "TIMEOUT"
+          ]
+        },
+        "reasonCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/version"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fact"
+          },
+          "minItems": 0,
+          "maxItems": 20000
+        },
+        "outcomes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/outcome"
+          },
+          "minItems": 0,
+          "maxItems": 9216
+        }
+      }
+    },
+    "observations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "bundleId",
+        "provenance",
+        "corpusSha256",
+        "capabilityManifestSha256",
+        "runs"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "bundleId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "producerVersion",
+            "captureAttestation",
+            "productBuildSha256"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "SYNTHETIC_SELF_TEST",
+                "PRODUCT_CAPTURE"
+              ]
+            },
+            "producerVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "captureAttestation": {
+              "const": "UNVERIFIED"
+            },
+            "productBuildSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "corpusSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "capabilityManifestSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/run"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cellId",
+        "capability",
+        "required",
+        "publicSupported",
+        "versions",
+        "patterns",
+        "patternAllocationStatus",
+        "sampleRequirements",
+        "strata"
+      ],
+      "properties": {
+        "cellId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "capability": {
+          "enum": [
+            "P",
+            "S",
+            "C",
+            "F",
+            "X"
+          ]
+        },
+        "required": {
+          "const": true
+        },
+        "publicSupported": {
+          "const": false
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/versionRequirement"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "patternAllocationStatus": {
+          "const": "PENDING_INDEPENDENT_REVIEW"
+        },
+        "sampleRequirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "positive",
+            "negative",
+            "independentProjects",
+            "scenarios",
+            "parserFiles",
+            "holdoutPositive",
+            "holdoutNegative"
+          ],
+          "properties": {
+            "positive": {
+              "const": 200
+            },
+            "negative": {
+              "const": 100
+            },
+            "independentProjects": {
+              "const": 3
+            },
+            "scenarios": {
+              "const": 10
+            },
+            "parserFiles": {
+              "enum": [
+                0,
+                50
+              ]
+            },
+            "holdoutPositive": {
+              "const": 50
+            },
+            "holdoutNegative": {
+              "const": 25
+            }
+          }
+        },
+        "strata": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "stratumId",
+              "minimumPositive",
+              "minimumNegative",
+              "versions"
+            ],
+            "properties": {
+              "stratumId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+              },
+              "minimumPositive": {
+                "const": 50
+              },
+              "minimumNegative": {
+                "const": 25
+              },
+              "versions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/versionRequirement"
+                },
+                "minItems": 1,
+                "maxItems": 32
+              }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 4
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "manifestId",
+        "publicSupportPolicy",
+        "thresholds",
+        "policyReferences",
+        "toolInventory",
+        "cells"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "manifestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "publicSupportPolicy": {
+          "const": "NO_PROMOTION_IN_T00A"
+        },
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "parseSuccess",
+            "invalidDiagnostics",
+            "symbolPrecision",
+            "symbolRecall",
+            "resolvedPrecision",
+            "resolvedRecall",
+            "wilsonLower",
+            "candidatePrecision",
+            "candidateRecall",
+            "candidateExactSet",
+            "falseResolved"
+          ],
+          "properties": {
+            "parseSuccess": {
+              "const": 0.99
+            },
+            "invalidDiagnostics": {
+              "const": 1
+            },
+            "symbolPrecision": {
+              "const": 0.99
+            },
+            "symbolRecall": {
+              "const": 0.95
+            },
+            "resolvedPrecision": {
+              "const": 0.99
+            },
+            "resolvedRecall": {
+              "const": 0.9
+            },
+            "wilsonLower": {
+              "const": 0.95
+            },
+            "candidatePrecision": {
+              "const": 0.9
+            },
+            "candidateRecall": {
+              "const": 0.9
+            },
+            "candidateExactSet": {
+              "const": 0.85
+            },
+            "falseResolved": {
+              "const": 0
+            }
+          }
+        },
+        "policyReferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "document",
+              "sha256"
+            ],
+            "properties": {
+              "document": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "minItems": 2,
+          "maxItems": 8
+        },
+        "toolInventory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "producer",
+              "declaredVersion",
+              "lockedVersion",
+              "observedVersion",
+              "artifactSha256",
+              "packagingStatus"
+            ],
+            "properties": {
+              "producer": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+              },
+              "declaredVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "lockedVersion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "observedVersion": {
+                "type": "null"
+              },
+              "artifactSha256": {
+                "type": "null"
+              },
+              "packagingStatus": {
+                "const": "NOT_VERIFIED"
+              }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cell"
+          },
+          "minItems": 18,
+          "maxItems": 18
+        }
+      }
+    }
+  }
+}

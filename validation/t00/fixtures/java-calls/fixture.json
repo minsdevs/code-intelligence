@@ -1,0 +1,112 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "java-calls",
+  "fixtureVersion": "1.0.0",
+  "corpusId": "t00-synthetic-contract-selftest",
+  "license": {
+    "spdx": "MIT",
+    "status": "AUTHOR_DECLARED"
+  },
+  "origin": {
+    "kind": "SYNTHETIC",
+    "projectId": "t00-synthetic-project",
+    "uri": "urn:code-intelligence:t00:synthetic-contract-selftest",
+    "commit": null
+  },
+  "scenarioFamilyId": "t00-call-abstention-family",
+  "generatorFamilyId": "t00-hand-authored-family",
+  "split": "DEVELOPMENT",
+  "versions": [
+    {
+      "name": "java",
+      "version": "21"
+    }
+  ],
+  "capabilities": [
+    "J-P",
+    "J-C"
+  ],
+  "patterns": [
+    {
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null
+    },
+    {
+      "cellId": "J-C",
+      "patternId": "direct-source-call",
+      "stratum": null
+    },
+    {
+      "cellId": "J-C",
+      "patternId": "dynamic-unresolved",
+      "stratum": null
+    },
+    {
+      "cellId": "J-P",
+      "patternId": "invalid-syntax",
+      "stratum": null
+    },
+    {
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null
+    }
+  ],
+  "source": [
+    {
+      "path": "source/Calls.java",
+      "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+      "bytes": 414,
+      "namespace": "synthetic-java-calls"
+    },
+    {
+      "path": "source/Invalid.java",
+      "sha256": "64c7b144c720916de595df0e2837ca78049f2f33e52965fe1daa4e51deabdf04",
+      "bytes": 28,
+      "namespace": "synthetic-java-calls"
+    }
+  ],
+  "eligibility": [
+    {
+      "path": "source/Calls.java",
+      "cellId": "J-P",
+      "owner": "synthetic-authored-producer",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/Calls.java",
+      "cellId": "J-C",
+      "owner": "synthetic-authored-producer",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/Invalid.java",
+      "cellId": "J-P",
+      "owner": "synthetic-authored-producer",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/Invalid.java",
+      "cellId": "J-C",
+      "owner": "synthetic-authored-producer",
+      "eligible": false,
+      "exclusionReason": "INVALID_SYNTAX"
+    }
+  ],
+  "gold": {
+    "path": "gold.json",
+    "sha256": "ea37d32d9aceed9638e601247f019c6b32e85d48bfc1fb02b40878df9c35f955"
+  },
+  "negatives": {
+    "path": "negatives.json",
+    "sha256": "e5ef6712d70c4e61177584ae053ca2dbd65801bfbc13e64249caab8a0fda22de"
+  },
+  "review": {
+    "path": "review.json",
+    "sha256": "77580bed2bab73b9790c215d5b5a85518eb76eb6e433e77837447d4db2ec8d9f"
+  }
+}

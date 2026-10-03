@@ -1,0 +1,14 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "java-calls",
+  "author": {
+    "id": "t00-agent-author",
+    "kind": "AGENT",
+    "method": "SOURCE_AUTHORED"
+  },
+  "status": "AUTHOR_PROVISIONAL",
+  "goldSha256": "ea37d32d9aceed9638e601247f019c6b32e85d48bfc1fb02b40878df9c35f955",
+  "negativesSha256": "e5ef6712d70c4e61177584ae053ca2dbd65801bfbc13e64249caab8a0fda22de",
+  "reviews": [],
+  "adjudicator": null
+}

@@ -1,0 +1,15 @@
+{
+  "contractVersion": "1.0.0",
+  "corpusId": "t00-synthetic-contract-selftest",
+  "purpose": "SYNTHETIC_SELF_TEST",
+  "fixtures": [
+    {
+      "path": "fixtures/java-calls/fixture.json",
+      "sha256": "afc28fff7a681be1de9c739fd3e4d9f792a60c2feb0cc37aca1ce3fccfdd4d75"
+    },
+    {
+      "path": "fixtures/typescript-calls/fixture.json",
+      "sha256": "7637c419021b9013764192aed32b75ab0f8d37f05188a56a0e3161a482af1f80"
+    }
+  ]
+}

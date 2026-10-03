@@ -1,0 +1,7 @@
+{
+  "kind": "SYNTHETIC_SELF_TEST",
+  "producerVersion": "t00-authored-1.0.0",
+  "productArtifact": null,
+  "productExecution": "NOT_RUN",
+  "description": "Identity for hand-authored observation self-tests only; this file is not a product build."
+}
