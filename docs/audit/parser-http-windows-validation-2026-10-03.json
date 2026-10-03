@@ -1,0 +1,436 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-10-03",
+  "collectedAt": "2026-10-03T12:46:12.401Z",
+  "verdict": {
+    "mac": "NO_GO",
+    "windows": "NO_GO"
+  },
+  "scope": "Authorized synthetic temporary HTTP/DB/SSE integration and Windows portability/build preparation; no real user DB, secure storage, app launch or release.",
+  "environment": {
+    "host": "darwin-arm64",
+    "node": "v26.5.0",
+    "java": "Eclipse Adoptium 21.0.12+8 aarch64",
+    "docker": "Linux arm64 Engine 29.6.2 API 1.55",
+    "windowsNativeAvailable": false,
+    "windowsNativeAvailabilityScope": "No Windows execution environment supplied/confirmed in this session"
+  },
+  "gates": [
+    {
+      "name": "JDK 21 main + integration runner compile",
+      "status": "PASS",
+      "mainSources": 363,
+      "runnerSources": 1,
+      "annotationProcessing": false,
+      "fullGradleBuild": false
+    },
+    {
+      "name": "TypeScript production strict compile",
+      "status": "PASS",
+      "sources": 11
+    },
+    {
+      "name": "parser regression RED",
+      "status": "EXPECTED_FAIL",
+      "passed": 161,
+      "failed": 4,
+      "total": 165
+    },
+    {
+      "name": "parser regression GREEN",
+      "status": "PASS",
+      "passed": 165,
+      "failed": 0,
+      "total": 165
+    },
+    {
+      "name": "real HTTP DB Redis SSE",
+      "status": "PASS",
+      "passed": 14,
+      "failed": 0,
+      "countType": "assertions in one standalone runner",
+      "results": {
+        "checks": [
+          {
+            "name": "fresh database applies all 25 migrations",
+            "passed": true
+          },
+          {
+            "name": "real analyzer HTTP 400 persists a bounded syntax code and location",
+            "passed": true
+          },
+          {
+            "name": "database, GET and live Redis SSE agree on syntax failure",
+            "passed": true
+          },
+          {
+            "name": "invalid syntax publishes no partial graph",
+            "passed": true
+          },
+          {
+            "name": "HTTP retry returns coded 409 without requeueing or resetting the checkpoint",
+            "passed": true
+          },
+          {
+            "name": "production job ownership rejects other synthetic principal for GET SSE and retry",
+            "passed": true
+          },
+          {
+            "name": "SSE reconnect restores terminal failure from database and closes",
+            "passed": true
+          },
+          {
+            "name": "new repaired .mts job stores graph while prior failure remains unchanged",
+            "passed": true
+          },
+          {
+            "name": "new repaired .cts job stores graph while prior failure remains unchanged",
+            "passed": true
+          },
+          {
+            "name": "ordinary failure still accepts HTTP retry",
+            "passed": true
+          },
+          {
+            "name": "ordinary retry completes on its second attempt",
+            "passed": true
+          },
+          {
+            "name": "running job accepts HTTP cancellation",
+            "passed": true
+          },
+          {
+            "name": "cancellation retains active-project exclusivity until worker returns",
+            "passed": true
+          },
+          {
+            "name": "late syntax failure cannot replace cancellation or leave active job behind",
+            "passed": true
+          }
+        ],
+        "passed": true
+      }
+    },
+    {
+      "name": "modeled Windows platform + builder schema",
+      "status": "PASS",
+      "passed": 28,
+      "failed": 0,
+      "nativeWindows": false
+    },
+    {
+      "name": "selected actual-main modeled regression",
+      "status": "PASS",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "name": "Windows readiness command",
+      "status": "EXPECTED_BLOCK",
+      "exitCode": 1,
+      "packagingExecuted": false
+    },
+    {
+      "name": "JS syntax + git diff --check",
+      "status": "PASS"
+    },
+    {
+      "name": "full lint/Gradle build/full existing tests/native packaging/install/update/operational OAuth",
+      "status": "NOT_RUN"
+    }
+  ],
+  "commands": [
+    "node validation/parser-flow-integration/prepare.mjs <existing-JDK21-home> /tmp/ci-java-unit-EPAyKn/deps",
+    "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin LANG=en_US.UTF-8 /opt/homebrew/bin/node /private/tmp/ci-parser-flow-ilf8wo/run.mjs /private/tmp/ci-parser-flow-ilf8wo",
+    "(cd analyzers/ts-analyzer && env -i PATH=/opt/homebrew/bin:/usr/bin:/bin LANG=en_US.UTF-8 /opt/homebrew/bin/node node_modules/vitest/vitest.mjs run --config vitest.syntax-api.config.mjs --configLoader native)",
+    "node --test desktop/test/runtime-platform.test.cjs",
+    "node --test --test-name-pattern='all bundled child paths|integrity verifier' desktop/test/runtime.test.cjs",
+    "node desktop/scripts/windows-readiness.cjs",
+    "node --check desktop/src/main.cjs",
+    "node --check validation/parser-flow-integration/run.mjs",
+    "node --check validation/parser-flow-integration/prepare.mjs",
+    "git diff --check"
+  ],
+  "sourceBindings": {
+    "preparedInputs": 410,
+    "sourceDrift": [],
+    "preparedArtifacts": 1151,
+    "artifactDrift": [],
+    "dependencies": 164,
+    "preparedManifestSha256": "3995785f5919be38c1b54ad4bf32d6db6353ef0011ec1277a18255314de8cc7f"
+  },
+  "lifecycle": {
+    "nonce": "f7e7d790-a071-4415-849d-d663ad5f92f0",
+    "containers": [
+      {
+        "kind": "postgres",
+        "id": "2ea52366007746115809b19b6b13f9771d4ea110f513218e318176629751ba60",
+        "image": "sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b",
+        "temporaryMemoryStorage": true,
+        "loopbackOnly": true
+      },
+      {
+        "kind": "redis",
+        "id": "04637d2c348a651f0e56a380e8a0addcc2b5dea5f5f2986b355c646411f427e1",
+        "image": "sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2",
+        "temporaryMemoryStorage": true,
+        "loopbackOnly": true
+      }
+    ],
+    "network": {
+      "id": "ed1c063c150cc941afc851f0eb9d7733391e8509bcd311ca1502295c0ae576b3",
+      "dedicatedBridge": true,
+      "egressIsolation": false
+    },
+    "cleanup": [
+      {
+        "resource": "Nest application",
+        "closed": true
+      },
+      {
+        "resource": "redis",
+        "id": "04637d2c348a651f0e56a380e8a0addcc2b5dea5f5f2986b355c646411f427e1",
+        "stopped": true,
+        "removed": true
+      },
+      {
+        "resource": "postgres",
+        "id": "2ea52366007746115809b19b6b13f9771d4ea110f513218e318176629751ba60",
+        "stopped": true,
+        "removed": true
+      },
+      {
+        "resource": "dedicated network",
+        "id": "ed1c063c150cc941afc851f0eb9d7733391e8509bcd311ca1502295c0ae576b3",
+        "removed": true
+      }
+    ],
+    "children": [
+      {
+        "name": "java-integration",
+        "exitCode": 0,
+        "signal": null,
+        "closed": true
+      }
+    ],
+    "passed": true
+  },
+  "failures": [
+    {
+      "root": "/private/tmp/ci-http-db-sse-DOwdK2",
+      "stage": "Compiler argument-file classpath wildcard; explicit list compile then passed. First container port binding guard failed; owned DB/network removed; Java integration not started.",
+      "lifecycle": {
+        "nonce": "61b984c0-e6e8-4b27-86c4-957d41cb22a2",
+        "containers": [],
+        "network": {
+          "id": "3a6ba0967c419aa5c8345958da5c50cd7d3210300b04f6417279f0b32951dc02",
+          "internal": true
+        },
+        "cleanup": [
+          {
+            "resource": "postgres",
+            "id": "d9344a4b0fc8e6da2498d877ddfe6e98cbc835689309ed776ef2e1587d8bb9db",
+            "stopped": true,
+            "removed": true
+          },
+          {
+            "resource": "internal network",
+            "id": "3a6ba0967c419aa5c8345958da5c50cd7d3210300b04f6417279f0b32951dc02",
+            "removed": true
+          }
+        ],
+        "children": [],
+        "passed": false,
+        "error": "Expected loopback-only port binding"
+      }
+    },
+    {
+      "root": "/private/tmp/ci-http-db-sse-13UN7z",
+      "stage": "First actual normal-input graph test exposed top-level CALLS omission after seven passed checks; fixed with regression; owned services removed.",
+      "lifecycle": {
+        "nonce": "093477d1-cb64-449a-8d7b-c4f2fed91c7d",
+        "containers": [
+          {
+            "kind": "postgres",
+            "id": "30b5e973ea61c35ee374061c3707f2e58e7b910680be3c3b9fd88af685bec314",
+            "image": "sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b",
+            "temporaryMemoryStorage": true,
+            "loopbackOnly": true
+          },
+          {
+            "kind": "redis",
+            "id": "85d8d0346d5a620ff62cda2192b726e85bad98eb8096a50fe144768f5604508e",
+            "image": "sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2",
+            "temporaryMemoryStorage": true,
+            "loopbackOnly": true
+          }
+        ],
+        "network": {
+          "id": "c5cc6c70d788401794e187ddd47d76693b23b966d0f3af0a516f36238c0d4d18",
+          "dedicatedBridge": true,
+          "egressIsolation": false
+        },
+        "cleanup": [
+          {
+            "resource": "Nest application",
+            "closed": true
+          },
+          {
+            "resource": "redis",
+            "id": "85d8d0346d5a620ff62cda2192b726e85bad98eb8096a50fe144768f5604508e",
+            "stopped": true,
+            "removed": true
+          },
+          {
+            "resource": "postgres",
+            "id": "30b5e973ea61c35ee374061c3707f2e58e7b910680be3c3b9fd88af685bec314",
+            "stopped": true,
+            "removed": true
+          },
+          {
+            "resource": "dedicated network",
+            "id": "c5cc6c70d788401794e187ddd47d76693b23b966d0f3af0a516f36238c0d4d18",
+            "removed": true
+          }
+        ],
+        "children": [
+          {
+            "name": "java-integration",
+            "exitCode": 1,
+            "signal": null,
+            "closed": true
+          }
+        ],
+        "passed": false,
+        "error": "Java integration failed; see retained log"
+      }
+    }
+  ],
+  "access": {
+    "initialSandboxFailures": [
+      "Docker socket EPERM",
+      "loopback bind EPERM"
+    ],
+    "authorizedReview": "require_escalated requests approved for owned loopback probe, cached-image read and scoped integration runs",
+    "processEnumeration": false,
+    "pidRecordSignaling": false
+  },
+  "preservation": {
+    "branch": "codex/e2e-docs-scripts",
+    "head": "ebe3ab135ce6dbaa454b29db6e5ab5c678557070",
+    "frozenPlanningFiles": 21,
+    "frozenChanges": [],
+    "guardianQuarantineHash": "228f5b34f68937cde55f3162e35653851b778f0ab7d05b71b3f7effa0956ae15",
+    "stagingAndDistModified": false,
+    "commitPushDeploy": false
+  },
+  "currentRepositoryFileHashes": {
+    "analyzers/ts-analyzer/src/semantic-extractor.ts": "734ab017b044a91a758caa36d8833a3ebefc889bce91eb53c0a7df55cc03ea73",
+    "analyzers/ts-analyzer/src/semantic-extractor.test.ts": "15f5b0a7b9be051f5fb47d30b638f3f9982a3eb8a0a72c6a56e4aa726518d248",
+    "desktop/src/main.cjs": "4c41ebe81b41cdb25afb6aa5fdc2c813a7a814a58d990cd949a1a811b13c6bf5",
+    "desktop/src/runtime-platform.cjs": "13fa967d3075502cd94f7d5095a2c980011462bf1ba4589ae300dcaf79dd8053",
+    "desktop/package.json": "0035bb0c220c61769d971119e56fda19d9e0ff0446fb65295f0502ade99a0beb",
+    "desktop/scripts/windows-readiness.cjs": "8a3f6aa755fd90d0fd04af883251cfab5cb29d33ab6a8e702851e8677a7dcd62",
+    "desktop/scripts/desktop-build-gate.cjs": "1d803d7ea90aebdfd40f0d390561acaaa2a98e58d11faa7022ba3c639f1e4fd5",
+    "desktop/test/runtime-platform.test.cjs": "a2f859c355a31fec84d50e24d680ddd6e83d074c5972d44000e8c0aeaad8d3b3",
+    "desktop/test/managed-process.test.cjs": "228f5b34f68937cde55f3162e35653851b778f0ab7d05b71b3f7effa0956ae15",
+    "validation/parser-flow-integration/ParserFlowIntegration.java": "615e132296f993b549dd7a63e868c1cedd89431eee4f5f00c1b5c9ee154b5d89",
+    "validation/parser-flow-integration/prepare.mjs": "7e0889f55071cefc947ac0ab66081f531d8c13eb371bf8d3ec376e6398ab2f0c",
+    "validation/parser-flow-integration/run.mjs": "68638b8ba8d6215db0c16eaf9bec58ae41c480651d61b8296167a1bd7517694a",
+    "validation/parser-flow-integration/README.md": "2d91eda7b556c40bea240e8d7ef24c11869eefb7f73087fff33318dafb3bee2e",
+    "README.md": "05dc42a1fc2641acf935a482d49ad3e8a989702ab3e112b648be66049257fb74",
+    "README.ko.md": "46826e5f85b8f6e8898eabce7c602c35ee30279cb94139b92d2e6b62f115b22b",
+    "docs/audit/parser-http-db-sse-2026-10-03.md": "6defecf299e130c18d95a3b5b8a347c3c43805615b4f4a3ad0ab44da39bc3e40",
+    "docs/audit/windows-readiness-2026-10-03.md": "1fadd7c31d99feb3752d9b1058a6eb37cc29208e0d9e8f2cfbeaa4b6862db07d",
+    "docs/audit/app-launch-handoff-2026-10-03.md": "fc1166365f40e5cbd1ab138cb2fc20d21755cbd9141ac850ebec51de0a556461",
+    "docs/audit/restart-recovery-audit-2026-10-03.md": "5529fe7ead2c07287ed4269cc0fe7f4bac73cb13bbeccf1cc68df935e4cfb8ed"
+  },
+  "supportingArtifacts": {
+    "/private/tmp/ci-http-db-sse-DOwdK2/reports/compile-java.log": {
+      "bytes": 26135,
+      "sha256": "6c9a67e713f7b0f5181b9bf87f4cc9c008da8bcc6afe353fc333fe30b332c1bf"
+    },
+    "/private/tmp/ci-http-db-sse-DOwdK2/reports/compile-java-explicit.log": {
+      "bytes": 110,
+      "sha256": "dece862a32d4e989fd23df958ea691a7e58fa3157857498e3049c7e8b6c37239"
+    },
+    "/private/tmp/ci-http-db-sse-DOwdK2/reports/lifecycle.json": {
+      "bytes": 620,
+      "sha256": "793db6e23370d0008100a943d7d9674f369dac512a65c4b96f20f2bd339e9a74"
+    },
+    "/private/tmp/ci-http-db-sse-13UN7z/reports/integration.json": {
+      "bytes": 730,
+      "sha256": "e8b530d387e1d3d8f9a82c162e62fb0bdf513ce9929b8f64cf5f33a63f708a0e"
+    },
+    "/private/tmp/ci-http-db-sse-13UN7z/reports/lifecycle.json": {
+      "bytes": 1561,
+      "sha256": "6c111a338572127a393af977943e722bc714b7f64e3a143de2c331e6acc991bb"
+    },
+    "/private/tmp/ci-http-db-sse-13UN7z/reports/function-calls-red.log": {
+      "bytes": 21323,
+      "sha256": "95eb3b52fd810459af2211e7f77f99b5970a3c746c4c8f8a7d0122d3ee8486fc"
+    },
+    "/private/tmp/ci-http-db-sse-13UN7z/reports/function-calls-green.log": {
+      "bytes": 828,
+      "sha256": "216e1585646b0b361faaec2328c9a7d1440bfb44d157359e2c0dd2e4133e0abe"
+    },
+    "/private/tmp/ci-http-db-sse-13UN7z/reports/windows-contract-tests.log": {
+      "bytes": 2485,
+      "sha256": "589155096335123bb5568a67feb7b4dbe9ebf5daf82919068d661d837e369802"
+    },
+    "/private/tmp/ci-http-db-sse-13UN7z/reports/main-platform-regression.log": {
+      "bytes": 317,
+      "sha256": "935a757bff9ef1c94b847b032fa39a3ac8f5a6a48dbc07f5cac4761e3a4b8525"
+    },
+    "/private/tmp/ci-http-db-sse-13UN7z/reports/java-integration.log": {
+      "bytes": 10039,
+      "sha256": "f37578dbc2a336ed3b1074993fbdd3e5b63b23a3bcdb2a1e78a349060f54a134"
+    },
+    "/private/tmp/ci-parser-flow-ilf8wo/prepared.json": {
+      "bytes": 253648,
+      "sha256": "3995785f5919be38c1b54ad4bf32d6db6353ef0011ec1277a18255314de8cc7f"
+    },
+    "/private/tmp/ci-parser-flow-ilf8wo/reports/compile-java.log": {
+      "bytes": 110,
+      "sha256": "dece862a32d4e989fd23df958ea691a7e58fa3157857498e3049c7e8b6c37239"
+    },
+    "/private/tmp/ci-parser-flow-ilf8wo/reports/compile-analyzer.log": {
+      "bytes": 27,
+      "sha256": "478d2e0145d72a98cc3dc75715a42f4859c0952716d7ef652e552882f8dd7131"
+    },
+    "/private/tmp/ci-parser-flow-ilf8wo/reports/integration.json": {
+      "bytes": 1222,
+      "sha256": "d7bc160cea8f6cd11ccb063e821b1f4f5458bbd1a88a7f7446da13c089075021"
+    },
+    "/private/tmp/ci-parser-flow-ilf8wo/reports/lifecycle.json": {
+      "bytes": 1504,
+      "sha256": "113bf94c3dc2a4be46c4d98a792f4e650d6759410a46fc364ee83713aba097b6"
+    },
+    "/private/tmp/ci-parser-flow-ilf8wo/reports/java-integration.log": {
+      "bytes": 13005,
+      "sha256": "f3a5babb1f24da0eb2ebf453f7f122652d0c7efc327441e995160c0d0af1042e"
+    }
+  },
+  "limits": [
+    "Synthetic principal resolver instead of production authentication/CSRF/OAuth",
+    "Pre-inventoried files and workspace adapter instead of approved local import",
+    "Docker Linux DB runtimes do not validate native Mac or Windows bundle",
+    "No full Spring Boot bootstrap or real frontend/browser",
+    "No native storage/guardian/AX/installed app/user database",
+    "No production GitHub credentials, paid calls, external upload, install, signing, update or release"
+  ],
+  "officialSources": [
+    "https://learn.microsoft.com/en-us/lifecycle/products/windows-11-home-and-pro",
+    "https://learn.microsoft.com/en-us/lifecycle/products/windows-10-home-and-pro",
+    "https://redis.io/docs/latest/operate/oss_and_stack/install/archive/install-redis/install-redis-on-windows/",
+    "https://www.electronjs.org/docs/latest/api/safe-storage"
+  ],
+  "remainingBlockers": [
+    "Operational GitHub OAuth contract and settings",
+    "General retained-source consumer integration and representative accuracy/performance/UX",
+    "Compatible independent Mac runtime and minimum OS alignment",
+    "Windows ACL/reparse/durable storage and ownership lifecycle implementation",
+    "Desktop Redis dependency decision and Windows JRE/PG/extensions/runtime sourcing",
+    "Signed clean install/update/rollback on both OSes"
+  ]
+}

@@ -1,0 +1,486 @@
+{
+  "checkpoint": "E2 approval and local AI preview",
+  "releaseDecision": "NO_GO",
+  "continuingImplementation": true,
+  "backendTests": 647,
+  "backendSuites": 89,
+  "realHeadlessTests": 12,
+  "frontendTests": 149,
+  "artifacts": [
+    {
+      "path": "/tmp/ci-e2-backend-final.log",
+      "bytes": 91976,
+      "sha256": "feae6551c19614cdf349fee35053430bdd81c20cab135bb6ae345193239d4433"
+    },
+    {
+      "path": "/tmp/ci-e2-test-final-summary.json",
+      "bytes": 15176,
+      "sha256": "a09b8a72e92c069555069d1d772f4ee619b16522a53b442e9bf36da1c6b34b19"
+    },
+    {
+      "path": "/tmp/ci-e2-snapshotSourceTest-final-summary.json",
+      "bytes": 315,
+      "sha256": "edf4b6e7a309ede293fc4f308150ca4bba5330e9388085dc845be06bdf948b8d"
+    },
+    {
+      "path": "/tmp/ci-e2-frontend-final.log",
+      "bytes": 226,
+      "sha256": "5cfda96b85c047838f8502908da4fc04ccd6e72a45b2cd8912e9c659c6e2019e"
+    },
+    {
+      "path": "/tmp/ci-e2-frontend-final.json",
+      "bytes": 51380,
+      "sha256": "f2fd9a3977fb33c87cd565454d7d27675b56f7b816e65e3d0ccdf328fa2b58cf"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/snapshotSourceTest/TEST-dev.codeintelligence.analysis.core.SnapshotSourceContractIntegrationTest.xml",
+      "bytes": 25943,
+      "sha256": "556a9e74b3835a09a550405c0c835a46aede5f03a500259cb864bd9638cb0c3a"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ApplicationIntegrationTest.xml",
+      "bytes": 23598,
+      "sha256": "589f73d9014452c7b2ab3ea4c0e7d28b01e659918762bf9f0f1cba542ef19c65"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ArchitectureTest.xml",
+      "bytes": 867,
+      "sha256": "287e033d3d023a924780dc698096584078ddc2d461fdae14bec317db3e7b6cd7"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.AuthIntegrationTest.xml",
+      "bytes": 19850,
+      "sha256": "655f282549b9b3be8149d0cefc3f13fb46fffc879778d690b92dc5807eca1736"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.OAuthEnabledIntegrationTest.xml",
+      "bytes": 18449,
+      "sha256": "510fe7f79527dd302afad368ded5c2ac8feb45db0a5f90b1edc385f2b8cb4039"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ProjectJobApiIntegrationTest.xml",
+      "bytes": 20059,
+      "sha256": "25345c7f88405a573dfab053a3e220929078191b4c85267a039448684133f30a"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.AiAskApiIntegrationTest.xml",
+      "bytes": 19938,
+      "sha256": "914a591a43b5c47c2501f392dd08b1318ef21ccefd0a1c4f441b96a0c8a9a3a5"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.AiDisabledApiIntegrationTest.xml",
+      "bytes": 18877,
+      "sha256": "e9ef9ce4349e55e838fac7c19aa086583be912fd7c27276780ab40d26a21c95c"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.AiExclusionIntegrationTest.xml",
+      "bytes": 18891,
+      "sha256": "ce224b04eb5f2aeecfc518166fcbef2ba023f1db9c53b250e0d88af441f3cdfd"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.AiPreviewLocalRetrievalIntegrationTest.xml",
+      "bytes": 18568,
+      "sha256": "af4f8f9c7a2f9772653c456de66658a52e69b2ce970a1af19fddbaf4dd271ee9"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.AiPreviewServiceTest.xml",
+      "bytes": 1084,
+      "sha256": "ce25606a6a6aa4064968c386c2785383f8f865d8b17e0b5eb56a7b373365574f"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.AiSettingsServiceTest.xml",
+      "bytes": 893,
+      "sha256": "3ef9f9b1d094b7e50dad0ab693b78e62768bcf2fa0d1533370766c38b2377904"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.AssistantServiceExclusionTest.xml",
+      "bytes": 963,
+      "sha256": "20a548edadd31989067651afe306f6fd92808f123990fee21fcb9c2844d67c4b"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.GeminiProviderTest.xml",
+      "bytes": 601,
+      "sha256": "544bdcd1ef10eb4c3b1b3bba98abb6dee932831787c1cd8670fc2d2debb5b6eb"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.LlmJsonTest.xml",
+      "bytes": 551,
+      "sha256": "b784a51889b3508e69491833532121b8c949d4bed9a9426cb1de0aafa53ef379"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.OpenAIProviderTest.xml",
+      "bytes": 967,
+      "sha256": "426a60a7f8a4d2e48cad4f359fd22c7617706c9405f1de1ccc29c99bf7480b40"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.Phase5ApiIntegrationTest.xml",
+      "bytes": 19000,
+      "sha256": "d1482e1a037e84d327824ddd20a479de1c707a99ab0fae2133d20ee7beef5b53"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.RuntimeAIProviderTest.xml",
+      "bytes": 478,
+      "sha256": "0ff37b891bf0a80b33ced10380ab627fde239db68f4fe493c797a073bfe694de"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.ai.TaskDraftApiIntegrationTest.xml",
+      "bytes": 18601,
+      "sha256": "7e1cec5122eeec6012c59e3b076a8504faacf74a80525997cdf21b067b681fff"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.accuracy.FixtureAccuracyTest.xml",
+      "bytes": 6270,
+      "sha256": "eb399d8a2950fc8449c9f43ec16a54fe7fb176071df619530e7dc37edefcc12b"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.accuracy.SemanticOracleTest.xml",
+      "bytes": 688,
+      "sha256": "d74501743912a5b12c343a984399e783ea7ac3647637b823f37dba56014eecaf"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.area.AreaDetectorTest.xml",
+      "bytes": 2091,
+      "sha256": "3421baa269cf81d22cd72b406ae860ef16ebc02842ed78b971ad9cc1a53cc169"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.area.FixtureGoldenTest.xml",
+      "bytes": 16779,
+      "sha256": "29a42ebf352371e58b5dbfa660bb3d94d765741db9b24b94d864317475dc978c"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.compare.SnapshotComparisonServiceTest.xml",
+      "bytes": 670,
+      "sha256": "f8ed8885d7a2998dbc260c78bfc174f1d189adaf19aaf6b2d097f5bcb360192d"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.config.BuildFileAnalyzerTest.xml",
+      "bytes": 785,
+      "sha256": "df2f28a90fd6a001de35d25bc09db3372fd147d0a67b9323d7b3bf4a1067e8bb"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.config.ConfigAnalyzersGoldenTest.xml",
+      "bytes": 17733,
+      "sha256": "fcad1b44508625f42caaa8a86b504526e4e30400292c408461b7a33ff7f02d8a"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.config.DockerAnalyzerTest.xml",
+      "bytes": 2808,
+      "sha256": "e77a09d1a7c09352b89d62c13dea50c9fa032dc298ef07bee2c6c782e2491082"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.config.InfraApiIntegrationTest.xml",
+      "bytes": 18647,
+      "sha256": "45e93b3ada7d50aa8dc1376ca8f0926ab7300dabdd28f278474e29e83f5ca41f"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.config.SqlMigrationAnalyzerTest.xml",
+      "bytes": 678,
+      "sha256": "be28abaffb4a61fb81fb47098f2cec20031af8b4317995b70a933b53805766ab"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.config.TerraformAnalyzerTest.xml",
+      "bytes": 487,
+      "sha256": "ea5d64d3cc9213ba7c8ea36e9e87af3172f341506e412b44d858ae4f5f6f2ad2"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.core.FileApiIntegrationTest.xml",
+      "bytes": 19326,
+      "sha256": "cc1e5e10b2d982a931efeccac5466c35e7c5a3dee49756bc7f7b9f74b87c906d"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.core.FileInventoryScannerTest.xml",
+      "bytes": 784,
+      "sha256": "5c6e76c086a04efa4a546c0fd9c11db3b8d7a5e0d7f3125e2d293680cb3eee2f"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.core.LanguageDetectorTest.xml",
+      "bytes": 3860,
+      "sha256": "adb682de258d63f8dfa7ed871f71a1cd6f2e2e9c366b3854ce39a9874a2b4b7c"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.core.NaturalKeysTest.xml",
+      "bytes": 462,
+      "sha256": "cbc9f7bd09530dbccf58387a34af93ccea9cae47f20cdc1bc4c4cf3333113d5b"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.core.SafeRelativePathTest.xml",
+      "bytes": 846,
+      "sha256": "df31068202d7ab0bea7d46edaf83aa1a88f6259a888e90b2584aee15061fb9be"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.coverage.CoverageServiceTest.xml",
+      "bytes": 23536,
+      "sha256": "3c7fd6e8650572ad193f2afc0c00927c56f88d494f501bf9deed9c3d83ada922"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.cross.EndpointPathMatcherTest.xml",
+      "bytes": 1030,
+      "sha256": "d75d59fcbb8be03d3bb2752a47e6fe08cf33ebfb3b6e74d4d4b56c6fdb0789f3"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.cross.FullstackCrossDomainGoldenTest.xml",
+      "bytes": 17140,
+      "sha256": "59916cb7f6b730dab5c4ae20c62f74e7d1fb53c3786199e95c271f7eacd95d37"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.feature.FeatureMergerTest.xml",
+      "bytes": 939,
+      "sha256": "b85f79380a93cd339c898d0fab2c3fd2ab79f303c6ac1fcc6f090ba76945387e"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.feature.SpringMiniEndpointsFeaturesGoldenTest.xml",
+      "bytes": 17566,
+      "sha256": "aee1402bfd57baa41bfb6045f23da24c3d7d898f5b91a7e8891c105ec9c97559"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.finding.FindingServiceJudgmentTest.xml",
+      "bytes": 829,
+      "sha256": "29fb68f070c37b57358d4fa95c5ed389848f603ddfbae71ac930de526f38e9c0"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.graph.ArchitectureApiIntegrationTest.xml",
+      "bytes": 18775,
+      "sha256": "fc4bea1fb0942d8ccc581081701a5f72fb7eef00269f69f2dbae81539572b174"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.graph.AreaPathTaggerTest.xml",
+      "bytes": 620,
+      "sha256": "bad44695dc41e934799debc1312a53e66c69c9ea20fb458c9b8b2d9e10223687"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.graph.GraphApiIntegrationTest.xml",
+      "bytes": 18636,
+      "sha256": "c042497ebbbafa1c82d29b134ba513809fd5972f693009f8d2bd83f8c5ab87c8"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.graph.SpringMiniGraphGoldenTest.xml",
+      "bytes": 18091,
+      "sha256": "55b7d572ebfeaf72c31877d8cbe8b2b73a867e7773ec2fb86f0e02dae4e92ee6"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.java.JavaAnalyzerTest.xml",
+      "bytes": 1345,
+      "sha256": "d9e2076af25fa7f43e3a24a0e6b48213716e62e2ead63e2f99ef052901d616fd"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.java.JavaSourceRootsTest.xml",
+      "bytes": 780,
+      "sha256": "1aecaba24ee6519e9a0b5a8199a037da41d6a695712c2d6fdf4029a5fc907dd5"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.java.JpaEntityExtractorTest.xml",
+      "bytes": 629,
+      "sha256": "749a763173417a7d888863ab2ca0bf0308111c2b7a2a569af27a781033462fa7"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.java.KafkaEventExtractorTest.xml",
+      "bytes": 488,
+      "sha256": "e39f64cf8381d03777cbf4470f2ffd7874d0a66ee99069fa3ea7e92b470029a1"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.java.LayerTaggerTest.xml",
+      "bytes": 486,
+      "sha256": "588d68daff4ba13aaa198aecf7c50dee0a4aedf4d65eb3df51999f30840e16cf"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.java.RequestMappingsTest.xml",
+      "bytes": 914,
+      "sha256": "0494ef1bdce8dad65e39c39595ed86dcfac6337bc92551a01e431b7b27cea8b9"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.java.SpringEndpointExtractorTest.xml",
+      "bytes": 691,
+      "sha256": "1d3de7c9942adc975dd54121c1179c93f6079d57da69e0514082073d4e7d1089"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.ts.ReactMiniTsParsingGoldenTest.xml",
+      "bytes": 17233,
+      "sha256": "448f5277a5626a74a7eefe2a02a46b46234ed6541a47e4ca4b7915de7d4e1c60"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.ts.TsAnalyzerClientTest.xml",
+      "bytes": 608,
+      "sha256": "19caf8fd55ba69c9d163ba5ff32d0fbe5ade7e24eda39dbb242b800b2bd9268d"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.ts.TsAnalyzerPropertiesTest.xml",
+      "bytes": 994,
+      "sha256": "9cc87500585a0ef709a8299844e608f37e4a6d4b7d85148957d676e1c47f54c0"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.ts.TsGraphMapperTest.xml",
+      "bytes": 630,
+      "sha256": "741c220fe2d52c0a33a4873fa362c6d2f4ec460046ae7d8d81724c5c84a0c760"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.ts.TsParsingStepTest.xml",
+      "bytes": 665,
+      "sha256": "d25aae4a5390fc120573745c8fd1e0051d9ea1b29d8617dcf9fb0c4eafb37e34"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.analysis.ts.TsRequestBudgetTest.xml",
+      "bytes": 653,
+      "sha256": "1d2e7ef04b92cc58923acd4b6840f62a3c5fbd52f71165885d204b2619b6d119"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.auth.DesktopAuthenticationFilterTest.xml",
+      "bytes": 1421,
+      "sha256": "4f6aaa8b6e07783c77ae2ab9f8a01f249f16679c122f50ca9f53759325903907"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.auth.GithubNativeOAuthServiceTest.xml",
+      "bytes": 785,
+      "sha256": "0b6afb2445e1ef5e893b0ca7cff8df1dcfbf916e1348d3604b580cb19b265b19"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.auth.PatAuthServiceTest.xml",
+      "bytes": 783,
+      "sha256": "c4fbf3d3727f09616edd9509324578c3933631707f921470069aa6d402f51d3f"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.auth.PatLoginRateLimitFilterTest.xml",
+      "bytes": 609,
+      "sha256": "15f0a0a2b1e887765a8b7853c040baf19d427f21496c18901be1c3cc185249aa"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.auth.TokenCryptoServiceTest.xml",
+      "bytes": 1351,
+      "sha256": "f417061c0405285f37fa2c8bc76d727ec2194682d38dda32326404ec5f0f2571"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.evidence.SecretMaskTest.xml",
+      "bytes": 749,
+      "sha256": "40d24308e2dee7d5713dfd1cacbbc5f90375ea70ca500809fbf84b034c8ae9b0"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.export.ExportServiceTest.xml",
+      "bytes": 1059,
+      "sha256": "10dae12406146b93bf60d7b175403a1748fee8a133430eb4539e61daac42c49e"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.github.GitCloneServiceTest.xml",
+      "bytes": 1073,
+      "sha256": "98af8a4b655b68570760cd841fb1999c48f3a197a3be9a68117555cf896265d4"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.github.GithubApiClientTest.xml",
+      "bytes": 1030,
+      "sha256": "cb0d847c04bfdbb39988d76e92062e6439cfa6c11b149c35619f49335ffd923b"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.github.RepoRefTest.xml",
+      "bytes": 3785,
+      "sha256": "5c2e8716996814a37825a35a975c8bb1db4a42dd8e3a009d944058dc616ccda8"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.history.GitMetadataScannerTest.xml",
+      "bytes": 623,
+      "sha256": "587d8dfb5914b9e2877968ded6facb6b90bef8622e2f3256c310362742a236fa"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.history.GitMetadataStepTest.xml",
+      "bytes": 16971,
+      "sha256": "0a1dc77a58df3d3ad50c81f891eed2fcfd29ce0432bf5e3952cc09333de22e29"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.history.GitMetadataTruncationTest.xml",
+      "bytes": 17047,
+      "sha256": "f7f1ebe1138cc09886e63903a19ce2b2548cd3671be96b3535ecb269f12acb3b"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.history.HistoryApiIntegrationTest.xml",
+      "bytes": 19006,
+      "sha256": "694358f0e616bc308c33aa839977c9a4101f0ee9fa465579834c4eef54ab87bd"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.history.PullRequestCollectorTest.xml",
+      "bytes": 1015,
+      "sha256": "ead889bb202954bbfb3937a278029f52d1d40f500c4e4829e9fa5ce51fe8ef49"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.job.JobFrameworkIntegrationTest.xml",
+      "bytes": 19509,
+      "sha256": "57734b3b84c365b9bf139a51bc8d8cde7eab133639bf8c7d365c8659085e4b19"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.job.JobRetrySourceIntegrationTest.xml",
+      "bytes": 19995,
+      "sha256": "5aaf12f0a7c4769af76b35c3924002cd1633d67112d387d9e2b7234932303b82"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.job.JobServiceRetryTest.xml",
+      "bytes": 626,
+      "sha256": "ecf6c74ea6f28fad12ecd8ccbce72851bec4841c736e2d764743796abe6c8431"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.job.RetrySourceGuardTest.xml",
+      "bytes": 4248,
+      "sha256": "a814a0b67fa4da2e09599ac43c45a0a994d42e12604392b27eb4ae96a331d0dd"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.migration.DesktopIdentityMigrationTest.xml",
+      "bytes": 9462,
+      "sha256": "5248634183cd3a27475d51fe556714e75027fe297f45c3386228fa19c5bbf1f7"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.note.NoteReferenceParserTest.xml",
+      "bytes": 478,
+      "sha256": "f26fd380841a94ce4a445109c99a5b749db7876b1e2f64ab7d71c724efbf0de9"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.note.NotesTasksApiIntegrationTest.xml",
+      "bytes": 18654,
+      "sha256": "1462db9c5ed2d2d78e9fff75cde09531f7aa51e08a7dfbb789f6f61616fd6504"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.project.IdeOpenServiceTest.xml",
+      "bytes": 1395,
+      "sha256": "f4890baeba6b9cded23905ee8f9cf6daeb7d4738835d13679a10934ce868a4f6"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.project.LocalIgnoreRulesTest.xml",
+      "bytes": 8471,
+      "sha256": "1879cb550b2936ef884e766c1b42dadebe34e0f5003b59a90f4112b58bd89306"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.project.LocalImportServiceTest.xml",
+      "bytes": 2492,
+      "sha256": "63c27fa087c0d17fca7384ae9aeba73a66947c9e1945f4aa7bdd7118c49662f4"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.project.LocalIngestIntegrationTest.xml",
+      "bytes": 17474,
+      "sha256": "83f1e4811a95dbc638b3d0fec075ab5d922101da8f3388dcbe337432446fb8e3"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.project.LocalIngestPolicyTest.xml",
+      "bytes": 9704,
+      "sha256": "45ea854decc0764182541dac87fd03826ac8e8cc7f98fcee4d3f492fd56da573"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.project.LocalPreviewApiIntegrationTest.xml",
+      "bytes": 19231,
+      "sha256": "31bf65e6e15d0534cd1487793c9954776b2f10dac732c724d56f886bd20bbe34"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.project.LocalSourceApprovalIntegrationTest.xml",
+      "bytes": 22095,
+      "sha256": "0cbe0c806b45c0654fef8e34416de3fd0382ee8cf79d7b54b81a6a7766dda4e2"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.project.LocalSourceBindingTest.xml",
+      "bytes": 5192,
+      "sha256": "e023e76c813ef5e7f082029d682377d0ec5f0858126530b018b605d5fe6e6dc6"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.project.LocalSourceStatusServiceTest.xml",
+      "bytes": 1150,
+      "sha256": "353ba690bb25c16635e723a80dda0c81aad4dfdfca9d2ff7d59b8db012421c43"
+    },
+    {
+      "path": "/tmp/ci-e2-final-xml/test/TEST-dev.codeintelligence.search.SearchApiIntegrationTest.xml",
+      "bytes": 18625,
+      "sha256": "d83402f342e5626ab33fd03ef9b7a5904f1fdbc7b74d2ddf3c61ece3cb864b19"
+    }
+  ]
+}

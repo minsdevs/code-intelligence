@@ -1,0 +1,322 @@
+{
+  "createdAt": "2026-10-03T12:01:10.482Z",
+  "scope": "Parser service and mocked progress UI; Java source changes statically reviewed only",
+  "environment": {
+    "node": "v26.5.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "sidecarVitest": "4.1.10",
+    "frontendVitest": "4.1.10",
+    "frontendTypeScript": "6.0.3"
+  },
+  "baseline": {
+    "artifact": "/tmp/ci-parser-flow-ZQdw8J/baseline.json",
+    "sha256": "e52d4982e4f36c0125f582da71d0a276bcb425d77dc9648edd17faded7696b9d",
+    "changedPaths": [
+      "analyzers/ts-analyzer/src/analyze.service.ts",
+      "analyzers/ts-analyzer/src/analyze.service.test.ts",
+      "analyzers/ts-analyzer/README.md",
+      "backend/src/main/java/dev/codeintelligence/analysis/core/LanguageDetector.java",
+      "backend/src/main/java/dev/codeintelligence/analysis/ts/TsParsingStep.java",
+      "backend/src/main/java/dev/codeintelligence/analysis/ts/TsAnalyzerClient.java",
+      "backend/src/main/java/dev/codeintelligence/job/JobService.java",
+      "backend/src/main/java/dev/codeintelligence/job/JobConflictException.java",
+      "backend/src/test/java/dev/codeintelligence/analysis/core/LanguageDetectorTest.java",
+      "backend/src/test/java/dev/codeintelligence/analysis/ts/TsParsingStepTest.java",
+      "backend/src/test/java/dev/codeintelligence/job/JobServiceRetryTest.java",
+      "frontend/src/features/import/ProgressStep.tsx",
+      "frontend/src/api/types.ts",
+      "frontend/src/lib/translations.ts"
+    ]
+  },
+  "sourceHashes": {
+    "analyzers/ts-analyzer/src/analyze.service.ts": "bc9d2d8ee101ace6777a1194a4afda45701616fc3bc66aeb0dfe9b6b9d1ae9d8",
+    "analyzers/ts-analyzer/src/analyze.service.test.ts": "04f5fb10cc15c36085b05f8cb95a3f673af5646fff5838ce074d5e1e611b4546",
+    "analyzers/ts-analyzer/src/syntax-diagnostics.ts": "c940902b6c096821e91fb3e0eba93c606a1771e280bb814133d947e0a44dd042",
+    "analyzers/ts-analyzer/README.md": "5d0a3b74f4da79c1dbfcfbb6ef2f2a8083ea14b43f3e5b1e811181c9056be3c6",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/LanguageDetector.java": "67ae54e8cee0396eac065c2d001f9806312755e7623ed3047450c62107984a7d",
+    "backend/src/main/java/dev/codeintelligence/analysis/ts/TsParsingStep.java": "7bd1622745c0624cbd650da4cd180a482a8ff3ba9f240e367dde060dc4a4126d",
+    "backend/src/main/java/dev/codeintelligence/analysis/ts/TsAnalyzerClient.java": "ec929ce7dd12eb572075439e12fa95b5e0b7062c372da1458b2b5fe32dfe550d",
+    "backend/src/main/java/dev/codeintelligence/job/JobService.java": "fe8c65701a93b4ebb9b64980e5229b4c0ee527c86e6538e5488a5b26556ca9fc",
+    "backend/src/main/java/dev/codeintelligence/job/JobWorker.java": "d35cd8493f4872e33032706f771afaecf482cfeedcd8ebb65232d7526d37ebc3",
+    "backend/src/main/java/dev/codeintelligence/job/JobConflictException.java": "d34edf36594ecab4797e52863f02450844432c0aeea2612eb4809bcc23330e49",
+    "backend/src/test/java/dev/codeintelligence/analysis/core/LanguageDetectorTest.java": "7e0fa807f81e79a54ab53545bdfc4850c84c2823627028ee3d2f51fbf82baf91",
+    "backend/src/test/java/dev/codeintelligence/analysis/ts/TsParsingStepTest.java": "c80e09971c55e2343f8052a88b8c77c44cf9767e8e341edfa0e82e7e448c81c4",
+    "backend/src/test/java/dev/codeintelligence/job/JobServiceRetryTest.java": "15589f1899f510f7bcddf641c18934c34de1f71adb2dbc6aec11ec519fd6ae2d",
+    "frontend/src/features/import/ProgressStep.tsx": "65373ae6ed7066a5cba80016f19a0e853a92e2065c7523cbb035099cb21087f0",
+    "frontend/src/api/types.ts": "aa44b9d27e4032aa3308631253bb87d30b34c9e89571592310a46943a45bea0a",
+    "frontend/src/lib/translations.ts": "4be6081c8638105a93e947d6f8a92afc0bf0e9fc6bcc4f932d18f0e33c665810",
+    "frontend/src/test/setup.ts": "d4196d4bfa513adb9f66f31b300a4a131785c0701ee30a554e90cb48abf5220f",
+    "desktop/test/managed-process.test.cjs": "228f5b34f68937cde55f3162e35653851b778f0ab7d05b71b3f7effa0956ae15",
+    "docs/audit/parser-gaps-2026-10-03.md": "8fcbdd25d55228e336ca83bde66444e27c673d28edac5352a301df509471edd4",
+    "docs/audit/parser-gaps-validation-2026-10-03.json": "cecf9cab885de42481efe48dac06c98b9739bb8543a3412faabf19451f8420f4",
+    "analyzers/ts-analyzer/vitest.syntax-api.config.mjs": "3fbf7f606c4c16d55ca638ed6b3309582b7eb1fe444098d4793b0e42e3c6a69c",
+    "frontend/vitest.progress.config.mjs": "7febd27fecbe87e4ba98543c3e4115be6086c70229922ea96e8fbd7e88a6e267",
+    "frontend/src/test/no-network.ts": "1d66b179058b3244bb0a2a86d94fcea77dcec7bbe7922d5ef6689faf5f05424b",
+    "frontend/src/features/import/syntaxFailure.test.tsx": "7fc20069ebfcc4b7c3f4e04cc4a7df37c7c82af9f60353bead99f9ed21acbb60",
+    "backend/src/main/java/dev/codeintelligence/analysis/ts/TsSyntaxInputException.java": "6ce3dae57f799c13a5c6eb72a223d2162bb467ba5742d6582d58c28f9788354f",
+    "backend/src/test/java/dev/codeintelligence/analysis/ts/TsSyntaxInputExceptionTest.java": "0b726aa5eec6465686adae62627aa6e578d97d9c7f64b1da92141ee098804a33",
+    "backend/src/test/resources/fixtures/ts-syntax-error.json": "9e297f35ecfd2b60762f598f8d5dc56d2784048b94e324a5c3b9b32adc3ca331",
+    "analyzers/ts-analyzer/vitest.parser.config.mjs": "93ca8203d351d777ec4db622dcb09a1b7f163eaefaf41c911714e3e79b130369",
+    "analyzers/ts-analyzer/src/ts-extractor.ts": "71f58ff7edfab1c89a6290db55f23dcc7598c44c8e463904c8be3822603fddad",
+    "analyzers/ts-analyzer/src/semantic-extractor.ts": "938671c12169465e8dd18e90cc713a6e3a062b8c54fccc5858d2e15a90e5c420",
+    "analyzers/ts-analyzer/src/paths.ts": "4d2d8b48f25a4f105f0f585d1d047654e927d5a1bf3d5d32639f66d464b21c56",
+    "analyzers/ts-analyzer/src/types.ts": "f2619a9a813a97bea1c82af2be996b18c6c27cbe7318c77904139c489c632cae",
+    "analyzers/ts-analyzer/src/generic-extractor.ts": "e630de84e1be8d79524924cdaec7c859fe97a082bdbd06b9b522593219e263dc",
+    "analyzers/ts-analyzer/src/ts-extractor.test.ts": "53f34bf48a6191aa877b328bcdfda1a261498c144b3d17be8b3b46f24c6c2bcb",
+    "analyzers/ts-analyzer/src/semantic-extractor.test.ts": "b2177aecf17f9f69b6f693215a1eeded84b3112be9378c624f7b4a607e52e640",
+    "analyzers/ts-analyzer/src/http-boundary.test.ts": "e56d6c69a0deb9d588d81daecd2a25c68403bd6dd5ea997ac853425ab6441836",
+    "analyzers/ts-analyzer/src/fixtures/project-boundary.ts": "579336e02b240db7db639bc185886dec441b285a1bee2dbec9c44a5b11625507",
+    "frontend/src/api/jobs.ts": "d97977655c68309c822f36ca5fe064f44f858941129c196d96a9b0720d54d5b1",
+    "frontend/src/api/client.ts": "4fb08f6f283d60b0e83e6826586eacd1dbcdce390752c9225a2fd93dae416f7d",
+    "frontend/src/features/import/localPreviewRequired.test.tsx": "abca330d3ef25e4bec7a8fd3f93ef1b70062da814c3426913d5636f963c9db41",
+    "frontend/src/features/import/progressCancellation.test.tsx": "5a19bd5986a86d0b6924e3983675788a23677ddc6a45ea26a042d815f5edecd2",
+    "frontend/src/lib/i18n.tsx": "e08939ae64d64d002fac237749d66c53158e5fdac18fe366940189eeae898c73",
+    "frontend/src/lib/i18n-core.ts": "a9c88708d6979753c3e9236a27dea0c5b6e560f1705b92073ff76ae9b6347516",
+    "frontend/src/features/import/wizard.ts": "b8f9b62d2ced2febbe6338f81677d3a19925956b046a6c6d085e57a0d0cdc969",
+    "frontend/src/desktop.d.ts": "d7a13f0ea1dc7419a3d61e75f120b3e03bd6266c364f73069e6d9a7601b7dc0f",
+    "backend/src/main/java/dev/codeintelligence/job/JobInputFailure.java": "f634c3038c4c82c55a2b283432bb6b0287755325a26033e0a053572fc7beefab",
+    "backend/src/main/java/dev/codeintelligence/job/JobDetailResponse.java": "27ae615a7ace7cd463d8ee086166291f9695c488afa0db739307d294085283a0",
+    "backend/src/main/java/dev/codeintelligence/job/JobRepository.java": "4278b760c14ef012a96d668378ea5de8fd9b7854ccc5d65a543879cd419e161c",
+    "backend/src/main/java/dev/codeintelligence/job/JobProgressPublisher.java": "7120f29246c6eb6f3a4cd232415cbeac3a51e3425d69897ba70eaf3f77bfcec6"
+  },
+  "tests": [
+    {
+      "artifact": "/tmp/ci-parser-flow-ZQdw8J/sidecar-red.json",
+      "sha256": "e689cccb1cc640f765ff064ef9ad964ada33d8cd43dac7d738c3368d322bee4a",
+      "exitCode": 1,
+      "success": false,
+      "total": 156,
+      "passed": 155,
+      "failed": 1,
+      "skipped": 0,
+      "files": [
+        {
+          "path": "analyzers/ts-analyzer/src/analyze.service.test.ts",
+          "status": "failed",
+          "total": 4
+        },
+        {
+          "path": "analyzers/ts-analyzer/src/http-boundary.test.ts",
+          "status": "passed",
+          "total": 51
+        },
+        {
+          "path": "analyzers/ts-analyzer/src/semantic-extractor.test.ts",
+          "status": "passed",
+          "total": 70
+        },
+        {
+          "path": "analyzers/ts-analyzer/src/ts-extractor.test.ts",
+          "status": "passed",
+          "total": 31
+        }
+      ]
+    },
+    {
+      "artifact": "/tmp/ci-parser-flow-ZQdw8J/ui-red.json",
+      "sha256": "c6de0221f800abd1ff7fc9a48a0a5b7821be99ce2485b0fd73f4a779c1e9d9f5",
+      "exitCode": 1,
+      "success": false,
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "files": [
+        {
+          "path": "frontend/src/features/import/localPreviewRequired.test.tsx",
+          "status": "passed",
+          "total": 3
+        },
+        {
+          "path": "frontend/src/features/import/progressCancellation.test.tsx",
+          "status": "passed",
+          "total": 1
+        },
+        {
+          "path": "frontend/src/features/import/syntaxFailure.test.tsx",
+          "status": "failed",
+          "total": 0
+        }
+      ]
+    },
+    {
+      "artifact": "/tmp/ci-parser-flow-ZQdw8J/ui-red-regression.json",
+      "sha256": "8083f29b03488b4640c045949a044665bef48162147c3fdcdfe3ee209d2f4359",
+      "exitCode": 1,
+      "success": false,
+      "total": 8,
+      "passed": 5,
+      "failed": 3,
+      "skipped": 0,
+      "files": [
+        {
+          "path": "frontend/src/features/import/localPreviewRequired.test.tsx",
+          "status": "passed",
+          "total": 3
+        },
+        {
+          "path": "frontend/src/features/import/progressCancellation.test.tsx",
+          "status": "passed",
+          "total": 1
+        },
+        {
+          "path": "frontend/src/features/import/syntaxFailure.test.tsx",
+          "status": "failed",
+          "total": 4
+        }
+      ]
+    },
+    {
+      "artifact": "/tmp/ci-parser-flow-ZQdw8J/sidecar-final.json",
+      "sha256": "c97792138dfe95bcc047c42863961baccef98f4de6af5edd5ca64936877b087c",
+      "exitCode": 0,
+      "success": true,
+      "total": 156,
+      "passed": 156,
+      "failed": 0,
+      "skipped": 0,
+      "files": [
+        {
+          "path": "analyzers/ts-analyzer/src/analyze.service.test.ts",
+          "status": "passed",
+          "total": 4
+        },
+        {
+          "path": "analyzers/ts-analyzer/src/http-boundary.test.ts",
+          "status": "passed",
+          "total": 51
+        },
+        {
+          "path": "analyzers/ts-analyzer/src/semantic-extractor.test.ts",
+          "status": "passed",
+          "total": 70
+        },
+        {
+          "path": "analyzers/ts-analyzer/src/ts-extractor.test.ts",
+          "status": "passed",
+          "total": 31
+        }
+      ]
+    },
+    {
+      "artifact": "/tmp/ci-parser-flow-ZQdw8J/ui-final.json",
+      "sha256": "f6ed8f642a88822e1c911eb6d4c1eca637198bbbf46f7d496b1d1a49f7a09bd2",
+      "exitCode": 0,
+      "success": true,
+      "total": 9,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "files": [
+        {
+          "path": "frontend/src/features/import/localPreviewRequired.test.tsx",
+          "status": "passed",
+          "total": 3
+        },
+        {
+          "path": "frontend/src/features/import/progressCancellation.test.tsx",
+          "status": "passed",
+          "total": 1
+        },
+        {
+          "path": "frontend/src/features/import/syntaxFailure.test.tsx",
+          "status": "passed",
+          "total": 5
+        }
+      ]
+    },
+    {
+      "artifact": "/tmp/ci-parser-flow-ZQdw8J/ui-final-escaped.json",
+      "sha256": "f91f61bc301827ce4059e7f224abaf7909442f39e8ecf3e556cb93e7d71530ed",
+      "exitCode": 0,
+      "success": true,
+      "total": 10,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "files": [
+        {
+          "path": "frontend/src/features/import/localPreviewRequired.test.tsx",
+          "status": "passed",
+          "total": 3
+        },
+        {
+          "path": "frontend/src/features/import/progressCancellation.test.tsx",
+          "status": "passed",
+          "total": 1
+        },
+        {
+          "path": "frontend/src/features/import/syntaxFailure.test.tsx",
+          "status": "passed",
+          "total": 6
+        }
+      ]
+    }
+  ],
+  "typechecks": [
+    {
+      "artifact": "/tmp/ci-parser-flow-ZQdw8J/sidecar-typecheck.log",
+      "exitCode": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact": "/tmp/ci-parser-flow-ZQdw8J/ui-typecheck.log",
+      "exitCode": 2,
+      "sha256": "181bc487194902e9ecaed919ad1e8e3ddac51bb54d7f17c07daa53345ee79786"
+    },
+    {
+      "artifact": "/tmp/ci-parser-flow-ZQdw8J/ui-typecheck-final.log",
+      "exitCode": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact": "/tmp/ci-parser-flow-ZQdw8J/ui-typecheck-final-escaped.log",
+      "exitCode": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "commands": {
+    "sidecarCwd": "analyzers/ts-analyzer",
+    "uiCwd": "frontend",
+    "testPrefix": "env -u NODE_OPTIONS -u NAPI_RS_NATIVE_LIBRARY_PATH -u NAPI_RS_FORCE_WASI -u NAPI_RS_WASI_FLAVOR node node_modules/vitest/vitest.mjs run",
+    "sidecarTestArgs": "--config vitest.syntax-api.config.mjs --configLoader native --reporter=default --reporter=json --outputFile.json=<stage artifact>",
+    "uiTestArgs": "--config vitest.progress.config.mjs --configLoader native --reporter=default --reporter=json --outputFile.json=<stage artifact>",
+    "sidecarTypecheck": "env -u NODE_OPTIONS node node_modules/typescript/bin/tsc --noEmit --target ES2022 --lib ES2022 --module ESNext --moduleResolution Bundler --strict --esModuleInterop --skipLibCheck --experimentalDecorators --emitDecoratorMetadata src/ts-extractor.ts src/semantic-extractor.ts src/syntax-diagnostics.ts src/paths.ts src/types.ts src/generic-extractor.ts src/ts-extractor.test.ts src/semantic-extractor.test.ts src/http-boundary.test.ts src/analyze.service.ts src/analyze.service.test.ts",
+    "uiTypecheck": "env -u NODE_OPTIONS node node_modules/typescript/bin/tsc --ignoreConfig --noEmit --target ES2023 --lib ES2023,DOM --module ESNext --moduleResolution Bundler --strict --skipLibCheck --jsx react-jsx --types vite/client --resolveJsonModule --allowImportingTsExtensions --verbatimModuleSyntax --noUnusedLocals --noUnusedParameters src/desktop.d.ts src/features/import/ProgressStep.tsx src/features/import/syntaxFailure.test.tsx src/features/import/localPreviewRequired.test.tsx src/features/import/progressCancellation.test.tsx src/test/no-network.ts src/test/setup.ts",
+    "initialUiTypecheckDifference": "Omitted src/test/setup.ts, so jest-dom matcher declarations were missing; failed log retained"
+  },
+  "javaValidation": {
+    "status": "NOT_EXECUTED",
+    "review": "Static source/contract/exception flow review only; no compile, JUnit, formatter, Java process, REST or DB execution",
+    "regressionSources": [
+      "LanguageDetectorTest.java",
+      "TsParsingStepTest.java",
+      "TsSyntaxInputExceptionTest.java",
+      "JobServiceRetryTest.java"
+    ]
+  },
+  "guardianQuarantineUnchanged": true,
+  "priorParserProofUnchanged": true,
+  "reports": {
+    "docs/audit/parser-flow-2026-10-03.md": "17012fd845aaac1edcebafd29d0a919110a3ac7a8b0157d117a7de2a48da11e0",
+    "docs/audit/restart-recovery-audit-2026-10-03.md": "cced70395ddb5fe8be1cbb4016a8d38799c047e62843b64319b9acf70407a3eb"
+  },
+  "notRun": [
+    "Java compilation/JUnit/formatters",
+    "DB integration",
+    "real HTTP/SSE job path",
+    "guardian/native helpers/PID query or signal/AX",
+    "full builds/suites",
+    "installed desktop/browser user flow",
+    "OAuth production setup",
+    "signing, updates, publishing, deployment"
+  ],
+  "remaining": [
+    "End-to-end module inventory and syntax error propagation remain unverified",
+    "Full diagnostic list is not persisted/rendered; first location plus total only",
+    "Unknown or oversized 400 envelopes remain generic service errors",
+    "Existing release blockers require operational decisions and separate runtime approval"
+  ],
+  "releaseDecision": "NO_GO"
+}

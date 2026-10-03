@@ -2,6 +2,25 @@
 
 # Code Intelligence
 
+Current audit: [2026-10-02 release assessment](docs/release-audit-2026-10-02.md).
+Follow-up implementation and verification: [integrated results](docs/audit/execution-results-2026-10-02.md),
+[current execution status](docs/audit/execution-status-2026-10-02.md), and
+[independent review findings](docs/audit/execution-review-2026-10-02.md).
+The production release verdict is **No-Go**; the historical RC records below are not current acceptance evidence.
+The [current restart/release audit](docs/audit/restart-recovery-audit-2026-10-03.md) covers
+authenticated transaction recovery, retained-source reconstruction, capacity/retention,
+process ownership and native/analyzer fixes, including historical recovery observations and their evidence limits.
+The unsafe PID-based guardian test remains quarantined.
+Final commands, test counts, scope limits and source hashes are in the [validation record](docs/audit/restart-recovery-validation-2026-10-03.json).
+Compatible standalone runtimes, operational OAuth, source-consumer migration, OS isolation,
+signed installation and representative accuracy acceptance remain release blockers.
+The [latest synthetic HTTP→DB→SSE verification](docs/audit/parser-http-db-sse-2026-10-03.md)
+passed 14 checks and exposed a top-level function call gap, now fixed with 165 analyzer tests passing.
+[Windows preparation](docs/audit/windows-readiness-2026-10-03.md) adds path/environment handling and
+gated x64 NSIS configuration. Windows native storage/runtime and installation remain blocked and unverified.
+The earlier [backup/restore](docs/audit/backup-restore-integration-2026-10-03.md) and
+[cost integration](docs/audit/strict-ai-cost-integration-2026-10-03.md) records are preserved.
+
 A personal workspace that analyzes an entire GitHub repository, automatically
 discovers the technical areas that make up the project (Backend, Frontend,
 Database, Infrastructure, DevOps, Security, Testing, AI, …), and lets you
@@ -9,9 +28,9 @@ explore its features, architecture, call flows, dependencies, history, design
 rationale, and alternatives — with an evidence-grounded, context-aware AI
 assistant.
 
-> **Status: release candidate / internal testing.**
+> **Historical RC record / internal testing.**
 > Phase 1–5 functionality is present, and the current RC adds local-folder
-> import, safe local refresh, snapshot comparison, finding judgments, coverage,
+> import, confirmed local refresh, snapshot comparison, finding judgments, coverage,
 > Markdown/JSON export, IDE deep links, AI context preview/exclusion, and a
 > quality regression gate. These RC changes are staged on
 > `rc/feature-freeze-20260824`; they are not described here as released on
@@ -20,7 +39,7 @@ assistant.
 >
 > **Release remains blocked** on the real browser 10-step E2E and an approved
 > accuracy/false-positive oracle for representative repositories. Desktop
-> backup/restore is implemented for the local macOS runtime; roadmap P2
+> backup/restore was implemented for the local macOS runtime and is now blocked pending safe replacement; roadmap P2
 > incremental reanalysis is not implemented.
 
 This repository currently ships a browser-based local workspace with a Spring
@@ -73,7 +92,9 @@ openssl rand -base64 32
 ```
 
 For the local macOS desktop runtime, use a staged bundle after the browser
-checks pass:
+checks pass. The release owner must first export `CODE_INTELLIGENCE_BUILD_SEQUENCE` as an
+assigned nonnegative signed64 decimal string. Staging refuses a missing or invalid value
+before building or replacing files; the value alone is not signed antirollback proof.
 
 ```bash
 (cd desktop && npm ci && npm run stage && npm start)
@@ -83,21 +104,28 @@ checks pass:
 frontend/analyzer/backend, and requires local PostgreSQL with pgvector and
 Redis binaries. `pack:mac` creates a local directory package; signing,
 notarization, fresh-machine install, and real OAuth remain release blockers.
+Staging checks Java 21, arm64, macOS 13.0 deployment targets, required executable/extension
+roles and self-contained library references before publication. Compatible dependency artifacts
+are required; existing host Homebrew builds may fail these checks.
 When the host `pgvector` bottle targets a different PostgreSQL major, set
 `PGVECTOR_ROOT` to a matching build root containing `lib/postgresql` and
-`share/postgresql/extension` before staging; the stage is committed atomically
-only after its manifest is complete.
+`share/postgresql/extension` before staging; the previous stage is replaced after the new manifest is
+complete. The previous stage is retained; an interrupted transaction leaves a lock/recovery
+marker for inspection. Synthetic crash-path tests do not certify signed update recovery.
 
 On macOS, Electron's default app-data directory is
 `~/Library/Application Support/code-intelligence-desktop` (the desktop package
 name is `code-intelligence-desktop`). Based on `desktop/src/main.cjs`, the
 bundled PostgreSQL database is stored below `postgres/`, Redis state below
 `redis/`, backend data and repositories below `data/`, and restore recovery
-backups below `recovery/<timestamp>/` within that app-data directory. Runtime
+checkpoints below `recovery/<transaction-UUID>/` within that app-data directory. Runtime
 child logs use Electron's `app.getPath('logs')`, so they are written to
 `~/Library/Logs/code-intelligence-desktop/runtime` on macOS, outside the app-data
-directory. User-selected backup exports remain at the destination chosen in the
-backup dialog.
+directory. Main-owned safety state is outside the restorable data roots under `safety/`,
+with a separate enrollment marker. Encrypted maintenance records live under `backup-maintenance/`.
+Newly staged protocol3 runtimes connect the encrypted backup/restore buttons; older bundles keep
+them disabled. These are internal validation paths, not release acceptance. Legacy format1/2 and
+different-installation archives are rejected. Interrupted transactions block normal startup.
 
 To create and directly run the local unsigned directory package:
 
@@ -126,8 +154,11 @@ docker compose up -d
 ```
 
 AI is optional. Native GitHub OAuth requires `GITHUB_NATIVE_CLIENT_ID` at
-desktop/backend launch. The client secret is never placed in the desktop
-binary; PAT login is supported as a secondary path. `TOKEN_ENC_KEY` is always
+desktop/backend launch, but a client ID alone does not make the current native
+OAuth flow production-ready. The authorization-code exchange currently omits the
+client secret required by GitHub; select a supported device flow or a hosted
+secret-bearing exchange before release. Never package a client secret in the
+desktop binary. PAT login is supported as a secondary path. `TOKEN_ENC_KEY` is always
 required by the backend. Set
 `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040` and
 `TREE_ANALYZER_BASE_URL=http://127.0.0.1:3041` to enable the sidecars.
@@ -153,7 +184,7 @@ Run these commands from the repository root:
 ./quality-gate
 
 # Desktop syntax and local macOS staging/package checks
-(cd desktop && node --check src/main.cjs && node --check src/preload.cjs)
+(cd desktop && npm test && node --check src/main.cjs && node --check src/preload.cjs)
 (cd desktop && npm run stage && npm run pack:mac)
 ```
 
@@ -164,22 +195,28 @@ runner must provide Docker. Baseline changes are explicit reviewed edits to
 
 ## AI providers, models, and cost
 
-AI is optional. Static repository analysis, graph exploration, history, search,
-and the growth report do not require an AI provider. You can either configure a
-server-wide environment key (`OPENAI_API_KEY` or `GEMINI_API_KEY`) or enter a
-provider key in Settings. Settings keys are encrypted with `TOKEN_ENC_KEY` and
-are scoped to the authenticated user; the server does not return the plaintext
-key. A provider connection check runs before a key is stored, and the selected
-chat model can be changed from Settings. The current providers are OpenAI and
-Gemini; embedding models remain environment-configured because the database
-vector schema has a fixed dimension.
+AI is optional. Static analysis, graph exploration, history and search work without
+a provider. Explicit BYOK credentials in Settings are encrypted and scoped to their
+owner; plaintext keys are not returned. Missing credentials or OFF/reconnect states
+never opt a user in through an environment key. The key owner pays the provider;
+the project includes no hosted AI allowance.
 
-The project does not include a hosted AI gateway or a free AI allowance. With a
-server-wide key, the operator pays provider usage for all users. With BYOK, the
-key owner pays the provider directly. Provider pricing, quotas, retention, and
-terms change over time, so check the provider's current official pricing and
-privacy documentation before production use. `AI_DAILY_TOKEN_LIMIT` is an
-application budget guard, not a billing guarantee.
+The desktop candidate supports the local owner's Assistant Q&A using the pinned
+`gpt-4o-mini-2024-07-18` model. Saving a key performs no provider call and leaves
+desktop AI off. Set daily/monthly USD limits (both default to zero), then explicitly
+activate the budget. Each question needs a fresh review and one-use approval for
+its exact masked context and maximum reservation. Amounts use integer micro-USD;
+the conservative reservation uses the full input bound and capped output, not an
+estimate of typical charges. Main sends once and records usage plus journal/DB
+settlement before returning an answer. Unknown outcomes retain their reservation;
+OFF prevents new sends but does not cancel an already issued provider request.
+
+Other desktop providers, embeddings and unapproved helper calls remain unavailable.
+The versioned price contract expires and fails closed; actual provider invoices,
+paid requests and signed native confinement have not been validated. See the
+[cost contract and limitations](docs/audit/strict-ai-cost-integration-2026-10-03.md).
+The browser development path retains OpenAI/Gemini support and the soft
+`AI_DAILY_TOKEN_LIMIT` guard; it does not provide the desktop monetary contract.
 
 ## Privacy and trust boundaries
 
@@ -201,16 +238,26 @@ not a production deployment.
 ## RC workflows and safety boundaries
 
 - **Local import:** an authenticated user can open
-  `/import?path=<URL-encoded-path>`, inspect the path, and explicitly confirm
-  before `POST /api/projects/local` runs. There is no automatic import or
+  `/import?path=<URL-encoded-path>`, request a bounded file preview, and explicitly confirm
+  its one-use approval before `POST /api/projects/local` runs. There is no automatic import or
   browser directory picker. `LOCAL_IMPORT_ALLOWED_ROOTS` is a comma-separated
-  allowlist; when empty, the backend user home is the only allowed root.
-  Canonical-path, system/secret-directory, and symlink-escape checks apply.
-- **Safe refresh:** local projects show `최신`, `변경됨`, `경로 없음`, or
-  `권한 재확인 필요`. Refresh requires a preview snapshot plus matching
-  added/modified/deleted counts; a source change after preview returns a
-  conflict. Refresh remains a safe **full** analysis, not incremental P2 work.
-- **Analysis decisions:** Analysis exposes coverage/partial-result information,
+  allowlist; when empty, no server filesystem roots are granted. The desktop
+  native picker grants selected folders through a separate main-process-only
+  capability. Refresh fingerprinting and copy share bounded selection, exclusions, and raw Git
+  blob hashes. See the [local ingest policy](docs/audit/local-ingest-policy.md)
+  for ignore syntax, limits, exclusions, and the remaining filesystem race boundary.
+- **Confirmed refresh:** local projects show `최신`, `변경됨`, `경로 없음`,
+  `권한 재확인 필요`, or `검사 실패`. Initial import and refresh bind approval to the
+  owned project/base snapshot, root identity, selection limits and actual file bytes.
+  Unconsumed approvals expire after ten minutes; a consumed job receipt survives queue
+  delays. The worker verifies staged bytes before replacing the repository. Changed input
+  requires a new preview. Uncertain responses use an atomic outcome lookup without
+  resending confirmation. Refresh performs a **full** analysis. Native filesystem
+  confinement and immutable retained source remain release blockers; see the
+  [approval contract](docs/audit/e2-approval-contract-2026-10-02.md).
+- **Analysis decisions:** Analysis distinguishes inventory counts from unmeasured
+  analysis outcomes and unknown completeness. Local ingest exclusions are a
+  separate count-only observation. It also exposes
   deterministic snapshot comparison, and per-user finding judgments
   (`NEEDS_REVIEW`, `ACCEPTED`, `FALSE_POSITIVE`, `RESOLVED`). Hidden false
   positives remain recoverable; rule/evidence changes return them to review.
@@ -218,8 +265,9 @@ not a production deployment.
   after secret redaction and without source bodies. IDE links are available
   only for local projects and validate the relative path; commit mismatch is
   reported before opening the configured IDE.
-- **AI control:** preview uses the real retrieval path without contacting the
-  provider. Excluded context IDs are filtered server-side; “local data only”
+- **AI control:** preview reads bounded local context and existing matching summaries
+  without generating summaries or embeddings. Normal ask may retrieve additional context.
+  Excluded context IDs are filtered server-side; “local data only”
   prevents the frontend from sending an AI request. This is not a guarantee
   about provider policy when a request is actually sent.
 - **Copyable prompt:** Context Preview can generate a masked, copyable prompt
@@ -229,10 +277,32 @@ not a production deployment.
   reanalysis. Snapshot comparison shows changed features, flows, findings,
   nodes, relations, coverage, rename candidates, and regression warnings;
   incremental P2 reanalysis is still out of scope.
-- **Desktop recovery:** the desktop Settings screen shows runtime status and
-  services, restart, backup, and restore. Restore requires a UI confirmation
-  and a main-process warning after manifest/hash validation; a recovery backup
-  is created only after explicit Restore.
+- **Desktop recovery:** Protocol3 runtimes offer encrypted backups from Settings. Restore loads
+  reviewed typed data and verified source objects into fresh staging, preserves prior DB/source
+  images, keeps AI OFF and clears credentials, sessions and folder grants. Runtime health is
+  checked behind a write barrier before completion. The unsafe legacy dump/SQL fallback remains
+  unavailable. Interrupted-transaction recovery and storage retention remain release blockers;
+  missing identity or safety state never silently creates replacement keys. See the
+  [current audit and limits](docs/audit/backup-restore-integration-2026-10-03.md).
+- **AI connection state:** OFF deletes the stored credential while preserving provider/model
+  preferences. New users and OFF/reconnect states never use an environment key.
+  Desktop key storage, budget activation and approval of each question are separate
+  actions. An issued request can finish after OFF and stays counted while pending.
+  Local analysis and copyable context previews remain available. The browser development
+  path still does not provide a strict monetary budget guarantee.
+
+### Current analysis boundaries
+
+- TypeScript/NestJS project context is sent as one request, limited to 20,000 files
+  and 10 MiB of serialized UTF-8 JSON (1 MiB per file). Larger inputs fail explicitly;
+  independent partial batches are not used. This is not a large-monorepo guarantee.
+- A running cancelled job stays `CANCELLING` until its current step exits. Reanalysis
+  and deletion remain blocked during that interval; cancellation does not undo a
+  completed step. Flyway V21 keeps this state in the active-job uniqueness constraint.
+- Git submodule entries are excluded and recorded as snapshot evidence; submodule
+  contents are not fetched or analyzed automatically.
+- Language recognition does not imply full semantic support. See the current
+  [language support and planning handoff](docs/planning-handoff-2026-10-02.md).
 
 ## RC validation record (2026-08-24)
 
@@ -265,7 +335,7 @@ and blockers in [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md).
 | Local browser + Spring Boot backend | Supported development path |
 | Docker Compose PostgreSQL/Redis/sidecars | Supported local infrastructure |
 | macOS arm64 Electron runtime | Local staged/package RC; unsigned/notarized acceptance pending |
-| Windows native installer | Not verified |
+| Windows native installer | x64 NSIS configuration prepared; packaging blocked pending native safety/runtime work; not verified |
 | Linux native package | Not verified |
 | Production hosted deployment | Deployment-specific; no release workflow is included |
 

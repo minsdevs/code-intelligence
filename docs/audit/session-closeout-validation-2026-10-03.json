@@ -1,0 +1,379 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-10-03",
+  "collectedAt": "2026-10-03T13:03:36.779Z",
+  "scope": "User stop boundary: finish only the in-progress TS_PARSING nullable metadata fix and required validation; hand off remaining work.",
+  "releaseDecision": {
+    "mac": "NO_GO",
+    "windows": "NO_GO"
+  },
+  "repository": {
+    "path": "/Users/minseokchae/Dev/code-intelligence",
+    "branch": "codex/e2e-docs-scripts",
+    "head": "ebe3ab135ce6dbaa454b29db6e5ab5c678557070",
+    "dirty": true,
+    "trackedChanged": 130,
+    "untrackedFiles": 316,
+    "statusCountsExcludeThisNewManifest": true,
+    "commitPushPrDeploy": false
+  },
+  "currentProductChanges": [
+    "backend/src/main/java/dev/codeintelligence/analysis/ts/TsAnalyzeDtos.java",
+    "backend/src/test/java/dev/codeintelligence/analysis/ts/TsAnalyzeDtosTest.java",
+    "backend/src/test/resources/fixtures/ts-nullable-metadata.json"
+  ],
+  "validationRunnerChanges": [
+    "validation/parser-flow-integration/prepare.mjs",
+    "validation/parser-flow-integration/ParserFlowIntegration.java"
+  ],
+  "currentFileBindings": {
+    "backend/src/main/java/dev/codeintelligence/analysis/ts/TsAnalyzeDtos.java": {
+      "sha256": "2ed0ee85372bfc373d055879d9ea9449fdc636093009cd144b3a08d902debfe3",
+      "bytes": 4322
+    },
+    "backend/src/test/java/dev/codeintelligence/analysis/ts/TsAnalyzeDtosTest.java": {
+      "sha256": "badc3cbb641c1cb687101ef9e9334ecc2a383f96ab8dd43209e34b3fc6af06e5",
+      "bytes": 3712
+    },
+    "backend/src/test/resources/fixtures/ts-nullable-metadata.json": {
+      "sha256": "4e37cdf589fad413b753c0ee47bd3beaa42781471904e6313592314d7a56fe99",
+      "bytes": 2885
+    },
+    "validation/parser-flow-integration/prepare.mjs": {
+      "sha256": "d10d96830be829e0935ae8da1e8d8aa4bc7243cc2112576f369e5893aea6162a",
+      "bytes": 4989
+    },
+    "validation/parser-flow-integration/ParserFlowIntegration.java": {
+      "sha256": "140ff17afa687d183931a9aef4998987278e7c856fe1e9ec7678228703a91ac6",
+      "bytes": 20377
+    },
+    "validation/parser-flow-integration/run.mjs": {
+      "sha256": "68638b8ba8d6215db0c16eaf9bec58ae41c480651d61b8296167a1bd7517694a",
+      "bytes": 10762
+    },
+    "validation/parser-flow-integration/README.md": {
+      "sha256": "28cef3b1d278f03e7cb1d09faf159d1026191c6053ab13b6ad50b8c2e22d3389",
+      "bytes": 3003
+    },
+    "docs/audit/ts-parsing-live-app-2026-10-03.md": {
+      "sha256": "5bc97d22ad1b0a023004a7eccd56ef161a798cf93c4fff848f5e29eb59881a96",
+      "bytes": 5172
+    },
+    "docs/audit/session-closeout-2026-10-03.md": {
+      "sha256": "dd8bc018535bd0127e7016c6116276c0da42e06ba700bc5aed6416f2d56374c5",
+      "bytes": 8934
+    },
+    "docs/audit/next-tool-handoff-prompt-2026-10-03.md": {
+      "sha256": "f2d91b7d1fa2ac91b90e50a4abf30085aa1783a656bff05a6024382f3d1d9f29",
+      "bytes": 16066
+    },
+    "docs/audit/app-launch-handoff-2026-10-03.md": {
+      "sha256": "eb22292110ddb038c50bd7cb8f9316832788ef99fed8720e5ae7680e86a89449",
+      "bytes": 3165
+    }
+  },
+  "diagnosis": {
+    "priority": "P0",
+    "severity": "HIGH",
+    "observedFailure": "TsAnalyzerException caused by response conversion ValueInstantiationException and NullPointerException in EndpointHit constructor",
+    "liveLogEventAt": "2026-10-03T21:49:03.907+09:00",
+    "liveFrame": "TsAnalyzeDtos$EndpointHit.<init>(TsAnalyzeDtos.java:34)",
+    "wireProperty": "endpoints",
+    "fixtureKind": "Synthetic Nest controller with unknown optional return/parameter types",
+    "actualUserSourceRead": false,
+    "rawLiveLogCopied": false,
+    "liveHttpStatus": "NOT_ESTABLISHED"
+  },
+  "gates": {
+    "dtoRed": {
+      "status": "EXPECTED_FAIL",
+      "failed": 3,
+      "passed": 2,
+      "found": 5
+    },
+    "dtoGreen": {
+      "status": "PASS",
+      "failed": 0,
+      "passed": 5,
+      "found": 5
+    },
+    "javaCompile": {
+      "status": "PASS",
+      "jdk": "21.0.12+8",
+      "mainSources": 363,
+      "standaloneRunners": 1,
+      "fullGradle": false
+    },
+    "analyzerCompile": {
+      "status": "PASS",
+      "productionSources": 11
+    },
+    "integration": {
+      "status": "PASS",
+      "countType": "assertions in one standalone runner",
+      "checks": [
+        {
+          "name": "fresh database applies all 25 migrations",
+          "passed": true
+        },
+        {
+          "name": "real analyzer HTTP 400 persists a bounded syntax code and location",
+          "passed": true
+        },
+        {
+          "name": "database, GET and live Redis SSE agree on syntax failure",
+          "passed": true
+        },
+        {
+          "name": "invalid syntax publishes no partial graph",
+          "passed": true
+        },
+        {
+          "name": "HTTP retry returns coded 409 without requeueing or resetting the checkpoint",
+          "passed": true
+        },
+        {
+          "name": "production job ownership rejects other synthetic principal for GET SSE and retry",
+          "passed": true
+        },
+        {
+          "name": "SSE reconnect restores terminal failure from database and closes",
+          "passed": true
+        },
+        {
+          "name": "new repaired .mts job stores graph while prior failure remains unchanged",
+          "passed": true
+        },
+        {
+          "name": "new repaired .cts job stores graph while prior failure remains unchanged",
+          "passed": true
+        },
+        {
+          "name": "Nest controller with unknown return type completes through HTTP database and SSE",
+          "passed": true
+        },
+        {
+          "name": "persisted endpoint omits unknown response type and preserves unknown parameter position",
+          "passed": true
+        },
+        {
+          "name": "persisted method preserves nested unknown parameter type without DTO failure",
+          "passed": true
+        },
+        {
+          "name": "nullable Nest endpoint retains linked source evidence",
+          "passed": true
+        },
+        {
+          "name": "ordinary failure still accepts HTTP retry",
+          "passed": true
+        },
+        {
+          "name": "ordinary retry completes on its second attempt",
+          "passed": true
+        },
+        {
+          "name": "running job accepts HTTP cancellation",
+          "passed": true
+        },
+        {
+          "name": "cancellation retains active-project exclusivity until worker returns",
+          "passed": true
+        },
+        {
+          "name": "late syntax failure cannot replace cancellation or leave active job behind",
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    "diffCheck": {
+      "status": "PASS"
+    },
+    "initialTestCompile": {
+      "status": "FAIL_THEN_FIXED",
+      "reason": "AssertJ wildcard List containsExactly generic mismatch; replaced by size and null-position assertions before RED execution",
+      "artifact": "/private/tmp/ci-null-metadata-1FM4uo/reports/compile-red.log"
+    }
+  },
+  "sourceBinding": {
+    "inputs": 411,
+    "inputDrift": [],
+    "artifacts": 1152,
+    "artifactDrift": [],
+    "dependencies": 164,
+    "dependencyDrift": []
+  },
+  "lifecycle": {
+    "nonce": "17461953-a0a8-4f4e-acd4-73779751f246",
+    "containers": [
+      {
+        "kind": "postgres",
+        "id": "99e15187f8c851edd3005eed8c10bd52ec2ce1632c4340088489f513428fa88f",
+        "image": "sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b",
+        "temporaryMemoryStorage": true,
+        "loopbackOnly": true
+      },
+      {
+        "kind": "redis",
+        "id": "8c53150ef4163ee1b272237800dc508ffc95a250ac1af1b182e6718227dc15de",
+        "image": "sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2",
+        "temporaryMemoryStorage": true,
+        "loopbackOnly": true
+      }
+    ],
+    "network": {
+      "id": "ad0007d9a2a94848597d73904b6cf6a295edcffbdc7fbc52d6a34da1b50a4c2b",
+      "dedicatedBridge": true,
+      "egressIsolation": false
+    },
+    "cleanup": [
+      {
+        "resource": "Nest application",
+        "closed": true
+      },
+      {
+        "resource": "redis",
+        "id": "8c53150ef4163ee1b272237800dc508ffc95a250ac1af1b182e6718227dc15de",
+        "stopped": true,
+        "removed": true
+      },
+      {
+        "resource": "postgres",
+        "id": "99e15187f8c851edd3005eed8c10bd52ec2ce1632c4340088489f513428fa88f",
+        "stopped": true,
+        "removed": true
+      },
+      {
+        "resource": "dedicated network",
+        "id": "ad0007d9a2a94848597d73904b6cf6a295edcffbdc7fbc52d6a34da1b50a4c2b",
+        "removed": true
+      }
+    ],
+    "children": [
+      {
+        "name": "java-integration",
+        "exitCode": 0,
+        "signal": null,
+        "closed": true
+      }
+    ],
+    "passed": true
+  },
+  "preservation": {
+    "frozenCount": 21,
+    "frozenDrift": [],
+    "guardianSha256": "228f5b34f68937cde55f3162e35653851b778f0ab7d05b71b3f7effa0956ae15",
+    "guardianQuarantineMaintained": true,
+    "historicalManifest": {
+      "path": "docs/audit/parser-http-windows-validation-2026-10-03.json",
+      "sha256": "8fb54ee57e6892e76b61f1685feeb6fa2acd3aea22f8325bda5a32f02849c69a",
+      "bytes": 17253
+    },
+    "stageDistAppModifiedByThisAudit": false,
+    "liveDbKeychainPortsBrowserModifiedByThisAudit": false,
+    "processEnumerationOrNumericPidSignals": false
+  },
+  "installedApp": {
+    "relativeAsar": "desktop/dist/mac-arm64/Code Intelligence.app/Contents/Resources/app.asar",
+    "version": "0.1.0",
+    "sha256": "f347d4942fb1d41490ba4df58d882b6eb7eb01c6e715679c619167cc505e3dae",
+    "bytes": 25302,
+    "modifiedAt": "2026-09-29T07:37:29.345Z",
+    "runtimeState": "Parent reported separately opened September 29 app with four ready services and DB V20; no direct live DB verification here",
+    "currentFixIncluded": false
+  },
+  "supportingArtifacts": {
+    "/private/tmp/ci-parser-flow-mKGBI5/prepared.json": {
+      "sha256": "938c5a05f60f16f3557053c1d417c80db2938ea3d7d55fda1d6b21b1872d5264",
+      "bytes": 253930
+    },
+    "/private/tmp/ci-parser-flow-mKGBI5/reports/compile-java.log": {
+      "sha256": "dece862a32d4e989fd23df958ea691a7e58fa3157857498e3049c7e8b6c37239",
+      "bytes": 110
+    },
+    "/private/tmp/ci-parser-flow-mKGBI5/reports/compile-analyzer.log": {
+      "sha256": "478d2e0145d72a98cc3dc75715a42f4859c0952716d7ef652e552882f8dd7131",
+      "bytes": 27
+    },
+    "/private/tmp/ci-parser-flow-mKGBI5/reports/integration.json": {
+      "sha256": "b15de32247211a3dff118f3a110607ce6db35c788573c9d57c6b06a74e092384",
+      "bytes": 1622
+    },
+    "/private/tmp/ci-parser-flow-mKGBI5/reports/lifecycle.json": {
+      "sha256": "bbc10bb80e192d97cd2cb99e02469097ce1751a23581a2f0fb004ec66c6bf17e",
+      "bytes": 1504
+    },
+    "/private/tmp/ci-parser-flow-mKGBI5/reports/java-integration.log": {
+      "sha256": "ffc1ab90f8d84535466c1404f1848c92e7286fa7cd1efc4fe082dc436cec0eac",
+      "bytes": 11126
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/ContractTests.java": {
+      "sha256": "5865acb05499a62347b91ee89b636b3572358c80b97fadb8f1ba2c8cffd6a70b",
+      "bytes": 1513
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/compile.args": {
+      "sha256": "9d8369022c3e7b59a4b7fbb34e689cd2aa75543d764c8e538375d8854a743a87",
+      "bytes": 10071
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/compile-green.args": {
+      "sha256": "f13fb37db12b8bee0d65b42435b6444751279969616689096ccddf2e39ac8ef4",
+      "bytes": 10188
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/classpath.txt": {
+      "sha256": "72eb358e863ab03ed8636789156e3a0ce5d9bdb392cc60cd578341b164cf270d",
+      "bytes": 9860
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/reports/compile-red.log": {
+      "sha256": "22e21437fa874c5d53bdfd00d10ea3a349d9093d8b086a5f246b719a7289e155",
+      "bytes": 1077
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/reports/compile-red-fixed.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/reports/compile-green.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/reports/red.log": {
+      "sha256": "cce418debc99d0d9df57461452e573a8e78546cd28b5d5716cded0398e55c85b",
+      "bytes": 4700
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/reports/red.json": {
+      "sha256": "feb1be454275026b757ae2626d751a3979cf63b15f1334276becc1dc927fa9d4",
+      "bytes": 33
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/reports/green.log": {
+      "sha256": "6e07adec3c41bef64196e07f970cf0e0fb3433abecf76e29c5f2c5d17fd93c4f",
+      "bytes": 465
+    },
+    "/private/tmp/ci-null-metadata-1FM4uo/reports/green.json": {
+      "sha256": "9886014195b75302a3378476b84efea7aa53b60fc721413a167c5086326cbbea",
+      "bytes": 33
+    }
+  },
+  "commands": {
+    "cwd": "/Users/minseokchae/Dev/code-intelligence",
+    "prepare": "node validation/parser-flow-integration/prepare.mjs '/Users/minseokchae/.gradle/jdks/eclipse_adoptium-21-aarch64-os_x.2/jdk-21.0.12+8/Contents/Home' /tmp/ci-java-unit-EPAyKn/deps",
+    "executedOnce": "node /private/tmp/ci-parser-flow-mKGBI5/run.mjs /private/tmp/ci-parser-flow-mKGBI5",
+    "reuseForbidden": true,
+    "access": "Formal sandbox require_escalated review accepted this exact temporary synthetic integration invocation"
+  },
+  "notRun": [
+    "Full lint/spotless/Gradle build/all tests",
+    "Actual user-folder reanalysis in the installed app",
+    "Production SecurityConfig/CSRF/OAuth and local import approval path",
+    "Live V20 database migration",
+    "UI browser/resize/version validation",
+    "Native guardian or numeric-PID crash tests",
+    "New Mac or Windows packaging/signing/install/update",
+    "Windows native execution"
+  ],
+  "handedOff": {
+    "version": "Confirmed hardcoded Sidebar v0.0.0; no implementation changes",
+    "ui": "Static narrow-window risk only; no browser reproduction or implementation",
+    "windows": "Prior portability model/gated packaging preserved; storage/locks/Redis/native bundle decisions not implemented"
+  },
+  "stopBoundaryHonored": true
+}

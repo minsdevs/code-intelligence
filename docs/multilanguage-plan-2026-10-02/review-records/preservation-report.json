@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-02",
+  "scope": "planning documents only",
+  "baseline_file_count": 715,
+  "baseline_manifest_sha256": "1aba38911689c85afc9a8a1231e01d3e04fa342b08cd9d13958f3e64350c6f57",
+  "baseline_changed_or_missing": [],
+  "unexpected_new_files_outside_planning_directory": [],
+  "broken_local_markdown_links": [],
+  "trailing_whitespace": [],
+  "rubric_sha256": "7db6405e61e8ea5cc3669fb95ef7fb866cea0e339fa5a72808a94e486785a794",
+  "rubric_unchanged_from_first_review": true,
+  "reviewed_technical_documents_changed_after_v1_1_review": [],
+  "post_review_metadata_updates": [
+    "08-evaluation.md",
+    "README.md",
+    "review-records/*"
+  ],
+  "git_diff_check_exit": 0,
+  "product_tests_rerun": false,
+  "external_accounts_paid_calls_deploy_commits": false,
+  "excluded_from_baseline": "Ignored build/stage/node_modules contents; these were not modified."
+}

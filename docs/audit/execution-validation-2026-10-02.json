@@ -1,0 +1,893 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-02T15:54:08.709211+00:00",
+  "scope": "Final local validation of preserved audit/S1 and bounded T00a/E1/E3/E5/staging fixes; not whole-product acceptance",
+  "releaseDecision": "NO_GO",
+  "productCompletion": {
+    "denominatorTasks": 16,
+    "wholeTaskAcceptanceComplete": 0,
+    "implementationStarted": 5,
+    "unstartedOrDependenciesPending": 11,
+    "weightedPercentage": null
+  },
+  "repository": {
+    "branch": "codex/e2e-docs-scripts",
+    "head": "ebe3ab135ce6dbaa454b29db6e5ab5c678557070",
+    "workingTree": "UNCOMMITTED",
+    "sourceHashesAreContentEvidenceNotSignedProductBuild": true
+  },
+  "environment": {
+    "os": "macOS",
+    "architecture": "arm64",
+    "node": "v26.5.0",
+    "javaToolchain": 21,
+    "ciNodeTarget": 24,
+    "remoteCi": "NOT_RUN",
+    "browser": "separate headless Chromium; no user GUI/session"
+  },
+  "gates": [
+    {
+      "id": "backend-full",
+      "command": "./backend/gradlew --offline -p backend spotlessApply spotlessCheck build --console=plain",
+      "status": "PASS",
+      "exitCode": 0,
+      "suites": 85,
+      "tests": 572,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": {
+        "path": "/tmp/ci-execution-backend-final.log",
+        "sha256": "ab36d1fd0c28727e59e3917f8bc0fb84e8db7c4109611335cfa775a0bb0dcd8b",
+        "bytes": 37374
+      },
+      "junit": [
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ApplicationIntegrationTest.xml",
+          "sha256": "9e0e2952730344658eeded4cdecaa49b28b10e7fb6eaab49a1751f7ecc90c40d",
+          "bytes": 23399
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ArchitectureTest.xml",
+          "sha256": "ecb6c00c0f34409257973a6b3d13961b926a72e2bef95406c9cec406fdd96df5",
+          "bytes": 867
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.AuthIntegrationTest.xml",
+          "sha256": "61777bf9d948acd0215eb2f2809cf89ef09f30f5bcd9c75e4ed2724df1b2a7bb",
+          "bytes": 19647
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.OAuthEnabledIntegrationTest.xml",
+          "sha256": "6f0134274ee021ad0509546792cb07dbecc61bf93a60b762936ee10dd4053226",
+          "bytes": 18247
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ProjectJobApiIntegrationTest.xml",
+          "sha256": "183fbb7a9284c3740d061f3653f9e500b4681e133fdd4106ae47709b8db94869",
+          "bytes": 19859
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.AiAskApiIntegrationTest.xml",
+          "sha256": "51746e55c70e577528b01b91d47dc02f0877162e53a2477a4b0750fe039eaacd",
+          "bytes": 19739
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.AiDisabledApiIntegrationTest.xml",
+          "sha256": "0b147ac7d309288c3388443686218f8defd1d5734d964073038b790cb439fce3",
+          "bytes": 18674
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.AiExclusionIntegrationTest.xml",
+          "sha256": "d02b887a229bac64cf8f5fef62d6cb24427c9c4ee4c0dbca5ecaafac6669558e",
+          "bytes": 18687
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.AiPreviewServiceTest.xml",
+          "sha256": "d912ef2a838a9bc450102405d12fae3a2412e9d578e08b6d82f2a7d50d4efd67",
+          "bytes": 1084
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.AiSettingsServiceTest.xml",
+          "sha256": "02567ec20e114d1eed87c52072ca29140651b1c24ffd7dae2bde39b827adabdd",
+          "bytes": 893
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.AssistantServiceExclusionTest.xml",
+          "sha256": "5f69814858ee57b4cbdbafe48e135bb8efec1f70f1ec1d6e49a10897f1759cd3",
+          "bytes": 963
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.GeminiProviderTest.xml",
+          "sha256": "d3f96a0c031b2324bc794d422d49b06774d3e00019c01b09f101c6724f5ef146",
+          "bytes": 599
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.LlmJsonTest.xml",
+          "sha256": "25bb326735905166b06084e8407029a7d8c99b8697a6e084188e3e7c31e908c0",
+          "bytes": 551
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.OpenAIProviderTest.xml",
+          "sha256": "112c3ca19d95eb385e3b53951ecada83dd75659bba2aab8db305027fc1493339",
+          "bytes": 966
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.Phase5ApiIntegrationTest.xml",
+          "sha256": "80801df230d07c2f85867ad3e6c8ebe3d8370f98a76e1c0621531e9d3c80a372",
+          "bytes": 18797
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.RuntimeAIProviderTest.xml",
+          "sha256": "21cef2db567d1011f28da575d8fd46eca85467991e55ecc60d53e4728785ae44",
+          "bytes": 478
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.ai.TaskDraftApiIntegrationTest.xml",
+          "sha256": "3d0ce98d038a6c19bdea5e65e8ffc5d500ed0dfa530a295aded2dd68c401d282",
+          "bytes": 18394
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.accuracy.FixtureAccuracyTest.xml",
+          "sha256": "f82549df1385959b100a66189ab2741e31d1ac178cc73b7959bc25e6677f956c",
+          "bytes": 6270
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.accuracy.SemanticOracleTest.xml",
+          "sha256": "b050b8b93fd782e7225bfe2e2e514ac0fcd7f94eed1580c00980a0417dd9af63",
+          "bytes": 688
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.area.AreaDetectorTest.xml",
+          "sha256": "52873dcf241fb624c1e542551a0106378a37f62d7f5ba40910638b34b4a14262",
+          "bytes": 2096
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.area.FixtureGoldenTest.xml",
+          "sha256": "2d84c1f8ae2b8f9b39d8893461718d6fc9cc91b4f0c8e6bd9dc8e8207d49fd91",
+          "bytes": 16578
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.compare.SnapshotComparisonServiceTest.xml",
+          "sha256": "0b92598c1429d47af4f79164c498590546a6e08f9d43a2fd1b5776732847e9c8",
+          "bytes": 670
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.config.BuildFileAnalyzerTest.xml",
+          "sha256": "73c1e97c5dabd30db800e83d03358a8cc806667cb3067bbc97bbfd5774f1cdf3",
+          "bytes": 781
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.config.ConfigAnalyzersGoldenTest.xml",
+          "sha256": "415269bcf42fe63c951017f1854ecc9edf1075c25e7ca059b6c555064d664cf8",
+          "bytes": 17530
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.config.DockerAnalyzerTest.xml",
+          "sha256": "fe5cf8645581c9e945e07d26515d0bc308f108726afe96fabcf95892c914ddc8",
+          "bytes": 2808
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.config.InfraApiIntegrationTest.xml",
+          "sha256": "e3d61416e9612aa844d674f2b248c02c6155872fd37bc3bae00d3f76f487c83e",
+          "bytes": 18444
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.config.SqlMigrationAnalyzerTest.xml",
+          "sha256": "22f92e9c8423bb13f06f202a70fb9c5f836dbecd089dd6ed3b5c8cd3823949b6",
+          "bytes": 678
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.config.TerraformAnalyzerTest.xml",
+          "sha256": "99fa22a18c2fef182e6b827b03fe40c34f1b2f2c3882ccc039e7fe9844710f8d",
+          "bytes": 487
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.core.FileApiIntegrationTest.xml",
+          "sha256": "11c69adbd82b205c10b84ade82af576b7c73caf8b74ab05873f97ddec10ef545",
+          "bytes": 19122
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.core.FileInventoryScannerTest.xml",
+          "sha256": "c0545504c2b3a90a2f4461d529b9f53eb3390151abc7a64c36b254a1771ceb9a",
+          "bytes": 784
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.core.LanguageDetectorTest.xml",
+          "sha256": "b7fda6b15dd75caad10c5a4f4c69615bf127644749dc744fb21581214d267dca",
+          "bytes": 3858
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.core.NaturalKeysTest.xml",
+          "sha256": "3eaa89f0245fc1da6e7e697f537d19a481bd332640b3c32dbe8a168a91b94c2e",
+          "bytes": 462
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.core.SafeRelativePathTest.xml",
+          "sha256": "25c171346d06b76e19c6bf107da20b97a246cd25cf4cd91c61f3712a44c06f2f",
+          "bytes": 846
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.coverage.CoverageServiceTest.xml",
+          "sha256": "de2ba1d3075d97a97e0ca6b63440fcbdca0ced6cb08a2ff3c6c2ce745e5874b9",
+          "bytes": 23329
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.cross.EndpointPathMatcherTest.xml",
+          "sha256": "04e70d972cb19a07593ecbd88e8bcbef8cf78a332a76ce8383fdfda53efe1f94",
+          "bytes": 1028
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.cross.FullstackCrossDomainGoldenTest.xml",
+          "sha256": "25654fdbcfd91e4c11e57f75f35ad33aa2756fad5bad9da8aad2aff834b892d6",
+          "bytes": 16939
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.feature.FeatureMergerTest.xml",
+          "sha256": "73be40ff3f0650d9fc3841819fb8934f5676fe7eba86906f97ed13e306b804c3",
+          "bytes": 939
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.feature.SpringMiniEndpointsFeaturesGoldenTest.xml",
+          "sha256": "0c05282d06d1ec861ec005dec8794dab436a48ae6fc42d24673dfe9219d60a6c",
+          "bytes": 17363
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.finding.FindingServiceJudgmentTest.xml",
+          "sha256": "006d8e86185d2d0e705d68b6f06af5f4b055e653d044492abdfbf85a47e04082",
+          "bytes": 831
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.graph.ArchitectureApiIntegrationTest.xml",
+          "sha256": "23317ede64881a9133e8dd7f6dcc82e9af9f3bdbd1cc994ca58ef5e61099e4d5",
+          "bytes": 18572
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.graph.AreaPathTaggerTest.xml",
+          "sha256": "ee0ffa856c3fdace809455880922ce2ad22b9fea079f0b552667f92925a23224",
+          "bytes": 622
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.graph.GraphApiIntegrationTest.xml",
+          "sha256": "e503e8f41612fefb7abe21b86b34129dd7f5d4d04139a82097158a47b0ea61f6",
+          "bytes": 18434
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.graph.SpringMiniGraphGoldenTest.xml",
+          "sha256": "8034a4fbf95b9994886a6d302c88f8fdaf2f0b222f9057aa40fd6477401bb72e",
+          "bytes": 17888
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.java.JavaAnalyzerTest.xml",
+          "sha256": "2a45760217fee0306c56b395fc09b0bcba0e7bab426470dce80c1ba5b500387a",
+          "bytes": 1344
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.java.JavaSourceRootsTest.xml",
+          "sha256": "b205c7cbb4e2b81658c2123d014971f0f938f712b022702bf3d791f2afde28ff",
+          "bytes": 782
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.java.JpaEntityExtractorTest.xml",
+          "sha256": "6f96b5312e9913a88881486228c909b635e5d48c9ec5c05274248c20fef09b46",
+          "bytes": 629
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.java.KafkaEventExtractorTest.xml",
+          "sha256": "a2f3bbaafb2c024c300448f028ffe2436f59948dfe02d3d2f5d54069fbb82cbf",
+          "bytes": 488
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.java.LayerTaggerTest.xml",
+          "sha256": "1ee17ebe388acb0417e943bd0b26ca25feaed3f25bafb4c5518168d2a579435f",
+          "bytes": 486
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.java.RequestMappingsTest.xml",
+          "sha256": "6251a86e056fa91a396c7da1f1a702a3c166e04e6d407820e3b2cd1cd4348b14",
+          "bytes": 912
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.java.SpringEndpointExtractorTest.xml",
+          "sha256": "6c5d6b12191778df7906729272899ba60437e0f8b26af7f37512f2503100816a",
+          "bytes": 691
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.ts.ReactMiniTsParsingGoldenTest.xml",
+          "sha256": "b03406980d414f3e436789d8ac83f0c9cb3f63ec8f9619131798f9839e2196ae",
+          "bytes": 17031
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.ts.TsAnalyzerClientTest.xml",
+          "sha256": "3f4eec9debd99a0bbfcff1b070c619f20eabf4d02d4f6a72dc4fcd0eb3aa2d26",
+          "bytes": 609
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.ts.TsAnalyzerPropertiesTest.xml",
+          "sha256": "b30b659fb9dfa538d22250d51ac5607c6bd44a4fdeb56b3f3bfa92eadd53a466",
+          "bytes": 996
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.ts.TsGraphMapperTest.xml",
+          "sha256": "dff6409690d82b00da7f204a88327a5e8939ec20f53bf9938d6cb9c3b5c03535",
+          "bytes": 634
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.ts.TsParsingStepTest.xml",
+          "sha256": "4bbce0eb61477a19f257acc1fed032862333b4397883b18a47166af960ff4f45",
+          "bytes": 666
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.analysis.ts.TsRequestBudgetTest.xml",
+          "sha256": "d476c3268c97522837c5683104e86b6821c71765e3917a5fd091d9e8fec142b7",
+          "bytes": 654
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.auth.DesktopAuthenticationFilterTest.xml",
+          "sha256": "83380becc04f1f9b0a4817f4ce99a65ab3a99c1effc8d964d3ef3b86b45fde33",
+          "bytes": 1419
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.auth.GithubNativeOAuthServiceTest.xml",
+          "sha256": "1b41f346c203108c71d58f1c0949670e980b580be965d4bd16e4246a9932948b",
+          "bytes": 787
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.auth.PatAuthServiceTest.xml",
+          "sha256": "e5189866d332b808715168e45fb569ad0f3a6924ed4f5f31f2c01594affbf599",
+          "bytes": 782
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.auth.PatLoginRateLimitFilterTest.xml",
+          "sha256": "da2f564140f18a8809c3d59b5170f5606c0f2c98c7192d17988c337ce47e10f9",
+          "bytes": 607
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.auth.TokenCryptoServiceTest.xml",
+          "sha256": "665ddc1dacd1d85644e1b0a37464a8723cdf5c9fcdc57e303d45f9d98049bb67",
+          "bytes": 1347
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.evidence.SecretMaskTest.xml",
+          "sha256": "001ac572e471967a0aeca076bfd10bb4bcaa72ffd283b9c45dc50a61492aba2b",
+          "bytes": 747
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.export.ExportServiceTest.xml",
+          "sha256": "4bc32fce4006a4d0bbcb80887d7f9d6790c48b3a089832689ab819520d4245d1",
+          "bytes": 1059
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.github.GitCloneServiceTest.xml",
+          "sha256": "8dcc79b3d647982be8ca38c9226af1b90f7cc9852716e09ccbfdb8f6a8bf146f",
+          "bytes": 1074
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.github.GithubApiClientTest.xml",
+          "sha256": "f0dedfd2cb5ffbdef951a45d5d24dabaa439261de8922974ad7c54a902551341",
+          "bytes": 1029
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.github.RepoRefTest.xml",
+          "sha256": "3f1bb1a01909cf186bacf4ac35effa8ad1ecfb6294860d7ad9c97b58c66e0e69",
+          "bytes": 3781
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.history.GitMetadataScannerTest.xml",
+          "sha256": "a8a40238272a0481a6fad8cb1af7fa3138578bf15647ff66ef7b22eb78e31ec4",
+          "bytes": 624
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.history.GitMetadataStepTest.xml",
+          "sha256": "d692f37ad89cc6642542c3b071922c8b19274602d3de8b30fea2457700e8eaff",
+          "bytes": 16771
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.history.GitMetadataTruncationTest.xml",
+          "sha256": "3ebc5e5860d119a9825fff07dbb916ff3016b05806a6876720552b5a016f7d79",
+          "bytes": 16846
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.history.HistoryApiIntegrationTest.xml",
+          "sha256": "d8429376c9304e7c850a95315fcc409320a6c9ab227edd6f33b493648b658479",
+          "bytes": 18804
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.history.PullRequestCollectorTest.xml",
+          "sha256": "e1409c343c19487120e77b85d5ab2f77a30c3c9441c9623b9093d74be39cba06",
+          "bytes": 1015
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.job.JobFrameworkIntegrationTest.xml",
+          "sha256": "4e3c4973e32caf15775f267b75432e358cd89ca08f688fd8ba80526df05e7f1b",
+          "bytes": 19305
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.job.JobRetrySourceIntegrationTest.xml",
+          "sha256": "91f1f2c3a26d0506c5ce814d266344c8cf658ce35fe2f59407dd453813871f50",
+          "bytes": 19792
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.job.JobServiceRetryTest.xml",
+          "sha256": "75c2a33e71eabc7990214fdc4ee36559dccab3e4b20cf3d7541d19e0aaebda80",
+          "bytes": 626
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.job.RetrySourceGuardTest.xml",
+          "sha256": "8aba5f97e4fa9e19db553608702e3fabe4bb7d08c49aeaedf06786b281bf13c9",
+          "bytes": 4248
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.migration.DesktopIdentityMigrationTest.xml",
+          "sha256": "6b0e015564beb9c82063e8823f13ff42f9c75a7ace4341ced7c3124afd73f144",
+          "bytes": 8432
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.note.NoteReferenceParserTest.xml",
+          "sha256": "13f2f927a88055f163e4fb06cb75fe42d00d5324577d1636525602ad796a5aa0",
+          "bytes": 478
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.note.NotesTasksApiIntegrationTest.xml",
+          "sha256": "15afcf95ba8c565fcb4fe61633c8aa220636deebfc8b25da1f98d96ddcafcdd9",
+          "bytes": 18451
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.project.IdeOpenServiceTest.xml",
+          "sha256": "c2fb3d4649aa4a00dce9b34e1ac5282ec12ab190b397be4c191286313d1174d6",
+          "bytes": 1393
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.project.LocalIgnoreRulesTest.xml",
+          "sha256": "40d3dbf23d09af7ec2e53913918082d9e39382794dcceded182a5db56bd14126",
+          "bytes": 8465
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.project.LocalImportServiceTest.xml",
+          "sha256": "0ffcebe4725b238d88b1f4dc1b607f253ffbb8aa9018d03d7f5f30c30ab79074",
+          "bytes": 2490
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.project.LocalIngestIntegrationTest.xml",
+          "sha256": "05048f7b899a2c39e167732683bf2edfdf0f9ddb84dad5035f80229f12a1f146",
+          "bytes": 17273
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.project.LocalIngestPolicyTest.xml",
+          "sha256": "31fcbd9ad4efe1d8908c265015b7327a6e041d766457617099ed1a78d2e4b941",
+          "bytes": 9709
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.project.LocalSourceStatusServiceTest.xml",
+          "sha256": "2d08d74e0630dcdad5fe62f57dbbe73cd9f05cb3298daec71ae85a905e5778ab",
+          "bytes": 1152
+        },
+        {
+          "path": "/tmp/ci-execution-backend-final-xml/TEST-dev.codeintelligence.search.SearchApiIntegrationTest.xml",
+          "sha256": "c55a9d4f9d46dd5ed5e159eb8a9542af3a61eae3fcfd86062a6e6000e2e41b71",
+          "bytes": 18422
+        }
+      ]
+    },
+    {
+      "id": "snapshot-source",
+      "command": "./backend/gradlew --offline -p backend snapshotSourceTest --console=plain",
+      "status": "PASS",
+      "exitCode": 0,
+      "suites": 1,
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "singleFinalInvocation": true,
+      "scope": "Java/TypeScript x 6 source-contract groups; real backend/disposable PostgreSQL/headless UI, not native app or OAuth",
+      "log": {
+        "path": "/tmp/ci-execution-snapshot-source-final.log",
+        "sha256": "8bf0ad6d75434effd7c2a9f90552885e800d5cec8f35b8a215afdbcb5d600c50",
+        "bytes": 48400
+      },
+      "junit": [
+        {
+          "path": "/tmp/ci-execution-snapshot-source-final-xml/TEST-dev.codeintelligence.analysis.core.SnapshotSourceContractIntegrationTest.xml",
+          "sha256": "dc13a60c8ebff786b7734cc81036bb60edb48e2d5ec3909348c7d45d45c4155f",
+          "bytes": 25734
+        }
+      ]
+    },
+    {
+      "id": "frontend",
+      "status": "PASS",
+      "checks": {
+        "lint": "PASS",
+        "typecheck": "PASS",
+        "test": "PASS",
+        "build": "PASS"
+      },
+      "tests": 120,
+      "files": 24,
+      "failures": 0,
+      "skipped": 0,
+      "testArtifact": {
+        "path": "/tmp/ci-execution-frontend-final.json",
+        "sha256": "517f318ac4068c0457cf9872694974e42e0e10f9ba824eb35b681b90fcaa56bc",
+        "bytes": 40663
+      },
+      "finalBuildArtifact": {
+        "path": "/tmp/ci-e3-frontend-build-final.log",
+        "sha256": "d9060d67229d8de4a6ebef79450f56efd53600bf88215a543ccf2c7ea804089d",
+        "bytes": 9901
+      },
+      "executionWitness": "root full test and snapshotSourceTest build; coverage_honesty lint/typecheck/final build"
+    },
+    {
+      "id": "desktop",
+      "status": "PASS",
+      "testCases": 45,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "artifact": {
+        "path": "/tmp/ci-execution-desktop.xml",
+        "sha256": "7d4a4d3a305d49b9600702501ac893bbeae8a7e85ace45bee78f442d4b69e7fa",
+        "bytes": 9488
+      }
+    },
+    {
+      "id": "t00a-selftests",
+      "status": "PASS",
+      "testCases": 104,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "artifact": {
+        "path": "/tmp/ci-execution-t00-final.xml",
+        "sha256": "844b89e12c5edb821dba679c943ad867045ab57414d9f0c1a605a31541656694",
+        "bytes": 20993
+      }
+    },
+    {
+      "id": "quality-existing",
+      "command": "PREBUILDS_ONLY=1 ./quality-gate",
+      "status": "PASS",
+      "exitCode": 0,
+      "accuracy": {
+        "suites": 2,
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "golden": {
+        "suites": 6,
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "tsAnalyzer": {
+        "tests": 11,
+        "test": "PASS",
+        "typecheck": "PASS",
+        "build": "PASS"
+      },
+      "treeAnalyzer": {
+        "tests": 7,
+        "test": "PASS",
+        "typecheck": "PASS",
+        "build": "PASS"
+      },
+      "corpusFiles": 55,
+      "measuredBackendSeconds": 25,
+      "reportedMaxRssKb": 127440,
+      "metricsScope": "quality-gate subprocess measurement; not whole product process-tree/performance acceptance",
+      "log": {
+        "path": "/tmp/ci-execution-quality-final.log",
+        "sha256": "4462607edfb8fece39d28fe8c7c591dc4b216496fe828f1b40cfbb8a0c1e0fe2",
+        "bytes": 32269
+      },
+      "junit": [
+        {
+          "path": "/tmp/ci-execution-quality-final-xml/accuracyTest/TEST-dev.codeintelligence.analysis.accuracy.FixtureAccuracyTest.xml",
+          "sha256": "6f7b23dfbe94b64743fc2485021504352f3855b85f0f1d0f2b9f7367071cb380",
+          "bytes": 7397
+        },
+        {
+          "path": "/tmp/ci-execution-quality-final-xml/accuracyTest/TEST-dev.codeintelligence.analysis.accuracy.SemanticOracleTest.xml",
+          "sha256": "c72348a9435f41166e6ccbf052d155202d9242f59c122ae6f69cc0005e4bc013",
+          "bytes": 688
+        },
+        {
+          "path": "/tmp/ci-execution-quality-final-xml/test/TEST-dev.codeintelligence.analysis.area.FixtureGoldenTest.xml",
+          "sha256": "6ac08a3548689ff6dc8acb9a49a0f9d26aa344c0fc0e962375055d5d84049d21",
+          "bytes": 22499
+        },
+        {
+          "path": "/tmp/ci-execution-quality-final-xml/test/TEST-dev.codeintelligence.analysis.config.ConfigAnalyzersGoldenTest.xml",
+          "sha256": "decf098415f391251b1ccd850f6e938e0834e2ed2df021f4b62b735157700755",
+          "bytes": 17527
+        },
+        {
+          "path": "/tmp/ci-execution-quality-final-xml/test/TEST-dev.codeintelligence.analysis.cross.FullstackCrossDomainGoldenTest.xml",
+          "sha256": "988e91788346569dd767cff004dd68c2818176bab7d5cbf677593c38517f442b",
+          "bytes": 16937
+        },
+        {
+          "path": "/tmp/ci-execution-quality-final-xml/test/TEST-dev.codeintelligence.analysis.feature.SpringMiniEndpointsFeaturesGoldenTest.xml",
+          "sha256": "b8106de8ea2c451bb43cccb56f02b6699562c202e35fba73f6333f7ab17525c7",
+          "bytes": 17362
+        },
+        {
+          "path": "/tmp/ci-execution-quality-final-xml/test/TEST-dev.codeintelligence.analysis.graph.SpringMiniGraphGoldenTest.xml",
+          "sha256": "cb536930019370b610d16ffa1b173343ffe87ca102abd9b3a87615050ff142ca",
+          "bytes": 17885
+        },
+        {
+          "path": "/tmp/ci-execution-quality-final-xml/test/TEST-dev.codeintelligence.analysis.ts.ReactMiniTsParsingGoldenTest.xml",
+          "sha256": "bfb82873e82457f32211bdb6cfbe86b70962a9e32b320758df17df804acd672e",
+          "bytes": 17029
+        }
+      ]
+    }
+  ],
+  "independentReviews": {
+    "E1": {
+      "critical": 0,
+      "high": 0
+    },
+    "E5": {
+      "critical": 0,
+      "high": 0,
+      "capturedSnapshotMedium": "CLOSED"
+    },
+    "E3": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "closedHigh": 4,
+      "closedMedium": 2,
+      "gitDifferentialCases": 474,
+      "asciiCases": 342,
+      "unicodeAndRecursiveCases": 132,
+      "mismatches": 0,
+      "artifact": {
+        "path": "/var/folders/jm/j1k8dq4914g5k2grx_1cqc1r0000gn/T/ci-e3-unicode-ignore-8if5x3gg/fixed-report.json",
+        "sha256": "4a397f6e168debd8ca59cf7cacc52792939c70f9fa45a7b384e1eb37636eb1c2",
+        "bytes": 513
+      },
+      "reviewedSourceSha256": "81e5c041f13ebdc0f2bc72a5b2330bc65c08b32e505a5834939157961dd6c04c",
+      "scope": "bounded ingest only; native confinement/E2/T02 not completed"
+    },
+    "T00a": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "closedHigh": 2,
+      "closedMedium": 3,
+      "validationFile": "docs/audit/t00a-validation-2026-10-02.json",
+      "validationFileSha256": "4f113cfb4a7f25af86da5a1ac2438c2f86804a9e93098187bd27051b806e4dd3"
+    }
+  },
+  "historicalFailuresResolved": [
+    {
+      "gate": "E1 first targeted",
+      "result": "111 passed /112; corrupt-readonly-object fixture preparation failure",
+      "fix": "replace disposable read-only object in fixture before corruption, guard unchanged"
+    },
+    {
+      "gate": "E3 first targeted",
+      "result": "test compile failed, no test pass claimed",
+      "fix": "installed JGit ObjectReader.has API in test helper"
+    },
+    {
+      "gate": "E3 independent re-review",
+      "result": "Unicode question wildcard exclusion mismatch",
+      "fix": "UTF-8 byte DP; independent474 and final full572 passed"
+    }
+  ],
+  "limits": {
+    "nodeTestsAreNotProductE2e": true,
+    "overlappingGateCountsMustNotBeSummed": true,
+    "publicSupportedCells": 0,
+    "definedPublicCells": 18,
+    "independentAnnotations": 0,
+    "annotationPilot": "NOT_RUN",
+    "productAccuracyGate": "BLOCKED",
+    "syntheticCasesAreIndependentOracle": false
+  },
+  "remainingBlockers": [
+    "E2 expiring one-use approved-content binding through worker copy",
+    "T01 native descriptor-relative confinement",
+    "T02 immutable encrypted source/generation, outcome partition, pin/grace/GC and crash recovery",
+    "T03 signed XPC/App Sandbox and worker termination/fencing",
+    "T04 independent licensed corpus/annotations and T06 flow-impact/UX acceptance",
+    "T05 project session/incremental and large-repository process-tree performance",
+    "T07 device flow implementation and real GitHub App/OAuth O1",
+    "T08 strict all-provider cost reservation/dispatch/uncertain usage journal",
+    "T09 format3 backup/native dependency relocation/signing/notary/update/clean-Mac O2",
+    "T10 independent real-user/native acceptance and dependent T11-T15"
+  ],
+  "notExecuted": [
+    "production OAuth/private/SSO/revocation",
+    "signed/notarized package on clean Mac",
+    "actual stage/pack or installed-app replacement",
+    "native folder picker/keychain/backup/restore GUI",
+    "large-repository 20-run p95/full process-tree RSS acceptance",
+    "300 independent annotation pilot or 5400 evaluation annotations",
+    "eight-person UX acceptance",
+    "remote CI Node24/Linux",
+    "paid provider calls",
+    "commit/push/PR/publish/deploy"
+  ],
+  "knownNonfatalWarnings": [
+    "existing Vite IIFE name / large chunks",
+    "Gradle connection preamble warning; final exit and JUnit passed"
+  ],
+  "preservation": {
+    "baselineFiles": 743,
+    "missingFiles": [],
+    "originalPlanFiles": 20,
+    "changedOriginalPlanFiles": [],
+    "executionRoadmapSha256": "10a017578442e5e176e26e07d793fe7bc52f8087ff5ad267a1261eea70c120d2"
+  },
+  "thresholdFiles": {
+    "quality-baseline.env": {
+      "sha256": "196d3e39f8d5b236852c6a0d396ead24517e169a20ce481e1ee2a3f274da4739",
+      "unchangedFromPostS1": true
+    }
+  },
+  "changedSourceFileHashes": {
+    "analyzers/ts-analyzer/src/analyze.service.test.ts": "dcdccc88d98ca664d9c166a1806b83b40230e0eefcf61ac62e8187d85e05fc67",
+    "analyzers/ts-analyzer/src/analyze.service.ts": "8016457d61d104a3255596b88d38afb30a5b0a814585c9dc5b8ef18de0b22915",
+    "analyzers/ts-analyzer/src/fixtures/project-boundary.ts": "afeb70d5becaa5f6332ca8501b97134ac7110845b8e84f8154a456f415abb8b8",
+    "backend/src/main/java/dev/codeintelligence/ai/AiUsageService.java": "7e1dde67c99ed072615a7303ec0245f517d6193caa53148a75d7f57f7aa6f5d1",
+    "backend/src/main/java/dev/codeintelligence/ai/AssistantService.java": "f1cfc736ec5918c78ee076356a888f1e9fe4d1de6b593e775844a6aa7a6f0286",
+    "backend/src/main/java/dev/codeintelligence/ai/CodeReviewService.java": "3e139554a18c7793c2683870d8fc6ffed4b70159edcab83478ed11779db56a27",
+    "backend/src/main/java/dev/codeintelligence/ai/PlaygroundService.java": "2564eab492abd2949e3fb2917fbe82e0f621c43df696795b4fb228403e45340a",
+    "backend/src/main/java/dev/codeintelligence/ai/SummaryService.java": "e6fa365fadc7314a446af36f6d1aae4646224fa77c3aca20f576e1cf480cde34",
+    "backend/src/main/java/dev/codeintelligence/ai/TaskGenerationService.java": "12da32af82f7c9478d9557952a4dc69a1a24f72867e73502fcb6e2aa9de4f67d",
+    "backend/src/main/java/dev/codeintelligence/ai/WhatIfService.java": "218c8fac836b625a56eae1ee182014258e3fd6c9eddb1c9832b59f11e1cdba96",
+    "backend/src/main/java/dev/codeintelligence/analysis/compare/SnapshotComparisonService.java": "f7bab9eff8b58b1ef8f16cc6b56014eb077e23d8ae0a8fc61c3256f430236e2d",
+    "backend/src/main/java/dev/codeintelligence/analysis/config/DockerAnalyzer.java": "c688c693a4dd03bf3e900ffd7848fc9f4ec2da346880e05adba39e1c6b47ddc7",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/FileController.java": "76718f07064eb2aae33c07af656552cc74765349388ebe81dd4e7cc1e7ab0a50",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/FileInventoryScanner.java": "0b1f997ff4c3edc97fbb28c6f9345ecab53a47edfc7efa8067521350991dd9b0",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/FileInventoryStep.java": "e3a71f24e1cf76ce9878564133fe13ebad27a87d0bd2bb45c6e13c09a4655add",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/FileService.java": "3e3a8eeabe112f04ed1e5ae5c0d6532491c157fba038399dd73b7fbc1536d2d6",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/InventoryResult.java": "7a205e890ea229cd990c2242b885692f1f1198828d7b223344bf5447987d44f0",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/SnapshotBlobReader.java": "77942d2ab80c12af22411b7fc0b851e7e0b959862b36396d0bfca0ee8d9eb03a",
+    "backend/src/main/java/dev/codeintelligence/analysis/core/SnapshotSourceException.java": "ad153351d3b4abbd9a9343200edbf45950d4d53115750a181a7d042bac7496a5",
+    "backend/src/main/java/dev/codeintelligence/analysis/coverage/CoverageReport.java": "250333b4b7dd7fe72eb255dcf7b69a573f5c67c33d529ae1471d8a26dfe845e1",
+    "backend/src/main/java/dev/codeintelligence/analysis/coverage/CoverageService.java": "599f8fc64eceeb87f1c76fbd59fdacb38b153a5bcece1a5b96098520a2637b2c",
+    "backend/src/main/java/dev/codeintelligence/analysis/feature/FeatureService.java": "593f34b9f1a0da79b9202b1ce4105720e6afbdc7f80314c04cc8ebb2cb45922c",
+    "backend/src/main/java/dev/codeintelligence/analysis/ts/TsAnalyzerClient.java": "bfd130897916b650d92ed10b67ebc925a8a3a93661570dc3f6936a9758358234",
+    "backend/src/main/java/dev/codeintelligence/analysis/ts/TsParsingStep.java": "7d1dfb1c1d22aa1432e848663d1cd566d0bf9bfe94891dec02f37e4310430e70",
+    "backend/src/main/java/dev/codeintelligence/analysis/ts/TsRequestBudget.java": "a37967723a52024a52fc181413a30c736def5a85d42c264b707c34fb78e4bbf4",
+    "backend/src/main/java/dev/codeintelligence/common/config/SecurityConfig.java": "65f92a33c132f1c488cafbc45e2bf54f0457a4f39ebbfea852a8cf14352133a6",
+    "backend/src/main/java/dev/codeintelligence/evidence/EvidenceSubjects.java": "787a864d227fdaf0ed05b263d2ef590133cab37996920a16e0b1a4e0aeb0894c",
+    "backend/src/main/java/dev/codeintelligence/evidence/SecretMask.java": "7e75d65a206376d6494ab935fa9dcc5b825a79f24cc1f9956338d98923683513",
+    "backend/src/main/java/dev/codeintelligence/export/ExportService.java": "16d769cdfd1f881e2f38a627947baa8237dbf8830cf57eb68e4fcc7da4ab9366",
+    "backend/src/main/java/dev/codeintelligence/job/FinalizeStep.java": "1457d822be4e0596477cca84fc2e3d5114f04c575375d694d3e8b86a5ab2c305",
+    "backend/src/main/java/dev/codeintelligence/job/JobRepository.java": "58e05d477f0490d6e9f12dcf5301f07a37de1e47620582139f2ab9adb4e685fe",
+    "backend/src/main/java/dev/codeintelligence/job/JobService.java": "b34d0cc7ff6da97ffa092aac56f3c86ededde412e167f9d216bc81037ef4716b",
+    "backend/src/main/java/dev/codeintelligence/job/JobStartupRecovery.java": "eea33745afbc4244116bc6f98e5134c267f95f27e4520526e8fb21174b556464",
+    "backend/src/main/java/dev/codeintelligence/job/JobStatus.java": "f9e62967296417b5b3424a1a30184bc6ed432c1371ccaafba9c74983842d4ae8",
+    "backend/src/main/java/dev/codeintelligence/job/JobWorker.java": "dd6c681844138cc51e4ab207c60c2f6bb02a6a67fc864a201a4607348480d7a5",
+    "backend/src/main/java/dev/codeintelligence/job/RetrySourceGuard.java": "d29cf74a6d3dc17c7e4b8c3f62c74ef8fd313c3208f21bd9c33341a1952bda72",
+    "backend/src/main/java/dev/codeintelligence/project/DesktopPathAuthorizationController.java": "95542523c6f02cc2403fc828516aab6044eb73f66ebe709b060c8888272c87f0",
+    "backend/src/main/java/dev/codeintelligence/project/ImportStep.java": "6fc7c7d0ce168d69d37d815764d4f1b47569dbce77e33bc2d110bd9ec87f8caa",
+    "backend/src/main/java/dev/codeintelligence/project/LocalIgnoreRules.java": "81e5c041f13ebdc0f2bc72a5b2330bc65c08b32e505a5834939157961dd6c04c",
+    "backend/src/main/java/dev/codeintelligence/project/LocalImportDiagnostics.java": "e850c27155a50aa8538a5b9e591dd98c1918842510a3b041503d4fc0db0bb01b",
+    "backend/src/main/java/dev/codeintelligence/project/LocalImportService.java": "a2eb5b52fe60b6613e92994a09bfc4f8b3a7b41b10c5ab04933187e53a5db955",
+    "backend/src/main/java/dev/codeintelligence/project/LocalImportStep.java": "6ad83d133e0c067114de9197cf5e9e27dece30d3bf5e8a1d7dcb391a552dc6a8",
+    "backend/src/main/java/dev/codeintelligence/project/LocalSourcePolicy.java": "86491736218b2990fbf4d7e478c68477568067521fb567aa937650c53ce29607",
+    "backend/src/main/java/dev/codeintelligence/project/LocalSourceStatusService.java": "cdaf604cd5d174961db5e57d54b67617da716d705db5b9ac69734f8a2ba73cfb",
+    "backend/src/main/java/dev/codeintelligence/project/ProjectService.java": "2bc8243671c282c47e07c847a6049cc1aa81de93144abc1bb8882e224711d7fb",
+    "backend/src/main/resources/application.yml": "604d37df328a4d1e7d588e84d78f901d7f8d0ad8b35be30c5c204122744d48b9",
+    "backend/src/main/resources/db/migration/V21__cancelling_jobs_remain_exclusive.sql": "77dafe22315d49fc34700fc780e482753e010cab17e9d25616cca4e1609c2fdb",
+    "backend/src/test/java/dev/codeintelligence/AuthIntegrationTest.java": "247978fed4114a7a0d8abaaee17415505ae444e5af16a0b7177d165ff046721f",
+    "backend/src/test/java/dev/codeintelligence/ProjectJobApiIntegrationTest.java": "0c29b985ce74a7cf046161a3953128e785146026046dda1596abc18f5adf170f",
+    "backend/src/test/java/dev/codeintelligence/ai/AiAskApiIntegrationTest.java": "62c75db4928d6900cab71887afb03a14cb9f6fe20edfa0b43f17b0a8a8b47b6c",
+    "backend/src/test/java/dev/codeintelligence/ai/AssistantServiceExclusionTest.java": "de48405284b3c9255b431f5de03c9d9a6d2b4aa4c27ba1ee14cccadf8b4cf0b3",
+    "backend/src/test/java/dev/codeintelligence/ai/TaskDraftApiIntegrationTest.java": "9e5db85098a810dbb47f01dffc460bdab089f0b8eddf5b39fec8956b17f67fb8",
+    "backend/src/test/java/dev/codeintelligence/analysis/config/DockerAnalyzerTest.java": "13c7351e4a6756cd58d5fd0040a538a9e84f7b1fc005f93aa86cd0960d02abda",
+    "backend/src/test/java/dev/codeintelligence/analysis/core/FileApiIntegrationTest.java": "2b7114d3a1a9e211929d7531ae56d3beecc96f861906df600246f7bad5a142fc",
+    "backend/src/test/java/dev/codeintelligence/analysis/core/FileInventoryScannerTest.java": "a2b6778ab0a73ef3320b994fad0d7238fc0feb7eb463f57628f92adb5f2ec069",
+    "backend/src/test/java/dev/codeintelligence/analysis/core/SnapshotSourceContractIntegrationTest.java": "0790fdf24965970d688d9d67d548f48868d6dbef9ebfe9a5a9b443f413c36ffb",
+    "backend/src/test/java/dev/codeintelligence/analysis/coverage/CoverageServiceTest.java": "54e85dfdd6c455d69749ea91b9d8830595024792795972031583f1d3784c8650",
+    "backend/src/test/java/dev/codeintelligence/analysis/ts/TsParsingStepTest.java": "abd4359ad1710c8f83c656e18e213b6b6c1560de8d24e3ae12e216c8c997789f",
+    "backend/src/test/java/dev/codeintelligence/analysis/ts/TsRequestBudgetTest.java": "65e944caf81bc3f57f69406b079bb0ff903096e28c717527a32f549df8cda891",
+    "backend/src/test/java/dev/codeintelligence/evidence/SecretMaskTest.java": "29ea98444f0a0120d2e6599fa87c6fa419776fc022c50f90813f0e66bc8bf541",
+    "backend/src/test/java/dev/codeintelligence/job/JobFrameworkIntegrationTest.java": "eafd7bc33622f4819af0881a102e25d8f38fa2165327c5bf6f0ebda516d126f9",
+    "backend/src/test/java/dev/codeintelligence/job/JobRetrySourceIntegrationTest.java": "f172253dcd8cf98cc9ad4b138ca0ec1533105a5f592928a4e07e140acbb7003f",
+    "backend/src/test/java/dev/codeintelligence/job/JobServiceRetryTest.java": "7739c30c577d9b8dea56a6ead5356424bce21b76f82afd6c842303a8463e8f41",
+    "backend/src/test/java/dev/codeintelligence/job/RetrySourceGuardTest.java": "3c47d000db1160839bcd63cfa0559c00d2ca4131b0b8746e109e1b4e86b17ab6",
+    "backend/src/test/java/dev/codeintelligence/migration/DesktopIdentityMigrationTest.java": "19f1cfbbf8325f700525f53d8be32beafb3aada030cfe58c9de81674c5b690ef",
+    "backend/src/test/java/dev/codeintelligence/project/LocalIgnoreRulesTest.java": "42a0e78f3fd66a693b8c1c8e7e500b0fe9a16f2b7e511bc4f5cc624de362d0ea",
+    "backend/src/test/java/dev/codeintelligence/project/LocalImportServiceTest.java": "cd1e803007ebf3e09a02ee235d96f1a96bcddfa2cacaf7472694623087ff2083",
+    "backend/src/test/java/dev/codeintelligence/project/LocalIngestIntegrationTest.java": "a43652d5cb3210b4738bfc3c7c9e00199f8cc1faa76cdc675095f7b667d0babb",
+    "backend/src/test/java/dev/codeintelligence/project/LocalIngestPolicyTest.java": "390325538214e84ee4693295695c5bc9005a8dc7ff2f4c2e9a7658dcfdb052f6",
+    "backend/src/test/java/dev/codeintelligence/project/LocalSourceStatusServiceTest.java": "81e3fae33d109d379562ec78ab6fe259ef2e3b1a78c2a52c41e46e07e19b6213",
+    "backend/src/test/resources/static/assets/audit-bootstrap.js": "3dc543072de6ca1803305c22b0e349618424ed7687953c4ea0ebaced7aa3f4bb",
+    "desktop/scripts/runtime-stage.cjs": "40631181974fc1f0bb46528fb9213bfb5638ea75434eef99edb53a7352671e23",
+    "desktop/scripts/stage-runtime.mjs": "e2ae6dca094399d2147ca63824e377facca7aed6853eb850e12c58c51a75ea87",
+    "desktop/src/backup.cjs": "80e5c7d6fca1f785c5f854d522fa17737837e6ee2670f9d477cf43b7c94e044e",
+    "desktop/src/main.cjs": "0617605158560ddc219a0a3c5fdb867ee92f5e86d03a8bf6e914e6fa9e224502",
+    "desktop/test/backup.test.cjs": "8ecde57dc5df0061cdaba76617252c22c14f0d3d0a15283a61bd126432ae4e47",
+    "desktop/test/runtime-stage.test.cjs": "14ea607108b1184df2c1c8d53214cdd88687c82d3068b7f2c6ee571032e06c08",
+    "desktop/test/runtime.test.cjs": "bd2e82368df6ef6c3687a53080084dadf2f0fc5d7254869a869590735681d44c",
+    "frontend/e2e/snapshot-source-real.cjs": "0acce2881c2df331c192de382ec3c4a043c9808df4c3a5781b97ef35c3f90069",
+    "frontend/src/api/client.ts": "7e3ba067ce95d4a0c2cb3cc3490a1005b6758d40d9233b83373a952246b5ba47",
+    "frontend/src/api/files.ts": "79c530900e63e7571760a988832f0a2c707464ab851b35f933277249cbff8b02",
+    "frontend/src/api/graph.ts": "501b59c4e368efe123bb00c58cae443da2919c8ad240b99ba4841d3b3cbf9316",
+    "frontend/src/api/types.ts": "11b86053a7dc52106cf462531005a4629398cc9f1bd27af232c1f04b38da5378",
+    "frontend/src/app/AiPanel.test.tsx": "41730bf85cf452747aff9c16aedafd39cb671cad872349536334c6a6aae84b8f",
+    "frontend/src/components/EvidenceList.test.tsx": "ecdfcac6a8b528ff118779aac6af744859ea33d97daba8dde0d09e50cda3fb35",
+    "frontend/src/components/EvidenceList.tsx": "9f81d5b8bf9bf498abcb640593e2af2ce9b0efa3ab9c976f9d759acf15d57c7f",
+    "frontend/src/features/analysis/CoveragePanel.tsx": "4ef5c98e14124411713ffebd2fdeb60b0e591db02f33a662d4332fb374b4c28e",
+    "frontend/src/features/analysis/SnapshotComparisonPanel.tsx": "f752f7d2e5ac617c54af39e8b7da968c4f20676797ee2243795dfcfb6ced534d",
+    "frontend/src/features/analysis/analysis.test.tsx": "aba1c9cfc4567316f27557f236bf3b961d8f5021de0f1a8beb2f42b9dcc8558e",
+    "frontend/src/features/analysis/coverageHonesty.test.tsx": "d2f61dc88a65be84f2429b4755c76ac1ec99ae5a325988887c5bdeac29a89ff2",
+    "frontend/src/features/architecture/architecture.test.tsx": "11bcd5571dc0c7f4f1c02463bb5714c2ce76ffc7296d9dc5edb46801cda4304b",
+    "frontend/src/features/code/CodeExplorerPage.tsx": "6fdf0dfc081570bd25d296310944e305ce6aa54036ab5cd2a39998f9e5cf5f2e",
+    "frontend/src/features/code/CodeViewer.tsx": "5dfc9d1571679e9147a48bccaadcead2793539377478950e09e64d37dd64b036",
+    "frontend/src/features/code/SymbolPanel.tsx": "6712985787c7a4ed28ff79ef5a8a364e74723b5c0a806065ddba0c0369e10de4",
+    "frontend/src/features/code/codeExplorer.test.tsx": "80460abe8ae17a5a11c4484e88de1de04df74ff10e74627a2b4e870b8898a3f7",
+    "frontend/src/features/code/codeLocation.ts": "90c0d2c3de0182295e847e5ca037593ae97dfb180e9455b04b64ecedf68c7a80",
+    "frontend/src/features/features/FeaturesPage.tsx": "7c5c3a84001c9878c9defc19a81fb0b9ca19b2d2976e9f7fadde7aed32cad013",
+    "frontend/src/features/features/features.test.tsx": "65edc18238ff2e2f276afcd6a4166cc569f2e36d4c22059d8638eb266c73aedc",
+    "frontend/src/features/flows/flows.test.tsx": "a88640bd6102e8f3e31a78362ed6eccd35be0d06aab134422a4a57fe8ed1df55",
+    "frontend/src/features/home/HomePage.tsx": "427aaba1c7186888649983f42a52f06d6b03666b8cfea8a7c9ac7c8fc18a2491",
+    "frontend/src/features/import/ProgressStep.tsx": "fbb47a2ffad8934af6e07d73923fa33e3c8e54ced871f8787e901441a7756daa",
+    "frontend/src/features/import/progressCancellation.test.tsx": "5a19bd5986a86d0b6924e3983675788a23677ddc6a45ea26a042d815f5edecd2",
+    "frontend/src/features/notes/NotesPage.tsx": "421533ada2153c5b0f0880e6621032cad8b6285165d04eb238305c1732217602",
+    "frontend/src/features/notes/noteRefs.ts": "6fe919e257b6beef72e116ba3a0f95213a6b1a5eb4b1a1585c0a70b259e835ea",
+    "frontend/src/features/notes/notes.test.tsx": "7881d80899827e7d7d7a4a2f3ee1023223c78b63e508bac3f996686ada7f5d95",
+    "frontend/src/features/projects/LocalSourceStatus.tsx": "973d30a5e07b822d4162eff237f1a876e4bbee40999aa1f087da44414c015cb8",
+    "frontend/src/features/projects/ProjectWorkspacePage.tsx": "431f7ce7d1629db52eaa0ff6f1602639468117319ace1c8efa7bc421c58ad9c0",
+    "frontend/src/features/projects/localSourceStatus.test.tsx": "c8a3e3719b08fc85028f7e9dccf12809bf474499737663e31534adba4fd2cee6",
+    "frontend/src/features/search/SearchPage.tsx": "7c3600c2f1d9350965f8e7fb397ce5512c5b804be5bb1ad529169c5666085870",
+    "frontend/src/features/search/search.test.tsx": "a414982874069982e01c557263eaa5347ea7c9a73da8fe9762694e42c3aaf2ed",
+    "frontend/src/lib/monacoSetup.ts": "494a21602a89eae4fdfbc3525efdb95b9dbfc94c5313277e781b178fc3525f0e",
+    "validation/t00/README.md": "c4f16befdce92af23c17c39614bbf028ae11fdc5e6a4945a1be782da925a7490",
+    "validation/t00/capability-manifest.json": "e4ccb98e14e929e77986d0d13292d4d5d7a47cf0962c7aaa7fbd2b90e9ed4b73",
+    "validation/t00/corpus.json": "3c6ea1565013e50ea75bd29bfc5b1c67d4532bf2ca76ef6627f8e776a3531766",
+    "validation/t00/fixtures/java-calls/fixture.json": "afc28fff7a681be1de9c739fd3e4d9f792a60c2feb0cc37aca1ce3fccfdd4d75",
+    "validation/t00/fixtures/java-calls/gold.json": "ea37d32d9aceed9638e601247f019c6b32e85d48bfc1fb02b40878df9c35f955",
+    "validation/t00/fixtures/java-calls/negatives.json": "e5ef6712d70c4e61177584ae053ca2dbd65801bfbc13e64249caab8a0fda22de",
+    "validation/t00/fixtures/java-calls/review.json": "77580bed2bab73b9790c215d5b5a85518eb76eb6e433e77837447d4db2ec8d9f",
+    "validation/t00/fixtures/java-calls/source/Calls.java": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+    "validation/t00/fixtures/java-calls/source/Invalid.java": "64c7b144c720916de595df0e2837ca78049f2f33e52965fe1daa4e51deabdf04",
+    "validation/t00/fixtures/typescript-calls/fixture.json": "7637c419021b9013764192aed32b75ab0f8d37f05188a56a0e3161a482af1f80",
+    "validation/t00/fixtures/typescript-calls/gold.json": "5ef7aaa7f97a28f4b59ef60e09b1cd0c4f66573ecd4d8373df832d0355b68bf7",
+    "validation/t00/fixtures/typescript-calls/negatives.json": "dbf57be153ecacc85bbfb0a189f54acd4689a03dcb2dcc35fd3c8613be7892b8",
+    "validation/t00/fixtures/typescript-calls/review.json": "0cccf2740bccc50d279801f7ad85f42bec9f6e42d9b3fb5bdc7d4ccaeb0878cc",
+    "validation/t00/fixtures/typescript-calls/source/calls.ts": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+    "validation/t00/fixtures/typescript-calls/source/invalid.ts": "a3fb1bf706e21f00ff73d9143b409bc650fc8c59d1f35d5e1a9e349f7c2d721c",
+    "validation/t00/lib/contracts.cjs": "b8c686f8e802468a72c5091c9d7445df269d485fe0d8e818926543bab8a5b5d0",
+    "validation/t00/lib/errors.cjs": "67d8352cfc0cc3549808d7b91fd48908e0e0a968b85d922151cbc1259ce85d5c",
+    "validation/t00/lib/json.cjs": "a4516ac457afb072f573473b1701ce27c9c4cdb5d146d6c8cfb2d342d0cf68bd",
+    "validation/t00/lib/metrics.cjs": "6d576a8fa8684c895e5bcda1d55234915240a664eceb39aab26fb6d315952dbb",
+    "validation/t00/lib/policy.cjs": "20fabc638a5e8ce3aff52afdf62158a128246442e7b7ae1ad96548685ca0f076",
+    "validation/t00/lib/safe-io.cjs": "1aeeeb9f79bd56330b6d21e13e0e52110df39e60ec8f91b0f92ea72623ba55f5",
+    "validation/t00/runner.cjs": "ad652759c47c27871d22326f8fafd3d47535fbe77fba7a392a97edf59fd2bbd4",
+    "validation/t00/schemas/contracts.schema.json": "7a7b847c1adec9d95a8d0463a2babd1a596f20e5c95e2d1de74ba38ff90fbd1f",
+    "validation/t00/selftest/known-bad-observations.json": "e3104ee384d3700dc29b93e2e402331357b82275ae5c28850beed36741f9f665",
+    "validation/t00/selftest/known-good-observations.json": "78816ab17b2f2789c03251732134d7d0c753a8154a301553b6fd414cbae09a65",
+    "validation/t00/selftest/producer-descriptor.json": "834b361f59ad3a3f02ce51eeb3bcab6c66f0374bde84cfa6c4874adfd772a0c8",
+    "validation/t00/test/cli.test.cjs": "7d77673e45a78076a2fdadfdcf894ea6bd1a9644cf9766ccf7f3977fab51e71f",
+    "validation/t00/test/helpers.cjs": "789d3c522ea36b080d5e5767f57cf08145456b668bb38ae4e8541d3f29b26180",
+    "validation/t00/test/metrics.test.cjs": "efb1f55245198556d5c13bc2d1aa6c0f4f2ee6f01963490ac440fc56438d130a",
+    "validation/t00/test/safety.test.cjs": "e34e47140a092c907a0ea57aa2cdf81c8bbc11ff98f61b249dc07dce8213bcca"
+  },
+  "artifactsMayBeTemporary": true,
+  "rawUserSourceOrCredentialsIncluded": false,
+  "documentationEvidenceReview": {
+    "status": "PASS_WITHIN_SCOPE",
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "artifactReferencesVerified": 102,
+    "changedSourceHashesVerified": 141,
+    "t00CompositeAndEntryHashDistinguished": true,
+    "releaseDecisionUnchanged": "NO_GO"
+  }
+}

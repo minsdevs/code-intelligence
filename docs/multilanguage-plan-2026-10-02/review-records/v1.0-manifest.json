@@ -1,0 +1,17 @@
+{
+  "revision": "v1.0",
+  "date": "2026-10-02",
+  "files": {
+    "00-rubric-v1.md": "7db6405e61e8ea5cc3669fb95ef7fb866cea0e339fa5a72808a94e486785a794",
+    "01-prd.md": "373f50b32b8b32a0e2db80370f23d56d7c47424f91875adc574a8008c15565f0",
+    "02-language-support.md": "ba90b1f7d77c715f9eb0f50ef6238b4aeeed1b2f89466450897856d01cb21497",
+    "03-architecture-contracts.md": "50a4c8dcbb6dc4b32b7955fbc3054be12976018186b40cdb012654e14a8cd60f",
+    "04-user-flows.md": "da988d8c6966bb5ea871220d086cde3e7c664c5f0e160057b80ca2695d3f1bec",
+    "05-security-performance-operations.md": "80502586551d40437d9c7d0a2eed48229a0aa255ca2806be9f0ed67db07b18fb",
+    "06-benchmarks-validation.md": "68bccb856e1ec818a9c465b054a3d0523c9ee20ced48fa6b1dc66e35ec8087d1",
+    "07-delivery-release-gates.md": "0ad69acec65a18616768b9b037396ab04620e843fb107c646f3187306e031832",
+    "08-evaluation.md": "dd5b5d74a384f7ae54d9cbc0a2e007b169aff902940cf4244d05d9cf255db613",
+    "09-evidence-register.md": "93cd398d60f45bd0c9f3930b27c0c0ad96ed2423ccb10de16e8ff5088439747c",
+    "10-r1-public-cells.md": "6e8fab2541e71b08f6b9640293fd84a5e55dd15f52e3afe5fea9adb187127826"
+  }
+}

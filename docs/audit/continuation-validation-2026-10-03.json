@@ -1,0 +1,257 @@
+{
+  "date": "2026-10-03",
+  "release_decision": "NO_GO",
+  "whole_roadmap_complete": false,
+  "branch": "codex/e2e-docs-scripts",
+  "head": "ebe3ab135ce6dbaa454b29db6e5ab5c678557070",
+  "gates": {
+    "backend": {
+      "status": "PASS",
+      "command": "./backend/gradlew --offline -p backend spotlessCheck build snapshotSourceTest",
+      "formatter_apply": "PASS in preceding focused formatter/check/test command",
+      "test": {
+        "tests": 857,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suites": 92
+      },
+      "snapshotSourceTest": {
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suites": 1
+      }
+    },
+    "frontend": {
+      "lint": "PASS",
+      "typecheck": "PASS (tsc -b in backend frontend build task)",
+      "build": "PASS",
+      "tests": 152,
+      "files": 27
+    },
+    "desktop": {
+      "status": "PASS",
+      "tests": 456,
+      "failure": 0,
+      "error": 0,
+      "skip": 0,
+      "cancel": 0,
+      "scope": "synthetic isolated Node modules including the frozen pure export policy; no Electron/OS key storage launch"
+    },
+    "accuracy": {
+      "status": "PASS",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "suites": 2,
+      "scope": "reviewed development fixtures with real local TS sidecar and temporary DB"
+    },
+    "ts_analyzer": {
+      "tests": 11,
+      "status": "PASS",
+      "typecheck_build": "PASS"
+    },
+    "backup_export_policy": {
+      "status": "PASS_SCOPED_PRIMITIVE",
+      "included_in_desktop_tests": true,
+      "unit_tests": 68,
+      "schema": {
+        "migrations": 23,
+        "tables": 48,
+        "columns": 388
+      },
+      "real_temporary_postgresql_catalog_cases": 8,
+      "independent_synthetic_probe_groups": 21,
+      "independent_rejection_assertions": 904,
+      "independent_unresolved_findings": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0
+      },
+      "limits": "Pure policy and temporary catalog tests only; live exporter/restore/main/OFF/owner/codec integration not complete."
+    },
+    "operational": {
+      "status": "NOT_RUN",
+      "items": [
+        "actual GitHub OAuth/permissions/refresh",
+        "Electron safeStorage/main integration",
+        "clean Mac installation",
+        "signing/notarization/Gatekeeper",
+        "update/rollback",
+        "actual power-loss",
+        "independent large-repository corpus/holdout",
+        "human user acceptance"
+      ]
+    },
+    "ai_context_references": {
+      "status": "PASS",
+      "focused": [
+        {
+          "name": "AiPreviewLocalRetrievalIntegrationTest",
+          "tests": 25,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "AiPreviewServiceTest",
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "AiExclusionIntegrationTest",
+          "tests": 8,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "AssistantServiceExclusionTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ],
+      "total": 43,
+      "included_in_full_backend": true,
+      "scope": "structured refs attached to included source/focus node blocks; no regex promotion of prose; unchanged public preview DTO",
+      "independent_review": {
+        "mode": "read-only source and XML/hash verification; not a test rerun",
+        "additional_unresolved_findings": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0
+        },
+        "report": "/tmp/ci-ai-reference-read-review-2026-10-03.md",
+        "limit": "NODE refs are snapshot file-location metadata, not proof of source-byte availability; whole RequestPlan and native UI navigation not covered"
+      }
+    }
+  },
+  "failed_checkpoints": {
+    "backend_first": {
+      "tests": 845,
+      "failures": 3,
+      "subsequently_corrected": "actual Git/job-lifetime fixtures; no production guard relaxation"
+    },
+    "ai_helper_exclusions_red": {
+      "tests": 3,
+      "failures": 3
+    },
+    "ai_copy_preview_red": {
+      "tests": 4,
+      "failures": 2
+    },
+    "ui_initial_red": {
+      "tests": 9,
+      "failures": 4,
+      "note": "three new regressions plus pre-existing implicit focus fixture; two intermediate runs lacked file/graph mocks"
+    },
+    "actual_workspace_lock_red": {
+      "tests": 2,
+      "failures": 2
+    },
+    "ai_references_red": {
+      "tests": 25,
+      "failures": 4,
+      "subsequently_corrected": "structured block provenance, budget omission and removal of text-derived refs"
+    }
+  },
+  "preservation": [
+    {
+      "baseline": "/tmp/ci-post-s1-baseline.json",
+      "file_count": 743,
+      "deleted": [],
+      "frozen_count": 20,
+      "frozen_changed": [],
+      "old_migration_count": 20,
+      "old_migrations_changed": []
+    },
+    {
+      "baseline": "/tmp/ci-post-e3-baseline.json",
+      "file_count": 797,
+      "deleted": [],
+      "frozen_count": 21,
+      "frozen_changed": [],
+      "old_migration_count": 20,
+      "old_migrations_changed": []
+    },
+    {
+      "baseline": "/tmp/ci-continuation-pre-gate-2026-10-03.json",
+      "file_count": 849,
+      "deleted": [],
+      "frozen_count": 21,
+      "frozen_changed": [],
+      "old_migration_count": 20,
+      "old_migrations_changed": []
+    }
+  ],
+  "tested_source_count": 707,
+  "tested_sources_changed_after_gate": [],
+  "artifact_sha256": {
+    "/tmp/ci-continuation-backend-full-final-2026-10-03.log": "73383bb059add3a2bcb18ed173c855ada500df414c7b918a361cddba33db25d4",
+    "/tmp/ci-continuation-backend-full-final-2026-10-03-summary.json": "3c462061b6f9806496d83db0f2fc7ad0e6352b615efd19ca3d05511c267d6a46",
+    "/tmp/ci-continuation-backend-full-first-2026-10-03-summary.json": "ddeaf9c9edb42e24261a8a46867443c79f17109d0ec14ef75f97a323168ffafe",
+    "/tmp/ci-ai-exclusion-red-2026-10-03.xml": "d87c32d35ef2f889c455217f73cf6d960ed96fa5b9ef6901fea74979db10ee62",
+    "/tmp/ci-ai-exclusion-copy-red-2026-10-03.xml": "c787c274f2df81199bde79d252891721609e0545f8adc3efb7d1c5d6fb42dae4",
+    "/tmp/ci-ai-exclusion-http-2026-10-03.xml": "a39644aae4daefb2ad2bf4562c52c320fe51192d3a20ce52dc470de35d437c03",
+    "/tmp/ci-ai-exclusion-ui-red-2026-10-03.log": "bf3fdbba68f7539a27107902937be01e3e9f3c33eafc5d7fc21188553b671c85",
+    "/tmp/ci-ai-exclusion-ui-green-third-2026-10-03.log": "21a7abe47b2b97937e43ddffe74b59eb12300464bfe040df94eb85ddbee5e65f",
+    "/tmp/ci-ai-exclusion-green-second-2026-10-03.log": "5f1d304da74709f8dee2b8e54efb579970b159b662dc4f7816295d2e2b97bb17",
+    "/tmp/ci-ai-exclusion-read-review-2026-10-03.md": "9407492f3a3f80fbd8314eefb9788678cfc0114aa4cfe11de7e8e9817c4b033e",
+    "/tmp/ci-ai-exclusion-read-review-2026-10-03.json": "e922c77661d54288b4f2be06afd5340fb45272a2d4dba88aad9199b7c73f9fd1",
+    "/tmp/ci-frontend-lint-final-2026-10-03.log": "0d4695f4da2780a75fa8d28ae5fabe88093b7de3774417c514e2ecd90774e01f",
+    "/tmp/ci-frontend-test-final-2026-10-03.log": "1e1726aabdc463ebaf63200ccd688457cb48a3d572b35aaffec726ab50d6276a",
+    "/tmp/ci-desktop-root-2026-10-03.log": "2d5542f14fa25a338ac6707741a40b794323cf497e190c7e61ab4cec568756f8",
+    "/tmp/ci-desktop-root-2026-10-03.xml": "7a97bbc6f52172b475f8d2a15d7659bd375933b0c8f597b4fda7e36c389c97d8",
+    "/tmp/ci-accuracy-final-2026-10-03.log": "a019717449ede8c3063c2f400d126e417ef851dd189550f1b679aa90a7a05d8b",
+    "/tmp/ci-accuracy-final-2026-10-03-summary.json": "4df1c5c16fb102b534eadd5279e8e56ec34aee4b743a3e3e1eb7d443c248f2aa",
+    "/tmp/ci-ts-build-2026-10-03.log": "e7033de54aa0e5f58248d8a4a3216c6c40773b187a1f7e766e5a19ad6f9d77c8",
+    "/tmp/ci-ts-test-2026-10-03.log": "f0fed033351ccb1f8dbe461bdb4ba01a3659c97cf78b6c029a28ffd58962c876",
+    "/tmp/ci-filelock-probe-2026-10-03.log": "820f8dfddd4ba21636a2f8d34bbea853edae49fee70f0e6742f17bc089c643c0",
+    "/tmp/ci-workspace-lock-red-2026-10-03.xml": "fa3963b92d21f4c91a927b1db5f3b990b957a3c19a35f777826019535bc289d6",
+    "/tmp/ci-retained-retry-red-2026-10-03-summary.json": "df3e7da27e2800b692d3abc34974c64b1f56329dd54f3e78bff39d120fd3b4f0",
+    "/tmp/ci-retained-retry-followup-read-review-2026-10-03.md": "d9cf481250bdf90b8386e14996df798e5f6a752d34a88f77f3acf6b0ad343076",
+    "/tmp/ci-backup-archive-independent-review-2026-10-03.md": "b646d4be5afd5d9f8d61c969e862e559d338e511a4a11a6869230e1bb21a3075",
+    "/tmp/ci-continuation-final-gate-sources-2026-10-03.json": "48e433ecbb42ac2b87c4d8732e64f204ac60f90e6d159c77eadd329f3ce1d282",
+    "/tmp/ci-continuation-backend-post-reference-2026-10-03.log": "2dab98771c4966b8841da378093079157d468ce8631c8e197076b55d5ea46098",
+    "/tmp/ci-continuation-backend-post-reference-2026-10-03-summary.json": "a9fa9b7b26637d709cc03d2d987bdea34a96d480d8df19f092d933ecdd96b82a",
+    "/tmp/ci-continuation-post-reference-gate-sources-2026-10-03.json": "028f3cc2dbbf319ac52addd2f143229edf8dfcb5d84da8f59e93da42ee313577",
+    "/tmp/ci-desktop-final-2026-10-03.xml": "2a943f585db3c66447767478621cdeaadc9d7458b49545fece7a4b8bac23f59d",
+    "/tmp/ci-desktop-final-2026-10-03.log": "5e5ee50e696b10deec14684fe44dbb31178df1c7394ace001e117f63dbef81bd",
+    "/tmp/ci-backup-export-catalog-final-2026-10-03.log": "bcc1623cb1091d9eee0aa6dc98e899e7e9f1822a895f38f3f8524ef054f071ce",
+    "/tmp/ci-backup-export-policy-test.xml": "408dc8ac14f52927f82e5bfef2b47eaa27e46633e3576694b8560fdf77794ae9",
+    "/tmp/ci-backup-export-policy-test.log": "1a99802c420b5ddf6c271d9cf74ecfa918088d8705d58d84c45c8fdfea4b42a5",
+    "/tmp/ci-backup-export-policy-independent-review-2026-10-03.md": "340ec4020e77a3aa35bfc7e0de413d5f044777db7aa8d1c932a24580a46e6898",
+    "/tmp/ci-backup-export-policy-independent-review-2026-10-03.json": "8b838e0f39022db4c44ce716a14d82a4610779493314b1bdd2042fbc5d50f87f",
+    "/tmp/ci-backup-export-policy-independent-probe-2026-10-03.cjs": "bde9c554d764754d46d15df292730af172d02fc87f5618a1b6e8b3d6d7227eee",
+    "/tmp/ci-backup-export-policy-independent-probe-2026-10-03.json": "971946de00ccedbd5293e9514d637230216a0c646db9151db121ebdb80b7dc7a",
+    "/tmp/ci-ai-reference-red-2026-10-03.xml": "3a8eacb0ae2a2e6eb7a2d8de5640258ddefefc4a3b1eaa326865b41334338d1b",
+    "/tmp/ci-ai-reference-red-2026-10-03.log": "bd7241851461bfabf07679e45b709f9862a45e42fea03cf9ce350907e5f39b48",
+    "/tmp/ci-ai-reference-green-2026-10-03.log": "d26f081f9aa4f8020cdb38b032fca7894120f2fb423ff5d9f88d7d4804d3c3d5",
+    "/tmp/ci-ai-reference-green-2026-10-03-summary.json": "5b1b6cbd90d5c554d68a4854c5dc29d43fef14835439a3ece873c99368256fbb",
+    "/Users/minseokchae/Dev/code-intelligence/desktop/src/backup-export-policy.cjs": "9a4e0072eaa5a7e263d5ce2f8df2fb18aa7df305b7855931c4d98f50dd3bc16d",
+    "/Users/minseokchae/Dev/code-intelligence/desktop/test/backup-export-policy.test.cjs": "c52f9e0cfbfd701c5890a505663abccf8dc0bfb9cf7d7771208b868b9dafc2df",
+    "/Users/minseokchae/Dev/code-intelligence/docs/audit/verify-backup-export-catalog.cjs": "33291f5b0887d355afe3845a3f031b9ea57e274e7b917b886a9189f0bc91730f",
+    "/tmp/ci-ai-reference-read-review-2026-10-03.md": "0d774a752c252a3ad4eadf2bde8581b2b697c88bb6c0e54682027e604d17bb1e",
+    "/tmp/ci-ai-reference-read-review-2026-10-03.json": "6fe37f7ff28eaf019521b464bea96458c2ee3a40f6e81bb3e26e2b36ccbec571"
+  },
+  "missing_artifacts": [],
+  "limitations": [
+    "excluded IDs are checked, full RequestPlan is not bound",
+    "source/safety/keyring/archive product integration incomplete",
+    "current format2 backup is not credential-free",
+    "no claim of native filesystem confinement or secure erasure",
+    "tests do not replace release acceptance",
+    "pure export annotations do not enforce live OFF/ownership; precision-safe PG JSONB adapter and staging restore remain open"
+  ],
+  "subsequently_changed_and_revalidated_from_previous_gate": [
+    "backend/src/main/java/dev/codeintelligence/ai/ContextRetrievalService.java",
+    "backend/src/test/java/dev/codeintelligence/ai/AiPreviewLocalRetrievalIntegrationTest.java"
+  ]
+}
