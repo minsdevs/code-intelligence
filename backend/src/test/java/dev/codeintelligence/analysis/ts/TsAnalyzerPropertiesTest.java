@@ -1,10 +1,86 @@
 package dev.codeintelligence.analysis.ts;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 
 class TsAnalyzerPropertiesTest {
+    @Test
+    void springBinderUsesCanonicalConstructorAndKeepsHttpDefaults() {
+        var source = new MapConfigurationPropertySource();
+        source.put("app.ts-analyzer.base-url", "https://127.0.0.1:3040");
+        source.put("app.ts-analyzer.tls-cert-sha256", PIN);
+        source.put("app.ts-analyzer.auth-token", TOKEN);
+        var binder = new Binder(source);
+        var bound = binder.bind("app.ts-analyzer", Bindable.of(TsAnalyzerProperties.class))
+                .get();
+        assertThat(bound.pinnedTls()).isTrue();
+        assertThat(bound.timeoutSeconds()).isEqualTo(30);
+        assertThat(bound.authToken()).isEqualTo(TOKEN);
+        var defaults = new Binder(
+                        new MapConfigurationPropertySource(Map.of("app.ts-analyzer.base-url", "http://127.0.0.1:3040")))
+                .bind("app.ts-analyzer", Bindable.of(TsAnalyzerProperties.class))
+                .get();
+        assertThat(defaults.pinnedTls()).isFalse();
+        assertThat(defaults.authToken()).isEmpty();
+        assertThat(defaults.timeoutSeconds()).isEqualTo(30);
+    }
+
+    private static final String PIN = "a1".repeat(32);
+    private static final String TOKEN = "B2".repeat(32);
+
+    @Test
+    void pinsLoopbackOriginsAndPreservesCallerTokenCase() {
+        for (String origin : new String[] {"https://127.0.0.1:3040/", "https://[::1]:3040"}) {
+            var properties = new TsAnalyzerProperties(origin, 30, PIN.toUpperCase(), TOKEN);
+            assertThat(properties.pinnedTls()).isTrue();
+            assertThat(properties.tlsCertSha256()).isEqualTo(PIN);
+            assertThat(properties.authToken()).isEqualTo(TOKEN);
+            assertThat(properties.toString()).doesNotContain(TOKEN, PIN);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "",
+                "http://127.0.0.1:3040",
+                "https://localhost:3040",
+                "https://ts-analyzer:3040",
+                "https://127.0.0.1",
+                "https://127.0.0.1:0",
+                "https://127.0.0.1:65536",
+                "https://127.0.0.1:3040/analyze",
+                "https://127.0.0.1:3040/?value=1",
+                "https://127.0.0.1:3040/#fragment",
+                "https://user@127.0.0.1:3040",
+                "https://127.0.0.1:3040//"
+            })
+    void strictTlsRejectsAmbiguousOrUnpinnedDestinations(String origin) {
+        assertThatThrownBy(() -> new TsAnalyzerProperties(origin, 30, PIN, TOKEN))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void httpsAndAnyTlsSettingRequireCompleteWellFormedConfiguration() {
+        assertThatThrownBy(() -> new TsAnalyzerProperties("https://127.0.0.1:3040", 30))
+                .isInstanceOf(IllegalStateException.class);
+        for (String invalid : new String[] {"", " ", "a".repeat(63), "g".repeat(64), TOKEN + "\r\n"}) {
+            assertThatThrownBy(() -> new TsAnalyzerProperties("https://127.0.0.1:3040", 30, PIN, invalid))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageNotContaining(TOKEN);
+            assertThatThrownBy(() -> new TsAnalyzerProperties("https://127.0.0.1:3040", 30, invalid, TOKEN))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageNotContaining(TOKEN);
+        }
+    }
 
     @Test
     void blankUrlDisablesSidecar() {
@@ -28,8 +104,7 @@ class TsAnalyzerPropertiesTest {
 
     @Test
     void publicHostIsRejected() {
-        org.assertj.core.api.Assertions.assertThatThrownBy(
-                        () -> new TsAnalyzerProperties("http://example.com:3040", 30))
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new TsAnalyzerProperties("http://192.0.2.1:3040", 30))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("not allowed");
     }

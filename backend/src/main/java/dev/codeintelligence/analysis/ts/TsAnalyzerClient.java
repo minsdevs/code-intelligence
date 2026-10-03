@@ -2,6 +2,7 @@ package dev.codeintelligence.analysis.ts;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import javax.net.ssl.SSLParameters;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -20,10 +21,7 @@ public class TsAnalyzerClient {
             this.restClient = null;
             return;
         }
-        HttpClient httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(Math.min(5, properties.timeoutSeconds())))
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .build();
+        HttpClient httpClient = transport(properties).build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
         this.restClient = restClientBuilder
@@ -31,6 +29,21 @@ public class TsAnalyzerClient {
                 .baseUrl(properties.baseUrl())
                 .requestFactory(factory)
                 .build();
+    }
+
+    static HttpClient.Builder transport(TsAnalyzerProperties properties) {
+        HttpClient.Builder builder = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(Math.min(5, properties.timeoutSeconds())))
+                .followRedirects(HttpClient.Redirect.NEVER);
+        if (properties.pinnedTls()) {
+            SSLParameters parameters = new SSLParameters();
+            parameters.setProtocols(new String[] {"TLSv1.3", "TLSv1.2"});
+            parameters.setEndpointIdentificationAlgorithm("HTTPS");
+            builder.sslContext(TsAnalyzerTls.context(properties))
+                    .sslParameters(parameters)
+                    .proxy(HttpClient.Builder.NO_PROXY);
+        }
+        return builder;
     }
 
     public boolean enabled() {
@@ -46,6 +59,9 @@ public class TsAnalyzerClient {
             TsAnalyzeDtos.Response body = restClient
                     .post()
                     .uri("/analyze")
+                    .headers(headers -> {
+                        if (properties.pinnedTls()) headers.setBearerAuth(properties.authToken());
+                    })
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
                     .retrieve()
@@ -59,7 +75,7 @@ public class TsAnalyzerClient {
                     .body(TsAnalyzeDtos.Response.class);
             return body == null ? TsAnalyzeDtos.Response.EMPTY : body;
         } catch (RestClientException e) {
-            throw new TsAnalyzerException("ts-analyzer request failed", e);
+            throw new TsAnalyzerException("ts-analyzer request failed", properties.pinnedTls() ? null : e);
         }
     }
 
@@ -68,9 +84,16 @@ public class TsAnalyzerClient {
             return;
         }
         try {
-            restClient.get().uri("/health").retrieve().toBodilessEntity();
+            restClient
+                    .get()
+                    .uri("/health")
+                    .headers(headers -> {
+                        if (properties.pinnedTls()) headers.setBearerAuth(properties.authToken());
+                    })
+                    .retrieve()
+                    .toBodilessEntity();
         } catch (RestClientException e) {
-            throw new TsAnalyzerException("ts-analyzer health failed", e);
+            throw new TsAnalyzerException("ts-analyzer health failed", properties.pinnedTls() ? null : e);
         }
     }
 }
