@@ -113,6 +113,36 @@ When the host `pgvector` bottle targets a different PostgreSQL major, set
 complete. The previous stage is retained; an interrupted transaction leaves a lock/recovery
 marker for inspection. Synthetic crash-path tests do not certify signed update recovery.
 
+For isolated desktop validation, prepare a **new** private parent directory and a
+separate runtime directory, then run this preparation-only command with canonical
+absolute paths (on macOS, resolve `/tmp` and `/var` aliases first):
+
+```bash
+node desktop/scripts/prepare-isolated-run.cjs \
+  --isolated-run-parent "$ISOLATED_PARENT" \
+  --isolated-runtime-root "$ISOLATED_RUNTIME"
+```
+
+The parent must be owned by the current user with mode `0700`; the runtime directory
+must be owned by that user and must not be group/world-writable. Preparation creates
+fresh private userData, sessionData, logs, temporary, crash, home and output paths.
+It rejects symlinks, claimed run reuse and overlap with this checkout's stage/dist
+and the conventional app-data location. It does not inspect runtime contents,
+build a bundle, change staging outputs, start services or access credentials.
+Success reports `PREPARED_BLOCKED` and `launchAllowed: false`; the JSON is diagnostic
+and cannot resume or authorize a run. Existing runs are never reused or removed.
+
+Electron recognizes the same flags before its single-instance lock, also checks its
+actual userData/sessionData and packaged resources, and exits before initialization.
+Launch remains blocked by `CREDENTIAL_STORE_UNVERIFIED` and
+`SERVICE_ENDPOINT_OWNERSHIP_UNPROVEN`: changing paths does not isolate the macOS
+Keychain, and a free port or health response does not prove service ownership.
+There is no environment-variable bypass. These filesystem checks are not an OS
+sandbox against concurrent changes by the same user. Native Windows validation is
+pending; this POSIX preparation path refuses Windows. Full desktop flow validation
+still requires a separately approved credential-store boundary and authenticated
+connections to owned services.
+
 On macOS, Electron's default app-data directory is
 `~/Library/Application Support/code-intelligence-desktop` (the desktop package
 name is `code-intelligence-desktop`). Based on `desktop/src/main.cjs`, the

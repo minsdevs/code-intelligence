@@ -27,6 +27,7 @@ const { openSourceVault, openSourceVaultRestoreStage } = require('./source-vault
 const { createNativeOwnerLocks } = require('./native-owner-locks.cjs');
 const { spawnManagedProcess } = require('./managed-process.cjs');
 const { runtimeRelativePath, runtimeFile, inheritedEnvironment, libraryEnvironment } = require('./runtime-platform.cjs');
+const { parseIsolatedRunArguments, prepareIsolatedRun, assertIsolatedLaunchReady } = require('./isolated-run.cjs');
 
 const children = new Map();
 const childStops = new Map();
@@ -53,6 +54,29 @@ function withRuntimeOperation(action) {
   const result = runtimeOperation.then(action);
   runtimeOperation = result.catch(() => {});
   return result;
+}
+
+// Process-local paths must be selected before the singleton or Chromium session.
+// This preparation is not an OS credential-store or service-ownership boundary.
+try {
+  const isolation = parseIsolatedRunArguments(process.argv ?? []);
+  if (isolation) {
+    const plan = prepareIsolatedRun({ ...isolation, forbiddenRoots: [
+      app.getPath('userData'), app.getPath('sessionData'),
+      path.join(__dirname, '..', 'stage'), path.join(__dirname, '..', 'dist'),
+      ...(process.resourcesPath ? [process.resourcesPath] : []),
+    ] });
+    for (const name of ['userData', 'sessionData', 'temp', 'crashDumps']) app.setPath(name, plan.paths[name]);
+    app.setAppLogsPath(plan.paths.logs);
+    // No environment flag or prepared claim can bypass these unresolved boundaries.
+    assertIsolatedLaunchReady(plan);
+  }
+} catch (error) {
+  const code = ['ISOLATED_RUN_INVALID', 'ISOLATED_RUN_UNSUPPORTED_PLATFORM', 'ISOLATED_LAUNCH_BLOCKED'].includes(error?.code)
+    ? error.code : 'ISOLATED_RUN_INVALID';
+  console.error(`[desktop] isolated validation refused: ${code}`);
+  app.exit(1);
+  throw error; // Do not continue if an embedding or test double returns from exit.
 }
 
 const ownsInstance = app.requestSingleInstanceLock();
