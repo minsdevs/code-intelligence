@@ -1,0 +1,200 @@
+{
+  "phase": "after",
+  "completed": true,
+  "passed": true,
+  "failure": null,
+  "cleanupErrors": [],
+  "results": [
+    {
+      "width": 980,
+      "height": 700,
+      "metrics": {
+        "viewport": 980,
+        "documentWidth": 980,
+        "main": {
+          "x": 240,
+          "y": 0,
+          "width": 400,
+          "height": 700,
+          "right": 640
+        },
+        "detail": {
+          "x": 240,
+          "y": 302.515625,
+          "width": 400,
+          "height": 397.484375,
+          "right": 640
+        },
+        "detailScrollWidth": 400,
+        "detailClientWidth": 400,
+        "detailScrollHeight": 3819,
+        "detailClientHeight": 397,
+        "separatorFocusable": true
+      },
+      "evidenceVisible": true,
+      "code": {
+        "width": 320,
+        "height": 512.625,
+        "scrollWidth": 320,
+        "clientWidth": 320
+      }
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "metrics": {
+        "viewport": 1280,
+        "documentWidth": 1280,
+        "main": {
+          "x": 240,
+          "y": 0,
+          "width": 694,
+          "height": 800,
+          "right": 934
+        },
+        "detail": {
+          "x": 528,
+          "y": 88.5,
+          "width": 406,
+          "height": 711.5,
+          "right": 934
+        },
+        "detailScrollWidth": 406,
+        "detailClientWidth": 406,
+        "detailScrollHeight": 3819,
+        "detailClientHeight": 712,
+        "separatorFocusable": true
+      },
+      "evidenceVisible": true,
+      "code": {
+        "width": 320,
+        "height": 612.625,
+        "scrollWidth": 320,
+        "clientWidth": 320
+      }
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "metrics": {
+        "viewport": 1440,
+        "documentWidth": 1440,
+        "main": {
+          "x": 240,
+          "y": 0,
+          "width": 854,
+          "height": 900,
+          "right": 1094
+        },
+        "detail": {
+          "x": 528,
+          "y": 88.5,
+          "width": 566,
+          "height": 811.5,
+          "right": 1094
+        },
+        "detailScrollWidth": 566,
+        "detailClientWidth": 566,
+        "detailScrollHeight": 3423,
+        "detailClientHeight": 812,
+        "separatorFocusable": true
+      },
+      "evidenceVisible": true,
+      "code": {
+        "width": 320,
+        "height": 712.625,
+        "scrollWidth": 320,
+        "clientWidth": 320
+      }
+    }
+  ],
+  "network": {
+    "serverApiRequests": [],
+    "blockedRequests": [],
+    "unexpectedApis": [],
+    "mockedRequests": [
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/flows",
+      "/api/projects/7/flows/1",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/flows",
+      "/api/projects/7/flows/1",
+      "/api/ai/budget",
+      "/api/projects/7",
+      "/api/projects/7/snapshots",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/file-content",
+      "/api/projects/7/graph/nodes",
+      "/api/projects/7",
+      "/api/projects/7/snapshots",
+      "/api/projects/7/files",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/flows",
+      "/api/projects/7/flows/1",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/flows",
+      "/api/projects/7/flows/1",
+      "/api/ai/budget",
+      "/api/projects/7",
+      "/api/projects/7/snapshots",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/file-content",
+      "/api/projects/7/graph/nodes",
+      "/api/projects/7",
+      "/api/projects/7/snapshots",
+      "/api/projects/7/files",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/flows",
+      "/api/projects/7/flows/1",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/flows",
+      "/api/projects/7/flows/1",
+      "/api/ai/budget",
+      "/api/projects/7",
+      "/api/projects/7/snapshots",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/file-content",
+      "/api/projects/7/graph/nodes",
+      "/api/projects/7",
+      "/api/projects/7/snapshots",
+      "/api/projects/7/files"
+    ]
+  },
+  "errors": []
+}

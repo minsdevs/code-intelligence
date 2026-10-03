@@ -1,0 +1,169 @@
+{
+  "phase": "before",
+  "results": [
+    {
+      "width": 980,
+      "height": 700,
+      "metrics": {
+        "viewport": 980,
+        "documentWidth": 980,
+        "main": {
+          "x": 240,
+          "y": 0,
+          "width": 397,
+          "height": 700,
+          "right": 637
+        },
+        "detail": {
+          "x": 592,
+          "y": 106.125,
+          "width": 48,
+          "height": 593.875,
+          "right": 640
+        },
+        "detailScrollWidth": 1029,
+        "detailClientWidth": 48,
+        "detailScrollHeight": 3291,
+        "detailClientHeight": 594,
+        "separatorFocusable": false
+      },
+      "evidenceVisible": false,
+      "code": {
+        "width": 0,
+        "height": 316.25,
+        "scrollWidth": 5,
+        "clientWidth": 0
+      }
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "metrics": {
+        "viewport": 1280,
+        "documentWidth": 1280,
+        "main": {
+          "x": 240,
+          "y": 0,
+          "width": 697,
+          "height": 800,
+          "right": 937
+        },
+        "detail": {
+          "x": 592,
+          "y": 106.125,
+          "width": 345,
+          "height": 693.875,
+          "right": 937
+        },
+        "detailScrollWidth": 1029,
+        "detailClientWidth": 345,
+        "detailScrollHeight": 2472,
+        "detailClientHeight": 694,
+        "separatorFocusable": false
+      },
+      "evidenceVisible": true,
+      "code": {
+        "width": 121,
+        "height": 541.375,
+        "scrollWidth": 121,
+        "clientWidth": 121
+      }
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "metrics": {
+        "viewport": 1440,
+        "documentWidth": 1440,
+        "main": {
+          "x": 240,
+          "y": 0,
+          "width": 857,
+          "height": 900,
+          "right": 1097
+        },
+        "detail": {
+          "x": 592,
+          "y": 106.125,
+          "width": 505,
+          "height": 793.875,
+          "right": 1097
+        },
+        "detailScrollWidth": 1029,
+        "detailClientWidth": 505,
+        "detailScrollHeight": 2472,
+        "detailClientHeight": 794,
+        "separatorFocusable": false
+      },
+      "evidenceVisible": true,
+      "code": {
+        "width": 281,
+        "height": 677.125,
+        "scrollWidth": 281,
+        "clientWidth": 281
+      }
+    }
+  ],
+  "network": {
+    "serverApiRequests": [],
+    "blockedRequests": [],
+    "unexpectedApis": [],
+    "mockedRequests": [
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/flows",
+      "/api/projects/7/flows/1",
+      "/api/ai/budget",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/file-content",
+      "/api/projects/7/graph/nodes",
+      "/api/projects/7",
+      "/api/projects/7/snapshots",
+      "/api/projects/7/files",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/flows",
+      "/api/projects/7/flows/1",
+      "/api/ai/budget",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/file-content",
+      "/api/projects/7/graph/nodes",
+      "/api/projects/7",
+      "/api/projects/7/snapshots",
+      "/api/projects/7/files",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/flows",
+      "/api/projects/7/flows/1",
+      "/api/ai/budget",
+      "/api/projects/7/areas",
+      "/api/projects",
+      "/api/projects/7",
+      "/api/ai/status",
+      "/api/ai/budget",
+      "/api/projects/7/file-content",
+      "/api/projects/7/graph/nodes",
+      "/api/projects/7",
+      "/api/projects/7/snapshots",
+      "/api/projects/7/files"
+    ]
+  },
+  "errors": []
+}
