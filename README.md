@@ -220,6 +220,11 @@ The native boundary suite exercises real Java21 Unicode socket paths through UTF
 full-size source frames, FIN/EOF and capability/epoch refusal. Guardian-death acceptance waits
 on pre-retained query/synchronization process handles, not PID-existence polling. Passing these
 boundaries alone does not attest Electron credential-store restart or full product acceptance.
+The standalone Electron credential probe uses normal `app.quit()` shutdown: an immediate
+`app.exit()` from Electron44's ready callback can bypass the Local State commit. This
+restart proof does not attest crash or power-loss durability. Native Electron operations
+and shutdown have bounded waits; primary failures are saved before cleanup, and forced
+termination of the SDK-owned launcher can never pass clean-shutdown acceptance.
 
 Main owns the encrypted source vault and private source broker. Java receives one bounded
 version2 JSON+EOF bootstrap for both AI and source capabilities, never environment fallback.

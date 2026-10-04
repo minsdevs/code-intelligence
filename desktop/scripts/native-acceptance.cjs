@@ -267,6 +267,16 @@ function relocateMacLibraries(prefix) {
   }
   return summary;
 }
+function recordFailure(report, error) {
+  report.status = 'FAIL';
+  report.failure ||= { category: error.name === 'AssertionError' ? 'assertion' : 'native-step-failed',
+    code: /^[A-Z][A-Z0-9_]{2,63}$/.test(error.message || '') ? error.message
+      : /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code || '') ? error.code
+        : error.name === 'TimeoutError' ? 'NATIVE_UI_TIMEOUT' : 'NATIVE_ACCEPTANCE_STEP_FAILED',
+    phase: report.phase,
+    exitStatus: Number.isInteger(error.exitStatus) ? error.exitStatus : null, command: error.commandEvidence || null };
+  return report.failure;
+}
 async function main(target) {
   requireHosted();
   assert.equal(target, process.platform === 'darwin' ? 'macos' : 'windows');
@@ -327,15 +337,10 @@ async function main(target) {
     await runProduct({ source, owned, artifacts, report, env, phase: name => { report.phase = name; save(); } });
     report.status = 'PASS'; report.phase = 'complete';
   } catch (error) {
-    report.status = 'FAIL'; report.failure = { category: error.name === 'AssertionError' ? 'assertion' : 'native-step-failed',
-      code: /^[A-Z][A-Z0-9_]{2,63}$/.test(error.message || '') ? error.message
-        : /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code || '') ? error.code
-          : error.name === 'TimeoutError' ? 'NATIVE_UI_TIMEOUT' : 'NATIVE_ACCEPTANCE_STEP_FAILED',
-      phase: report.phase,
-      exitStatus: Number.isInteger(error.exitStatus) ? error.exitStatus : null, command: error.commandEvidence || null };
+    recordFailure(report, error);
     process.exitCode = 1;
   } finally { save(); }
   console.log(`Native acceptance: ${report.status}; phase=${report.phase}. Only credential-free evidence was retained.`);
 }
-module.exports = { included, requireHosted, copySource, run, buildDiagnostics, relocateMacLibraries, main };
+module.exports = { included, requireHosted, copySource, run, buildDiagnostics, relocateMacLibraries, recordFailure, main };
 if (require.main === module) main(process.argv[2]).catch(() => { console.error('Native acceptance preflight refused.'); process.exitCode = 1; });

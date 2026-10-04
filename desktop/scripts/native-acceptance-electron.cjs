@@ -6,9 +6,39 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
 
+function bounded(operation, timeoutMs, code) {
+  let timer;
+  return Promise.race([operation, new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(code)), timeoutMs);
+  })]).finally(() => clearTimeout(timer));
+}
+async function closeOwnedApplication(current, { timeoutMs = 30000, killGraceMs = 5000 } = {}) {
+  const child = current.process();
+  let onExit;
+  const exited = new Promise(resolve => {
+    onExit = resolve; child.once('exit', onExit);
+    if (child.exitCode !== null || child.signalCode !== null) resolve();
+  });
+  try {
+    await bounded(current.close(), timeoutMs, 'NATIVE_ELECTRON_CLOSE_TIMEOUT');
+    await bounded(exited, killGraceMs, 'NATIVE_ELECTRON_EXIT_TIMEOUT');
+    if (child.exitCode !== 0 || child.signalCode !== null) throw new Error('NATIVE_ELECTRON_UNCLEAN_EXIT');
+  } catch (error) {
+    // Only the SDK-owned ChildProcess may be signalled. On Windows this can be
+    // its launcher, so forced cleanup never establishes a clean product exit.
+    for (const signal of ['SIGTERM', 'SIGKILL']) {
+      if (child.exitCode !== null || child.signalCode !== null) break;
+      try { child.kill(signal); } catch { /* A failed signal is not exit proof. */ }
+      try { await bounded(exited, killGraceMs, 'NATIVE_ELECTRON_EXIT_TIMEOUT'); } catch { /* Escalate only this owned child. */ }
+    }
+    throw error;
+  } finally { child.removeListener('exit', onExit); }
+}
+
 async function runProduct({ source, owned, artifacts, report, env, phase }) {
   // Keep direct callers subject to the same hosted-only safety boundary as main.
-  require('./native-acceptance.cjs').requireHosted(env);
+  const { requireHosted, recordFailure } = require('./native-acceptance.cjs');
+  requireHosted(env);
   const frontendRequire = createRequire(path.join(source, 'frontend', 'package.json'));
   const { _electron: electron } = frontendRequire('playwright');
   const { expect } = frontendRequire('@playwright/test');
@@ -30,20 +60,27 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   const cipherPath = path.join(owned, 'safestorage-probe.enc');
   let app, page, userData, projectId, snapshotId;
   let pageErrors = 0;
+  const step = (name, action, timeoutMs = 30000) => {
+    phase(name);
+    return bounded(Promise.resolve().then(action), timeoutMs, 'NATIVE_ELECTRON_OPERATION_TIMEOUT');
+  };
   const launch = async () => {
     // Playwright enables its process-local inspector; no shipping flags or startup hooks change.
+    phase('electron-launch');
     app = await electron.launch({ executablePath, args: [desktop], cwd: desktop, env, timeout: 180000 });
+    phase('electron-first-window');
     page = await app.firstWindow({ timeout: 180000 });
     page.setDefaultTimeout(30000);
     page.on('pageerror', () => pageErrors++);
-    userData = await app.evaluate(({ app }) => app.getPath('userData'));
+    userData = await step('native-profile-path', () => app.evaluate(({ app }) => app.getPath('userData')));
     assert.equal(userData, expectedUserData);
-    report.electronVersion = await app.evaluate(() => process.versions.electron);
+    report.electronVersion = await step('native-electron-version', () => app.evaluate(() => process.versions.electron));
+    phase('native-home-visible');
     await expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible({ timeout: 60000 });
-    const appVersion = await page.evaluate(() => window.codeIntelligenceDesktop.appVersion);
+    const appVersion = await step('native-app-version-ipc', () => page.evaluate(() => window.codeIntelligenceDesktop.appVersion));
     assert.equal(appVersion, desktopPackage.version, 'Renderer app version must come from the real desktop config IPC');
     report.appVersion = appVersion; report.checks.push('native-app-version-ipc');
-    const status = await page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus());
+    const status = await step('native-runtime-status', () => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()));
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null);
     assert.equal(status.aiOff, true, 'Provider egress must remain disabled for synthetic acceptance');
     assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
@@ -54,9 +91,14 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     if (process.platform === 'win32') report.checks.push('windows-profile-private-data-separation');
     report.checks.push('native-services-ready');
   };
-  const close = async () => { if (app) { const current = app; app = null; await current.close(); } };
+  const close = async () => {
+    if (!app) return;
+    const current = app; app = null;
+    phase('native-clean-shutdown');
+    await closeOwnedApplication(current);
+  };
   const api = async (route, method = 'GET', body) => {
-    const result = await page.evaluate(async ({ route, method, body }) => {
+    const result = await bounded(page.evaluate(async ({ route, method, body }) => {
       const desktop = window.codeIntelligenceDesktop;
       const headers = { 'X-Code-Intelligence-Token': desktop.apiToken };
       if (method !== 'GET') {
@@ -70,13 +112,13 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
         body: body === undefined ? undefined : JSON.stringify(body) });
       const text = await response.text();
       return { status: response.status, body: response.ok && text ? JSON.parse(text) : null };
-    }, { route, method, body });
+    }, { route, method, body }), 30000, 'NATIVE_API_TIMEOUT');
     assert.ok(result.status >= 200 && result.status < 300, 'Real application API request failed');
     return result.body;
   };
-  const navigate = route => page.evaluate(route => {
+  const navigate = route => bounded(page.evaluate(route => {
     history.pushState(null, '', route); window.dispatchEvent(new PopStateEvent('popstate'));
-  }, route);
+  }, route), 30000, 'NATIVE_RENDERER_TIMEOUT');
   const awaitJob = async id => {
     assert.ok(Number.isSafeInteger(id) && id > 0);
     const deadline = Date.now() + 180000;
@@ -99,24 +141,26 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   const captureSizes = async label => {
     // Capture the actual Electron native window content, not a browser replay/mock.
     // Captures are only taken on project metadata pages, never source/secret/settings views.
-    const window = await app.browserWindow(page);
+    const window = await step('native-window-handle', () => app.browserWindow(page));
     for (const [width, height] of [[980, 700], [1280, 800], [1440, 900]]) {
-      await window.evaluate((win, size) => { win.setContentSize(size.width, size.height); win.show(); }, { width, height });
-      await expect.poll(() => page.evaluate(() => [innerWidth, innerHeight])).toEqual([width, height]);
-      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Horizontal overflow');
-      const image = await window.evaluate(async win => (await win.capturePage()).toPNG({ scaleFactor: 1 }).toString('base64'));
+      await step('native-' + label + '-size-' + width + 'x' + height,
+        () => window.evaluate((win, size) => { win.setContentSize(size.width, size.height); win.show(); }, { width, height }));
+      await expect.poll(() => bounded(page.evaluate(() => [innerWidth, innerHeight]), 30000, 'NATIVE_RENDERER_TIMEOUT')).toEqual([width, height]);
+      await step('native-window-paint', () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
+      assert.equal(await bounded(page.evaluate(() => document.documentElement.scrollWidth > innerWidth), 30000, 'NATIVE_RENDERER_TIMEOUT'), false, 'Horizontal overflow');
+      const image = await step('native-window-capture', () => window.evaluate(async win => (await win.capturePage()).toPNG({ scaleFactor: 1 }).toString('base64')));
       fs.writeFileSync(path.join(artifacts, `${label}-${width}x${height}.png`), Buffer.from(image, 'base64'), { flag: 'wx', mode: 0o600 });
     }
-    await window.dispose();
+    await bounded(window.dispose(), 30000, 'NATIVE_WINDOW_DISPOSE_TIMEOUT');
     report.checks.push(`${label}-three-native-window-sizes`);
   };
+  let failure;
   try {
     phase('real-app-first-start'); await launch();
-    const cipher = await app.evaluate(({ safeStorage }, secret) => {
+    const cipher = await step('native-safe-storage-encrypt', () => app.evaluate(({ safeStorage }, secret) => {
       if (!safeStorage.isEncryptionAvailable()) throw new Error('NATIVE_SAFE_STORAGE_UNAVAILABLE');
       return safeStorage.encryptString(secret).toString('base64');
-    }, secret);
+    }, secret), 60000);
     assert.ok(Buffer.from(cipher, 'base64').length > 32);
     fs.writeFileSync(cipherPath, Buffer.from(cipher, 'base64'), { flag: 'wx', mode: 0o600 });
     report.checks.push('native-safeStorage-encrypt');
@@ -150,11 +194,11 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await expect(page.getByText('native-synthetic-project', { exact: true }).first()).toBeVisible();
     await captureSizes('project-list');
     phase('real-app-restart'); await close(); await launch();
-    const decryptedMatches = await app.evaluate(({ safeStorage }, { bytes, expected }) => {
+    const decryptedMatches = await step('native-safe-storage-decrypt', () => app.evaluate(({ safeStorage }, { bytes, expected }) => {
       if (!safeStorage.isEncryptionAvailable()) throw new Error('NATIVE_SAFE_STORAGE_UNAVAILABLE');
       // Serialized evaluate callbacks have no CommonJS module-local require binding.
       return safeStorage.decryptString(Buffer.from(bytes, 'base64')) === expected;
-    }, { bytes: fs.readFileSync(cipherPath).toString('base64'), expected: secret });
+    }, { bytes: fs.readFileSync(cipherPath).toString('base64'), expected: secret }), 60000);
     assert.equal(decryptedMatches, true);
     assert.equal((await api(`/api/projects/${projectId}`)).currentSnapshot.id, snapshotId);
     await sourceContent(first, snapshotId);
@@ -182,6 +226,17 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     report.checks.push('deleted-project-stays-deleted-after-restart');
     assert.equal(pageErrors, 0, 'Renderer errors occurred');
     phase('native-clean-shutdown'); await close(); report.checks.push('native-clean-shutdown');
-  } finally { await close(); }
+  } catch (error) {
+    failure = error; recordFailure(report, error);
+    phase(report.failure.phase); // Persist the primary before SDK cleanup can stall.
+  } finally {
+    try { await close(); }
+    catch (error) {
+      if (!failure) { failure = error; recordFailure(report, error); }
+      else report.cleanupFailure = recordFailure({ phase: 'native-cleanup' }, error);
+    }
+    if (failure) phase(report.failure.phase);
+  }
+  if (failure) throw failure;
 }
-module.exports = { runProduct };
+module.exports = { runProduct, closeOwnedApplication };
