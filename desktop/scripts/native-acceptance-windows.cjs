@@ -28,7 +28,10 @@ function tapDiagnostics(output) {
     ...['ARGUMENT', 'UNSUPPORTED', 'UNSAFE_PATH', 'MISSING', 'EXISTS', 'LIMIT', 'BUSY', 'FORMAT', 'INTEGRITY', 'KEY_UNAVAILABLE', 'SOURCE_CHANGED', 'IO'].map(code => 'BACKUP_ARCHIVE_' + code),
     ...['INVALID', 'UNSAFE', 'CHANGED', 'STATE', 'LIMIT', 'BUSY', 'CLOSED', 'IO', 'TRANSITION'].map(code => 'BACKUP_SOURCE_SWAP_' + code),
     ...['OPEN', 'CONNECT', 'WRITE', 'FIN', 'PREFIX', 'LENGTH', 'BODY', 'EOF', 'OUTPUT', 'PROCESS'].map(phase => 'WINDOWS_JAVA_PROBE_' + phase + '_FAILED'),
-    ...['READ', 'CONSTRUCT', 'WRITE', 'PROCESS'].map(phase => 'WINDOWS_ACL_TAMPER_' + phase + '_FAILED')]);
+    ...['WRITE', 'PROCESS'].map(phase => 'WINDOWS_ACL_TAMPER_' + phase + '_FAILED'),
+    ...['VOLUME', 'FILE_ID', 'OWNER', 'SIZE', 'ALLOCATION_SIZE', 'MODIFIED', 'CHANGED'].map(field => 'WINDOWS_STORAGE_COMMIT_' + field + '_CHANGED'),
+    ...['ACCESS_DENIED', 'REFUSED', 'INVALID_ARGUMENT', 'PATH_NOT_FOUND', 'ADDRESS_UNAVAILABLE', 'TIMED_OUT', 'OTHER'].map(reason => 'WINDOWS_JAVA_PROBE_CONNECT_' + reason + '_FAILED'),
+    ...['OPEN', 'DACL', 'PROCESS'].map(phase => 'WINDOWS_UNIX_PIN_' + phase + '_FAILED')]);
   const messages = new Map([
     ['Windows protected boundary refused the operation.', 'windows-boundary'],
     ['Windows protected storage refused the operation.', 'windows-storage'],

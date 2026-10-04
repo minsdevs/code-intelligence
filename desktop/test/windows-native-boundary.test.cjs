@@ -160,11 +160,11 @@ test('native TLS material supports a real pinned loopback handshake and rejects 
 });
 test('native private read rejects an explicit other-user read grant', { skip: !enabled }, t => {
   const { boundary, root } = fixture(t); const file = path.join(root, 'acl.bin'); boundary.writeFresh(file, Buffer.from('private'));
-  const shell = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  const script = "$ErrorActionPreference='Stop';$phase='READ';try {$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + Buffer.from(file).toString('base64') + "'));$a=Get-Acl -LiteralPath $p;$phase='CONSTRUCT';$s=[System.Security.Principal.SecurityIdentifier]::new('S-1-1-0');$r=[System.Security.AccessControl.FileSystemAccessRule]::new($s,[System.Security.AccessControl.FileSystemRights]::Read,[System.Security.AccessControl.AccessControlType]::Allow);$a.AddAccessRule($r);$phase='WRITE';Set-Acl -LiteralPath $p -AclObject $a} catch {[Console]::Error.WriteLine('WINDOWS_ACL_TAMPER_'+$phase+'_FAILED');exit 1}";
-  const result = spawnSync(shell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true });
+  // Alter the DACL only: Set-Acl can also attempt privileged owner/SACL updates.
+  const command = path.join(process.env.SystemRoot, 'System32', 'icacls.exe');
+  const result = spawnSync(command, [file, '/grant', '*S-1-1-0:(R)', '/q'], { encoding: 'utf8', windowsHide: true });
   if (result.status !== 0 || result.error || result.signal) {
-    const code = result.stderr?.match(/^(WINDOWS_ACL_TAMPER_(?:READ|CONSTRUCT|WRITE)_FAILED)\r?$/m)?.[1] ?? 'WINDOWS_ACL_TAMPER_PROCESS_FAILED';
+    const code = result.error || result.signal ? 'WINDOWS_ACL_TAMPER_PROCESS_FAILED' : 'WINDOWS_ACL_TAMPER_WRITE_FAILED';
     throw Object.assign(new Error(code), { code });
   }
   assert.throws(() => boundary.readPrivate(file, 32));
@@ -193,7 +193,15 @@ test('native retained storage streams past 16 MiB and returns the exact bytes', 
     const expected = crypto.createHash('sha256');
     for (let i = 0; i < 18; i++) { expected.update(chunk); await writer.write(chunk); }
     const committed = await writer.commit();
-    assert.equal((await storage.stat('large.bin')).token, committed.token);
+    const persisted = await storage.stat('large.bin');
+    for (const [field, label] of [['volume', 'VOLUME'], ['fileId', 'FILE_ID'], ['owner', 'OWNER'],
+      ['size', 'SIZE'], ['allocationSize', 'ALLOCATION_SIZE'], ['modified', 'MODIFIED'], ['changed', 'CHANGED']]) {
+      if (persisted[field] !== committed[field]) {
+        const code = 'WINDOWS_STORAGE_COMMIT_' + label + '_CHANGED';
+        throw Object.assign(new Error(code), { code });
+      }
+    }
+    assert.equal(persisted.token, committed.token);
     assert.equal(committed.size, String(18 * chunk.length));
     assert.equal(committed.platform, 'win32'); assert.ok(BigInt(committed.allocationSize) > 0n);
     const reader = await storage.openRead('large.bin', { expected: committed, maxBytes: 32 * 1024 * 1024 });
