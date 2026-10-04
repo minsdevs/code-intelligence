@@ -1,6 +1,6 @@
 {
   "name": "@code-intelligence/builder-downloader",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Stable electron-builder transport adapter using the maintained Electron downloader",
   "main": "index.cjs",
@@ -10,6 +10,6 @@
   },
   "dependencies": {
     "electron-get-upstream": "npm:@electron/get@5.1.0",
-    "undici": "7.27.1"
+    "undici": "7.30.0"
   }
 }
