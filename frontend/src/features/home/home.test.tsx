@@ -138,12 +138,13 @@ afterEach(() => {
 })
 
 describe('HomePage', () => {
-  it('renders card fields for areas, technologies, snapshot, and latest commit', async () => {
+  it('opens the overview from a card with technologies, snapshot, and latest commit', async () => {
     projects = [readyProject]
     renderHome()
 
     expect(await screen.findByRole('heading', { name: 'Hello-World' })).toBeInTheDocument()
-    expect(screen.getByText('Backend, Database')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Hello-World' }).closest('a')).toHaveAttribute('href', '/projects/7/overview')
+    expect(screen.queryByText('Backend, Database')).not.toBeInTheDocument()
     expect(screen.getByText('Java, Spring Boot, PostgreSQL')).toBeInTheDocument()
     expect(screen.getByText(/READY/)).toBeInTheDocument()
     expect(screen.getByText(/abc1234 wire auth filter/)).toBeInTheDocument()

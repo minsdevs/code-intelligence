@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getMe } from '../../api/auth'
 import { useT } from '../../lib/i18n'
 import type { MeResponse } from '../../api/types'
-import AreasStep from './AreasStep'
 import ConnectStep from './ConnectStep'
 import ProgressStep from './ProgressStep'
 import RepoStep from './RepoStep'
@@ -83,11 +82,11 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
   }
 
   const handleProgressDone = useCallback(() => {
-    setStep('areas')
-  }, [])
+    if (projectId != null) navigate(`/projects/${projectId}/overview`)
+  }, [navigate, projectId])
 
   // If a local path is provided and the user is authenticated, show the local import confirmation
-  const showLocalConfirm = localPath && me?.authenticated && step !== 'progress' && step !== 'areas'
+  const showLocalConfirm = localPath && me?.authenticated && step !== 'progress'
 
   return (
     <div className="flex flex-1 flex-col px-6 py-5">
@@ -149,13 +148,6 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
               onDone={handleProgressDone}
               onUnauthorized={goConnect}
               onSourcePreviewRequired={(id) => navigate(`/projects/${id}`)}
-            />
-          )}
-          {step === 'areas' && projectId != null && (
-            <AreasStep
-              projectId={projectId}
-              onSaved={() => navigate(`/projects/${projectId}`)}
-              onUnauthorized={goConnect}
             />
           )}
         </>

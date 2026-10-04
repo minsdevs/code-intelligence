@@ -53,7 +53,9 @@ function installFetch() {
     if (path === '/api/ai/status') return jsonResponse({ configured: true, provider: 'mock' })
     if (path === '/api/csrf') return new Response(null, { status: 204 })
     if (path === '/api/projects/7/files') return jsonResponse(files)
-    if (path === '/api/projects/7/playground/sessions' && method === 'GET') return jsonResponse([])
+    if (path === '/api/projects/7/playground/sessions' && method === 'GET') return jsonResponse([asked])
+    if (path === '/api/projects/7/playground/sessions/3' && method === 'GET') return jsonResponse(asked)
+    if (path === '/api/projects/7/playground/sessions/3' && method === 'PUT') return jsonResponse(asked)
     if (path === '/api/projects/7/playground/sessions' && method === 'POST') {
       return jsonResponse(
         { ...asked, lastQuestion: null, lastExplanation: null, lastClaims: [] },
@@ -92,38 +94,23 @@ afterEach(() => {
 })
 
 describe('PlaygroundPage', () => {
-  it('asks about selected files without an execute control', async () => {
+  it('loads saved sessions and saves local snippets without an AI request', async () => {
     renderPlayground()
-    expect(
-      await screen.findByText(
-        '가설 스니펫은 텍스트로만 전달됩니다. clone 코드는 빌드하거나 실행하지 않습니다.',
-      ),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /실행/ })).not.toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('checkbox'))
-    fireEvent.change(screen.getByRole('textbox', { name: '가설 스니펫' }), {
-      target: { value: 'class App {}' },
-    })
-    fireEvent.change(screen.getByRole('textbox', { name: '질문' }), {
-      target: { value: 'what does this do?' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '질문하기' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'src/App.java' }))
     expect(await screen.findByText('App is a placeholder class.')).toBeInTheDocument()
-    expect(screen.getByText('The focused file exists in the snapshot.')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '가설 스니펫' })).toHaveValue('class App {}')
+    fireEvent.click(screen.getByRole('button', { name: '세션 저장' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(true))
+    expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).pathname.endsWith('/ask'))).toBe(false)
+    expect(screen.queryByRole('button', { name: /실행/ })).not.toBeInTheDocument()
   })
 
-  it('opens Settings when a playground question needs AI configuration', async () => {
-    askStatus = 503
-    const router = createMemoryRouter(routes, { initialEntries: ['/projects/7/playground'] })
-    render(<RouterProvider router={router} />)
-
+  it('opens the approval panel with the first selected file without transmitting snippets', async () => {
+    renderPlayground()
     fireEvent.click(await screen.findByRole('checkbox'))
-    fireEvent.change(screen.getByRole('textbox', { name: '질문' }), {
-      target: { value: 'what does this do?' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '질문하기' }))
-    fireEvent.click(await screen.findByRole('button', { name: '설정 열기' }))
-
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
+    fireEvent.click(screen.getByRole('button', { name: 'AI 패널에서 질문 준비' }))
+    await waitFor(() => expect(useUiStore.getState().aiPanelOpen).toBe(true))
+    expect(useUiStore.getState().focusedFile).toBe('src/App.java')
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
   })
 })

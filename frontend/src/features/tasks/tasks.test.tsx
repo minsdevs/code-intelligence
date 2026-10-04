@@ -25,7 +25,7 @@ function requestUrl(input: RequestInfo | URL): URL {
 
 const draft: TaskView = {
   id: 4,
-  type: 'LEARNING',
+  type: 'REVIEW',
   title: 'Review unmatched API call',
   description: 'Confirm the finding in code.',
   status: 'DRAFT',
@@ -33,7 +33,6 @@ const draft: TaskView = {
   sourceFindingId: 5,
   updatedAt: '2026-08-14T00:00:00Z',
   goals: [{ id: 1, seq: 1, content: 'Open the evidence file', done: false }],
-  records: [],
 }
 
 let tasks: TaskView[] = [draft]
@@ -92,7 +91,15 @@ describe('TasksPage', () => {
     renderTasks()
     expect(await screen.findByRole('heading', { name: 'Tasks' })).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: '초안 승인' }))
-    expect(await screen.findByText(/OPEN · LEARNING · AI/)).toBeInTheDocument()
+    expect(await screen.findByText(/OPEN · REVIEW · AI/)).toBeInTheDocument()
+  })
+
+  it('offers analysis tasks without learning type or record inputs', async () => {
+    renderTasks()
+    await screen.findByRole('heading', { name: 'Tasks' })
+    expect(screen.queryByRole('option', { name: 'LEARNING' })).not.toBeInTheDocument()
+    expect(screen.queryByText('학습 기록')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: '학습 기록' })).not.toBeInTheDocument()
   })
 
   it('toggles a checklist item', async () => {

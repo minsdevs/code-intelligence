@@ -1,25 +1,37 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { getFeature, listFeatures } from '../../api/features'
 import type { FeatureChildView } from '../../api/types'
+import { getProject } from '../../api/projects'
 import EmptyState from '../../components/EmptyState'
 import EvidenceList from '../../components/EvidenceList'
 import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
-import { codeLocationSearch, queryError } from '../code/codeLocation'
+import { codeLocationSearch, parseLineParam, queryError } from '../code/codeLocation'
 
 export default function FeaturesPage() {
   const t = useT()
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const requestedSnapshot = parseLineParam(params.get('snapshotId'))
+  const invalidSnapshot = params.has('snapshotId') && requestedSnapshot == null
+  const projectQuery = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => getProject(projectId!),
+    enabled: projectId != null,
+  })
+  const snapshotId = invalidSnapshot
+    ? null
+    : (requestedSnapshot ?? projectQuery.data?.currentSnapshot?.id ?? null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const treeQuery = useQuery({
-    queryKey: ['features', projectId],
-    queryFn: () => listFeatures(projectId!),
-    enabled: projectId != null,
+    queryKey: ['features', projectId, snapshotId],
+    queryFn: () => listFeatures(projectId!, snapshotId),
+    enabled: projectId != null && snapshotId != null,
   })
 
   const tree = treeQuery.data ?? []
@@ -27,10 +39,30 @@ export default function FeaturesPage() {
     selectedId != null && containsFeature(tree, selectedId) ? selectedId : (tree[0]?.id ?? null)
 
   const detailQuery = useQuery({
-    queryKey: ['feature', projectId, resolvedId],
-    queryFn: () => getFeature(projectId!, resolvedId!),
-    enabled: projectId != null && resolvedId != null,
+    queryKey: ['feature', projectId, snapshotId, resolvedId],
+    queryFn: () => getFeature(projectId!, resolvedId!, snapshotId),
+    enabled: projectId != null && snapshotId != null && resolvedId != null,
   })
+
+  if (invalidSnapshot || projectQuery.isError)
+    return (
+      <p role="alert" className="p-4">
+        분석 시점을 확인할 수 없습니다.
+      </p>
+    )
+
+  if (projectQuery.isLoading)
+    return (
+      <p role="status" className="p-4">
+        분석 시점을 불러오는 중…
+      </p>
+    )
+  if (projectId != null && snapshotId == null)
+    return (
+      <p role="status" className="p-4">
+        완료된 분석 결과가 없습니다.
+      </p>
+    )
 
   if (projectId == null) {
     return <EmptyState title="Features" description={t('features.desc')} />
@@ -76,7 +108,7 @@ export default function FeaturesPage() {
           <h3 className="text-[15px] font-semibold text-ink">{detail.name}</h3>
           <p className="mt-1 flex flex-wrap gap-x-3 font-mono text-[12px] text-ink-faint">
             <span>{detail.detection}</span>
-            <span>{Math.round(detail.confidence * 100)}%</span>
+            <span>정적 규칙으로 묶은 기능 후보</span>
           </p>
           <h4 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
             {t('features.links')}
@@ -152,9 +184,7 @@ function FeatureNode({
         }`}
       >
         <span className="text-[13px] text-ink">{node.name}</span>
-        <span className="font-mono text-[11px] text-ink-faint">
-          {node.detection} · {Math.round(node.confidence * 100)}%
-        </span>
+        <span className="font-mono text-[11px] text-ink-faint">{node.detection} · 기능 후보</span>
       </button>
       {node.children.length > 0 && (
         <ul className="ml-3 border-l border-line pl-2">

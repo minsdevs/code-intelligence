@@ -1,5 +1,5 @@
 import { apiGet } from './client'
-import type { GraphNodeDetail, GraphNodePage, GraphRelationsResponse } from './types'
+import type { GraphNodeDetail, GraphNodePage, GraphRelationsResponse, GraphOverview } from './types'
 
 /** Matches backend GraphService.MAX_PAGE_SIZE so a file's symbols fit in one request. */
 export const GRAPH_NODE_PAGE_SIZE = 100
@@ -14,10 +14,14 @@ export function listGraphNodes(
     path?: string
     page?: number
     size?: number
+    sort?: 'name' | 'path' | 'type'
+    category?: 'symbols' | 'entrypoints' | 'dependencies'
   } = {},
 ): Promise<GraphNodePage> {
   const params = new URLSearchParams()
   if (options.snapshotId != null) params.set('snapshotId', String(options.snapshotId))
+  if (options.category) params.set('category', options.category)
+  if (options.sort) params.set('sort', options.sort)
   if (options.type) params.set('type', options.type)
   if (options.area) params.set('area', options.area)
   if (options.q) params.set('q', options.q)
@@ -28,8 +32,14 @@ export function listGraphNodes(
   return apiGet<GraphNodePage>(`/api/projects/${projectId}/graph/nodes${query ? `?${query}` : ''}`)
 }
 
-export function getGraphNode(projectId: number, nodeId: number): Promise<GraphNodeDetail> {
-  return apiGet<GraphNodeDetail>(`/api/projects/${projectId}/graph/nodes/${nodeId}`)
+export function getGraphNode(
+  projectId: number,
+  nodeId: number,
+  snapshotId?: number | null,
+): Promise<GraphNodeDetail> {
+  return apiGet<GraphNodeDetail>(
+    `/api/projects/${projectId}/graph/nodes/${nodeId}${snapshotId == null ? '' : `?snapshotId=${snapshotId}`}`,
+  )
 }
 
 export function getGraphRelations(
@@ -51,4 +61,8 @@ export function getGraphRelations(
   return apiGet<GraphRelationsResponse>(
     `/api/projects/${projectId}/graph/nodes/${nodeId}/relations${query ? `?${query}` : ''}`,
   )
+}
+
+export function getGraphOverview(projectId: number, snapshotId: number): Promise<GraphOverview> {
+  return apiGet<GraphOverview>(`/api/projects/${projectId}/graph/overview?snapshotId=${snapshotId}`)
 }

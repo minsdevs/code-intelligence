@@ -345,43 +345,18 @@ describe('ImportWizardPage', () => {
     })
   })
 
-  it('sends area selection changes in the PUT payload and navigates to the workspace', async () => {
+  it('opens the overview after analysis without requiring area selection', async () => {
     meState = signedInMe
     jobState = doneJob
-    renderImport()
-
+    const { router } = renderImport()
     fireEvent.click(await screen.findByRole('option', { name: /octocat\/Hello-World/ }))
     const importButton = screen.getByRole('button', { name: '저장소 가져오기' })
     await waitFor(() => expect(importButton).toBeEnabled())
     fireEvent.click(importButton)
-
-    expect(await screen.findByRole('checkbox', { name: 'Backend' })).toBeInTheDocument()
-    expect(await screen.findByText('src/main/java/TodoController.java:12')).toBeInTheDocument()
-
-    const backend = screen.getByRole('checkbox', { name: 'Backend' })
-    expect(backend).toBeChecked()
-    fireEvent.click(backend)
-    expect(backend).not.toBeChecked()
-
-    fireEvent.click(screen.getByRole('button', { name: '워크스페이스로 이동' }))
-
-    await waitFor(() => {
-      const putCall = fetchMock.mock.calls.find(([input, init]) => {
-        return (
-          requestUrl(input).pathname === '/api/projects/7/area-selections' &&
-          (init?.method ?? 'GET').toUpperCase() === 'PUT'
-        )
-      })
-      expect(putCall).toBeTruthy()
-      expect(JSON.parse(String(putCall?.[1]?.body))).toEqual({
-        selections: [
-          { areaType: 'BACKEND', selected: false },
-          { areaType: 'DATABASE', selected: true },
-        ],
-      })
-    })
-
-    expect(await screen.findByRole('heading', { level: 1, name: '7' })).toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.pathname).toBe('/projects/7/overview'))
+    expect(fetchMock.mock.calls.some(([input, init]) =>
+      requestUrl(input).pathname.endsWith('/area-selections') && init?.method === 'PUT',
+    )).toBe(false)
   })
 
   it('returns to Connect when an API call responds 401', async () => {

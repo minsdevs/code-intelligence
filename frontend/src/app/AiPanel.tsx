@@ -888,6 +888,9 @@ function quickQuestions(
   view: string | null,
   t: (key: string) => string,
 ): { label: string; question: string; intent: string }[] {
+  if (view === 'overview') {
+    return [{ label: t('ai.qq.explainSimply'), question: t('ai.qq.explainSimplyQ'), intent: 'EXPLAIN' }]
+  }
   if (view === 'features') {
     return [
       { label: t('ai.qq.featureFlow'), question: t('ai.qq.featureFlowQ'), intent: 'EXPLAIN' },
@@ -927,15 +930,6 @@ function quickQuestions(
       {
         label: t('ai.qq.explainHypothesis'),
         question: t('ai.qq.explainHypothesisQ'),
-        intent: 'EXPLAIN',
-      },
-    ]
-  }
-  if (view === 'growth') {
-    return [
-      {
-        label: t('ai.qq.learningSummary'),
-        question: t('ai.qq.learningSummaryQ'),
         intent: 'EXPLAIN',
       },
     ]

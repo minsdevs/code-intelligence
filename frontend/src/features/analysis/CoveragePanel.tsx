@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getCoverage } from '../../api/coverage'
 import type { CoverageReport, LocalImportSummary } from '../../api/types'
 
-type Props = { projectId: number }
+type Props = { projectId: number; snapshotId?: number }
 
 const stepLabels = new Map([
   ['done', '단계 종료 · 파일별 결과 미측정'],
@@ -84,10 +84,10 @@ function LocalImportDetails({ summary }: { summary: LocalImportSummary | null })
   )
 }
 
-export function CoveragePanel({ projectId }: Props) {
+export function CoveragePanel({ projectId, snapshotId }: Props) {
   const { data, isLoading, error } = useQuery<CoverageReport>({
-    queryKey: ['coverage', projectId],
-    queryFn: () => getCoverage(projectId),
+    queryKey: ['coverage', projectId, snapshotId],
+    queryFn: () => getCoverage(projectId, snapshotId),
   })
 
   if (isLoading) return <div className="text-sm text-gray-500">분석 범위 보고서 로딩 중...</div>
@@ -96,17 +96,32 @@ export function CoveragePanel({ projectId }: Props) {
   }
 
   const { fileCoverage, languageCoverage, analyzerStatuses } = data
-  const hasInventoryContract = data.measurementStatus === 'LEGACY_UNMEASURED'
+  const measured = data.measurementStatus === 'PER_FILE_RECORDED' && data.outcomes != null
+  const hasInventoryContract = measured || data.measurementStatus === 'LEGACY_UNMEASURED'
   const countSkips = hasInventoryContract ? fileCoverage.skippedForCount : null
   const sizeSkips = hasInventoryContract ? fileCoverage.skippedForSize : null
 
   return (
     <section aria-label="분석 범위 보고서" className="space-y-4 rounded border p-4 text-sm">
       <h3 className="font-semibold text-base">분석 범위 보고서</h3>
-      <p className="rounded bg-amber-50 p-2 text-xs text-amber-800">
+      {measured ? (
+        <section aria-label="파일별 분석 결과">
+          <p className="mb-2 text-xs text-gray-600">기록된 파서 처리 결과입니다. 성공은 호출·의존·프레임워크 관계를 모두 찾았다는 보장이 아닙니다.</p>
+          <dl className="grid grid-cols-2 gap-2 text-xs">
+            {([
+              ['발견한 파일', data.outcomes!.discoveredFiles], ['분석 대상', data.outcomes!.targetedFiles],
+              ['성공', data.outcomes!.successfulFiles], ['부분 성공', data.outcomes!.partialFiles],
+              ['실패', data.outcomes!.failedFiles], ['목록에서 제외', data.outcomes!.excludedFiles],
+              ['미지원', data.outcomes!.unsupportedFiles], ['미측정', data.outcomes!.unmeasuredFiles],
+              ['대상 지정 후 결과 없음', data.outcomes!.pendingFiles],
+            ] as const).map(([label, count]) => <div key={label} className="contents"><dt>{label}</dt><dd>{inventoryCount(count)}</dd></div>)}
+          </dl>
+          <p className="mt-2 text-xs text-gray-500">발견 범위는 이 스냅샷의 Git 파일 목록입니다. 가져오기 전에 제외된 폴더의 내부 파일은 포함하지 않습니다. 제외된 서브모듈: {data.outcomes!.excludedSubmodules}개.</p>
+        </section>
+      ) : <p className="rounded bg-amber-50 p-2 text-xs text-amber-800">
         분석 범위 측정 불가. 파일별 분석 성공·실패 수와 결과 완전성은 알 수 없습니다.
         {hasInventoryContract ? ' 이 스냅샷에는 파일별 분석 결과가 기록되어 있지 않습니다.' : ' 측정 상태가 제공되지 않았습니다.'}
-      </p>
+      </p>}
 
       <section>
         <h4 className="font-medium mb-1">파일 목록</h4>
@@ -137,8 +152,8 @@ export function CoveragePanel({ projectId }: Props) {
                 <tr key={language.language}>
                   <th scope="row" className="text-left font-normal">{language.language}</th>
                   <td>{inventoryCount(language.inventoriedFiles)}</td>
-                  <td>알 수 없음</td>
-                  <td>알 수 없음</td>
+                  <td>{measured ? inventoryCount(language.analyzed ?? undefined) : '알 수 없음'}</td>
+                  <td>{measured ? inventoryCount(language.failed ?? undefined) : '알 수 없음'}</td>
                 </tr>
               ))}
             </tbody>
@@ -148,14 +163,14 @@ export function CoveragePanel({ projectId }: Props) {
 
       <section>
         <h4 className="font-medium mb-1">기록된 분석기 단계</h4>
-        <p className="mb-1 text-xs text-gray-500">단계가 종료되어도 파일별 분석 여부와 성공 건수는 알 수 없습니다.</p>
+        <p className="mb-1 text-xs text-gray-500">단계 종료 자체는 파일별 분석 성공을 보장하지 않습니다.</p>
         {analyzerStatuses.length === 0 && <p className="text-xs text-gray-500">알 수 없음</p>}
         <ul className="space-y-1 text-xs">
           {analyzerStatuses.map((analyzer) => (
             <li key={analyzer.name} className="flex items-center gap-2">
               <span className={analyzer.status === 'failed' ? 'text-red-600' : 'text-gray-400'} aria-hidden="true">●</span>
               <span>{analyzer.name}</span>
-              <span className="text-gray-500">{stepLabels.get(analyzer.status) ?? '알 수 없음'}</span>
+              <span className="text-gray-500">{measured && analyzer.status === 'done' ? '단계 종료' : stepLabels.get(analyzer.status) ?? '알 수 없음'}</span>
               {analyzer.status === 'failed' && analyzer.failureReason && <span className="text-red-500 text-[10px]">({analyzer.failureReason})</span>}
             </li>
           ))}

@@ -4,7 +4,6 @@ import { listProjects } from '../../api/projects'
 import { UnauthorizedError } from '../../api/client'
 import type { Project } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
-import { areaLabel } from '../areas/labels'
 import { useT } from '../../lib/i18n'
 import { firstLine, formatWhen, shortSha } from '../history/format'
 import LocalSourceStatus from '../projects/LocalSourceStatus'
@@ -82,7 +81,7 @@ function ProjectCard({ project }: { project: Project }) {
   const analyzing = isAnalyzing(project)
   return (
     <Link
-      to={`/projects/${project.id}`}
+      to={`/projects/${project.id}/overview`}
       className={`block rounded-md border border-line bg-surface-1 p-4 transition-colors hover:border-line-strong hover:bg-surface-2 ${
         analyzing ? 'shadow-[inset_3px_0_0_var(--color-accent)]' : ''
       }`}
@@ -115,23 +114,15 @@ function ProjectCard({ project }: { project: Project }) {
       </div>
       <dl className="mt-3 flex flex-col gap-2 text-[12px]">
         <div className="flex gap-2">
-          <dt className="shrink-0 text-ink-faint">Status</dt>
+          <dt className="shrink-0 text-ink-faint">{t('home.status')}</dt>
           <dd className="text-ink-muted">
-            {project.latestJob?.status ?? project.currentSnapshot?.status ?? 'Not analyzed'}
+            {project.latestJob?.status ?? project.currentSnapshot?.status ?? t('home.notAnalyzed')}
           </dd>
         </div>
         <div className="flex gap-2">
-          <dt className="shrink-0 text-ink-faint">Last analyzed</dt>
+          <dt className="shrink-0 text-ink-faint">{t('home.analyzedAt')}</dt>
           <dd className="text-ink-muted">
             {formatWhen(project.currentSnapshot?.analyzedAt ?? null)}
-          </dd>
-        </div>
-        <div className="flex gap-2">
-          <dt className="shrink-0 text-ink-faint">{t('home.areas')}</dt>
-          <dd className="text-ink-muted">
-            {project.selectedAreas.length > 0
-              ? project.selectedAreas.map(areaLabel).join(', ')
-              : '—'}
           </dd>
         </div>
         <div className="flex gap-2">

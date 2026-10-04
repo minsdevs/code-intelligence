@@ -30,7 +30,6 @@ vi.mock('../../api/jobs', () => ({
 // These steps are outside the local approval path under test.
 vi.mock('./ConnectStep', () => ({ default: () => <div>Connect</div> }))
 vi.mock('./RepoStep', () => ({ default: () => <div>Repository</div> }))
-vi.mock('./AreasStep', () => ({ default: () => <div>Areas</div> }))
 
 function preview(): LocalSourcePreview {
   return {
@@ -56,6 +55,7 @@ function renderWizard() {
     [
       { path: '/import', element: <ImportWizardPage /> },
       { path: '/projects/:id', element: <div>Existing project</div> },
+      { path: '/projects/:id/overview', element: <div>Repository overview</div> },
     ],
     { initialEntries: ['/import?path=%2Ffixture%2Ffirst'] },
   )
@@ -106,6 +106,18 @@ describe('local import wizard approval integration', () => {
     fireEvent.click(confirm)
     await waitFor(() => expect(getJob).toHaveBeenCalledWith(42))
     expect(createLocalProject).toHaveBeenCalledExactlyOnceWith('/fixture/first', 'wizard-approval')
+  })
+
+  it('opens overview immediately when the approved local analysis completes', async () => {
+    vi.mocked(getJob).mockResolvedValue({
+      id: 42, projectId: 7, snapshotId: 5, type: 'IMPORT', status: 'DONE',
+      error: null, createdAt: null, startedAt: null, finishedAt: null, steps: [],
+    })
+    const router = renderWizard()
+    fireEvent.click(await screen.findByRole('button', { name: '가져올 파일 미리보기' }))
+    fireEvent.click(await screen.findByRole('button', { name: '확인한 파일 가져오기 및 분석' }))
+    await screen.findByText('Repository overview')
+    expect(router.state.location.pathname).toBe('/projects/7/overview')
   })
 
   it('clears approval when the supplied URL path changes without automatically previewing the next path', async () => {

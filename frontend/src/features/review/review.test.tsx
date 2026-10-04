@@ -68,7 +68,7 @@ function installFetch() {
     if (path === '/api/csrf') return new Response(null, { status: 204 })
     if (path === '/api/projects/7/pulls') return jsonResponse(pulls)
     if (path === '/api/projects/7/pulls/12/review' && method === 'GET') {
-      return jsonResponse({ title: 'Not Found', detail: 'Review not found.' }, 404)
+      return jsonResponse(review)
     }
     if (path === '/api/projects/7/pulls/12/review' && method === 'POST')
       return generateStatus === 201
@@ -101,24 +101,14 @@ afterEach(() => {
 })
 
 describe('ReviewPage', () => {
-  it('lists pull requests and generates an AI review with evidence', async () => {
+  it('keeps saved reviews readable and opens approval-based assistance without posting a generation request', async () => {
     const { router } = renderReview()
-    expect(await screen.findByRole('heading', { name: 'Add login' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '리뷰 생성' }))
     expect(await screen.findByText('Look at the login path.')).toBeInTheDocument()
-    expect(screen.getByText('Check this change.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'AI 패널에서 근거 검토' }))
+    await waitFor(() => expect(useUiStore.getState().aiPanelOpen).toBe(true))
+    expect(useUiStore.getState().focusedFile).toBe('src/App.java')
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: 'src/App.java:1' }))
     expect(router.state.location.pathname).toBe('/projects/7/code')
-  })
-
-  it('opens Settings when review generation needs AI configuration', async () => {
-    generateStatus = 503
-    const { router } = renderReview()
-
-    expect(await screen.findByRole('heading', { name: 'Add login' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '리뷰 생성' }))
-    fireEvent.click(await screen.findByRole('button', { name: '설정 열기' }))
-
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
   })
 })

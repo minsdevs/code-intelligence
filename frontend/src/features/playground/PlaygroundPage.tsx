@@ -1,14 +1,15 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  askPlayground,
+  getPlaygroundSession,
+  updatePlaygroundSession,
   createPlaygroundSession,
   listPlaygroundSessions,
 } from '../../api/playground'
 import { listFiles } from '../../api/files'
 import { parseEvidenceRef } from '../../api/ai'
-import { ApiError } from '../../api/client'
+import { useUiStore } from '../../stores/uiStore'
 import EmptyState from '../../components/EmptyState'
 import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
@@ -23,7 +24,6 @@ export default function PlaygroundPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [selectedPaths, setSelectedPaths] = useState<string[]>([])
   const [snippet, setSnippet] = useState('')
-  const [question, setQuestion] = useState('')
   const [fileFilter, setFileFilter] = useState('')
 
   const sessionsQuery = useQuery({
@@ -50,26 +50,20 @@ export default function PlaygroundPage() {
     },
   })
 
-  const askMutation = useMutation({
-    mutationFn: async () => {
-      let sessionId = selectedId
-      if (sessionId == null) {
-        const created = await createPlaygroundSession(projectId!, {
-          title: selectedPaths[0] ?? 'Playground',
-          selectedPaths,
-          proposedSnippet: snippet,
-        })
-        sessionId = created.id
-        setSelectedId(sessionId)
-      }
-      return askPlayground(projectId!, sessionId, {
-        question,
-        selectedPaths,
-        proposedSnippet: snippet,
-      })
+  const loadMutation = useMutation({
+    mutationFn: (id: number) => getPlaygroundSession(projectId!, id),
+    onSuccess: (session) => {
+      setSelectedId(session.id)
+      setSelectedPaths(session.selectedPaths)
+      setSnippet(session.proposedSnippet)
     },
-    onSuccess: async () => {
-      setQuestion('')
+  })
+  const saveMutation = useMutation({
+    mutationFn: () => selectedId == null
+      ? createPlaygroundSession(projectId!, { title: selectedPaths[0] ?? 'Playground', selectedPaths, proposedSnippet: snippet })
+      : updatePlaygroundSession(projectId!, selectedId, { selectedPaths, proposedSnippet: snippet }),
+    onSuccess: async (session) => {
+      setSelectedId(session.id)
       await queryClient.invalidateQueries({ queryKey: ['playground-sessions', projectId] })
     },
   })
@@ -85,12 +79,8 @@ export default function PlaygroundPage() {
       ? files
       : files.filter((file) => file.path.toLowerCase().includes(fileFilter.trim().toLowerCase()))
   const sessionError = queryError(sessionsQuery.error)
-  const askError =
-    askMutation.error instanceof ApiError && askMutation.error.status === 503
-      ? t('playground.aiDisabled')
-      : queryError(askMutation.error)
-  const askAiDisabled = askMutation.error instanceof ApiError && askMutation.error.status === 503
-  const result = askMutation.data
+  const localError = queryError(loadMutation.error ?? saveMutation.error ?? createMutation.error)
+  const result = loadMutation.data?.id === selectedId ? loadMutation.data : null
 
   function togglePath(path: string) {
     setSelectedPaths((prev) =>
@@ -98,11 +88,6 @@ export default function PlaygroundPage() {
     )
   }
 
-  function onAsk(event: FormEvent) {
-    event.preventDefault()
-    if (question.trim() === '') return
-    askMutation.mutate()
-  }
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -133,7 +118,7 @@ export default function PlaygroundPage() {
             <li key={session.id}>
               <button
                 type="button"
-                onClick={() => setSelectedId(session.id)}
+                onClick={() => loadMutation.mutate(session.id)}
                 aria-current={session.id === selectedId ? 'true' : undefined}
                 className={`mb-0.5 w-full rounded-md px-3 py-1.5 text-left text-[13px] ${
                   session.id === selectedId
@@ -177,7 +162,7 @@ export default function PlaygroundPage() {
         <p className="border-b border-line px-4 py-2 text-[12px] text-ink-muted">
           {t('playground.hint')}
         </p>
-        <form onSubmit={onAsk} className="border-b border-line px-4 py-3">
+        <div className="border-b border-line px-4 py-3">
           <label className="block text-[12px] text-ink-muted">
             {t('playground.snippetLabel')}
             <textarea
@@ -188,37 +173,20 @@ export default function PlaygroundPage() {
               className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1 font-mono text-[12px] text-ink"
             />
           </label>
-          <label className="mt-3 block text-[12px] text-ink-muted">
-            {t('playground.questionLabel')}
-            <input
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              aria-label={t('playground.questionLabel')}
-              className="mt-1 w-full rounded-md border border-line bg-surface-2 px-2 py-1 text-[13px] text-ink"
-            />
-          </label>
           <button
-            type="submit"
-            disabled={askMutation.isPending || question.trim() === ''}
-            className="mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
-          >
-            {t('playground.ask')}
-          </button>
-        </form>
-        {askError && (
-          <div role="alert" className="px-4 py-2 text-[12px] text-danger">
-            <p>{askError}</p>
-            {askAiDisabled && (
-              <button
-                type="button"
-                onClick={() => navigate('/settings')}
-                className="mt-1 text-accent hover:underline"
-              >
-                {t('ai.openSettings')}
-              </button>
-            )}
-          </div>
-        )}
+            type="button"
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            className="mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink"
+          >세션 저장</button>
+          <button
+            type="button"
+            onClick={() => useUiStore.setState({ aiPanelOpen: true, pendingIntent: 'EXPLAIN', focusedFile: selectedPaths[0] ?? null, focusedNode: null, focusedCommitSha: null, focusedFindingId: null, focusedNoteId: null, focusedTaskId: null })}
+            className="ml-2 mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink"
+          >AI 패널에서 질문 준비</button>
+          <p className="mt-2 text-xs text-ink-muted">세션과 제안 코드는 로컬에 저장됩니다. AI 패널에서 질문을 입력하고 전송할 컨텍스트·프롬프트·비용을 승인하세요. 첫 선택 파일만 패널에 지정하며 제안 코드와 다른 파일은 자동 전송하지 않습니다.</p>
+        </div>
+        {localError && <p role="alert" className="px-4 py-2 text-danger">{localError}</p>}
         {result?.lastExplanation && (
           <div className="px-4 py-3">
             <p className="text-[13px] text-ink">{result.lastExplanation}</p>
