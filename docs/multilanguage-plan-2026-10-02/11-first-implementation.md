@@ -91,12 +91,28 @@ rtk proxy open -n '/Users/minseokchae/orca/workspaces/code-intelligence/main-2/.
 등록·사용자 키 생성·설치는 완료했다. 남은 순서는 실제 device 로그인/연결 해제/재연결/권한 철회→자동 토큰 갱신과 회전→최소 OS·깨끗한 설치/업데이트 검증이다. Developer ID·공증·정식 배포는 이번 승인 범위 밖이다. GitHub App 등록은 완료됐으므로 같은 앱을 중복 생성하지 않는다. 키 내용은 수집하지 않는다. 현재 구현은 만료 시 재로그인을 요구하며, 정식 배포 전 모든 게이트가 완료된 상태로 보고하지 않는다.
 
 
+### 실계정 연결 후 발견한 가져오기 실패
+
+사용자가 실제 device 인증을 완료한 뒤 `.native-product-e1e4tO` 화면에서 `GitHub 연결됨 · ID 154256470`을 확인했다. 사용자가 직접 시작한 GitHub 가져오기는 Import/File inventory/Language-framework/Area detection까지 Done이었으나, `GIT_METADATA` 70%에서 `step 'GIT_METADATA' failed: GitHub pulls request failed`로 실패했다. 따라서 실제 로그인 성공과 전체 가져오기 성공을 구분한다. `9b2deb3`에서 GitHub가 명시한 PR 권한 부족 403만 선택 정보 미수집으로 처리했다. 기존 PR/ETag를 보존하고 snapshot의 GIT_METADATA evidence에 미수집 경고를 기록한다. 커밋 절단 경고도 함께 보존한다. 401·429·일반 403·네트워크 오류는 실패로 유지하며 LOCAL 프로젝트는 토큰 조회 전 외부 PR 요청을 막는다. 회귀 27개와 전체 Java/test 컴파일·포맷 검사를 통과했다. 실제 수정 앱 재시도 결과는 후속 기록을 따른다. 최초 실패 증거를 성공으로 덮어쓰지 않는다.
+
+`eb380a3`은 LOCAL_LINKED 계정에 로컬 프로필 이름 `@local`을 GitHub 이름처럼 표시하던 오류를 수정했다. 확인된 GitHub ID를 표시하며 GITHUB identity의 실제 사용자 이름은 유지한다. Settings 35개 테스트와 프런트 전체 타입 검사를 통과했다. API/schema 변경은 없다.
+
+### 현재 수정 앱과 실제 계정 프로필
+
+두 후속 수정 `9b2deb3`·`eb380a3`를 묶은 앱은 `.native-product-atowzz/Code Intelligence Validation.app`이다. private frontend build·backend bootJar·runtime manifest·ad-hoc 서명 검증이 38.3초에 완료됐고 `evidence/runtime-fix-build.json`을 남겼다.
+
+실제 사용자 조작 중 원래 격리 프로필과 기본 Validation 프로필을 구분해야 하는 상황이 확인됐다. 61473 포트의 초기 실패 화면 뒤 63343 포트의 실패 화면도 확인됐으며, 후자의 main process에는 claim 인수가 없고 renderer 경로는 `~/Library/Application Support/Code Intelligence Validation`이었다. 최초 로그인/실패를 격리 claim만의 증거로 단정하지 않는다. 실제 설치 앱의 `Code Intelligence` 프로필과 구분한다. 기본 Validation 프로필의 파일/자격증명을 열거나 복제·삭제하지 않았다. 같은 프로필을 유지해 실행 파일을 교체하는 후속 절차를 진행했다.
+
+교체는 `.native-product-e1e4tO/Code Intelligence Validation.app`에 수정본을 넣고 이전본을 같은 디렉터리 `Code Intelligence Validation.before-eb380a3.app`로 보존했다. `evidence/runtime-fix-replacement.json`은 교체·실행 요청 근거다. 이후 실제 UI(64052)에서 Ready, LOCAL_LINKED/Connected, `GitHub ID 154256470`, 설치 `minsdevs · code-intelligence-dev-minsdevs`와 private 저장소 목록을 확인했다. 재로그인 없이 계정이 유지됐고 @local 표시 수정도 실제 화면에서 통과했다. 앱은 사용자 확인용으로 실행 상태를 유지한다.
+
+**실제 재분석은 미완료다.** 기존 실패 project 1(`minsdevs/code-intelligence`)은 목록에서 ANALYZING, 개요에는 완료 결과 없음으로 남았다. 이전 Retry는 checkpoint source 변경/검증 불가를 표시했고, 새 가져오기는 `This repository is already imported.`로 거부됐다. 기존 GitHub 프로젝트를 화면에서 새 분석으로 복구하는 경로가 부족하다. 데이터를 삭제하거나 API로 UI를 우회하지 않았다. 한도 2% 종료 지시에 따라 새 복구 UI 구현은 다음 세션 첫 단위로 남긴다. PR 권한 오류 수정의 단위 검증 PASS를 실제 가져오기 종단 성공으로 해석하지 않는다.
+
 ### 다음 AI 세션에 전달할 프롬프트
 
 > Code Intelligence 정식 배포 전 준비를 이어서 수행하라. 먼저 이 문서의 구현 상태와 검증 경계, 01-prd.md의 실제 GitHub App 등록 정보를 읽고 현재 git 상태를 확인하라. 작업 체크아웃은 `/Users/minseokchae/orca/workspaces/code-intelligence/main-2`, 준비 브랜치는 `codex/pre-release-account-stability`다. 등록 ID 반영 구현은 `26238ef`이며 이후 문서 커밋/원격 병합 상태는 실제 git으로 확인하라. `/Users/minseokchae/Dev/code-intelligence`, 원본 설치 앱/DB/profile/Keychain, 기존 산출물과 추적되지 않은 파일은 보존한다. 셸은 rtk를 사용하고, codebase-memory 그래프를 먼저 활용한다. 자동 stash/reset/clean, GitHub Actions, 유료 AI 호출, 정식 서명/공증/배포는 하지 않는다. 커밋에는 `[skip ci]`를 붙인다.
 >
 > 실제 등록된 GitHub App은 `Code Intelligence Dev minsdevs`(App ID 5189413, 공개 Client ID `Iv23licOyolwwPyDe1JY`), 설치 ID는 167934276이다. 중복 등록하지 마라. 사용자가 private key를 직접 생성·보관했고 전체 저장소 읽기 유지를 명시했다. 키 파일/내용은 열거나 수집하지 말고 앱에 넣지 마라. 등록과 설치는 실제 OAuth 로그인 성공을 뜻하지 않는다. 최신 실계정 검증 상태는 이 문서의 후속 기록과 사용자 응답을 확인하라.
 >
-> 최신 계정 검증 앱은 `.native-product-e1e4tO/Code Intelligence Validation.app`, 격리 claim은 `/private/tmp/civa-i21e3J/desktop-run-5mdAr2/.isolated-run.json`이다. 위 실행 명령으로 열되 원본 앱/프로필을 사용하지 마라. 최초 FAIL과 후속 PASS를 합치지 말고 기존 evidence를 보존하라. 최소 OS/새 기기와 Developer ID 검증은 미완료다. 현재 OAuth는 만료 시 재로그인을 요구하며 refresh token 저장·자동 갱신·회전은 아직 없다. 다음은 실계정 연결/해제/재연결/권한 철회 및 설치별 저장소 목록, 자동 갱신, 완료·취소 경합/강제 실패, 최소 OS·새 설치/업데이트 검증 순으로 범위를 나눠 진행하라. 테스트·실제 DB·실제 앱·실계정 증거를 구분하라. 새 기능에 schema 변경이 필요하면 V27 백업 호환 계약도 함께 검토하라.
+> 현재 수정 빌드 원본은 `.native-product-atowzz/Code Intelligence Validation.app`이며 교체 실행 대상은 `.native-product-e1e4tO/Code Intelligence Validation.app`이다. 실계정 프로필은 위 후속 기록을 먼저 확인하고 임의 복제/변경하지 마라. 이전 격리 claim은 `/private/tmp/civa-i21e3J/desktop-run-5mdAr2/.isolated-run.json`이다. 위 실행 명령으로 열되 원본 앱/프로필을 사용하지 마라. 최초 FAIL과 후속 PASS를 합치지 말고 기존 evidence를 보존하라. 최소 OS/새 기기와 Developer ID 검증은 미완료다. 현재 OAuth는 만료 시 재로그인을 요구하며 refresh token 저장·자동 갱신·회전은 아직 없다. **첫 작업은 기존 실패 GitHub project 1을 삭제하지 않고 새 분석으로 복구하는 UI를 제공하고, 실제 재분석에서 GIT_METADATA 이후 완료까지 검증하는 것이다.** checkpoint source 오류/중복 import/ANALYZING 잔류 상태를 함께 확인하라. 이후 실계정 연결/해제/재연결/권한 철회, 자동 갱신, 완료·취소 경합/강제 실패, 최소 OS·새 설치/업데이트 검증 순으로 범위를 나눠 진행하라. 테스트·실제 DB·실제 앱·실계정 증거를 구분하라. 새 기능에 schema 변경이 필요하면 V27 백업 호환 계약도 함께 검토하라.
 >
-> 사용자 지시대로 Codex 잔여 한도가 2% 이하가 되면 진행 중인 단위까지만 마치고 기존 Markdown과 이 프롬프트를 갱신한 후 별도 브랜치 commit/push/PR/merge로 마무리하라. 해당 조건 전 원격 발행은 하지 않는다. 병합은 보호 규칙을 우회하지 않고, GitHub Actions 금지와 충돌하면 차단 사유를 남긴다. 정식 배포 준비 전체가 끝나지 않았으면 완료라고 보고하지 마라.
+> 이번 세션은 Codex 잔여 2%에 도달해 진행 중인 가져오기/계정 표시 수정과 인계를 마무리했다. 다음 세션도 사용자 지시대로 Codex 잔여 한도가 2% 이하가 되면 진행 중인 단위까지만 마치고 기존 Markdown과 이 프롬프트를 갱신한 후 별도 브랜치 commit/push/PR/merge로 마무리하라. 해당 조건 전 원격 발행은 하지 않는다. 병합은 보호 규칙을 우회하지 않고, GitHub Actions 금지와 충돌하면 차단 사유를 남긴다. 정식 배포 준비 전체가 끝나지 않았으면 완료라고 보고하지 마라.
