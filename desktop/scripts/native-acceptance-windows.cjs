@@ -5,6 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { createRequire } = require('node:module');
+const { selectWindowsToolchain, cmakeConfigureArgs, pinKey } = require('./windows-toolchain.cjs');
 
 function tapCounts(output) {
   const counts = {};
@@ -38,14 +39,14 @@ function requireNativePass(result, counts) {
   for (const field of ['fail', 'cancelled', 'skipped', 'todo']) assert.equal(counts[field], 0, 'Skipped or failed native checks cannot pass');
 }
 
-function buildNative(cmake, native, build, owned, artifacts, env) {
+function buildNative(cmake, native, build, owned, artifacts, toolchain) {
   // Only public repository C++/CMake and OS toolchain output goes into this log.
   // Do not reuse this for npm, Electron, helper invocations, or test/runtime output.
-  const buildEnv = Object.fromEntries(Object.entries(env).filter(([key]) => /^(?:SystemRoot|windir|PATH|TEMP|TMP|USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|ProgramFiles(?:\(x86\))?|ProgramW6432|COMSPEC|PATHEXT|VSINSTALLDIR|VCINSTALLDIR|VCToolsInstallDir|WindowsSdkDir|WindowsSDKVersion|INCLUDE|LIB|LIBPATH)$/i.test(key)));
+  const buildEnv = toolchain.env;
   const fd = fs.openSync(path.join(artifacts, 'windows-native-build.log'), 'wx', 0o600);
   try {
     for (const [phase, args] of [
-      ['cmake-configure', ['-S', native, '-B', build, '-A', 'x64']],
+      ['cmake-configure', cmakeConfigureArgs(native, build, toolchain)],
       ['msvc-build', ['--build', build, '--config', 'Release']],
     ]) {
       fs.writeSync(fd, '[' + phase + ']\n');
@@ -73,11 +74,15 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
   const build = path.join(owned, 'native-build');
   const native = path.join(source, 'desktop', 'native', 'windows');
   assert.ok(path.isAbsolute(env.NATIVE_ACCEPTANCE_CMAKE || ''));
-  buildNative(env.NATIVE_ACCEPTANCE_CMAKE, native, build, owned, artifacts, env);
+  const toolchain = selectWindowsToolchain(env, owned);
+  // Pin the verified instance, MSVC version and SDK for pgvector and staging.
+  // The development environment itself never enters application/test processes.
+  env[pinKey] = toolchain.pin;
+  buildNative(env.NATIVE_ACCEPTANCE_CMAKE, native, build, owned, artifacts, toolchain);
   const runtime = path.join(owned, 'native-runtime');
   const helper = path.join(runtime, 'native', 'windows', 'codeintel-boundary.exe');
   fs.mkdirSync(path.dirname(helper), { recursive: true });
-  fs.copyFileSync(path.join(build, 'Release', 'codeintel-boundary.exe'), helper, fs.constants.COPYFILE_EXCL);
+  fs.copyFileSync(path.join(build, 'codeintel-boundary.exe'), helper, fs.constants.COPYFILE_EXCL);
   report.checks.push('current-source-msvc-x64-native-helper');
   const temporary = path.join(owned, 'native-test-temp'); fs.mkdirSync(temporary);
   const nativeEnv = { ...env, TEMP: temporary, TMP: temporary, CI_WINDOWS_BOUNDARY_TEST_RUNTIME: runtime };

@@ -27,6 +27,8 @@ $childWin32Error = $null
 $node = (Get-Command node.exe).Source
 $pwsh = (Get-Command pwsh.exe).Source
 $cmake = (Get-Command cmake.exe).Source
+$jdk = $env:JAVA_HOME
+if (-not $jdk -or -not [IO.Path]::IsPathFullyQualified($jdk) -or -not (Test-Path -LiteralPath (Join-Path $jdk 'bin\java.exe') -PathType Leaf) -or -not (Test-Path -LiteralPath (Join-Path $jdk 'bin\javac.exe') -PathType Leaf)) { throw 'Explicit installed JDK required' }
 $phase = 'standard-user-provisioning'
 try {
     $user = New-LocalUser -Name $name -Password $securePassword -AccountNeverExpires -PasswordNeverExpires -Description 'Disposable native acceptance only'
@@ -59,9 +61,13 @@ try {
         GITHUB_WORKSPACE = $env:GITHUB_WORKSPACE; RUNNER_TEMP = $private;
         CODE_INTELLIGENCE_BUILD_SEQUENCE = $env:CODE_INTELLIGENCE_BUILD_SEQUENCE;
         NATIVE_ACCEPTANCE_CMAKE = $cmake; PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1';
-        JAVA_HOME = $env:JAVA_HOME;
+        JAVA_HOME = $jdk;
         NATIVE_ACCEPTANCE_EXPECTED_SID = $sid; NATIVE_ACCEPTANCE_PARENT_PROFILE = $env:USERPROFILE;
-        PATH = (Join-Path $private 'node-runtime') + ';' + $env:PATH
+        # Only resolved executable directories and OS tools cross the user boundary.
+        # MSVC and SDK discovery runs later under the fresh standard-user token.
+        PATH = (@((Join-Path $private 'node-runtime'), (Split-Path -Parent $pwsh), (Split-Path -Parent $cmake),
+            (Join-Path $jdk 'bin'), (Join-Path $env:SystemRoot 'System32'), $env:SystemRoot,
+            (Join-Path $env:SystemRoot 'System32\Wbem'), (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0')) -join ';')
     }
     $config | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $private 'environment.json') -Encoding utf8
     $childScript = @'

@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
+const { selectWindowsToolchain } = require('./windows-toolchain.cjs');
 const { extractZip } = require('./windows-runtime-archive.cjs');
 const { parsePe, systemDll, inventory, validateClosure } = require('./windows-pe-policy.cjs');
 const SUPPLIES = require('./windows-runtime-supply.json');
@@ -42,6 +43,7 @@ function writeJson(file, value) { fs.writeFileSync(file, JSON.stringify(value, n
 async function provision(destination) {
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Windows x64 build host required');
   fresh(destination);
+  const toolchain = selectWindowsToolchain(process.env, destination);
   const downloads = path.join(destination, 'archives'); fs.mkdirSync(downloads);
   const unpack = async (name, target, select) => {
     const bytes = await download(name); fs.writeFileSync(path.join(downloads, name + '.zip'), bytes, { flag: 'wx' });
@@ -71,10 +73,10 @@ async function provision(destination) {
   const runtime = path.join(destination, 'runtime'); fs.mkdirSync(runtime);
   const jre = path.join(runtime, 'jre');
   command(path.join(jdk, 'bin', 'jlink.exe'), ['--add-modules', 'java.base,java.compiler,java.desktop,java.instrument,java.logging,java.management,java.naming,java.net.http,java.security.jgss,java.sql,jdk.crypto.ec,jdk.net,jdk.unsupported',
-    '--strip-debug', '--no-header-files', '--no-man-pages', '--compress=zip-6', '--output', jre], destination);
-  const env = { ...process.env, PGROOT: pg, JAVA_HOME: jdk, DOTNET_ROOT: dotnet, DOTNET_MULTILEVEL_LOOKUP: '0', DOTNET_CLI_TELEMETRY_OPTOUT: '1',
+    '--strip-debug', '--no-header-files', '--no-man-pages', '--compress=zip-6', '--output', jre], destination, toolchain.env);
+  const env = { ...toolchain.env, PGROOT: pg, JAVA_HOME: jdk, DOTNET_ROOT: dotnet, DOTNET_MULTILEVEL_LOOKUP: '0', DOTNET_CLI_TELEMETRY_OPTOUT: '1',
     DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1', DOTNET_CLI_HOME: path.join(destination, 'dotnet-home'), NUGET_PACKAGES: path.join(destination, 'nuget') };
-  command('nmake.exe', ['/NOLOGO', '/F', 'Makefile.win'], vector, env);
+  command(toolchain.make, ['/NOLOGO', '/F', 'Makefile.win'], vector, env);
   // No global installation, registry writes or service registration.
   copy(path.join(vector, 'vector.dll'), path.join(pg, 'lib', 'vector.dll'));
   copy(path.join(vector, 'vector.control'), path.join(pg, 'share', 'extension', 'vector.control'));
@@ -157,7 +159,7 @@ async function provision(destination) {
   validateClosure(entries);
   const provenance = { format: 1, sources, files, nuget, recipes: { garnet: 'net10.0/win-x64/self-contained/PublishSingleFile=false/PublishReadyToRun=false/RollForward=Disable', pgvector: 'MSVC x64 nmake Makefile.win PGROOT=pinned-PG16.10', jre: 'Temurin21 jlink' } };
   writeJson(path.join(runtime, 'windows-provenance.json'), provenance);
-  writeJson(path.join(destination, 'supply.json'), { format: 1, platform: 'win32', arch: 'x64', jdk, runtime, sources: SUPPLIES });
+  writeJson(path.join(destination, 'supply.json'), { format: 1, platform: 'win32', arch: 'x64', jdk, runtime, sources: SUPPLIES, toolchain: toolchain.pin });
   return { jdk, runtime };
 }
 if (require.main === module) provision(path.resolve(process.argv[2] || '')).then(() => console.log('Windows runtime supply prepared; native product acceptance still required.')).catch(error => { console.error(error); process.exitCode = 1; });

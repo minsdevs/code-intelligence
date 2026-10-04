@@ -4,6 +4,7 @@ const path = require('node:path');
 const { command, fresh, copy, copyTree, writeJson, digest } = require('./provision-windows-runtime.cjs');
 const { requireBuildSequence } = require('./runtime-stage.cjs');
 const { inventory, verifyWindowsRuntime } = require('./windows-pe-policy.cjs');
+const { selectWindowsToolchain, cmakeConfigureArgs, cmakeExecutable, pinKey } = require('./windows-toolchain.cjs');
 const SUPPLIES = require('./windows-runtime-supply.json');
 function stageWindowsRuntime({ desktop = path.resolve(__dirname, '..'), supply = process.env.CODE_INTELLIGENCE_WINDOWS_SUPPLY,
   buildSequence = process.env.CODE_INTELLIGENCE_BUILD_SEQUENCE } = {}) {
@@ -35,10 +36,13 @@ function stageWindowsRuntime({ desktop = path.resolve(__dirname, '..'), supply =
   for (const name of ['package.json', 'package-lock.json']) copy(path.join(root, 'analyzers', 'ts-analyzer', name), path.join(analyzer, name));
   npm(['ci', '--omit=dev', '--ignore-scripts'], analyzer);
   const nativeSource = path.join(desktop, 'native', 'windows'), nativeBuild = path.join(stageRoot, 'native-build-' + require('node:crypto').randomUUID());
-  command(env.NATIVE_ACCEPTANCE_CMAKE || 'cmake.exe', ['-S', nativeSource, '-B', nativeBuild, '-A', 'x64'], root, env);
-  command(env.NATIVE_ACCEPTANCE_CMAKE || 'cmake.exe', ['--build', nativeBuild, '--config', 'Release'], root, env);
+  if (typeof metadata.toolchain !== 'string' || (env[pinKey] && env[pinKey] !== metadata.toolchain)) throw new Error('Windows supply toolchain mismatch');
+  const toolchain = selectWindowsToolchain({ ...env, [pinKey]: metadata.toolchain }, stageRoot);
+  const cmake = cmakeExecutable(env, toolchain);
+  command(cmake, cmakeConfigureArgs(nativeSource, nativeBuild, toolchain), root, toolchain.env);
+  command(cmake, ['--build', nativeBuild, '--config', 'Release'], root, toolchain.env);
   const relative = 'native/windows/codeintel-boundary.exe';
-  copy(path.join(nativeBuild, 'Release', 'codeintel-boundary.exe'), path.join(incoming, relative));
+  copy(path.join(nativeBuild, 'codeintel-boundary.exe'), path.join(incoming, relative));
   const sourceFiles = fs.readdirSync(nativeSource).filter(name => /\.(?:cpp|inc)$/.test(name) || name === 'CMakeLists.txt').sort();
   const sourceDigest = digest(Buffer.concat(sourceFiles.flatMap(name => [Buffer.from(name + '\0'), fs.readFileSync(path.join(nativeSource, name))])));
   provenance.sources.boundary = { version: sourceDigest, sha256: sourceDigest, url: 'repository:desktop/native/windows', notice: 'notices/boundary.txt' };

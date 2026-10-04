@@ -19,15 +19,11 @@ foreach ($Identity in @($Sid, (New-Object Security.Principal.SecurityIdentifier(
   $Acl.AddAccessRule($Rule)
 }
 Set-Acl -LiteralPath $Private -AclObject $Acl
-$VsWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-if (-not (Test-Path -LiteralPath $VsWhere -PathType Leaf)) { throw 'MSVC x64 Build Tools with CMake are required' }
-$Vs = & $VsWhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-if ($LASTEXITCODE -ne 0 -or -not $Vs) { throw 'MSVC x64 toolchain unavailable' }
-$DevShell = Join-Path $Vs 'Common7\Tools\Launch-VsDevShell.ps1'
-& $DevShell -Arch amd64 -HostArch amd64 -SkipAutomaticLocation | Out-Null
-if (-not (Get-Command nmake.exe -ErrorAction SilentlyContinue)) { throw 'MSVC environment was not initialized' }
+# The Node provisioner shares the helper's verified x64 MSVC/SDK selection and
+# bounded developer environment; never initialize a second, implicit latest IDE.
+$Node = (Get-Command node.exe -CommandType Application).Source
 $Build = Join-Path $Private 'supply'
-& node (Join-Path $PSScriptRoot 'provision-windows-runtime.cjs') $Build
+& $Node (Join-Path $PSScriptRoot 'provision-windows-runtime.cjs') $Build
 if ($LASTEXITCODE -ne 0) { throw 'Windows supply preparation failed; retained private evidence' }
 # Publication is namespace placement of rebuildable output, not a durable user-data commit.
 Move-Item -LiteralPath $Build -Destination $Destination
