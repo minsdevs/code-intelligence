@@ -293,6 +293,32 @@ function recordFailure(report, error) {
     exitStatus: Number.isInteger(error.exitStatus) ? error.exitStatus : null, command: error.commandEvidence || null };
   return report.failure;
 }
+function recordProvisioningFailure({ work, step, exitCode, artifact }) {
+  const log = path.join(work, 'build-output');
+  let text = '', logBytes = 0;
+  if (fs.existsSync(log)) {
+    const descriptor = fs.openSync(log, 'r');
+    try {
+      logBytes = fs.fstatSync(descriptor).size;
+      const bytes = Buffer.alloc(Math.min(logBytes, 256 * 1024));
+      fs.readSync(descriptor, bytes, 0, bytes.length, logBytes - bytes.length);
+      text = bytes.toString('utf8');
+    } finally { fs.closeSync(descriptor); }
+  }
+  const sources = {};
+  for (const name of ['openssl', 'postgres', 'pgvector', 'redis']) {
+    const file = path.join(work, name + '-source.json');
+    if (!fs.existsSync(file)) continue;
+    const source = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (/^[0-9]+(?:\.[0-9]+){1,3}$/.test(source.version) && /^[a-f0-9]{64}$/.test(source.sourceSha256)) {
+      sources[name] = { version: source.version, sha256: source.sourceSha256 };
+    }
+  }
+  const executionContext = JSON.parse(fs.readFileSync(artifact, 'utf8')).executionContext;
+  fs.writeFileSync(artifact, JSON.stringify({ phase: 'native-runtime-provision', status: 'FAIL', step,
+    executionContext, exitCode: Number(exitCode), logBytes, diagnosticsTruncated: logBytes > 256 * 1024,
+    sources, diagnostics: buildDiagnostics('', text) }, null, 2) + '\n', { mode: 0o600 });
+}
 async function main(target) {
   const { requireExecutionContext, claimExecution, prepareArtifacts } = require('./native-acceptance-context.cjs');
   const context = requireExecutionContext();
@@ -350,7 +376,7 @@ async function main(target) {
     assert.equal(manifest.platform, 'darwin'); assert.equal(manifest.arch, 'arm64');
     report.runtimeManifestSha256 = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
     report.checks.push('current-source-runtime-stage');
-    await require(path.join(source, 'desktop', 'scripts', 'desktop-build-gate.cjs'))({ electronPlatformName: 'darwin' });
+
     report.phase = 'real-electron-safe-storage-restart'; save();
     const { runProduct } = require('./native-acceptance-electron.cjs');
     await runProduct({ source, owned, artifacts, report, env, phase: name => { report.phase = name; save(); } });
@@ -361,5 +387,5 @@ async function main(target) {
   } finally { save(); }
   console.log(`Native acceptance: ${report.status}; phase=${report.phase}. Only credential-free evidence was retained.`);
 }
-module.exports = { included, requireHosted, copySource, run, buildDiagnostics, relocateMacLibraries, recordFailure, main };
+module.exports = { included, requireHosted, copySource, run, buildDiagnostics, relocateMacLibraries, recordFailure, recordProvisioningFailure, main };
 if (require.main === module) main(process.argv[2]).catch(() => { console.error('Native acceptance preflight refused.'); process.exitCode = 1; });

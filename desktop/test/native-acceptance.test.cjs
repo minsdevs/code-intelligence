@@ -290,19 +290,20 @@ test('Windows policy evidence keeps public binary identity but rejects private o
 });
 
 test('macOS provisioning failure report bounds log reads and records source versions without raw text', t => {
-  const { spawnSync } = require('node:child_process');
+  const { recordProvisioningFailure } = require('../scripts/native-acceptance.cjs');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-provision-diagnostics-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const script = fs.readFileSync(path.join(__dirname, '../scripts/native-acceptance-macos.sh'), 'utf8');
-  const body = script.match(/node - "\$helper" "\$work" "\$step" "\$code" "\$artifacts\/provisioning.json" <<'NODE'\n([\s\S]*?)\nNODE/);
-  assert.ok(body, 'Failure-report heredoc remains directly testable without hosted provisioning');
-  fs.writeFileSync(path.join(root, 'build-output'), 'private-token\n'.repeat(30000) + "ld: library 'ssl' not found\n");
+  fs.writeFileSync(path.join(root, 'build-output'), "ld: library 'early' not found\n" + 'private-token\n'.repeat(30000) + "ld: library 'ssl' not found\n");
   fs.writeFileSync(path.join(root, 'redis-source.json'), JSON.stringify({ version: '8.10.2', sourceSha256: 'a'.repeat(64), sourceUrl: 'https://user:password@example.invalid' }));
+  fs.writeFileSync(path.join(root, 'postgres-source.json'), JSON.stringify({ version: '16.15/private-token', sourceSha256: 'b'.repeat(64) }));
+  fs.writeFileSync(path.join(root, 'openssl-source.json'), JSON.stringify({ version: '3.6.0', sourceSha256: 'private-token' }));
   const artifact = path.join(root, 'provisioning.json');
-  const result = spawnSync(process.execPath, ['-', path.join(__dirname, '../scripts/native-acceptance.cjs'), root, 'redis-build', '2', artifact], { input: body[1], encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
+  const executionContext = { kind: 'disposable-macos-vm', provider: 'tart-apple-virtualization' };
+  fs.writeFileSync(artifact, JSON.stringify({ status: 'RUNNING', executionContext }));
+  recordProvisioningFailure({ work: root, step: 'redis-build', exitCode: 2, artifact });
   const report = JSON.parse(fs.readFileSync(artifact, 'utf8'));
   assert.equal(report.status, 'FAIL'); assert.equal(report.step, 'redis-build'); assert.equal(report.exitCode, 2);
+  assert.deepEqual(report.executionContext, executionContext);
   assert.equal(report.logBytes, fs.statSync(path.join(root, 'build-output')).size);
   assert.equal(report.diagnosticsTruncated, true);
   assert.deepEqual(report.sources, { redis: { version: '8.10.2', sha256: 'a'.repeat(64) } });

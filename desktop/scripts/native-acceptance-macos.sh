@@ -26,31 +26,8 @@ on_exit() {
   code=$?
   if [[ "$code" != 0 ]]; then
     node - "$helper" "$work" "$step" "$code" "$artifacts/provisioning.json" <<'NODE'
-const fs = require('node:fs'), path = require('node:path');
-const [helper, work, step, code, artifact] = process.argv.slice(2);
-const log = path.join(work, 'build-output');
-let text = '', logBytes = 0;
-if (fs.existsSync(log)) {
-  const fd = fs.openSync(log, 'r');
-  try {
-    logBytes = fs.fstatSync(fd).size;
-    const bytes = Buffer.alloc(Math.min(logBytes, 256 * 1024));
-    fs.readSync(fd, bytes, 0, bytes.length, logBytes - bytes.length);
-    text = bytes.toString('utf8');
-  } finally { fs.closeSync(fd); }
-}
-const sources = {};
-for (const name of ['openssl', 'postgres', 'pgvector', 'redis']) {
-  const file = path.join(work, name + '-source.json');
-  if (!fs.existsSync(file)) continue;
-  const source = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (/^[0-9]+(?:\.[0-9]+){1,3}$/.test(source.version) && /^[a-f0-9]{64}$/.test(source.sourceSha256))
-    sources[name] = { version: source.version, sha256: source.sourceSha256 };
-}
-fs.writeFileSync(artifact, JSON.stringify({phase: 'native-runtime-provision', status: 'FAIL', step,
-  executionContext: JSON.parse(fs.readFileSync(artifact, 'utf8')).executionContext,
-  exitCode: Number(code), logBytes, diagnosticsTruncated: logBytes > 256 * 1024, sources,
-  diagnostics: require(helper).buildDiagnostics('', text)}, null, 2) + '\n');
+const [helper, work, step, exitCode, artifact] = process.argv.slice(2);
+require(helper).recordProvisioningFailure({ work, step, exitCode, artifact });
 NODE
   fi
   # Raw compiler text is private and never uploaded, even after a failed build.

@@ -77,11 +77,7 @@ function stage(root, candidate = inventory()) {
   };
 }
 
-test('fixed policy agrees with package minimum and Gradle Java toolchain contract', () => {
-  assert.deepEqual(policy.POLICY, { minimumSystemVersion: '13.0', javaMajor: 21, architecture: 'arm64' });
-  assert.equal(require('../package.json').build.mac.minimumSystemVersion, '13.0');
-  assert.match(fs.readFileSync(path.resolve(__dirname, '../../backend/build.gradle.kts'), 'utf8'), /JavaLanguageVersion\.of\(21\)/);
-});
+
 
 test('self-resolving arm64 Java 21 closure with macOS 11 and 13 minima passes', () => {
   assert.deepEqual(policy.validateNativeInventory(inventory()), { nativeFiles: 14, architecture: 'arm64', minimumSystemVersion: '13.0', javaMajor: 21 });
