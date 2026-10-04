@@ -21,12 +21,20 @@ gated x64 NSIS configuration. Windows native storage/runtime and installation re
 The earlier [backup/restore](docs/audit/backup-restore-integration-2026-10-03.md) and
 [cost integration](docs/audit/strict-ai-cost-integration-2026-10-03.md) records are preserved.
 
-A personal workspace that analyzes an entire GitHub repository, automatically
-discovers the technical areas that make up the project (Backend, Frontend,
-Database, Infrastructure, DevOps, Security, Testing, AI, …), and lets you
-explore its features, architecture, call flows, dependencies, history, design
-rationale, and alternatives — with an evidence-grounded, context-aware AI
-assistant.
+A macOS Apple Silicon analysis tool for understanding an unfamiliar repository,
+finding where a feature is implemented, and identifying code to check before a change.
+Start with a repository overview and searchable structured results, then explore a
+selected file or symbol's relationships and source retained for that analysis snapshot.
+Static relations are evidence-backed candidates, not proof of runtime behavior or absence
+of impact. Core exploration works without AI.
+
+Current product direction and implementation: [PRD](docs/multilanguage-plan-2026-10-02/01-prd.md)
+and [stages A–G](docs/multilanguage-plan-2026-10-02/11-first-implementation.md).
+Learning progress, growth reports and learning assignments are being removed; existing
+user records and historical migrations are preserved. Existing source encryption,
+backup/recovery, local import approval and AI request approval/cost controls are reused.
+Mind maps, broader languages, model subscription integrations and monetization are follow-ups.
+Windows work is deferred. Local app completion does not imply signed distribution.
 
 > **Historical RC record / internal testing.**
 > Phase 1–5 functionality is present, and the current RC adds local-folder
@@ -69,8 +77,8 @@ not a signed/notarized production distribution or an auto-update channel.
 | Frontend | React 19, TypeScript (strict), Vite, Tailwind CSS v4, TanStack Query, Zustand, React Flow |
 | Analyzer sidecar (Phase 2) | NestJS, ts-morph (TypeScript Compiler API), tree-sitter |
 | AI (Phase 3) | Provider-abstracted (OpenAI / Gemini), pgvector embeddings, evidence-grounded assistant |
-| Learning (Phase 4) | Notes with code refs, tasks + AI DRAFT approval, FTS/`pg_trgm`/vector hybrid search |
-| Advanced (Phase 5) | PR review (static findings + AI), playground (no clone execution), growth reports, static what-if |
+| Analysis records | Notes with code refs, review tasks, FTS/`pg_trgm`/vector hybrid search |
+| Advanced (Phase 5) | PR review (static findings + AI), playground (no clone execution), static what-if |
 
 ## Getting started
 
