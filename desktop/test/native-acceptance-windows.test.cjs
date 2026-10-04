@@ -65,6 +65,22 @@ test('Windows diagnostics remain bounded and cannot replace missing or failing T
   assert.throws(() => tapCounts(lines));
 });
 
+test('Windows failed TAP retains allowlisted primary causes while rejecting secret-valued fields', () => {
+  const tap = 'not ok 1 - private name\n  failureType: testCodeFailure\n  errorType: Error\n' +
+    "  error: 'Windows protected storage refused the operation.'\n  code: 'WINDOWS_STORAGE_REFUSED'\n" +
+    "  operator: 'rejects'\n  expected: 'private expected'\n  actual: 'private actual'\n" +
+    '  stack: |-\n    lose (C:\\private\\windows-storage.cjs:54:44)\n' +
+    'not ok 2 - private name\n  failureType: private failure\n  errorType: private type\n' +
+    '  error: private message\n  code: PRIVATE_SECRET\n  operator: private operation\n';
+  assert.deepEqual(tapDiagnostics(tap), [
+    { ordinal: 1, status: 'FAIL', sourceLocations: [{ file: 'windows-storage.cjs', line: 54, column: 44 }],
+      diagnostic: { code: 'WINDOWS_STORAGE_REFUSED', failureType: 'testCodeFailure', errorType: 'Error', operator: 'rejects', category: 'windows-storage' } },
+    { ordinal: 2, status: 'FAIL', sourceLocations: [] },
+  ]);
+  assert.deepEqual(tapDiagnostics(tap.replaceAll('\n', '\r\n')), tapDiagnostics(tap));
+  assert.equal(JSON.stringify(tapDiagnostics(tap)).includes('private'), false);
+});
+
 test('Windows child attestation requires exact fresh SID, actual nonadmin token, loaded profile and CurrentUser DPAPI', () => {
   const token = { elevated: false, serviceAccount: false, freshLocalUser: true, exactSid: true,
     administratorGroup: false, profileLoaded: true, currentUserDpapi: true };

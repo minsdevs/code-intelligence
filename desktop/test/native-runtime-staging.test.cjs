@@ -51,7 +51,7 @@ test('product staging follows relocated load edges, not original dylib install I
     const begin = source.indexOf('function createStageDestinationGuard(');
     const end = source.indexOf('\nfunction filesUnder(');
     assert.ok(begin >= 0 && end > begin);
-    const product = vm.runInNewContext(`${source.slice(begin, end)}\nconst guardStageDestination = createStageDestinationGuard(staging);\n({ copy, copyDynamicLibraries });`, {
+    const product = vm.runInNewContext(`${source.slice(begin, end)}\nconst guardStageDestination = createStageDestinationGuard(staging);\n({ copy, copyDynamicLibraries, guardStageDestination });`, {
       fs, path, process, nativePolicy: policy, staging, output: run,
     });
     const destination = path.join(staging, 'postgres/lib');
@@ -88,5 +88,33 @@ test('product staging follows relocated load edges, not original dylib install I
     fs.renameSync(ssl, ssl + '.hidden');
     assert.throws(() => product.copyDynamicLibraries([external], destination), error =>
       error instanceof policy.NativeRuntimePolicyError && error.findings.some(item => item.code === 'UNRESOLVED_COPY_DEPENDENCY'));
+    run('/usr/bin/install_name_tool', ['-add_rpath', '@loader_path', '-add_rpath', '@loader_path/absent',
+      path.join(destination, 'libssl.3.dylib')]);
+    const diagnosticStart = source.indexOf('function emitNativeStageClosure(');
+    const diagnosticEnd = source.indexOf('\nfunction hash(', diagnosticStart);
+    const diagnosticGuard = product.guardStageDestination;
+    const records = [];
+    const emit = vm.runInNewContext(source.slice(diagnosticStart, diagnosticEnd) + '\nemitNativeStageClosure', {
+      fs, path, Buffer, nativePolicy: policy, output: run,
+      guardStageDestination: diagnosticGuard,
+      process: { stderr: { write: line => records.push(line) } },
+    });
+    const failure = { code: 'UNRESOLVED_NATIVE_REFERENCE', file: 'postgres/lib/libssl.3.dylib', detail: '@loader_path/libcrypto.3.dylib' };
+    emit(new policy.NativeRuntimePolicyError([
+      { ...failure, file: '../private.dylib' }, { ...failure, detail: '/private/secret.dylib' },
+      { ...failure, detail: '@rpath/not-in-load-commands.dylib' },
+      { ...failure, file: 'postgres/lib/missing.dylib' }, failure,
+    ]), staging);
+    assert.equal(records.length, 1);
+    assert.deepEqual(JSON.parse(records[0].slice('NATIVE_STAGE_CLOSURE '.length)), {
+      file: failure.file, reference: failure.detail, rpaths: [{ kind: 'loader', directory: 'postgres/lib' }],
+    });
+    assert.equal(records[0].includes(scratch), false);
+    fs.symlinkSync(destination, path.join(staging, 'postgres/linked'));
+    emit(new policy.NativeRuntimePolicyError([{ ...failure, file: 'postgres/linked/libssl.3.dylib' }]), staging);
+    assert.equal(records.length, 1, 'no evidence from a linked ancestor');
+    records.length = 0;
+    emit(new policy.NativeRuntimePolicyError(Array(20).fill(failure)), staging);
+    assert.equal(records.length, 12, 'evidence is bounded before transaction cleanup');
   } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
 });

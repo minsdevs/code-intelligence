@@ -169,6 +169,29 @@ test('runtime command failures remain opaque and build diagnostics require expli
   });
 });
 
+test('native closure artifacts retain bounded staged edges but reject absolute paths and malformed records', () => {
+  const { buildDiagnostics } = require('../scripts/native-acceptance.cjs');
+  const edge = { file: 'jre/lib/libjli.dylib', reference: '@rpath/libjvm.dylib',
+    rpaths: [{ kind: 'loader', directory: 'jre/lib/server' }] };
+  const record = item => 'NATIVE_STAGE_CLOSURE ' + JSON.stringify(item) + '\n';
+  const rejected = [
+    { ...edge, file: '/private/libjli.dylib' }, { ...edge, file: 'jre/../../private/libjli.dylib' },
+    { ...edge, reference: '/Users/private/libjvm.dylib' }, { ...edge, reference: '@rpath/../../private.dylib' },
+    { ...edge, reference: '@loader_path/../../../../private.dylib' },
+    { ...edge, reference: '@rpath/libjvm.dylib\nprivate-secret' },
+    { ...edge, rpaths: [{ kind: 'loader', directory: '/private/directory' }] },
+    { ...edge, rpaths: [{ kind: 'private-kind', directory: 'jre/lib' }] },
+    { ...edge, rpaths: Array(17).fill(edge.rpaths[0]) },
+    { ...edge, privateKey: 'private-secret' }, { ...edge, file: 'jre/lib/' + 'x'.repeat(256) },
+  ];
+  const text = record(edge).repeat(20) + rejected.map(record).join('') + 'NATIVE_STAGE_CLOSURE {invalid json}\n';
+  assert.deepEqual(buildDiagnostics('', text).nativeClosure, [edge]);
+  assert.deepEqual(buildDiagnostics('', text.replaceAll('\n', '\r\n')).nativeClosure, [edge]);
+  assert.equal(JSON.stringify(buildDiagnostics('', text)).includes('private'), false);
+  const many = Array.from({ length: 20 }, (_, index) => ({ ...edge, file: 'jre/lib/lib' + index + '.dylib' }));
+  assert.deepEqual(buildDiagnostics(many.map(record).join('')).nativeClosure, many.slice(0, 12));
+});
+
 test('private native closure preserves transitive dylibs and runs without the build prefix', {
   skip: process.platform !== 'darwin' || process.arch !== 'arm64',
 }, t => {

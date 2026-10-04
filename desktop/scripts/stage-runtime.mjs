@@ -147,6 +147,45 @@ function commonDirectory(paths) {
   return segments[0].slice(0, Math.max(length, 1)).join(path.sep) || path.sep;
 }
 
+function emitNativeStageClosure(error, staging) {
+  if (!(error instanceof nativePolicy.NativeRuntimePolicyError)) return;
+  const safeRelative = value => typeof value === 'string' && value.length <= 256
+    && /^(?:jre|postgres|redis)\/[A-Za-z0-9_.+/-]+$/.test(value)
+    && value === path.posix.normalize(value) && !value.split('/').includes('..');
+  const safeReference = value => typeof value === 'string' && value.length <= 256
+    && /^@(loader_path|executable_path|rpath)\/[A-Za-z0-9_.+/-]+$/.test(value);
+  let emitted = 0;
+  for (const finding of error.findings) {
+    if (emitted >= 12) break;
+    if (finding.code !== 'UNRESOLVED_NATIVE_REFERENCE' || !safeRelative(finding.file) || !safeReference(finding.detail)) continue;
+    try {
+      const file = guardStageDestination(path.join(staging, finding.file));
+      const stat = fs.lstatSync(file);
+      if (!stat.isFile() || stat.nlink !== 1) continue;
+      const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW), magic = Buffer.alloc(4);
+      try { fs.readSync(fd, magic, 0, 4, 0); } finally { fs.closeSync(fd); }
+      if (!['cffaedfe', 'feedfacf', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca'].includes(magic.toString('hex'))) continue;
+      const metadata = nativePolicy.parseLoadCommands(output('otool', ['-arch', 'arm64', '-l', file]));
+      if (!metadata.dependencies.includes(finding.detail)) continue;
+      const rpaths = [];
+      for (const reference of metadata.rpaths.slice(0, 16)) {
+        const match = reference.match(/^@(loader_path|executable_path)(?:\/([A-Za-z0-9_.+/-]+))?$/);
+        if (!match || reference.length > 256) continue;
+        // An arbitrary dylib does not establish the executable of a dlopen caller.
+        if (match[1] === 'executable_path' && !/Mach-O 64-bit executable arm64\b/.test(output('file', ['-b', file]))) continue;
+        const directory = path.resolve(path.dirname(file), match[2] || '.');
+        const relative = path.relative(staging, directory);
+        if (!safeRelative(relative) || !fs.existsSync(directory)) continue;
+        guardStageDestination(directory);
+        if (!fs.lstatSync(directory).isDirectory()) continue;
+        rpaths.push({ kind: match[1] === 'loader_path' ? 'loader' : 'executable', directory: relative });
+      }
+      process.stderr.write('NATIVE_STAGE_CLOSURE ' + JSON.stringify({ file: finding.file, reference: finding.detail, rpaths }) + '\n');
+      emitted++;
+    } catch { /* Diagnostics must neither replace the gate failure nor expose tool stderr. */ }
+  }
+}
+
 function hash(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
@@ -247,12 +286,17 @@ const redisServer = process.env.REDIS_SERVER || output('which', ['redis-server']
 copy(redisServer, path.join(staging, 'redis', 'bin', 'redis-server'));
 copyDynamicLibraries([redisServer], path.join(staging, 'redis', 'lib'));
 
-nativePolicy.verifyNativeRuntime({ root: staging,
-  minimumSystemVersion: JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8')).build.mac.minimumSystemVersion,
-  requiredExecutables: ['jre/bin/java', ...requiredPgBinaries.map(name => path.relative(staging, path.join(postgresBin, name))), 'redis/bin/redis-server'],
-  requiredModules: ['jre/lib/libjli.dylib', 'jre/lib/libjava.dylib', 'jre/lib/server/libjvm.dylib',
-    ...['vector', 'pg_trgm'].map(name => path.relative(staging, path.join(postgresPkgLib, `${name}.dylib`)))],
-  postgresShare: path.relative(staging, postgresShare) });
+try {
+  nativePolicy.verifyNativeRuntime({ root: staging,
+    minimumSystemVersion: JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8')).build.mac.minimumSystemVersion,
+    requiredExecutables: ['jre/bin/java', ...requiredPgBinaries.map(name => path.relative(staging, path.join(postgresBin, name))), 'redis/bin/redis-server'],
+    requiredModules: ['jre/lib/libjli.dylib', 'jre/lib/libjava.dylib', 'jre/lib/server/libjvm.dylib',
+      ...['vector', 'pg_trgm'].map(name => path.relative(staging, path.join(postgresPkgLib, `${name}.dylib`)))],
+    postgresShare: path.relative(staging, postgresShare) });
+} catch (error) {
+  emitNativeStageClosure(error, staging);
+  throw error;
+}
 
 const manifest = {};
 for (const file of filesUnder(staging)) {

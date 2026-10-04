@@ -18,16 +18,44 @@ function tapCounts(output) {
 }
 
 function tapDiagnostics(output) {
-  // Never export TAP names, assertion values/messages, paths, or raw stacks.
-  // Fixed test basenames and numeric locations locate failures without disclosing paths.
+  // Only fixed enums/basenames and numeric locations cross the artifact boundary.
+  // Never export test names, assertion values, arbitrary messages, paths or stacks.
   const results = [];
+  const codes = new Set(['WINDOWS_STORAGE_REFUSED', 'BACKUP_NATIVE_CHANGED', 'ERR_ASSERTION',
+    'EACCES', 'EPERM', 'EBUSY', 'ENOENT', 'EEXIST', 'ENOTEMPTY', 'ENOSPC', 'EPIPE',
+    'ECONNRESET', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE', 'ERR_STREAM_DESTROYED',
+    'ERR_INVALID_ARG_TYPE', 'ERR_OUT_OF_RANGE',
+    ...['ARGUMENT', 'UNSUPPORTED', 'UNSAFE_PATH', 'MISSING', 'EXISTS', 'LIMIT', 'BUSY', 'FORMAT', 'INTEGRITY', 'KEY_UNAVAILABLE', 'SOURCE_CHANGED', 'IO'].map(code => 'BACKUP_ARCHIVE_' + code),
+    ...['INVALID', 'UNSAFE', 'CHANGED', 'STATE', 'LIMIT', 'BUSY', 'CLOSED', 'IO', 'TRANSITION'].map(code => 'BACKUP_SOURCE_SWAP_' + code),
+    ...['OPEN', 'CONNECT', 'WRITE', 'FIN', 'PREFIX', 'LENGTH', 'BODY', 'EOF', 'OUTPUT', 'PROCESS'].map(phase => 'WINDOWS_JAVA_PROBE_' + phase + '_FAILED'),
+    ...['READ', 'CONSTRUCT', 'WRITE', 'PROCESS'].map(phase => 'WINDOWS_ACL_TAMPER_' + phase + '_FAILED')]);
+  const messages = new Map([
+    ['Windows protected boundary refused the operation.', 'windows-boundary'],
+    ['Windows protected storage refused the operation.', 'windows-storage'],
+    ['Windows private IPC unavailable.', 'windows-ipc'],
+    ['Backup native storage changed.', 'backup-native'],
+  ]);
   const entries = [...output.matchAll(/^(not )?ok (\d+) - [^\r\n]*(?:\r?\n|$)/gm)];
   for (let index = 0; index < entries.length && index < 128; index++) {
     const entry = entries[index];
     const detail = output.slice(entry.index + entry[0].length, entries[index + 1]?.index ?? output.length);
-    const lines = [...detail.matchAll(/(windows-native-boundary|windows-unix-server|backup-windows|service-transport-windows)\.test\.cjs:(\d{1,6}):(\d{1,6})/g)];
-    results.push({ ordinal: Number(entry[2]), status: entry[1] ? 'FAIL' : 'PASS',
-      sourceLocations: lines.slice(0, 8).map(match => ({ file: `${match[1]}.test.cjs`, line: Number(match[2]), column: Number(match[3]) })) });
+    const lines = [...detail.matchAll(/((?:windows-native-boundary|windows-unix-server|backup-windows|service-transport-windows)\.test\.cjs|(?:windows-native-boundary|windows-storage|windows-unix-server|backup-windows-io)\.cjs):(\d{1,6}):(\d{1,6})/g)];
+    const evidence = { ordinal: Number(entry[2]), status: entry[1] ? 'FAIL' : 'PASS',
+      sourceLocations: lines.slice(0, 8).map(match => ({ file: match[1], line: Number(match[2]), column: Number(match[3]) })) };
+    if (entry[1]) {
+      const diagnostic = {};
+      const field = name => detail.match(new RegExp('^  ' + name + ': [\"\']?([^\r\n\"\']+)[\"\']?\r?$', 'm'))?.[1];
+      const code = field('code'); if (codes.has(code)) diagnostic.code = code;
+      const failure = field('failureType');
+      if (['testCodeFailure', 'hookFailed', 'uncaughtException', 'unhandledRejection', 'cancelledByParent', 'testTimeoutFailure'].includes(failure)) diagnostic.failureType = failure;
+      const type = field('errorType');
+      if (['Error', 'AssertionError', 'TypeError', 'RangeError', 'SyntaxError'].includes(type)) diagnostic.errorType = type;
+      const operator = field('operator');
+      if (['strictEqual', 'notStrictEqual', 'deepStrictEqual', 'notDeepStrictEqual', 'throws', 'rejects', 'doesNotThrow', 'doesNotReject', 'match', 'ok'].includes(operator)) diagnostic.operator = operator;
+      const category = messages.get(field('error')); if (category) diagnostic.category = category;
+      if (Object.keys(diagnostic).length) evidence.diagnostic = diagnostic;
+    }
+    results.push(evidence);
   }
   return results;
 }
@@ -102,7 +130,7 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
     requireNativePass(result, nativeReport.counts);
     nativeReport.status = 'PASS';
   } finally {
-    // Raw TAP/stderr remain private; only numeric summaries/source locations cross the boundary.
+    // Raw TAP/stderr remain private; only bounded enums and source locations are published.
     fs.writeFileSync(path.join(artifacts, 'windows-native.json'), JSON.stringify(nativeReport, null, 2) + '\n');
   }
   report.checks.push('real-standard-user-ntfs-leases-job-object-security');

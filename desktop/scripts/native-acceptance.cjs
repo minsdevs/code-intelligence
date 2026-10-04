@@ -60,6 +60,31 @@ function copySource(source, destination) {
   for (const root of ROOTS) visit(root);
   return { files: count, sha256: hash.digest('hex') };
 }
+function nativeClosureDiagnostics(text) {
+  const records = [], seen = new Set();
+  const relative = value => typeof value === 'string' && value.length <= 256
+    && /^(?:postgres|redis|jre)\/[A-Za-z0-9_+./-]+$/.test(value)
+    && path.posix.normalize(value) === value && !value.endsWith('/');
+  const keys = (value, expected) => value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).length === expected.length && expected.every(key => Object.hasOwn(value, key));
+  for (const match of text.matchAll(/^NATIVE_STAGE_CLOSURE (\{[^\r\n]{1,8192}\})\r?$/gm)) {
+    if (records.length === 12) break;
+    let item; try { item = JSON.parse(match[1]); } catch { continue; }
+    if (!keys(item, ['file', 'reference', 'rpaths']) || !relative(item.file)
+        || typeof item.reference !== 'string' || item.reference.length > 256
+        || !/^@(loader_path|executable_path|rpath)\/[A-Za-z0-9_+./-]+$/.test(item.reference)
+        || !Array.isArray(item.rpaths) || item.rpaths.length > 16) continue;
+    const slash = item.reference.indexOf('/'), token = item.reference.slice(0, slash), suffix = item.reference.slice(slash + 1);
+    if (suffix.endsWith('/') || suffix.startsWith('/') || path.posix.normalize(suffix) !== suffix) continue;
+    if (token === '@rpath' ? suffix.startsWith('../')
+      : !relative(path.posix.join(path.posix.dirname(item.file), suffix))) continue;
+    if (item.rpaths.some(entry => !keys(entry, ['kind', 'directory']) || !['loader', 'executable'].includes(entry.kind)
+      || !(['.', 'postgres', 'redis', 'jre'].includes(entry.directory) || relative(entry.directory)))) continue;
+    const encoded = JSON.stringify(item); if (seen.has(encoded)) continue;
+    seen.add(encoded); records.push(item);
+  }
+  return records;
+}
 // Build-only public compiler IDs/locations are retained; raw text stays private.
 function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
   const text = stdout + '\n' + stderr;
@@ -131,7 +156,8 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
     rejectedDriverFlags: ['-mmacosx-version-min=13.0', '-Wl,-headerpad_max_install_names']
       .filter(flag => text.split(/\r?\n/).some(line => /^ld: (?:unknown|unrecognized) (?:options?|arguments?):/.test(line) && line.split(/\s+/).includes(flag))),
   };
-  return { lastBuildStep: steps.at(-1) || null, categories, compilerCodes, policyCodes, javaSymbols, missingPackages, locations, nativeLink };
+  return { lastBuildStep: steps.at(-1) || null, categories, compilerCodes, policyCodes, javaSymbols, missingPackages, locations, nativeLink,
+    nativeClosure: nativeClosureDiagnostics(text) };
 }
 function run(command, args, cwd, env = process.env, options = {}) {
   const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout: 35 * 60 * 1000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
