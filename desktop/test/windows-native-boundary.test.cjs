@@ -119,12 +119,30 @@ test('guardian death closes its non-inherited Job and kills a live descendant', 
   for (let i = 0; i < 100 && !fs.existsSync(pidFile); i++) await new Promise(resolve => setTimeout(resolve, 50));
   assert.ok(fs.existsSync(pidFile)); const descendant = Number(fs.readFileSync(pidFile, 'utf8'));
   assert.equal(messages[0]?.kind, 'STARTED'); const parent = Number(messages[0].pid);
-  const closed = once(child, 'close'); child.kill(); await closed;
-  for (const pid of [parent, descendant]) {
-    let alive = true;
-    for (let i = 0; i < 100; i++) { try { process.kill(pid, 0); } catch { alive = false; break; } await new Promise(resolve => setTimeout(resolve, 50)); }
-    assert.equal(alive, false);
+  assert.ok(Number.isSafeInteger(parent) && parent > 0 && parent <= 0xffffffff);
+  assert.ok(Number.isSafeInteger(descendant) && descendant > 0 && descendant <= 0xffffffff && descendant !== parent);
+  const guardianClosed = once(child, 'close');
+  const observer = ownChild(spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File',
+    path.join(__dirname, 'fixtures', 'WaitOwnedProcesses.ps1'), '-ParentId', String(parent), '-DescendantId', String(descendant),
+    '-ExpectedImageBase64', Buffer.from(process.execPath, 'utf8').toString('base64')],
+  { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, timeout: 25000 }));
+  let stderr = ''; let observerError = false;
+  observer.stderr.on('data', bytes => { stderr += bytes.toString('utf8'); });
+  for (const stream of [observer.stdin, observer.stdout, observer.stderr]) stream.once('error', () => { observerError = true; });
+  const observerClosed = new Promise(resolve => {
+    observer.once('error', () => { observerError = true; });
+    observer.once('close', (code, signal) => resolve({ code, signal }));
+  });
+  let pinned; let killed;
+  try { pinned = await reply(observer).catch(() => null); }
+  finally { killed = child.kill(); await guardianClosed; }
+  const observed = await observerClosed;
+  if (pinned !== 'PINNED' || observed.code !== 0 || observed.signal !== null || observerError) {
+    const code = stderr.match(/^(WINDOWS_GUARDIAN_WAIT_(?:OPEN|IMAGE|LIVE|TIMEOUT|WAIT|CLOSE|PROCESS)_FAILED)\r?$/m)?.[1]
+      ?? 'WINDOWS_GUARDIAN_WAIT_PROCESS_FAILED';
+    throw Object.assign(new Error(code), { code });
   }
+  assert.equal(killed, true);
 });
 test('native TLS material supports a real pinned loopback handshake and rejects mismatched keys', { skip: !enabled, timeout: 30000 }, async t => {
   const { boundary, root } = fixture(t);

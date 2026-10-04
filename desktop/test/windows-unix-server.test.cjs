@@ -6,7 +6,7 @@ const { PassThrough, Writable } = require('node:stream');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { spawn, spawnSync } = require('node:child_process');
+const { spawn } = require('node:child_process');
 const { createWindowsUnixServer } = require('../src/windows-unix-server.cjs');
 const { createWindowsBoundary } = require('../src/windows-native-boundary.cjs');
 const { createSourceBroker } = require('../src/source-broker.cjs');
@@ -71,7 +71,7 @@ test('native shutdown requires explicit owned-leaf cleanup acknowledgement', asy
 const runtime = process.env.CI_WINDOWS_BOUNDARY_TEST_RUNTIME;
 const native = process.platform === 'win32' && !!runtime;
 function probeFailure(stderr) {
-  return stderr.match(/^(WINDOWS_JAVA_PROBE_(?:PATH|OPEN|CONNECT(?:_(?:ACCESS_DENIED|REFUSED|INVALID_ARGUMENT|INVALID_PATH|PATH_NOT_FOUND|ADDRESS_UNAVAILABLE|TIMED_OUT|OTHER))?|WRITE|FIN|PREFIX|LENGTH|BODY|EOF|OUTPUT)_FAILED)\r?$/m)?.[1]
+  return stderr.match(/^(WINDOWS_JAVA_PROBE_(?:INPUT|STDIN|STDOUT|STDERR|PATH|OPEN|CONNECT(?:_(?:ACCESS_DENIED|REFUSED|INVALID_ARGUMENT|INVALID_PATH|PATH_NOT_FOUND|ADDRESS_UNAVAILABLE|TIMED_OUT|OTHER))?|WRITE|FIN|PREFIX|LENGTH|BODY|EOF|OUTPUT)_FAILED)\r?$/m)?.[1]
     ?? 'WINDOWS_JAVA_PROBE_PROCESS_FAILED';
 }
 test('Java probe diagnostics accept only fixed phase and connect subreason enums', () => {
@@ -86,18 +86,22 @@ test('Java probe diagnostics accept only fixed phase and connect subreason enums
 
 function probe(socketPath, request, mode = 'normal') {
   assert.ok(process.env.JAVA_HOME, 'Native AF_UNIX acceptance requires Java 21 JAVA_HOME');
-  const child = spawn(path.join(process.env.JAVA_HOME, 'bin', 'java.exe'),
+  const child = spawn(path.join(process.env.JAVA_HOME, 'bin', process.platform === 'win32' ? 'java.exe' : 'java'),
     [path.join(__dirname, 'fixtures', 'PrivateUnixProbe.java'), mode],
     { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, timeout: 15000 });
-  const chunks = []; let stderr = ''; let written;
+  const chunks = []; let stderr = ''; let written; let pipeFailure;
   const didWrite = new Promise(resolve => { written = resolve; });
   child.stdout.on('data', b => chunks.push(b)); child.stderr.on('data', b => { stderr += b; if (stderr.includes('WRITTEN')) written(); });
   const result = new Promise((resolve, reject) => {
+    for (const [phase, stream] of [['STDIN', child.stdin], ['STDOUT', child.stdout], ['STDERR', child.stderr]]) {
+      stream.once('error', () => { pipeFailure ??= 'WINDOWS_JAVA_PROBE_' + phase + '_FAILED'; });
+    }
     child.once('error', reject);
     child.once('close', (code, signal) => {
       try {
-        if (signal !== null || code !== 0) {
-          const failure = probeFailure(stderr);
+        if (signal !== null || code !== 0 || pipeFailure) {
+          const primary = probeFailure(stderr);
+          const failure = primary === 'WINDOWS_JAVA_PROBE_PROCESS_FAILED' && pipeFailure ? pipeFailure : primary;
           throw Object.assign(new Error(failure), { code: failure });
         }
         const bytes = Buffer.concat(chunks); resolve(bytes.length ? JSON.parse(bytes) : null);
@@ -116,14 +120,6 @@ test('real Windows AF_UNIX interoperates with Java21 FIN/EOF, Unicode, full-size
     boundary.createDirectory(directory);
     let source; let ai;
     t.after(async () => { await ai?.close(); await source?.close(); fs.rmSync(directory, { recursive: true, force: true }); });
-    // Temporary discriminator: argv is not the production UTF-8 bootstrap transport.
-    const argv = spawnSync(path.join(process.env.JAVA_HOME, 'bin', 'java.exe'),
-      [path.join(__dirname, 'fixtures', 'PrivateUnixProbe.java'), 'argv-check', directory, Buffer.from(directory).toString('base64')],
-      { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: 15000 });
-    if (argv.error || argv.signal !== null || ![0, 37].includes(argv.status)) {
-      throw Object.assign(new Error('WINDOWS_JAVA_PROBE_PROCESS_FAILED'), { code: 'WINDOWS_JAVA_PROBE_PROCESS_FAILED' });
-    }
-    t.diagnostic('NATIVE_JAVA_ARGV_' + (argv.status === 0 ? 'MATCH' : 'MISMATCH'));
     const bytes = Buffer.alloc(2 * 1024 * 1024, 65); const hash = crypto.createHash('sha256').update(bytes).digest('hex');
     let puts = 0;
     const token = 'a'.repeat(64);

@@ -28,9 +28,6 @@ ok 1 - ${privateValue}
   ---
   duration_ms: 1
   ...
-# NATIVE_JAVA_ARGV_MISMATCH
-# NATIVE_JAVA_ARGV_PRIVATE_${privateValue}
-# NATIVE_JAVA_ARGV_MATCH ${privateValue}
 not ok 2 - ${privateValue}
   ---
   location: 'C:\\${privateValue}\\windows-native-boundary.test.cjs:41:1'
@@ -49,7 +46,7 @@ not ok 2 - ${privateValue}
 `;
   const evidence = tapDiagnostics(tap);
   assert.deepEqual(evidence, [
-    { ordinal: 1, status: 'PASS', sourceLocations: [], observations: ['java-argv-mismatch'] },
+    { ordinal: 1, status: 'PASS', sourceLocations: [] },
     { ordinal: 2, status: 'FAIL', sourceLocations: [{ file: 'windows-native-boundary.test.cjs', line: 41, column: 1 }, { file: 'windows-unix-server.test.cjs', line: 43, column: 10 }] },
   ]);
   assert.equal(JSON.stringify(evidence).includes(privateValue), false);

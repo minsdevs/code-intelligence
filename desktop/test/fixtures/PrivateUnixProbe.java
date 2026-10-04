@@ -3,7 +3,6 @@ import java.net.UnixDomainSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Arrays;
 
 /** Disposable Java 21 peer for the real Windows AF_UNIX bridge tests. */
@@ -25,14 +24,12 @@ class PrivateUnixProbe {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args[0].equals("argv-check")) {
-            String expected = new String(Base64.getDecoder().decode(args[2]), StandardCharsets.UTF_8);
-            System.exit(args[1].equals(expected) ? 0 : 37);
-        }
-        byte[] request = System.in.readAllBytes();
-        String phase = "PATH";
+        byte[] request = null;
+        String phase = "INPUT";
         boolean failed = false;
         try {
+            request = System.in.readAllBytes();
+            phase = "PATH";
             // Production socket paths arrive as UTF-8 private bootstrap bytes,
             // not through the Java launcher's platform-dependent argv decoding.
             ByteBuffer input = ByteBuffer.wrap(request);
@@ -82,7 +79,7 @@ class PrivateUnixProbe {
             System.err.println("WINDOWS_JAVA_PROBE_" + phase + reason + "_FAILED");
             failed = true;
         } finally {
-            Arrays.fill(request, (byte) 0);
+            if (request != null) Arrays.fill(request, (byte) 0);
         }
         if (failed) System.exit(1);
     }
