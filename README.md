@@ -235,6 +235,12 @@ Main owns the encrypted source vault and private source broker. Java receives on
 version2 JSON+EOF bootstrap for both AI and source capabilities, never environment fallback.
 Backup quiescence closes backend/analyzer, drains the broker and closes the vault before
 source export/swap. Failed drain retains safety ownership and prevents ordinary exit.
+The native product scenario drives Settings backup, restore and restoration of the
+pre-replacement recovery checkpoint through the real trusted IPC and storage pipeline.
+It checks database snapshots, encrypted source contents, refusal of the old API token,
+service resumption and persistence after restarting the process. Only the OS file-picker
+selection is a single-use controlled fixture; the report does not claim native picker
+interaction or replace PostgreSQL, the vault, archive IO or quiescence with test adapters.
 Source enrollment has its own immutable authenticated marker, independent of paid-AI
 fresh-install eligibility; missing source keys or markers are never silently regenerated.
 Existing local data does not grant a new paid-AI enrollment exemption.
@@ -245,6 +251,9 @@ dependent official Garnet executable is not shipped. PE architecture/import clos
 checksums, provenance and notices are verified before native helper execution. Windows
 release packaging remains blocked pending reviewed native product evidence, signed
 installer/update, clean interactive Windows11, power-loss and provider/license gates.
+Windows JRE linking excludes the pinned JDK's compatibility copies of allowlisted inbox
+UCRT and API-set DLLs. App-local MSVC redistributables remain included and byte-identical;
+the system-DLL shadow, architecture and transitive import gates are not relaxed.
 
 The native-acceptance.yml workflow runs on fresh hosted machines, on trusted same-repository
 PRs and explicit manual dispatch. It exercises normal Electron startup rather than

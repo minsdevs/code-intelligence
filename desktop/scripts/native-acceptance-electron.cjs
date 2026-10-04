@@ -204,6 +204,87 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await perform(() => window.dispose(), 30000, 'NATIVE_WINDOW_DISPOSE_TIMEOUT');
     report.checks.push(`${label}-three-native-window-sizes`);
   };
+  const selectedArchive = (file, roots, directory = false) => {
+    assert.ok(path.isAbsolute(file), 'Native backup selection must be absolute');
+    const actual = fs.realpathSync(file), stat = fs.lstatSync(file);
+    assert.equal(stat.isSymbolicLink(), false);
+    assert.ok(directory ? stat.isDirectory() : stat.isFile() && stat.nlink === 1 && file.endsWith('.cibackup'));
+    assert.ok(roots.some(root => {
+      const relative = path.relative(fs.realpathSync(root), actual);
+      return relative !== '' && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
+    }), 'Native backup selection must belong to this disposable run');
+    return actual;
+  };
+  const withArchivePicker = async (kind, file, action) => {
+    const selected = selectedArchive(file, kind === 'backup' ? [owned] : [owned, report.productDataRoot], kind === 'backup');
+    // Only the OS picker result is controlled. UI confirmation, trusted IPC,
+    // quiescence, PostgreSQL, encrypted source vault and archive IO remain real.
+    const picker = await perform(() => app.evaluateHandle(({ dialog }, { kind, selected }) => {
+      const original = dialog.showOpenDialog;
+      const title = kind === 'backup' ? 'Choose where to save an encrypted backup' : 'Choose an encrypted backup from this installation';
+      const property = kind === 'backup' ? 'openDirectory' : 'openFile';
+      let calls = 0;
+      const choose = async (...args) => {
+        const options = args.at(-1);
+        if (calls || options?.title !== title || options.properties?.length !== 1 || options.properties[0] !== property
+          || (kind === 'restore' && (options.filters?.length !== 1 || options.filters[0].extensions?.length !== 1
+            || options.filters[0].extensions[0] !== 'cibackup'))) throw new Error('NATIVE_ARCHIVE_PICKER_REFUSED');
+        calls++;
+        return { canceled: false, filePaths: [selected] };
+      };
+      dialog.showOpenDialog = choose;
+      return { restore() {
+        if (dialog.showOpenDialog !== choose) throw new Error('NATIVE_ARCHIVE_PICKER_REPLACED');
+        dialog.showOpenDialog = original;
+        return calls;
+      } };
+    }, { kind, selected }));
+    let failure, result;
+    try { result = await action(); } catch (error) { failure = error; }
+    try { assert.equal(await bounded(picker.evaluate(value => value.restore()), 5000, 'NATIVE_PICKER_CLOSE_TIMEOUT'), 1); }
+    catch (error) { failure ||= error; }
+    try { await bounded(picker.dispose(), 5000, 'NATIVE_PICKER_CLOSE_TIMEOUT'); } catch (error) { failure ||= error; }
+    if (failure) throw failure;
+    return result;
+  };
+  const readyAfterMaintenance = async () => {
+    const status = await perform(() => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()));
+    assert.equal(status.ready, true); assert.equal(status.error, null); assert.equal(status.recoveryOnly, false);
+    assert.equal(status.aiOff, true); assert.equal(status.backupAvailable, true); assert.equal(status.restoreAvailable, true);
+    assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
+  };
+  const restoreArchive = async (file, expectedSource, expectedSnapshot) => {
+    const recovery = path.join(report.productDataRoot, 'recovery');
+    const before = new Set(fs.readdirSync(recovery));
+    const oldToken = await perform(() => page.evaluate(() => window.codeIntelligenceDesktop.apiToken));
+    await navigate('/settings');
+    await withArchivePicker('restore', file, async () => {
+      await perform(() => page.getByRole('button', { name: /^(Restore backup|백업 복원)$/ }).click());
+      await perform(() => expect(page.getByRole('alert')).toContainText(/Restore replaces|현재 로컬 DB와 저장소가 교체/));
+      // Production resume rotates credentials and reloads the renderer before
+      // replying to the old IPC caller. Observe that real navigation, not a
+      // substituted restore return value or the now-destroyed JS context.
+      await perform(() => Promise.all([
+        page.waitForEvent('domcontentloaded', { timeout: deadline.limit(120000) }),
+        page.getByRole('button', { name: /^(Confirm restore|복원 확인)$/ }).click(),
+      ]), 120000, 'NATIVE_RESTORE_TIMEOUT');
+      await perform(() => expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible());
+      await readyAfterMaintenance();
+    });
+    const revoked = await perform(() => page.evaluate(async oldToken => {
+      const desktop = window.codeIntelligenceDesktop;
+      const response = await fetch(desktop.apiBaseUrl + '/api/projects', {
+        credentials: 'include', headers: { 'X-Code-Intelligence-Token': oldToken },
+      });
+      return { changed: desktop.apiToken !== oldToken, status: response.status };
+    }, oldToken));
+    assert.equal(revoked.changed, true); assert.ok([401, 403].includes(revoked.status), 'Pre-restore API authority must be refused');
+    assert.equal((await api('/api/projects/' + projectId)).currentSnapshot.id, expectedSnapshot);
+    await sourceContent(expectedSource, expectedSnapshot);
+    const created = fs.readdirSync(recovery).filter(name => !before.has(name));
+    assert.equal(created.length, 1, 'Restore must retain its pre-replacement recovery checkpoint');
+    return selectedArchive(path.join(recovery, created[0], 'checkpoint.cibackup'), [recovery]);
+  };
   let failure;
   try {
     phase('real-app-first-start'); await launch();
@@ -260,6 +341,20 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.equal((await api(`/api/projects/${projectId}`)).currentSnapshot.id, snapshotId);
     await sourceContent(first, snapshotId);
     report.checks.push('native-safeStorage-decrypt-after-process-restart', 'real-database-and-encrypted-source-persistence');
+    phase('real-main-backup');
+    report.backupRestore = { status: 'RUNNING', filePicker: 'controlled-single-use-selection', nativePickerInteraction: false };
+    const destination = path.join(owned, 'native-backup-destination'); fs.mkdirSync(destination, { mode: 0o700 });
+    await navigate('/settings');
+    const backupFile = await withArchivePicker('backup', destination, async () => {
+      await perform(() => page.getByRole('button', { name: /^(Create backup|백업 생성)$/ }).click());
+      const result = page.locator('dd').filter({ hasText: /\.cibackup$/ });
+      await perform(() => expect(result).toHaveCount(1, { timeout: deadline.limit(120000) }), 120000, 'NATIVE_BACKUP_TIMEOUT');
+      await readyAfterMaintenance();
+      return selectedArchive((await perform(() => result.textContent())).trim(), [destination]);
+    });
+    assert.equal((await api('/api/projects/' + projectId)).currentSnapshot.id, snapshotId);
+    await sourceContent(first, snapshotId);
+    report.checks.push('real-main-quiescent-backup-and-resume');
     phase('synthetic-reanalysis'); fs.writeFileSync(sourceFile, second, { mode: 0o600 });
     await perform(() => page.getByRole('button', { name: '상태 새로고침', exact: true }).click());
     await perform(() => page.getByRole('button', { name: '변경 사항 미리보기', exact: true }).click());
@@ -274,6 +369,17 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.notEqual(nextSnapshot, snapshotId);
     await sourceContent(second, nextSnapshot);
     report.checks.push('real-preview-approved-reanalysis-source-navigation');
+    phase('real-main-restore');
+    const recoveryFile = await restoreArchive(backupFile, first, snapshotId);
+    report.checks.push('real-main-restore-db-source-and-revoke-old-api-authority');
+    phase('real-main-recovery-checkpoint-restore');
+    await restoreArchive(recoveryFile, second, nextSnapshot);
+    report.checks.push('real-main-recovery-checkpoint-restores-pre-replacement-db-and-source');
+    phase('post-restore-process-restart'); await close(); await launch();
+    assert.equal((await api('/api/projects/' + projectId)).currentSnapshot.id, nextSnapshot);
+    await sourceContent(second, nextSnapshot);
+    report.checks.push('restored-db-and-encrypted-source-survive-process-restart');
+    report.backupRestore.status = 'PASS';
     phase('synthetic-delete'); await api(`/api/projects/${projectId}`, 'DELETE');
     assert.deepEqual(await api('/api/projects'), []);
     await navigate('/projects');
@@ -286,6 +392,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.equal(pageErrors, 0, 'Renderer errors occurred');
     phase('native-clean-shutdown'); await close(); report.checks.push('native-clean-shutdown');
   } catch (error) {
+    if (report.backupRestore?.status === 'RUNNING') report.backupRestore.status = 'FAIL';
     failure = error; recordFailure(report, error);
     phase(report.failure.phase); // Persist the primary before SDK cleanup can stall.
   } finally {
