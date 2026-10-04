@@ -48,8 +48,8 @@ async function cacheCompatibility({ source, runtime, owned, env, run, report }) 
     while (Date.now() < deadline) { if (cache.stopped()) throw new Error('GARNET_EXITED'); if (await transport.redisReady()) { ready = true; break; } await new Promise(resolve => setTimeout(resolve, 200)); }
     assert.ok(ready, 'Real TLS+AUTH Garnet startup required');
     const material = transport.materials.redis;
-    await negativeConnection({ port: ports.redis, ca: material.pem, encrypted: true, command: '*1\r\n$4\r\nPING\r\n', expectErrorReply: true });
-    await negativeConnection({ port: ports.redis, ca: material.pem, encrypted: true, command: '*2\r\n$4\r\nAUTH\r\n$5\r\nwrong\r\n', expectErrorReply: true });
+    await negativeConnection({ port: ports.redis, ca: material.caPem, encrypted: true, command: '*1\r\n$4\r\nPING\r\n', expectErrorReply: true });
+    await negativeConnection({ port: ports.redis, ca: material.caPem, encrypted: true, command: '*2\r\n$4\r\nAUTH\r\n$5\r\nwrong\r\n', expectErrorReply: true });
     await negativeConnection({ port: ports.redis, encrypted: false, command: '*1\r\n$4\r\nPING\r\n' });
     await negativeConnection({ port: ports.redis, encrypted: true });
     const powershell = path.join(env.SystemRoot || env.SYSTEMROOT, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');

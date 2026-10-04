@@ -37,8 +37,11 @@ test('pinned TLS rejects a different service before sending HTTP and uses the cu
   const f = await fixture(t), client = f.transport.backend;
   const wrong = createPinnedClient(f.transport.materials.analyzer, new URL(client.origin).port * 1,
     { 'X-Code-Intelligence-Token': 'must-not-be-sent' });
-  t.after(() => wrong.close());
+  const wrongPin = createPinnedClient({ ...f.transport.materials.backend, pin: '0'.repeat(64) },
+    new URL(client.origin).port * 1, { 'X-Code-Intelligence-Token': 'must-not-be-sent' });
+  t.after(() => Promise.all([wrong.close(), wrongPin.close()]));
   await assert.rejects(wrong.request(client.origin + '/private'));
+  await assert.rejects(wrongPin.request(client.origin + '/private'));
   assert.deepEqual(f.requests, []);
   assert.equal((await client.request(client.origin + '/health')).status, 204);
   f.rotate();
@@ -93,5 +96,19 @@ test('failed startup closes resources and removes only its own material director
   await assert.rejects(createServiceTransport({ userData: root,
     ports: { backend: 0, analyzer: 1, postgres: 2, redis: 3 }, getApiToken: () => 'token' }));
   assert.deepEqual(fs.readdirSync(root), ['unrelated']);
+});
+
+test('real Electron accepts the service CA while refusing another service and a changed leaf pin', {
+  skip: process.platform === 'win32',
+}, async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-electron-tls-test-')));
+  fs.chmodSync(root, 0o700);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const environment = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+  delete environment.NODE_OPTIONS;
+  const execute = require('node:util').promisify(require('node:child_process').execFile);
+  await execute(require('electron'), [path.join(__dirname, 'fixtures/electron-service-tls.cjs'), root], {
+    env: environment, timeout: 60000, maxBuffer: 128 * 1024,
+  });
 });
 

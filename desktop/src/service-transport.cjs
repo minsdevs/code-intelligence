@@ -130,7 +130,7 @@ function fixedUrl(origin, raw) {
 function createPinnedClient(material, port, headers = {}) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) fail();
   const origin = `https://${HOST}:${port}`;
-  const agent = new https.Agent({ ca: material.pem, rejectUnauthorized: true,
+  const agent = new https.Agent({ ca: material.caPem, rejectUnauthorized: true,
     checkServerIdentity: peerCheck(material), maxCachedSessions: 0 });
   const pending = new Map(); let closing;
   return Object.freeze({
@@ -174,7 +174,7 @@ function createPinnedClient(material, port, headers = {}) {
 async function redisPing(material, port, password, signal) {
   return new Promise(resolve => {
     if (signal?.aborted) { resolve(false); return; }
-    const socket = tls.connect({ host: HOST, port, ca: material.pem, rejectUnauthorized: true,
+    const socket = tls.connect({ host: HOST, port, ca: material.caPem, rejectUnauthorized: true,
       checkServerIdentity: peerCheck(material), minVersion: 'TLSv1.2' });
     let response = '', finished = false;
     const abort = () => finish(false);
@@ -229,20 +229,32 @@ async function createServiceTransport({ userData, ports, getApiToken, windowsBou
   const x509 = require('@peculiar/x509');
   const algorithm = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]) };
   const materials = {};
-  // Separate keys prevent one sidecar from impersonating another service.
+  const now = Date.now(), notBefore = new Date(now - 60000), notAfter = new Date(now + 365 * 86400000);
+  // Each service has a separate trust root. Sidecars receive no CA signing key.
   for (const name of ['postgres', 'redis', 'analyzer', 'backend']) {
+    const caKeys = await crypto.webcrypto.subtle.generateKey(algorithm, false, ['sign', 'verify']);
+    const authority = await x509.X509CertificateGenerator.createSelfSigned({
+      serialNumber: `01${crypto.randomBytes(15).toString('hex')}`, name: `CN=Code Intelligence ${name} CA`,
+      notBefore, notAfter, signingAlgorithm: algorithm, keys: caKeys, extensions: [
+        new x509.BasicConstraintsExtension(true, 0, true),
+        new x509.KeyUsagesExtension(x509.KeyUsageFlags.keyCertSign | x509.KeyUsageFlags.cRLSign, true),
+        await x509.SubjectKeyIdentifierExtension.create(caKeys.publicKey, false, crypto.webcrypto)
+      ]
+    }, crypto.webcrypto);
     const keys = await crypto.webcrypto.subtle.generateKey(algorithm, true, ['sign', 'verify']);
-    const certificate = await x509.X509CertificateGenerator.createSelfSigned({
-      serialNumber: `01${crypto.randomBytes(15).toString('hex')}`, name: `CN=Code Intelligence ${name}`,
-      notBefore: new Date(Date.now() - 60000), notAfter: new Date(Date.now() + 365 * 86400000),
-      signingAlgorithm: algorithm, keys, extensions: [
+    const certificate = await x509.X509CertificateGenerator.create({
+      serialNumber: `01${crypto.randomBytes(15).toString('hex')}`, subject: `CN=Code Intelligence ${name}`,
+      issuer: authority.subject, notBefore, notAfter, publicKey: keys.publicKey,
+      signingKey: caKeys.privateKey, signingAlgorithm: algorithm, extensions: [
         new x509.BasicConstraintsExtension(false, undefined, true),
         new x509.KeyUsagesExtension(x509.KeyUsageFlags.digitalSignature | x509.KeyUsageFlags.keyEncipherment, true),
         new x509.ExtendedKeyUsageExtension(['1.3.6.1.5.5.7.3.1'], true),
-        new x509.SubjectAlternativeNameExtension([{ type: 'ip', value: HOST }])
+        new x509.SubjectAlternativeNameExtension([{ type: 'ip', value: HOST }]),
+        await x509.SubjectKeyIdentifierExtension.create(keys.publicKey, false, crypto.webcrypto),
+        await x509.AuthorityKeyIdentifierExtension.create(caKeys.publicKey, false, crypto.webcrypto)
       ]
     }, crypto.webcrypto);
-    const pem = certificate.toString('pem');
+    const pem = certificate.toString('pem'), caPem = authority.toString('pem');
     const der = Buffer.from(await crypto.webcrypto.subtle.exportKey('pkcs8', keys.privateKey));
     keyBytes.add(der);
     let keyPem;
@@ -251,9 +263,10 @@ async function createServiceTransport({ userData, ports, getApiToken, windowsBou
       keyPem = Buffer.from('-----BEGIN ' + 'PRIVATE KEY-----\n' + der.toString('base64').match(/.{1,64}/g).join('\n') + '\n-----END ' + 'PRIVATE KEY-----\n');
       keyBytes.add(keyPem);
       const cert = await write(name + '.crt', pem), key = await write(name + '.key', keyPem);
+      const ca = await write(name + '.ca.crt', caPem);
       const pin = crypto.createHash('sha256').update(new crypto.X509Certificate(pem).raw).digest('hex');
       if (!matchesCertificate(pem, pin)) fail();
-      materials[name] = Object.freeze({ cert, key, pem, pin });
+      materials[name] = Object.freeze({ cert, key, pem, pin, ca, caPem });
     } finally { der.fill(0); keyBytes.delete(der); keyPem?.fill(0); keyBytes.delete(keyPem); }
   }
   const analyzerToken = crypto.randomBytes(32).toString('hex');
@@ -265,7 +278,16 @@ async function createServiceTransport({ userData, ports, getApiToken, windowsBou
       AuthenticationMode: 'Password', Password: redisPassword, EnableLua: true, LuaTransactionMode: true,
       DisablePubSub: false, EnableStorageTier: false, EnableAOF: false, Recover: false,
       LogMemorySize: '64m', IndexMemorySize: '8m', EnableDebugCommand: 'no', EnableModuleCommand: 'no' }))
-    : await write('redis.conf', `bind ${HOST}\nprotected-mode yes\nport 0\ntls-port ${ports.redis}\ntls-cert-file ${JSON.stringify(materials.redis.cert)}\ntls-key-file ${JSON.stringify(materials.redis.key)}\ntls-ca-cert-file ${JSON.stringify(materials.redis.cert)}\ntls-auth-clients no\nrequirepass ${redisPassword}\n`);
+    : await write('redis.conf', `bind ${HOST}
+protected-mode yes
+port 0
+tls-port ${ports.redis}
+tls-cert-file ${JSON.stringify(materials.redis.cert)}
+tls-key-file ${JSON.stringify(materials.redis.key)}
+tls-ca-cert-file ${JSON.stringify(materials.redis.ca)}
+tls-auth-clients no
+requirepass ${redisPassword}
+`);
   backend = createPinnedClient(materials.backend, ports.backend, () => ({ 'X-Code-Intelligence-Token': getApiToken() }));
   analyzer = createPinnedClient(materials.analyzer, ports.analyzer, { Authorization: 'Bearer ' + analyzerToken });
   const values = {
@@ -274,14 +296,14 @@ async function createServiceTransport({ userData, ports, getApiToken, windowsBou
     'spring.ssl.bundle.pem.desktopbackend.keystore.certificate': pathToFileURL(materials.backend.cert).href,
     'spring.ssl.bundle.pem.desktopbackend.keystore.private-key': pathToFileURL(materials.backend.key).href,
     'spring.data.redis.ssl.enabled': 'true', 'spring.data.redis.ssl.bundle': 'desktopredis',
-    'spring.ssl.bundle.pem.desktopredis.truststore.certificate': pathToFileURL(materials.redis.cert).href,
+    'spring.ssl.bundle.pem.desktopredis.truststore.certificate': pathToFileURL(materials.redis.ca).href,
     'server.servlet.session.cookie.secure': 'true'
   };
   const backendConfig = await write('backend.properties', Object.entries(values).map(([key, value]) => key + '=' + value).join('\n') + '\n');
   return Object.freeze({ directory, materials, hba, redisConfig, redisPassword, backendConfig,
     backendConfigUrl: pathToFileURL(backendConfig).href, analyzerToken, backend, analyzer,
-    jdbcUrl: `jdbc:postgresql://${HOST}:${ports.postgres}/codeintel?sslmode=verify-full&sslrootcert=${encodeURIComponent(materials.postgres.cert)}`,
-    postgresEnvironment: Object.freeze({ PGSSLMODE: 'verify-full', PGSSLROOTCERT: materials.postgres.cert }),
+    jdbcUrl: `jdbc:postgresql://${HOST}:${ports.postgres}/codeintel?sslmode=verify-full&sslrootcert=${encodeURIComponent(materials.postgres.ca)}`,
+    postgresEnvironment: Object.freeze({ PGSSLMODE: 'verify-full', PGSSLROOTCERT: materials.postgres.ca }),
     redisReady() {
       check(); const pending = redisPing(materials.redis, ports.redis, redisPassword, redisAbort.signal);
       redisPending.add(pending); pending.finally(() => redisPending.delete(pending)); return pending;

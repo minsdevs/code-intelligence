@@ -234,7 +234,7 @@ async function fixture(t, options = {}) {
   function redisRequest(parts) {
     return new Promise((resolve, reject) => {
       const socket = require('node:tls').connect({ host: '127.0.0.1', port: ports.redis,
-        ca: transport.materials.redis.pem, rejectUnauthorized: true }); let text = '', authenticated = false;
+        ca: transport.materials.redis.caPem, rejectUnauthorized: true }); let text = '', authenticated = false;
       socket.setTimeout(3000, () => socket.destroy(new Error('Synthetic Redis timeout')));
       socket.on('error', () => reject(new Error('Synthetic Redis unavailable')));
       socket.once('secureConnect', () => socket.write(
