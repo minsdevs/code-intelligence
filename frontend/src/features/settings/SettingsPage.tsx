@@ -123,7 +123,7 @@ export default function SettingsPage() {
   })
   const accountQuery = useQuery({
     queryKey: ['account-profile'], queryFn: getMe, retry: false,
-    enabled: githubQuery.data?.githubId != null,
+    enabled: githubQuery.data?.identityType === 'GITHUB' && githubQuery.data.githubId != null,
   })
   const refreshGithub = async () => {
     await Promise.all([
@@ -246,7 +246,7 @@ export default function SettingsPage() {
               <dd className="text-ink">{githubQuery.data.connected ? t('settings.githubConnected') : githubQuery.data.reauthenticationReason ? 'GitHub 재인증 필요' : '로컬 모드 · GitHub 미연결'}</dd>
               {githubQuery.data.githubId != null && <>
                 <dt className="text-ink-muted">GitHub 계정</dt>
-                <dd className="break-all text-ink">{accountQuery.data?.login ? `@${accountQuery.data.login}` : `GitHub ID ${githubQuery.data.githubId ?? '확인 중'}`}</dd>
+                <dd className="break-all text-ink">{githubQuery.data.identityType === 'GITHUB' && accountQuery.data?.login ? `@${accountQuery.data.login}` : `GitHub ID ${githubQuery.data.githubId ?? '확인 중'}`}</dd>
               </>}
             </dl>
             {githubQuery.data.reauthenticationReason && <p role="status" className="mt-3 text-[12px] text-ink-muted">

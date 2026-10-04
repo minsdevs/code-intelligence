@@ -9,6 +9,8 @@ import type { RuntimeStatus } from '../../desktop'
 import { I18nProvider } from '../../lib/i18n'
 import SettingsPage from './SettingsPage'
 
+let accountLogin = 'fixture-user'
+let githubIdentityType = 'LOCAL_LINKED'
 let reauthenticationReason: string | null = null
 let oauthAvailable = true
 let initiallyConnected = true
@@ -91,6 +93,8 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 beforeEach(() => {
   window.localStorage.clear()
+  accountLogin = 'fixture-user'
+  githubIdentityType = 'LOCAL_LINKED'
   reauthenticationReason = null
   oauthAvailable = true
   initiallyConnected = true
@@ -152,11 +156,11 @@ beforeEach(() => {
             maxContextTokens: 8000,
           })))
       }
-      if (path === '/api/auth/me') return jsonResponse({ authenticated: true, login: 'fixture-user', name: 'Fixture', avatarUrl: null, credentialKind: 'OAUTH', oauthAvailable })
+      if (path === '/api/auth/me') return jsonResponse({ authenticated: true, login: accountLogin, name: 'Fixture', avatarUrl: null, credentialKind: 'OAUTH', oauthAvailable })
       if (path === '/api/auth/github/connection') {
         const disconnected = !initiallyConnected || requests.some((request) => request.path === path && request.method === 'DELETE')
         return jsonResponse({
-          identityType: disconnected ? 'LOCAL' : 'LOCAL_LINKED',
+          identityType: disconnected ? 'LOCAL' : githubIdentityType,
           connected: !disconnected && !reauthenticationReason,
           reauthenticationReason: disconnected ? null : reauthenticationReason,
           githubId: disconnected ? null : 42,
@@ -196,6 +200,19 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(requests.some((request) => request.method === 'DELETE')).toBe(true))
   })
 
+  it('uses the linked GitHub ID instead of treating a local profile login as a GitHub username', async () => {
+    accountLogin = 'local'
+    renderSettings()
+    expect(await screen.findByText('GitHub ID 42')).toBeInTheDocument()
+    expect(screen.queryByText('@local')).not.toBeInTheDocument()
+  })
+
+  it('retains the username for a GitHub-only identity', async () => {
+    githubIdentityType = 'GITHUB'
+    renderSettings()
+    expect(await screen.findByText('@fixture-user')).toBeInTheDocument()
+  })
+
   it('offers reauthentication and disconnect for an expired linked account', async () => {
     reauthenticationReason = 'TOKEN_EXPIRED'
     renderSettings()
@@ -207,7 +224,7 @@ describe('SettingsPage', () => {
 
   it('offers login after a confirmed account switch and preserves local data', async () => {
     renderSettings()
-    expect(await screen.findByText('@fixture-user')).toBeInTheDocument()
+    expect(await screen.findByText('GitHub ID 42')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '계정 전환' }))
     expect(screen.getByText(/계정을 전환하려면 현재 GitHub 연결/)).toBeInTheDocument()
     expect(requests.some((request) => request.method === 'DELETE')).toBe(false)
