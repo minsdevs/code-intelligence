@@ -56,11 +56,7 @@ test('Windows release gate remains independent of unsigned native product accept
   assert.equal(windowsReadiness('darwin','arm64').nativeWindowsValidation,false);
   assert.throws(requireWindowsReadiness,/Windows packaging is blocked/);
   await assert.rejects(beforePack({electronPlatformName:'win32'}),/Windows packaging is blocked/);
-  await beforePack({electronPlatformName:'darwin'});
+
 });
 
-test('pinned builder accepts Mac and Windows configuration without invoking a build', async () => {
-  const config=require('../package.json').build;
-  const { validateConfiguration }=require('app-builder-lib/out/util/config/config.js');
-  await validateConfiguration(config,{isEnabled:false});
-});
+

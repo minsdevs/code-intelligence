@@ -8,8 +8,8 @@
     "test": "node --test test/*.test.cjs",
     "stage": "node scripts/stage-runtime.mjs",
     "start": "electron .",
-    "pack:mac": "npm run stage && electron-builder --mac dir",
-    "dist:mac": "npm run stage && electron-builder --mac dmg zip",
+    "pack:mac": "npm run stage && electron-builder --mac dir --arm64 --publish never --config.mac.identity=- --config.mac.notarize=false",
+    "dist:mac": "npm run stage && electron-builder --mac dmg zip --arm64 --publish never",
     "check:windows": "node scripts/windows-readiness.cjs",
     "pack:win": "npm run check:windows && electron-builder --win dir --x64 --publish never",
     "dist:win": "npm run check:windows && electron-builder --win nsis --x64 --publish never"
@@ -21,6 +21,11 @@
   "devDependencies": {
     "electron": "44.4.5",
     "electron-builder": "26.15.3"
+  },
+  "overrides": {
+    "app-builder-lib@26.15.3": {
+      "@electron/get": "file:../../scripts/builder-downloader"
+    }
   },
   "build": {
     "appId": "dev.codeintelligence.desktop",
@@ -42,6 +47,10 @@
       "target": ["dmg", "zip"],
       "category": "public.app-category.developer-tools",
       "hardenedRuntime": true,
+      "type": "distribution",
+      "forceCodeSigning": true,
+      "notarize": true,
+      "sign": "./scripts/sign-macos-runtime.cjs",
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist"

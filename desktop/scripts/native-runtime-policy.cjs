@@ -10,6 +10,7 @@ const POLICY = Object.freeze({ minimumSystemVersion: '13.0', javaMajor: 21, arch
 const LIMITS = Object.freeze({ files: 100000, natives: 4096, fileBytes: 256 * 1024 * 1024,
   outputBytes: 1024 * 1024, depth: 64, findings: 1000 });
 const MACHO = new Set(['feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca']);
+function isMachOHeader(bytes) { return bytes.length === 4 && MACHO.has(bytes.toString('hex')); }
 const LOADS = new Set(['LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB', 'LC_REEXPORT_DYLIB', 'LC_LOAD_UPWARD_DYLIB', 'LC_LAZY_LOAD_DYLIB', 'LC_PREBOUND_DYLIB']);
 const PG_EXECUTABLES = Object.freeze(['postgres', 'initdb', 'pg_isready', 'psql', 'createdb', 'pg_dump', 'pg_restore']);
 const JRE_MODULES = Object.freeze(['jre/lib/libjli.dylib', 'jre/lib/libjava.dylib', 'jre/lib/server/libjvm.dylib']);
@@ -353,7 +354,7 @@ function verifyNativeRuntime({ root, minimumSystemVersion, requiredExecutables, 
         fs.readSync(fd, magic, 0, 4, 0);
         if (stamp(fs.fstatSync(fd, { bigint: true })) !== stamp(stat)) invalid('NATIVE_CHANGED', rel);
       } finally { fs.closeSync(fd); }
-      if (!MACHO.has(magic.toString('hex'))) {
+      if (!isMachOHeader(magic)) {
         if (LIBRARY_NAME.test(rel)) invalid('UNSUPPORTED_LIBRARY_FORMAT', rel);
         if (magic.toString('hex') === '7f454c46' && !required.includes(rel)) invalid('FOREIGN_NATIVE_FORMAT', rel);
         continue;
@@ -389,4 +390,4 @@ function verifyNativeRuntime({ root, minimumSystemVersion, requiredExecutables, 
   return validateNativeInventory({ minimumSystemVersion, release, native, requiredExecutables: required, requiredModules: modules });
 }
 
-module.exports = Object.freeze({ POLICY, NativeRuntimePolicyError, parseLoadCommands, validateNativeInventory, verifyDependencyCopy, verifyNativeRuntime, verifyPostgresExtensions });
+module.exports = Object.freeze({ POLICY, NativeRuntimePolicyError, isMachOHeader, parseLoadCommands, validateNativeInventory, verifyDependencyCopy, verifyNativeRuntime, verifyPostgresExtensions });
