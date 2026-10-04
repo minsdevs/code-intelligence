@@ -755,6 +755,38 @@ class AiDesktopCostFlowIntegrationTest {
                     .as("Only the running disposable Testcontainer may be connected")
                     .isTrue();
             assertThat(postgres.getHost()).isIn("localhost", "127.0.0.1");
+            var tls = postgres.execInContainer(
+                    "sh",
+                    "-ec",
+                    "openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=desktop-fixture "
+                            + "-addext subjectAltName=IP:127.0.0.1 -keyout /tmp/desktop-fixture.key -out /tmp/desktop-fixture.crt "
+                            + "2>/dev/null; chown postgres:postgres /tmp/desktop-fixture.key; chmod 600 /tmp/desktop-fixture.key; "
+                            + "psql -v ON_ERROR_STOP=1 -U \"$1\" -d \"$2\" "
+                            + "-c \"ALTER SYSTEM SET ssl_cert_file = '/tmp/desktop-fixture.crt'\" "
+                            + "-c \"ALTER SYSTEM SET ssl_key_file = '/tmp/desktop-fixture.key'\" "
+                            + "-c \"ALTER SYSTEM SET ssl = 'on'\" -c \"SELECT pg_reload_conf()\"",
+                    "desktop-tls",
+                    postgres.getUsername(),
+                    postgres.getDatabaseName());
+            assertThat(tls.getExitCode()).as("Owned test PostgreSQL TLS setup").isZero();
+            org.awaitility.Awaitility.await()
+                    .atMost(Duration.ofSeconds(10))
+                    .until(() -> postgres.execInContainer(
+                                    "psql",
+                                    "-U",
+                                    postgres.getUsername(),
+                                    "-d",
+                                    postgres.getDatabaseName(),
+                                    "-Atc",
+                                    "SHOW ssl")
+                            .getStdout()
+                            .trim()
+                            .equals("on"));
+            Path postgresRootCert = directory.resolve("postgres-root.crt");
+            byte[] postgresCertificate =
+                    postgres.copyFileFromContainer("/tmp/desktop-fixture.crt", input -> input.readAllBytes());
+            Files.write(postgresRootCert, postgresCertificate);
+            Files.setPosixFilePermissions(postgresRootCert, PosixFilePermissions.fromString("rw-------"));
             // Ubuntu's /usr/bin/psql resolves to pg_wrapper, which requires its symlink name.
             // Pass the real PostgreSQL 16 binary from the CI image to the strict main adapter.
             Path psql = executable(List.of(
@@ -773,6 +805,8 @@ class AiDesktopCostFlowIntegrationTest {
                             INSTALLATION,
                             "psqlPath",
                             psql.toString(),
+                            "postgresRootCert",
+                            postgresRootCert.toString(),
                             "connection",
                             Map.of(
                                     "host",

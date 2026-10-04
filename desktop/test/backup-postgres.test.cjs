@@ -469,7 +469,7 @@ test('real isolated PostgreSQL typed export and trigger-respecting staging round
   assert.match(sourceDb || '', /^ci_backup_stage_[0-9a-f]{16,32}$/); assert.match(targetDb || '', /^ci_backup_stage_[0-9a-f]{16,32}$/);
   assert.notEqual(sourceDb, targetDb); const port = Number(process.env.CI_BACKUP_PG_TEST_PORT);
   assert(Number.isInteger(port) && port > 1024 && port <= 65535);
-  const env = { PGPASSWORD: process.env.CI_BACKUP_PG_TEST_PASSWORD };
+  const env = { PGPASSWORD: process.env.CI_BACKUP_PG_TEST_PASSWORD, PGSSLMODE: 'verify-full', PGSSLROOTCERT: process.env.PGSSLROOTCERT };
   if (process.env.CI_BACKUP_PG_TEST_LIBRARY) env.DYLD_LIBRARY_PATH = process.env.CI_BACKUP_PG_TEST_LIBRARY;
   const options = database => ({ psqlPath, migrationRoot: awaitableRoot, installationId: INSTALLATION, mode: 'staging',
     connection: { host: '127.0.0.1', port, user: process.env.CI_BACKUP_PG_TEST_USER, database }, env });

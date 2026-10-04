@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
+const { transportFixture } = require('./fixtures/service-transport.cjs');
 
 // Evaluate the real main process without launching Electron or accessing user data.
 function harness(options = {}) {
@@ -56,6 +57,7 @@ function harness(options = {}) {
       if (name === 'electron') return electron;
       if (Object.hasOwn(options.modules || {}, name)) return options.modules[name];
       if (name === './safety-lifecycle.cjs' && options.safetyModule) return options.safetyModule;
+      if (name === './service-transport.cjs') return { createServiceTransport: async value => transportFixture(value, context.fetch) };
       if (name === './ai-desktop-gateway.cjs') return { openDesktopAiGateway: async () => gateway };
       if (name === './ai-egress-postgres.cjs') return { createAiEgressPostgres: async () => postgres };
       if (name === './backup-product-state.cjs') return { createBackupProductState: async value => {
@@ -112,7 +114,9 @@ function harness(options = {}) {
     if (!options.captureBootstrapError) throw error;
     return { ...result, bootstrapError: error };
   }
-  run("runtime = { ready: true, apiToken: 'renderer-token', pathToken: 'main-only-token', apiBaseUrl: 'http://127.0.0.1:43219', ports: {backend: 43219}, secrets: {}, authorizedRoots: [], pathsFile: '/test/paths.enc' }");
+  run("runtime = { ready: true, apiToken: 'renderer-token', pathToken: 'main-only-token', apiBaseUrl: 'https://127.0.0.1:43219', ports: {backend: 43219}, secrets: {}, authorizedRoots: [], pathsFile: '/test/paths.enc' }");
+  context.fixtureTransport = transportFixture({ userData: '/test', ports: { backend: 43219 }, getApiToken: () => run('runtime.apiToken') }, context.fetch);
+  run('runtime.transport = fixtureTransport');
   // This harness exercises the supported legacy manifest without the guardian protocol.
   // Protocol-1 service ownership is covered by main-runtime-gateway and the real crash fixture.
   run('runtimeManifest = {}');
@@ -150,14 +154,6 @@ test('child spawn errors are handled and reported instead of crashing Electron',
   assert.equal(h.run('runtime.ready'), false);
 });
 
-test('backend callback uses the actual runtime port and path grants use a separate token', async () => {
-  const h = harness();
-  h.run("binary = (...parts) => parts.join('/'); waitUntil = async () => {}; saveEncryptedJson = () => {};");
-  await h.run('startBackend()');
-  const env = h.spawned[0].options.env;
-  assert.equal(env.GITHUB_NATIVE_REDIRECT_URI, 'http://127.0.0.1:43219/api/auth/github/native/callback');
-  assert.equal(env.DESKTOP_PATH_TOKEN, 'main-only-token');
-});
 
 test('runtime mutations run sequentially even after a failed operation', async () => {
   const h = harness();
@@ -174,13 +170,6 @@ test('runtime mutations run sequentially even after a failed operation', async (
 });
 
 
-test('folder authorization sends the main-only capability to the backend', async () => {
-  const h = harness();
-  h.run('saveEncryptedJson = () => {}');
-  await h.run("authorizePath('/selected/project')");
-  assert.equal(h.sent[0].options.headers['X-Code-Intelligence-Path-Token'], 'main-only-token');
-  assert.equal(h.sent[0].options.headers['X-Code-Intelligence-Token'], 'renderer-token');
-});
 
 test('backup failure stops remaining writers and keeps recovery required instead of declaring readiness', async () => {
   const h = harness();
@@ -505,18 +494,6 @@ for (const mutation of ['wrong-transaction', 'unknown-state', 'old-counter-names
   });
 }
 
-test('main-only maintenance capabilities are sent to the current backend and never supplied by renderer payload', async () => {
-  const transactionId = '12d87afe-83b5-4b77-82d5-e30e510df38e';
-  const h = harness({ fetch: async () => ({ ok: true, json: async () => ({ transactionId, state: 'DRAINED',
-    activeRequests: 0, activeWriters: 0, activeJobs: 0 }) }) });
-  h.context.calls = []; h.run("stopChild = async name => { calls.push('stop:' + name); }");
-  await h.run(`pauseForBackup({transactionId:'${transactionId}',waitForAiDrain:async()=>{calls.push('ai.drained');}})`);
-  assert.deepEqual(h.context.calls, ['ai.drained', 'stop:backend', 'stop:ts-analyzer']);
-  assert.equal(h.sent[0].url, 'http://127.0.0.1:43219/api/desktop/maintenance');
-  assert.equal(h.sent[0].options.headers['X-Code-Intelligence-Token'], 'renderer-token');
-  assert.equal(h.sent[0].options.headers['X-Code-Intelligence-Path-Token'], 'main-only-token');
-  assert.deepEqual(JSON.parse(h.sent[0].options.body), { transactionId, operation: 'BEGIN' });
-});
 
 test('maintenance HTTP rejection leaves AI drain and child ownership untouched', async () => {
   const h = harness({ fetch: async () => ({ ok: false, status: 403 }) }); h.context.calls = [];

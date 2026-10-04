@@ -177,10 +177,12 @@ async function createBackupProductState(options) {
   if (typeof spawn !== 'function' || !Number.isInteger(timeoutMs) || timeoutMs < 20 || timeoutMs > LIMITS.timeoutMs) fail('INVALID');
   if (!options.env || typeof options.env !== 'object' || isProxy(options.env) || Array.isArray(options.env)) fail('INVALID');
   const envKeys = Object.keys(options.env);
-  if (!envKeys.includes('PGPASSWORD') || envKeys.some(key => !['PGPASSWORD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key))) fail('INVALID');
+  if (!envKeys.includes('PGPASSWORD') || envKeys.some(key => !['PGPASSWORD', 'PGSSLMODE', 'PGSSLROOTCERT', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key))) fail('INVALID');
   exact(options.env, envKeys);
+  if (options.env.PGSSLMODE !== undefined && options.env.PGSSLMODE !== 'verify-full') fail('INVALID');
+  if (options.env.PGSSLROOTCERT !== undefined) absolute(options.env.PGSSLROOTCERT);
   const environment = { LANG: 'C', LC_ALL: 'C', TZ: 'UTC', PGCLIENTENCODING: 'UTF8',
-    PGCONNECT_TIMEOUT: '5', PGAPPNAME: 'code-intelligence-backup-product', PGSSLMODE: 'disable' };
+    PGCONNECT_TIMEOUT: '5', PGAPPNAME: 'code-intelligence-backup-product', PGSSLMODE: 'verify-full' };
   for (const key of envKeys) {
     const value = options.env[key];
     if (typeof value !== 'string' || !value.length || Buffer.byteLength(value) > 16384 || value.includes('\0')) fail('INVALID');

@@ -134,7 +134,6 @@ test('psql uses closed environment, stdin SQL and no shell, password argument, U
   assert(c.args.includes('--no-password')); assert(c.args.includes('--host=127.0.0.1'));
   assert.doesNotMatch(c.args.join(' '), /synthetic-private|begin|delete|select|:\/\//i);
   assert.equal(c.options.shell, false); assert.equal(c.options.env.PGPASSWORD, 'synthetic-private-password');
-  assert.equal(c.options.env.PGSSLMODE, 'disable');
   for (const key of ['PGOPTIONS', 'PGSERVICE', 'PGHOST', 'NODE_OPTIONS', 'PATH', 'HOME']) assert.equal(c.options.env[key], undefined);
   assert(c.sql.includes("set local search_path=pg_catalog;"));
   assert.match(c.sql, /statement_timeout='15000ms'/); assert.match(c.sql, /lock_timeout='5000ms'/);

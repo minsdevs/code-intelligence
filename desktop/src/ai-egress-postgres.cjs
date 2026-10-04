@@ -479,9 +479,12 @@ async function openAiEgressPostgres(options, maintenanceParent) {
       || !full(connection.user, /^[A-Za-z_][A-Za-z0-9_]{0,62}$/)
       || !full(connection.database, /^[A-Za-z_][A-Za-z0-9_]{0,62}$/)) fail('INVALID');
   if (!options.env || typeof options.env !== 'object' || Array.isArray(options.env)
-      || Object.keys(options.env).some(key => !['PGPASSWORD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key))) fail('INVALID');
+      || Object.keys(options.env).some(key => !['PGPASSWORD', 'PGSSLMODE', 'PGSSLROOTCERT', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key))) fail('INVALID');
+  if (options.env.PGSSLMODE !== undefined && options.env.PGSSLMODE !== 'verify-full') fail('INVALID');
+  if (options.env.PGSSLROOTCERT !== undefined && (typeof options.env.PGSSLROOTCERT !== 'string'
+      || !path.isAbsolute(options.env.PGSSLROOTCERT) || path.normalize(options.env.PGSSLROOTCERT) !== options.env.PGSSLROOTCERT)) fail('INVALID');
   const environment = { LANG: 'C', LC_ALL: 'C', TZ: 'UTC', PGCLIENTENCODING: 'UTF8', PGCONNECT_TIMEOUT: '5',
-    PGAPPNAME: 'code-intelligence-ai-cost', PGSSLMODE: 'disable' };
+    PGAPPNAME: 'code-intelligence-ai-cost', PGSSLMODE: 'verify-full' };
   for (const [key, value] of Object.entries(options.env)) {
     if (typeof value !== 'string' || !value.length || value.length > 16384 || value.includes('\0')) fail('INVALID');
     environment[key] = value;

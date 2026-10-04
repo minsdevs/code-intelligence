@@ -14,6 +14,10 @@
     "pack:win": "npm run check:windows && electron-builder --win dir --x64 --publish never",
     "dist:win": "npm run check:windows && electron-builder --win nsis --x64 --publish never"
   },
+  "dependencies": {
+    "@peculiar/x509": "2.1.0",
+    "reflect-metadata": "0.2.2"
+  },
   "devDependencies": {
     "electron": "44.4.5",
     "electron-builder": "26.15.3"

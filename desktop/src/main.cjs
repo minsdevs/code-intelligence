@@ -28,6 +28,7 @@ const { createNativeOwnerLocks } = require('./native-owner-locks.cjs');
 const { spawnManagedProcess } = require('./managed-process.cjs');
 const { runtimeRelativePath, runtimeFile, inheritedEnvironment, libraryEnvironment } = require('./runtime-platform.cjs');
 const { parseIsolatedRunArguments, prepareIsolatedRun, assertIsolatedLaunchReady } = require('./isolated-run.cjs');
+const { createServiceTransport } = require('./service-transport.cjs');
 
 const children = new Map();
 const childStops = new Map();
@@ -92,7 +93,7 @@ if (!ownsInstance) {
 }
 
 function randomSecret(bytes = 32) {
-  return crypto.randomBytes(bytes).toString('base64url');
+  return crypto.randomBytes(bytes).toString('hex');
 }
 
 function runtimeRoot() {
@@ -303,9 +304,10 @@ async function waitUntil(check, label, timeoutMs = 60_000) {
 
 function postgresEnvironment() {
   return {
-    PGPASSWORD: runtime.secrets.databasePassword,
     ...libraryEnvironment(runtimeRoot(), process.platform === 'win32'
-      ? [runtime.postgresBinRoot, runtime.postgresLibRoot] : [runtime.postgresLibRoot], process.env, process.platform)
+      ? [runtime.postgresBinRoot, runtime.postgresLibRoot] : [runtime.postgresLibRoot], process.env, process.platform),
+    PGPASSWORD: runtime.secrets.databasePassword,
+    ...runtime.transport.postgresEnvironment
   };
 }
 
@@ -328,7 +330,7 @@ async function startPostgres({ recoveryOnly = false } = {}) {
         '-D', data,
         '-U', 'codeintel',
         '--encoding=UTF8',
-        '--auth-local=trust',
+        '--auth-local=reject',
         '--auth-host=scram-sha-256',
         `--pwfile=${passwordFile}`
       ], { env });
@@ -342,7 +344,13 @@ async function startPostgres({ recoveryOnly = false } = {}) {
     '-h', '127.0.0.1',
     '-p', String(runtime.ports.postgres),
     '-c', 'listen_addresses=127.0.0.1',
-    '-c', 'max_connections=40'
+    '-c', 'max_connections=40',
+    '-c', 'ssl=on',
+    '-c', 'ssl_min_protocol_version=TLSv1.2',
+    '-c', 'unix_socket_directories=',
+    '-c', `ssl_cert_file=${runtime.transport.materials.postgres.cert}`,
+    '-c', `ssl_key_file=${runtime.transport.materials.postgres.key}`,
+    '-c', `hba_file=${runtime.transport.hba}`
   ], { env });
   await waitUntil(() => {
     const result = spawnSync(pgIsReady, [
@@ -380,9 +388,7 @@ async function startRedis() {
   const data = path.join(app.getPath('userData'), 'redis');
   await fsp.mkdir(data, { recursive: true, mode: 0o700 });
   await spawnManaged('redis', binary('redis', 'bin', 'redis-server'), [
-    '--bind', '127.0.0.1',
-    '--protected-mode', 'yes',
-    '--port', String(runtime.ports.redis),
+    runtime.transport.redisConfig,
     '--dir', data,
     '--dbfilename', 'dump.rdb',
     '--appendonly', 'yes'
@@ -391,13 +397,7 @@ async function startRedis() {
       ...libraryEnvironment(runtimeRoot(), process.platform === 'win32' ? ['redis/bin', 'redis/lib'] : ['redis/lib'], process.env, process.platform)
     }
   });
-  await waitUntil(async () => {
-    const socket = net.createConnection({ host: '127.0.0.1', port: runtime.ports.redis });
-    return new Promise((resolve) => {
-      socket.once('connect', () => { socket.end(); resolve(true); });
-      socket.once('error', () => resolve(false));
-    });
-  }, 'Redis');
+  await waitUntil(() => runtime.transport.redisReady(), 'Redis');
 }
 
 async function startAnalyzer() {
@@ -408,18 +408,21 @@ async function startAnalyzer() {
       ELECTRON_RUN_AS_NODE: '1',
       TS_ANALYZER_PORT: String(runtime.ports.analyzer),
       TS_ANALYZER_HOST: '127.0.0.1',
+      TS_ANALYZER_TLS_CERT_FILE: runtime.transport.materials.analyzer.cert,
+      TS_ANALYZER_TLS_KEY_FILE: runtime.transport.materials.analyzer.key,
+      TS_ANALYZER_AUTH_TOKEN: runtime.transport.analyzerToken,
       NODE_ENV: 'production'
     }
   });
   await waitUntil(async () => {
-    const response = await fetch(`http://127.0.0.1:${runtime.ports.analyzer}/health`).catch(() => null);
+    const response = await runtime.transport.analyzer.request(`${runtime.transport.analyzer.origin}/health`).catch(() => null);
     return response?.ok;
   }, 'TypeScript analyzer');
 }
 
 async function authorizePath(selected, persist = true) {
   const canonical = await fsp.realpath(assertAbsolutePath(selected));
-  const response = await fetch(`${runtime.apiBaseUrl}/api/desktop/paths`, {
+  const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/api/desktop/paths`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -447,14 +450,18 @@ async function startBackend({ maintenanceId = '' } = {}) {
     env: {
       SERVER_ADDRESS: '127.0.0.1',
       SERVER_PORT: String(runtime.ports.backend),
-      DB_URL: `jdbc:postgresql://127.0.0.1:${runtime.ports.postgres}/codeintel`,
+      DB_URL: runtime.transport.jdbcUrl,
       DB_USERNAME: 'codeintel',
       DB_PASSWORD: runtime.secrets.databasePassword,
       REDIS_HOST: '127.0.0.1',
       REDIS_PORT: String(runtime.ports.redis),
+      REDIS_PASSWORD: runtime.transport.redisPassword,
+      SPRING_CONFIG_ADDITIONAL_LOCATION: runtime.transport.backendConfigUrl,
       TOKEN_ENC_KEY: runtime.secrets.tokenEncryptionKey,
       DATA_DIR: dataDir,
-      TS_ANALYZER_BASE_URL: `http://127.0.0.1:${runtime.ports.analyzer}`,
+      TS_ANALYZER_BASE_URL: runtime.transport.analyzer.origin,
+      TS_ANALYZER_TLS_CERT_SHA256: runtime.transport.materials.analyzer.pin,
+      TS_ANALYZER_AUTH_TOKEN: runtime.transport.analyzerToken,
       DESKTOP_API_TOKEN: runtime.apiToken,
       DESKTOP_PATH_TOKEN: runtime.pathToken,
       DESKTOP_LOCAL_IDENTITY: runtime.secrets.localIdentity,
@@ -462,12 +469,12 @@ async function startBackend({ maintenanceId = '' } = {}) {
       APP_DESKTOP_AI_BOOTSTRAP_STDIN: 'true',
       APP_DESKTOP_MAINTENANCE_STARTUP_ID: maintenanceId,
       GITHUB_NATIVE_CLIENT_ID: process.env.GITHUB_NATIVE_CLIENT_ID || '',
-      GITHUB_NATIVE_REDIRECT_URI: `${runtime.apiBaseUrl}/api/auth/github/native/callback`,
+      GITHUB_NATIVE_REDIRECT_URI: runtime.transport.callbackUrl,
       CORS_ALLOWED_ORIGINS: runtime.apiBaseUrl
     }
   });
   await waitUntil(async () => {
-    const response = await fetch(`${runtime.apiBaseUrl}/actuator/health`).catch(() => null);
+    const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/actuator/health`).catch(() => null);
     return response?.ok;
   }, 'Backend', 90_000);
   if (maintenanceId) return;
@@ -626,6 +633,7 @@ function shutdownRuntime() {
       try { await safetyLifecycle?.close(); } catch (error) { failure ||= error; }
       try { await aiPostgres?.close(); } catch (error) { failure ||= error; }
       try { await ownerLocks?.close(); } catch (error) { failure ||= error; }
+      try { await runtime?.transport?.close(); } catch (error) { failure ||= error; }
     }
     if (failure) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
   });
@@ -679,7 +687,7 @@ async function openBackupProductState() {
 }
 
 async function maintenanceControl(transactionId, operation) {
-  const response = await fetch(`${runtime.apiBaseUrl}/api/desktop/maintenance`, {
+  const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/api/desktop/maintenance`, {
     method: 'POST', signal: AbortSignal.timeout(10000),
     headers: { 'Content-Type': 'application/json', 'X-Code-Intelligence-Token': runtime.apiToken,
       'X-Code-Intelligence-Path-Token': runtime.pathToken }, body: JSON.stringify({ transactionId, operation })
@@ -916,14 +924,20 @@ function createWindow() {
     }
   });
   const appOrigin = new URL(runtime.apiBaseUrl).origin;
+  mainWindow.webContents.session.setCertificateVerifyProc((request, callback) => {
+    if (request.hostname !== '127.0.0.1') return callback(-3);
+    callback(runtime.transport.verifyBackendCertificate(request.certificate.data, request.hostname) ? 0 : -2);
+  });
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: [`${appOrigin}/*`] },
     (details, callback) => {
       try {
         if (details.webContentsId === mainWindow.webContents.id
-            && details.resourceType === 'mainFrame'
             && new URL(details.url).origin === appOrigin) {
-          details.requestHeaders.Origin = appOrigin;
+          if (details.resourceType === 'mainFrame') details.requestHeaders.Origin = appOrigin;
+          for (const name of Object.keys(details.requestHeaders)) {
+            if (name.toLowerCase() === 'x-code-intelligence-token') delete details.requestHeaders[name];
+          }
           details.requestHeaders['X-Code-Intelligence-Token'] = runtime.apiToken;
         }
       } finally {
@@ -985,7 +999,8 @@ async function startApplication() {
       ready: false,
       error: null
     };
-    runtime.apiBaseUrl = `http://127.0.0.1:${runtime.ports.backend}`;
+    runtime.transport = await createServiceTransport({ userData: runtime.userData, ports: runtime.ports, getApiToken: () => runtime.apiToken });
+    runtime.apiBaseUrl = runtime.transport.backend.origin;
     if (runtimeManifest.ownershipProtocol === 1) ownerLocks = await createNativeOwnerLocks({
       javaPath: binary('jre', 'bin', 'java'), jarPath: binary('backend', 'code-intelligence.jar'),
       safetyRoot: path.join(runtime.userData, 'safety'), installationId: secrets.localIdentity,

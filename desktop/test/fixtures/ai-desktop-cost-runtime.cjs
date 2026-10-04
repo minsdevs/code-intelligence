@@ -67,7 +67,7 @@ async function main() {
   // The Java owner only supplies its just-started Testcontainers PostgreSQL endpoint.
   adapter = await createAiEgressPostgres({ psqlPath: await fs.realpath(config.psqlPath),
     installationId: config.installationId, connection: config.connection,
-    env: { PGPASSWORD: config.databasePassword } });
+    env: { PGPASSWORD: config.databasePassword, PGSSLMODE: 'verify-full', PGSSLROOTCERT: config.postgresRootCert } });
   delete config.databasePassword;
   const userData = path.join(root, 'u');
   const temporaryRoot = path.join(root, 't');

@@ -329,10 +329,13 @@ async function createBackupPostgres(options) {
   if (connection.host !== '127.0.0.1' || !Number.isInteger(connection.port) || connection.port < 1025 || connection.port > 65535
       || ![connection.user, connection.database].every(s => typeof s === 'string' && /^[a-z][a-z0-9_]{0,62}$/.test(s))) fail();
   if (mode === 'staging' && !/^ci_backup_stage_[0-9a-f]{16,32}$/.test(connection.database)) fail('STAGING');
-  const environment = { PGCONNECT_TIMEOUT: '5', PGCLIENTENCODING: 'UTF8', PGTZ: 'UTC', LC_ALL: 'C' };
+  const environment = { PGCONNECT_TIMEOUT: '5', PGCLIENTENCODING: 'UTF8', PGTZ: 'UTC', LC_ALL: 'C', PGSSLMODE: 'verify-full' };
   if (!options.env || typeof options.env !== 'object') fail();
+  if (options.env.PGSSLMODE !== undefined && options.env.PGSSLMODE !== 'verify-full') fail();
+  if (options.env.PGSSLROOTCERT !== undefined && (typeof options.env.PGSSLROOTCERT !== 'string'
+      || !path.isAbsolute(options.env.PGSSLROOTCERT) || path.normalize(options.env.PGSSLROOTCERT) !== options.env.PGSSLROOTCERT)) fail();
   for (const [key, value] of Object.entries(options.env)) {
-    if (!['PGPASSWORD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key) || typeof value !== 'string'
+    if (!['PGPASSWORD', 'PGSSLMODE', 'PGSSLROOTCERT', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key) || typeof value !== 'string'
         || value.includes('\0') || value.length > 16384) fail();
     environment[key] = value;
   }

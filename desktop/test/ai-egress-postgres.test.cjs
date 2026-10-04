@@ -357,7 +357,7 @@ test('actual PostgreSQL adapter contract in a dedicated empty fixture database',
   assert.match(user, /^[A-Za-z_][A-Za-z0-9_]{0,62}$/); assert.ok(password);
   const psql = await fs.realpath(real);
   const connection = { host: '127.0.0.1', port, user, database };
-  const env = { PGPASSWORD: password };
+  const env = { PGPASSWORD: password, PGSSLMODE: 'verify-full', PGSSLROOTCERT: process.env.PGSSLROOTCERT };
   if (process.env.CI_AI_COST_PG_TEST_LIBRARY) env.DYLD_LIBRARY_PATH = process.env.CI_AI_COST_PG_TEST_LIBRARY;
   const commandArgs = ['-X', '--no-password', '--quiet', '--tuples-only', '--no-align', '--set=ON_ERROR_STOP=1',
     '--host=127.0.0.1', `--port=${port}`, `--username=${user}`, `--dbname=${database}`, '--file=-'];

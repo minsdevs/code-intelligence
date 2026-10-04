@@ -34,9 +34,12 @@ async function createBackupDatabaseControl(options) {
       || typeof connection.user !== 'string' || !/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(connection.user)
       || (liveDatabase !== 'codeintel' && !/^ci_backup_live_[a-f0-9]{16,32}$/.test(liveDatabase))) fail('INVALID');
   if (!env || typeof env !== 'object' || !env.PGPASSWORD || Object.keys(env).some(key =>
-    !['PGPASSWORD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key))) fail('INVALID');
+    !['PGPASSWORD', 'PGSSLMODE', 'PGSSLROOTCERT', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key))) fail('INVALID');
+  if (env.PGSSLMODE !== undefined && env.PGSSLMODE !== 'verify-full') fail('INVALID');
+  if (env.PGSSLROOTCERT !== undefined && (typeof env.PGSSLROOTCERT !== 'string'
+      || !path.isAbsolute(env.PGSSLROOTCERT) || path.normalize(env.PGSSLROOTCERT) !== env.PGSSLROOTCERT)) fail('INVALID');
   const environment = { LANG: 'C', LC_ALL: 'C', TZ: 'UTC', PGCLIENTENCODING: 'UTF8', PGCONNECT_TIMEOUT: '5',
-    PGAPPNAME: 'code-intelligence-backup-control', PGSSLMODE: 'disable' };
+    PGAPPNAME: 'code-intelligence-backup-control', PGSSLMODE: 'verify-full' };
   for (const [key, value] of Object.entries(env)) {
     if (typeof value !== 'string' || !value.length || value.length > 16384 || value.includes('\0')) fail('INVALID'); environment[key] = value;
   }

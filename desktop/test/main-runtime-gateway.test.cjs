@@ -10,6 +10,7 @@ const crypto = require('node:crypto');
 const vm = require('node:vm');
 const test = require('node:test');
 const { setTimeout: delay } = require('node:timers/promises');
+const { transportFixture } = require('./fixtures/service-transport.cjs');
 const clone = value => JSON.parse(JSON.stringify(value));
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 const sourceRoot = path.resolve(__dirname, '../src');
@@ -80,6 +81,7 @@ async function harness(t, options = {}) {
       webContents.send = (channel, value) => outbound.push({ channel, value: clone(value) });
       webContents.setWindowOpenHandler = fn => { this.windowOpen = fn; };
       webContents.session = { webRequest: { onBeforeSendHeaders: (_filter, fn) => { this.headers = fn; } },
+        setCertificateVerifyProc(fn) { this.verifyCertificate = fn; },
         async clearStorageData(value) { events.push('session.clearStorage'); controls.clearedStorage = value; await controls.clearStorage?.(); },
         async clearCache() { events.push('session.clearCache'); },
         setPermissionCheckHandler() {}, setPermissionRequestHandler() {} };
@@ -307,6 +309,7 @@ async function harness(t, options = {}) {
           showMessageBox: async (...values) => { dialogs.push({ kind: 'confirm', values }); return { response: controls.confirmation ?? 1 }; },
         }, shell: { openExternal: async () => {} } };
       if (name === './safety-lifecycle.cjs') return lifecycleApi;
+      if (name === './service-transport.cjs') return { createServiceTransport: async value => transportFixture(value, context.fetch) };
       if (name === './ai-desktop-gateway.cjs') return gatewayApi;
       if (name === './ai-egress-postgres.cjs') return postgresApi;
       if (name === './backup-runtime.cjs') return backupApi;
