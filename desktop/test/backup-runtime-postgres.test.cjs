@@ -234,14 +234,18 @@ async function fixture(t, options = {}) {
   function redisRequest(parts) {
     return new Promise((resolve, reject) => {
       const socket = require('node:tls').connect({ host: '127.0.0.1', port: ports.redis,
-        ca: transport.materials.redis.pem, rejectUnauthorized: true }); let text = '';
+        ca: transport.materials.redis.pem, rejectUnauthorized: true }); let text = '', authenticated = false;
       socket.setTimeout(3000, () => socket.destroy(new Error('Synthetic Redis timeout')));
       socket.on('error', () => reject(new Error('Synthetic Redis unavailable')));
       socket.once('secureConnect', () => socket.write(
         `*2\r\n$4\r\nAUTH\r\n$64\r\n${transport.redisPassword}\r\n*${parts.length}\r\n` + parts.map(p => `$${Buffer.byteLength(p)}\r\n${p}\r\n`).join('')));
       socket.on('data', bytes => {
         text += bytes.toString('utf8');
-        if (text.startsWith('+OK\r\n')) text = text.slice(5);
+        if (!authenticated) {
+          if (!text.includes('\r\n')) return;
+          if (!text.startsWith('+OK\r\n')) { socket.destroy(); reject(new Error('Synthetic Redis authentication failed')); return; }
+          authenticated = true; text = text.slice(5);
+        }
         if (text.length > 4096) { socket.destroy(); reject(new Error('Synthetic Redis reply limit')); return; }
         // Fixture commands use only simple strings, integers, null bulk replies and one short value.
         if (/^[+:-].*\r\n$/.test(text) || text === '$-1\r\n' || /^\$[0-9]+\r\n[^\r\n]*\r\n$/.test(text)) {

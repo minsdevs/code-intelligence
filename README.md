@@ -197,6 +197,8 @@ it never changes the system trust store. PostgreSQL requires SCRAM over verify-f
 Redis requires a launch password over TLS, and analyzer/backend requests require the
 current capability after peer authentication. Backend health and static resources are
 not authentication exceptions. Session and CSRF cookies are Secure in the desktop profile.
+Certificates are regenerated on each full application launch and are valid for one year;
+they are removed only after owned children stop. They are never long-term OS trust anchors.
 
 External GitHub redirects use a separate, narrowly bounded HTTP loopback callback;
 only validated callback parameters are forwarded to the pinned HTTPS backend. That
@@ -213,6 +215,14 @@ user. Artifacts distinguish native smoke results from blocked product/signing ac
 Current local transport proof covers real PostgreSQL 16 and Redis TLS/authentication,
 wrong-peer/plaintext rejection, HTTPS pinning, token rotation and callback refusal. Hosted
 whole-app results, signed installation, real OAuth and provider approval remain separate gates.
+
+The real native backup fixture now covers pinned Spring HTTPS, authenticated Redis,
+PostgreSQL verify-full TLS, encrypted backup/restore, and an injected post-health failure
+that rolls back product data while preserving the OFF credentials and unresolved safety seal.
+All three cases passed; its OS key wrapper remains explicitly synthetic.
+A separate cold clone of the real V20 database migrated through actual Flyway to V25;
+existing-table row counts were preserved, and a cold V20 restore reproduced all data digests.
+All 1,602 original DB files retained their bytes, sizes and permissions. This is not a signed-app upgrade.
 
 The explicit macOS integration fixture below compiles private copies of the actual
 Java client and Nest analyzer using existing dependencies, generates short-lived
@@ -324,13 +334,17 @@ analysis-only fixture manifests pin Vitest 4.1.11 without installing the fixture
 or adding lockfiles. Fresh isolated frontend/TS/tree dependency audits reported
 zero vulnerabilities; that is not a repository-wide or release acceptance claim.
 
-Desktop build tooling still includes `http-cache-semantics 4.2.0` through
-`app-builder-lib → @electron/get 3.1.0 → got → cacheable-request`.
-[GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) has no
-published patched version at this check. The locked chain is development-only,
-and the checked Got default has HTTP caching disabled. A packaged runtime exploit
-path was not established; neither observation proves the advisory inapplicable.
-The alert remains open, with no speculative version override or dismissal.
+Desktop build tooling still includes http-cache-semantics 4.2.0 through
+app-builder-lib → @electron/get 3.1.0 → got → cacheable-request.
+GHSA-ch52-4w7c-c8xp still reports no patched version. The newly published 4.3.0 was
+also exercised directly: a security-zeroed shared response containing Set-Cookie was
+returned to a second-user request with max-stale. Therefore a version bump alone is
+not accepted as remediation and the production lock remains unchanged.
+The chain is development-only. Two actual downloads through the locked @electron/get
+GotDownloader, with different synthetic user cookies and max-stale, made two origin
+requests and returned distinct fresh artifacts: default download caching did not expose
+the policy bug in that scenario. This does not prove every configured build path safe.
+No alert suppression or unsupported claim of a repository-wide clean audit is made.
 
 The patched frontend production build was exercised in an owned Chrome instance
 at 980×700, 1280×800 and 1440×900. [Results and seven screenshots](validation/ui-layout/2026-10-04/results.json)

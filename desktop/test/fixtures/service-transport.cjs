@@ -4,7 +4,7 @@ const path = require('node:path');
 // Lifecycle tests intentionally do not open sockets. Real TLS peer checks are exercised separately.
 function transportFixture({ userData, ports, getApiToken }, request) {
   const materials = Object.fromEntries(['backend', 'analyzer', 'postgres', 'redis'].map(name =>
-    [name, { cert: path.join(userData, `${name}.crt`), key: path.join(userData, `${name}.key`), fingerprint: 'a'.repeat(64) }]));
+    [name, { cert: path.join(userData, `${name}.crt`), key: path.join(userData, `${name}.key`), pin: 'a'.repeat(64) }]));
   const backend = { origin: `https://127.0.0.1:${ports.backend}`,
     request: (url, options = {}) => request(url, { ...options,
       headers: { ...options.headers, 'X-Code-Intelligence-Token': getApiToken() } }) };

@@ -633,7 +633,7 @@ async function openAiEgressPostgres(options, maintenanceParent) {
     creatingStages++;
     try {
       const child = await openAiEgressPostgres({ psqlPath, installationId, connection: { ...connection, database: value.database },
-        env: Object.fromEntries(Object.entries(environment).filter(([key]) => ['PGPASSWORD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key))),
+        env: Object.fromEntries(Object.entries(environment).filter(([key]) => ['PGPASSWORD', 'PGSSLMODE', 'PGSSLROOTCERT', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key))),
         spawn, now: wall, timeoutMs }, { assertOpen() { if (closed) fail('CLOSED'); }, authority: boundAuthority() });
       if (closed) { await child.close(); fail('CLOSED'); }
       const wrapped = Object.freeze({ ...child, close: () => child.close().finally(() => children.delete(wrapped)) });
