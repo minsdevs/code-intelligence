@@ -216,6 +216,10 @@ writer before acknowledging its state; closing cannot change that token. No-op a
 preserves the previous state, and empty/shorter inactive-slot writes truncate the old suffix.
 Safety state and folder grants use authenticated retained storage; missing/torn slots or
 enrollment markers require recovery.
+The native boundary suite exercises real Java21 Unicode socket paths through UTF-8 bootstrap,
+full-size source frames, FIN/EOF and capability/epoch refusal. Guardian-death acceptance waits
+on pre-retained query/synchronization process handles, not PID-existence polling. Passing these
+boundaries alone does not attest Electron credential-store restart or full product acceptance.
 
 Main owns the encrypted source vault and private source broker. Java receives one bounded
 version2 JSON+EOF bootstrap for both AI and source capabilities, never environment fallback.
