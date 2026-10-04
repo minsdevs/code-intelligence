@@ -14,14 +14,12 @@ import org.springframework.util.StringUtils;
 @Service
 public class TaskService {
 
-    private static final Set<String> TYPES = Set.of("DEVELOPMENT", "LEARNING", "REVIEW", "RESEARCH", "REFACTORING");
+    private static final Set<String> TYPES = Set.of("DEVELOPMENT", "REVIEW", "RESEARCH", "REFACTORING");
     private static final Set<String> STATUSES = Set.of("DRAFT", "OPEN", "DONE", "CANCELLED");
     private static final int TITLE_MAX = 200;
     private static final int TEXT_MAX = 20_000;
 
     public record GoalView(long id, int seq, String content, boolean done) {}
-
-    public record LearningRecordView(long id, String note, String createdAt) {}
 
     public record TaskView(
             long id,
@@ -32,14 +30,11 @@ public class TaskService {
             String origin,
             Long sourceFindingId,
             String updatedAt,
-            List<GoalView> goals,
-            List<LearningRecordView> records) {}
+            List<GoalView> goals) {}
 
     public record UpsertTask(String type, String title, String description, String status, List<String> goals) {}
 
     public record GoalPatch(Boolean done, String content) {}
-
-    public record LearningNote(String note) {}
 
     private final ProjectRepository projectRepository;
     private final JdbcClient jdbc;
@@ -55,7 +50,7 @@ public class TaskService {
         return jdbc
                 .sql("""
                         select id from tasks
-                        where project_id = :projectId
+                        where project_id = :projectId and type <> 'LEARNING'
                           and (:includeDrafts or status <> 'DRAFT')
                         order by
                             case status when 'OPEN' then 0 when 'DRAFT' then 1 when 'DONE' then 2 else 3 end,
@@ -112,7 +107,7 @@ public class TaskService {
         jdbc.sql("""
                         update tasks
                         set type = :type, title = :title, description = :description, status = :status, updated_at = now()
-                        where id = :id and project_id = :projectId
+                        where id = :id and project_id = :projectId and type <> 'LEARNING'
                         """)
                 .param("type", type)
                 .param("title", title)
@@ -136,7 +131,7 @@ public class TaskService {
         }
         jdbc.sql("""
                         update tasks set status = 'OPEN', updated_at = now()
-                        where id = :id and project_id = :projectId
+                        where id = :id and project_id = :projectId and type <> 'LEARNING'
                         """).param("id", taskId).param("projectId", projectId).update();
         return load(projectId, taskId);
     }
@@ -167,29 +162,9 @@ public class TaskService {
     }
 
     @Transactional
-    public LearningRecordView addRecord(long projectId, long userId, long taskId, LearningNote body) {
-        requireOwned(projectId, userId);
-        load(projectId, taskId);
-        String note = sanitize(body == null ? null : body.note());
-        if (!StringUtils.hasText(note)) {
-            throw new InvalidTaskException();
-        }
-        return jdbc.sql("""
-                        insert into learning_records (task_id, note)
-                        values (:taskId, :note)
-                        returning id, note, created_at::text as created_at
-                        """)
-                .param("taskId", taskId)
-                .param("note", note)
-                .query((rs, rowNum) ->
-                        new LearningRecordView(rs.getLong("id"), rs.getString("note"), rs.getString("created_at")))
-                .single();
-    }
-
-    @Transactional
     public void delete(long projectId, long userId, long taskId) {
         requireOwned(projectId, userId);
-        int n = jdbc.sql("delete from tasks where id = :id and project_id = :projectId")
+        int n = jdbc.sql("delete from tasks where id = :id and project_id = :projectId and type <> 'LEARNING'")
                 .param("id", taskId)
                 .param("projectId", projectId)
                 .update();
@@ -202,7 +177,7 @@ public class TaskService {
         TaskView task = jdbc.sql("""
                         select id, type, title, description, status, origin, source_finding_id, updated_at::text as updated_at
                         from tasks
-                        where id = :id and project_id = :projectId
+                        where id = :id and project_id = :projectId and type <> 'LEARNING'
                         """)
                 .param("id", taskId)
                 .param("projectId", projectId)
@@ -215,7 +190,6 @@ public class TaskService {
                         rs.getString("origin"),
                         (Long) rs.getObject("source_finding_id"),
                         rs.getString("updated_at"),
-                        List.of(),
                         List.of()))
                 .optional()
                 .orElseThrow(TaskNotFoundException::new);
@@ -226,14 +200,6 @@ public class TaskService {
                 .query((rs, rowNum) -> new GoalView(
                         rs.getLong("id"), rs.getInt("seq"), rs.getString("content"), rs.getBoolean("done")))
                 .list();
-        List<LearningRecordView> records = jdbc.sql("""
-                        select id, note, created_at::text as created_at
-                        from learning_records where task_id = :id order by id
-                        """)
-                .param("id", taskId)
-                .query((rs, rowNum) ->
-                        new LearningRecordView(rs.getLong("id"), rs.getString("note"), rs.getString("created_at")))
-                .list();
         return new TaskView(
                 task.id(),
                 task.type(),
@@ -243,8 +209,7 @@ public class TaskService {
                 task.origin(),
                 task.sourceFindingId(),
                 task.updatedAt(),
-                goals,
-                records);
+                goals);
     }
 
     private void replaceGoals(long taskId, List<String> goals) {

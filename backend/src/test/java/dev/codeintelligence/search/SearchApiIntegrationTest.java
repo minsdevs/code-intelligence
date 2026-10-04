@@ -66,11 +66,16 @@ class SearchApiIntegrationTest {
                 "insert into notes (project_id, title, content_md) values (?, 'Auth notes', 'login flow')", projectId);
         jdbcTemplate.update("""
                 insert into tasks (project_id, type, title, description, status, origin)
-                values (?, 'LEARNING', 'Hidden search draft', '', 'DRAFT', 'AI')
+                values (?, 'REVIEW', 'Hidden search draft', '', 'DRAFT', 'AI')
                 """, projectId);
         jdbcTemplate.update("""
                 insert into tasks (project_id, type, title, description, status, origin)
                 values (?, 'DEVELOPMENT', 'Ship login', 'open the App file', 'OPEN', 'USER')
+                """, projectId);
+
+        jdbcTemplate.update("""
+                insert into tasks (project_id, type, title, description, status, origin)
+                values (?, 'LEARNING', 'Hidden archived learning', '', 'OPEN', 'USER')
                 """, projectId);
 
         Map<String, Object> files = jsonMapper.readValue(
@@ -83,7 +88,7 @@ class SearchApiIntegrationTest {
 
         Map<String, Object> tasks = jsonMapper.readValue(
                 getAs(session, "/api/search?q=Hidden&projectId=" + projectId, HttpStatus.OK), Map.class);
-        assertThat(groupTitles(tasks, "TASK")).doesNotContain("Hidden search draft");
+        assertThat(groupTitles(tasks, "TASK")).doesNotContain("Hidden search draft", "Hidden archived learning");
         Map<String, Object> openTasks = jsonMapper.readValue(
                 getAs(session, "/api/search?q=Ship&projectId=" + projectId, HttpStatus.OK), Map.class);
         assertThat(groupTitles(openTasks, "TASK")).contains("Ship login");

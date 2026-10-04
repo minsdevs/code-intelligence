@@ -261,7 +261,7 @@ public class SearchService {
                         join projects p on p.id = t.project_id
                         where p.user_id = :userId
                           and (:projectId::bigint is null or p.id = :projectId)
-                          and t.status <> 'DRAFT'
+                          and t.status <> 'DRAFT' and t.type <> 'LEARNING'
                           and (t.title ilike :like escape '\\' or t.description ilike :like escape '\\'
                                or to_tsvector('simple', coalesce(t.title,'') || ' ' || coalesce(t.description,''))
                                   @@ plainto_tsquery('simple', :query))

@@ -103,7 +103,7 @@ class AiDisabledApiIntegrationTest {
     }
 
     @Test
-    void taskDraftReturns503WhenDisabled() {
+    void retiredTaskDraftIsNotAvailableWhenAiIsDisabled() {
         ResponseCookie session = loginWithPat();
         long userId = jdbcTemplate.queryForObject("select id from users where login = 'octocat'", Long.class);
         long projectId = jdbcTemplate.queryForObject("""
@@ -120,11 +120,11 @@ class AiDisabledApiIntegrationTest {
                 .header("X-XSRF-TOKEN", csrf.getValue())
                 .exchange()
                 .expectStatus()
-                .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
+                .isEqualTo(HttpStatus.NOT_FOUND)
                 .expectBody()
                 .returnResult()
                 .getResponseBodyContent();
-        assertThat(new String(body)).contains("AI provider is not configured");
+        assertThat(new String(body)).doesNotContain("sk-");
     }
 
     private byte[] getAs(ResponseCookie session, String uri, HttpStatus expected) {

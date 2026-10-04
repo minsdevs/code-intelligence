@@ -44,7 +44,7 @@ public class MockAIProvider implements AIProvider {
         lastUser = request.user() == null ? "" : request.user();
         if (request.system() != null && request.system().contains("Propose a Learning")) {
             String taskJson =
-                    "{\"type\":\"LEARNING\",\"title\":\"Review unmatched API call\",\"description\":\"Confirm the finding in code.\",\"goals\":[\"Open the evidence file\",\"Decide fix or dismiss\"]}";
+                    "{\"type\":\"REVIEW\",\"title\":\"Review unmatched API call\",\"description\":\"Confirm the finding in code.\",\"goals\":[\"Open the evidence file\",\"Decide fix or dismiss\"]}";
             return new ChatResponse(taskJson, List.of(), taskJson, List.of(), 12, 8);
         }
         if (request.system() != null && request.system().contains("Review this pull request")) {

@@ -168,7 +168,7 @@ public class PlaygroundService {
         if (!provider.enabled()) {
             throw new AiNotConfiguredException();
         }
-        usage.enforceBudget(userId);
+        usage.requireRequestPlan();
         long snapshotId = requireSnapshot(project);
         SessionView current = load(projectId, sessionId);
         List<String> paths = body != null && body.selectedPaths() != null

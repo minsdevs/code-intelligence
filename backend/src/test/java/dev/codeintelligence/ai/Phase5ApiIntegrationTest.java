@@ -62,30 +62,24 @@ class Phase5ApiIntegrationTest {
     private MockAIProvider mockAIProvider;
 
     @Test
-    void reviewGeneratesFromChangedFilesAndIsOwnerScoped() throws Exception {
+    void reviewNeedsAnApprovedPlanAndStoredReviewRemainsOwnerScoped() throws Exception {
         ResponseCookie session = loginWithPat();
         long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
         seedPull(projectId, 12, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "src/App.java");
 
-        Map<String, Object> created = jsonMapper.readValue(
-                postAs(session, "/api/projects/" + projectId + "/pulls/12/review", Map.of(), HttpStatus.CREATED),
-                Map.class);
-        assertThat(created.get("summary")).isEqualTo("mock review");
-        assertThat(created.get("origin")).isEqualTo("AI");
-        assertThat(created.get("pullNumber")).isEqualTo(12);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> comments = (List<Map<String, Object>>) created.get("comments");
-        assertThat(comments).isNotEmpty();
-        assertThat(comments.getFirst().get("filePath")).isEqualTo("src/App.java");
-        assertThat(comments.getFirst().get("confidence")).isEqualTo("CONFIRMED");
-        assertThat(mockAIProvider.lastUser())
-                .contains("CHANGED_FILE: src/App.java")
-                .contains("pr:12")
-                .contains("Review pull request #12");
-
+        postAs(session, "/api/projects/" + projectId + "/pulls/12/review", Map.of(), HttpStatus.CONFLICT);
+        long pullId = jdbcTemplate.queryForObject(
+                "select id from pull_requests where project_id = ? and number = 12", Long.class, projectId);
+        jdbcTemplate.update(
+                "insert into pr_reviews (project_id, pull_request_id, summary, origin) values (?, ?, 'Retained review', 'AI')",
+                projectId,
+                pullId);
         Map<String, Object> latest = jsonMapper.readValue(
                 getAs(session, "/api/projects/" + projectId + "/pulls/12/review", HttpStatus.OK), Map.class);
-        assertThat(latest.get("id")).isEqualTo(created.get("id"));
+        assertThat(latest.get("summary")).isEqualTo("Retained review");
+        assertThat(jdbcTemplate.queryForObject(
+                        "select count(*) from ai_usage_logs where project_id = ?", Long.class, projectId))
+                .isZero();
 
         getAs(session, "/api/projects/" + projectId + "/pulls/99/review", HttpStatus.NOT_FOUND);
 
@@ -102,7 +96,7 @@ class Phase5ApiIntegrationTest {
     }
 
     @Test
-    void reviewMasksSecretsBeforeTheProvider() throws Exception {
+    void reviewCannotTransmitUnapprovedSourceToProvider() throws Exception {
         ResponseCookie session = loginWithPat();
         long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
         long pullId = jdbcTemplate.queryForObject(
@@ -116,10 +110,9 @@ class Phase5ApiIntegrationTest {
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         assertThat(pullId).isPositive();
-        postAs(session, "/api/projects/" + projectId + "/pulls/7/review", Map.of(), HttpStatus.CREATED);
-        assertThat(mockAIProvider.lastUser())
-                .contains("[REDACTED]")
-                .doesNotContain("sk-abcdefghijklmnopqrstuvwxyz012345");
+        String before = mockAIProvider.lastUser();
+        postAs(session, "/api/projects/" + projectId + "/pulls/7/review", Map.of(), HttpStatus.CONFLICT);
+        assertThat(mockAIProvider.lastUser()).isEqualTo(before);
     }
 
     @Test
@@ -140,28 +133,18 @@ class Phase5ApiIntegrationTest {
                         HttpStatus.CREATED),
                 Map.class);
         Number sessionId = (Number) created.get("id");
-        Map<String, Object> asked = jsonMapper.readValue(
-                postAs(
-                        session,
-                        "/api/projects/" + projectId + "/playground/sessions/" + sessionId + "/ask",
-                        Map.of(
-                                "question",
-                                "api_key=sk-abcdefghijklmnopqrstuvwxyz012345 what does this do?",
-                                "proposedSnippet",
-                                "print(1)"),
-                        HttpStatus.OK),
+        String before = mockAIProvider.lastUser();
+        postAs(
+                session,
+                "/api/projects/" + projectId + "/playground/sessions/" + sessionId + "/ask",
+                Map.of("question", "Explain", "proposedSnippet", "print(1)"),
+                HttpStatus.CONFLICT);
+        assertThat(mockAIProvider.lastUser()).isEqualTo(before);
+        Map<String, Object> retained = jsonMapper.readValue(
+                getAs(session, "/api/projects/" + projectId + "/playground/sessions/" + sessionId, HttpStatus.OK),
                 Map.class);
-        assertThat(asked.get("lastExplanation")).isEqualTo("mock explanation");
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> claims = (List<Map<String, Object>>) asked.get("lastClaims");
-        assertThat(claims).isNotEmpty();
-        assertThat(mockAIProvider.lastUser())
-                .contains("[REDACTED]")
-                .doesNotContain("sk-abcdefghijklmnopqrstuvwxyz012345")
-                .contains("PROPOSED_SNIPPET")
-                .contains("was not executed")
-                .contains("print(1)");
-        assertThat(asked.get("proposedSnippet")).isEqualTo("print(1)");
+        assertThat(retained.get("proposedSnippet")).isEqualTo("class App {}");
+        assertThat(retained.get("lastExplanation")).isNull();
 
         postAs(
                 session,
@@ -182,55 +165,35 @@ class Phase5ApiIntegrationTest {
     }
 
     @Test
-    void growthAggregatesLearningWithoutAi() throws Exception {
+    void retiredLearningEndpointsLeaveHistoricalRecordsUntouched() throws Exception {
         ResponseCookie session = loginWithPat();
         long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
-        jdbcTemplate.update("insert into notes (project_id, title, content_md) values (?, 'n1', 'hello')", projectId);
         long taskId = jdbcTemplate.queryForObject("""
                 insert into tasks (project_id, type, title, description, status, origin)
-                values (?, 'LEARNING', 'Read App', '', 'DONE', 'USER')
-                returning id
+                values (?, 'LEARNING', 'Read App', '', 'DONE', 'USER') returning id
                 """, Long.class, projectId);
         jdbcTemplate.update(
                 "insert into learning_records (task_id, note) values (?, 'understood constructors')", taskId);
-        Long snapshotId = jdbcTemplate.queryForObject(
-                "select current_snapshot_id from projects where id = ?", Long.class, projectId);
-        jdbcTemplate.update("""
-                insert into analysis_findings (snapshot_id, category, severity, title, status)
-                values (?, 'UNUSED', 'LOW', 'unused', 'OPEN')
-                """, snapshotId);
-        jdbcTemplate.update("""
-                insert into analysis_findings (snapshot_id, category, severity, title, status)
-                values (?, 'UNUSED', 'LOW', 'gone', 'DISMISSED')
-                """, snapshotId);
-
-        Map<String, Object> body = jsonMapper.readValue(
-                getAs(session, "/api/projects/" + projectId + "/growth", HttpStatus.OK), Map.class);
-        assertThat(body.get("notesCount")).isEqualTo(1);
-        assertThat(body.get("learningRecords")).isEqualTo(1);
-        assertThat(body.get("findingsOpen")).isEqualTo(1);
-        assertThat(body.get("findingsDismissed")).isEqualTo(1);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> types = (List<Map<String, Object>>) body.get("tasksByType");
-        Map<String, Object> learning = types.stream()
-                .filter(row -> "LEARNING".equals(row.get("type")))
-                .findFirst()
-                .orElseThrow();
-        assertThat(learning.get("done")).isEqualTo(1);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> recent = (List<Map<String, Object>>) body.get("recentRecords");
-        assertThat(recent.getFirst().get("note")).isEqualTo("understood constructors");
-
-        long foreign = jdbcTemplate.queryForObject(
-                "insert into users (github_id, login) values (?, ?) returning id",
-                Long.class,
-                System.nanoTime(),
-                "g-" + System.nanoTime());
-        long otherProject = jdbcTemplate.queryForObject("""
-                insert into projects (user_id, name, repo_owner, repo_name)
-                values (?, 'x', 'acme', 'x') returning id
-                """, Long.class, foreign);
-        getAs(session, "/api/projects/" + otherProject + "/growth", HttpStatus.NOT_FOUND);
+        getAs(session, "/api/projects/" + projectId + "/growth", HttpStatus.NOT_FOUND);
+        postAs(
+                session,
+                "/api/projects/" + projectId + "/tasks/" + taskId + "/records",
+                Map.of("note", "new record"),
+                HttpStatus.NOT_FOUND);
+        postAs(
+                session,
+                "/api/projects/" + projectId + "/tasks",
+                Map.of("type", "LEARNING", "title", "New learning task"),
+                HttpStatus.BAD_REQUEST);
+        getAs(session, "/api/projects/" + projectId + "/tasks/" + taskId, HttpStatus.NOT_FOUND);
+        List<?> listed = jsonMapper.readValue(
+                getAs(session, "/api/projects/" + projectId + "/tasks?includeDrafts=true", HttpStatus.OK), List.class);
+        assertThat(listed).isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                        "select note from learning_records where task_id = ?", String.class, taskId))
+                .isEqualTo("understood constructors");
+        assertThat(jdbcTemplate.queryForObject("select type from tasks where id = ?", String.class, taskId))
+                .isEqualTo("LEARNING");
     }
 
     @Test
@@ -254,20 +217,18 @@ class Phase5ApiIntegrationTest {
                 values (?, ?, ?, 'CALLS', 'CONFIRMED', '{}'::jsonb)
                 """, snapshotId, caller, leaf);
 
-        Map<String, Object> body = jsonMapper.readValue(
-                postAs(
-                        session,
-                        "/api/projects/" + projectId + "/what-if",
-                        Map.of("nodeId", leaf, "depth", 3),
-                        HttpStatus.OK),
-                Map.class);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> impact = (Map<String, Object>) body.get("impact");
-        assertThat(((Number) impact.get("nodeId")).longValue()).isEqualTo(leaf);
-        assertThat(body.get("explanation")).isEqualTo("mock explanation");
-        assertThat(mockAIProvider.lastUser()).contains("WHAT_IF_NODE").contains("DEPENDENT");
+        String before = mockAIProvider.lastUser();
+        postAs(
+                session,
+                "/api/projects/" + projectId + "/what-if",
+                Map.of("nodeId", leaf, "depth", 3),
+                HttpStatus.CONFLICT);
+        assertThat(mockAIProvider.lastUser()).isEqualTo(before);
         postAs(session, "/api/projects/" + projectId + "/what-if", Map.of(), HttpStatus.BAD_REQUEST);
-        postAs(session, "/api/projects/" + projectId + "/what-if", Map.of("nodeId", 999999), HttpStatus.NOT_FOUND);
+        Map<String, Object> impact = jsonMapper.readValue(
+                getAs(session, "/api/projects/" + projectId + "/impact?nodeId=" + leaf + "&depth=3", HttpStatus.OK),
+                Map.class);
+        assertThat(((Number) impact.get("nodeId")).longValue()).isEqualTo(leaf);
     }
 
     private void seedPull(long projectId, int number, String sha, String path) {
