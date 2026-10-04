@@ -1,5 +1,6 @@
 package dev.codeintelligence.ai;
 
+import dev.codeintelligence.common.DesktopPrivateBootstrap;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.StandardProtocolFamily;
@@ -10,17 +11,14 @@ import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.StreamReadFeature;
@@ -31,7 +29,6 @@ import tools.jackson.databind.json.JsonMapper;
 /** No TCP, retry or environment/argv capability. Main supplies one bounded bootstrap on stdin. */
 @Component
 public final class AiMainGatewayClient {
-    private static final int MAX_BOOTSTRAP = 8192;
     private static final int MAX_REQUEST = 2 * 1024 * 1024;
     private static final int MAX_RESPONSE = 4 * 1024 * 1024;
     private static final Set<String> OPERATIONS = Set.of(
@@ -58,24 +55,15 @@ public final class AiMainGatewayClient {
                     .build())
             .build();
 
-    private record Bootstrap(String socketPath, String capability, String epoch) {
-        @Override
-        public String toString() {
-            return "AiGatewayBootstrap[redacted]";
-        }
-    }
-
-    private final Bootstrap bootstrap;
+    private final DesktopPrivateBootstrap.AiChannel bootstrap;
     private final JsonMapper json;
     private final Duration requestDeadline;
 
     @Autowired
-    public AiMainGatewayClient(Environment environment, JsonMapper json) {
+    public AiMainGatewayClient(DesktopPrivateBootstrap bootstrap, JsonMapper json) {
         this.json = json;
         this.requestDeadline = Duration.ofSeconds(90);
-        // This flag only chooses the inherited pipe. It grants no transport or dispatch authority.
-        boolean requested = environment.getProperty("app.desktop.ai-bootstrap-stdin", Boolean.class, false);
-        this.bootstrap = requested ? readBootstrap(System.in, json, Duration.ofSeconds(3)) : null;
+        this.bootstrap = bootstrap.ai();
     }
 
     AiMainGatewayClient(InputStream input, JsonMapper json, Duration deadline) {
@@ -85,8 +73,16 @@ public final class AiMainGatewayClient {
                 || deadline.compareTo(Duration.ofSeconds(90)) > 0) throw unavailable();
         this.json = json;
         this.requestDeadline = deadline;
-        this.bootstrap = readBootstrap(
-                input, json, deadline.compareTo(Duration.ofSeconds(3)) > 0 ? Duration.ofSeconds(3) : deadline);
+        try {
+            if (input == null) throw unavailable();
+            this.bootstrap = new DesktopPrivateBootstrap(
+                            input,
+                            json,
+                            deadline.compareTo(Duration.ofSeconds(3)) > 0 ? Duration.ofSeconds(3) : deadline)
+                    .ai();
+        } catch (RuntimeException error) {
+            throw unavailable();
+        }
     }
 
     public boolean enabled() {
@@ -167,43 +163,6 @@ public final class AiMainGatewayClient {
             if (body != null) Arrays.fill(body, (byte) 0);
             if (outgoing != null) Arrays.fill(outgoing.array(), (byte) 0);
             if (incoming != null) Arrays.fill(incoming.array(), (byte) 0);
-        }
-    }
-
-    private static Bootstrap readBootstrap(InputStream input, JsonMapper json, Duration timeout) {
-        if (input == null) throw unavailable();
-        var executor = Executors.newSingleThreadExecutor(Thread.ofVirtual().factory());
-        var read = executor.submit(() -> input.readNBytes(MAX_BOOTSTRAP + 1));
-        byte[] bytes = null;
-        try {
-            bytes = read.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-            if (bytes.length < 2 || bytes.length > MAX_BOOTSTRAP) throw unavailable();
-            JsonNode value = decode(bytes, json);
-            exact(value, Set.of("version", "socketPath", "capability", "epoch"));
-            if (!value.get("version").isIntegralNumber()
-                    || !value.get("version").canConvertToInt()
-                    || value.get("version").intValue() != 1) throw unavailable();
-            String socket = text(value.get("socketPath"));
-            String capability = text(value.get("capability"));
-            String epoch = text(value.get("epoch"));
-            if (!Path.of(socket).isAbsolute()
-                    || !Path.of(socket).normalize().toString().equals(socket)
-                    || socket.getBytes(StandardCharsets.UTF_8).length > 100
-                    || !capability.matches("[0-9a-f]{64}")
-                    || !epoch.matches("[0-9a-f]{64}")) throw unavailable();
-            return new Bootstrap(socket, capability, epoch);
-        } catch (Exception failure) {
-            if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
-            throw unavailable();
-        } finally {
-            read.cancel(true);
-            try {
-                input.close();
-            } catch (IOException ignored) {
-                /* owned pipe only */
-            }
-            executor.shutdownNow();
-            if (bytes != null) Arrays.fill(bytes, (byte) 0);
         }
     }
 

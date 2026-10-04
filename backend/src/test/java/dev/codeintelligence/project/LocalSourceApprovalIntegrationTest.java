@@ -369,10 +369,10 @@ class LocalSourceApprovalIntegrationTest {
                 """, job, hash(preview));
         jdbc.update("""
                 insert into job_local_source_inputs (job_id, project_id, approval_token_sha256, purpose,
-                    base_snapshot_id, schema_version, canonical_root, root_device, root_inode, policy_version,
+                    base_snapshot_id, schema_version, canonical_root, root_platform, root_identity, root_owner, policy_version,
                     limits_sha256, manifest_sha256, selected_files, selected_bytes, approved_at)
                 select ?, ?, token_sha256, purpose, base_snapshot_id, schema_version, canonical_root,
-                    root_device, root_inode, policy_version, limits_sha256, manifest_sha256,
+                    root_platform, root_identity, root_owner, policy_version, limits_sha256, manifest_sha256,
                     selected_files, selected_bytes, consumed_at from local_source_approvals where token_sha256 = ?
                 """, job, project, hash(preview));
         assertThat(jdbc.queryForObject(

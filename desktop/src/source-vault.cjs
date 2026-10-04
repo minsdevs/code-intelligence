@@ -56,11 +56,22 @@ function fullMatch(value, pattern) {
 function safeError(error) {
   return error instanceof SourceVaultError ? error : new SourceVaultError('SOURCE_VAULT_IO');
 }
-function sameIdentity(a, b) { return a.dev === b.dev && a.ino === b.ino; }
+function sameIdentity(a, b) {
+  if (a.platform === 'win32' || b.platform === 'win32')
+    return a.platform === b.platform && a.identity === b.identity;
+  return a.dev === b.dev && a.ino === b.ino;
+}
 function sameFileState(a, b) {
+  if (a.platform === 'win32' || b.platform === 'win32')
+    return sameIdentity(a, b) && a.token === b.token;
   return sameIdentity(a, b) && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
 }
 function checkPrivate(stat, directory) {
+  // Native sessions enforce SID/DACL and retained-ancestor confinement.
+  if (stat.platform === 'win32') {
+    if (stat.kind !== (directory ? 'directory' : 'file')) fail('SOURCE_VAULT_UNSAFE_PATH');
+    return;
+  }
   if ((directory ? !stat.isDirectory() : !stat.isFile()) || stat.isSymbolicLink()
       || stat.uid !== BigInt(process.getuid()) || (stat.mode & 0o7777n) !== (directory ? 0o700n : 0o600n)
       || (!directory && stat.nlink !== 1n)) fail('SOURCE_VAULT_UNSAFE_PATH');
@@ -149,7 +160,9 @@ async function directoryEmpty(directory) {
   try { return (await entries.read()) === null; } finally { await entries.close(); }
 }
 
-function directoryEntry(stat) { return { kind: 'directory', dev: stat.dev, ino: stat.ino }; }
+function directoryEntry(stat) {
+  return stat.platform === 'win32' ? stat : { kind: 'directory', dev: stat.dev, ino: stat.ino };
+}
 function quotaArgument(value, maximum) {
   if (!Number.isSafeInteger(value) || value < 1 || value > maximum) fail('SOURCE_VAULT_ARGUMENT');
   return value;
@@ -362,6 +375,32 @@ async function loadKeyring(file, wrapper, installationId) {
   } finally { if (Buffer.isBuffer(plaintext)) plaintext.fill(0); wrapped.bytes.fill(0); }
 }
 
+async function openPosixEnrollment(file, installationId, wrapper, fresh) {
+  const expected = Buffer.from(JSON.stringify({ format: 'code-intelligence-source-enrollment', major: 1, installationId }));
+  let wrapped, readback, plaintext;
+  try {
+    if (fresh) {
+      try { wrapped = await wrapper.wrap(expected); } catch { fail('SOURCE_VAULT_WRAPPING_UNAVAILABLE'); }
+      if (!Buffer.isBuffer(wrapped) || !wrapped.length || wrapped.length > 4096 || wrapped.equals(expected)) fail('SOURCE_VAULT_KEY_INVALID');
+      const directory = path.dirname(file), before = await privateDirectory(directory);
+      const handle = await fs.open(file, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      try {
+        checkPrivate(await handle.stat({ bigint: true }), false);
+        await handle.writeFile(wrapped); await handle.sync();
+        await privateDirectory(directory, before); await syncDirectory(directory);
+      } finally { await handle.close(); }
+      // Incomplete enrollment remains evidence; never unlink it to retry key generation.
+    }
+    readback = await readPrivateFile(file, 4096, 'SOURCE_VAULT_KEY_MISSING');
+    try { plaintext = await wrapper.unwrap(readback.bytes); } catch { fail('SOURCE_VAULT_KEY_INVALID'); }
+    if (!Buffer.isBuffer(plaintext) || !plaintext.equals(expected)) fail('SOURCE_VAULT_KEY_INVALID');
+    return readback.stat;
+  } finally {
+    expected.fill(0); if (Buffer.isBuffer(wrapped)) wrapped.fill(0);
+    readback?.bytes.fill(0); if (Buffer.isBuffer(plaintext)) plaintext.fill(0);
+  }
+}
+
 function aad(fields) {
   return Buffer.from(JSON.stringify({ format: BLOB_FORMAT, major: FORMAT_MAJOR,
     installationId: fields.installationId, projectId: fields.projectId, keyId: fields.keyId,
@@ -415,13 +454,20 @@ function decryptBlob(envelope, expected, installationId, keys) {
   } finally { unauthenticated?.fill(0); }
 }
 
+const posixStorage = { privateDirectory, ensureDirectory, directoryEmpty, statOrMissing,
+  readPrivateFile, scanDirectory, scanSourceStore, atomicWrite, syncDirectory,
+  mkdir: directory => fs.mkdir(directory, { mode: 0o700 }), entries: directory => fs.opendir(directory) };
+
 async function initialize(options, fresh, restoreStage = false) {
   let lock;
   let keys;
+  let nativeStorage;
   try {
-    if (typeof process.getuid !== 'function' || !constants.O_NOFOLLOW || !constants.O_DIRECTORY)
-      fail('SOURCE_VAULT_UNSUPPORTED');
     if (!options || typeof options !== 'object') fail('SOURCE_VAULT_ARGUMENT');
+    const windows = process.platform === 'win32';
+    if (windows ? !options.windowsBoundary || options.ownerLocks === undefined
+      : typeof process.getuid !== 'function' || !constants.O_NOFOLLOW || !constants.O_DIRECTORY)
+      fail('SOURCE_VAULT_UNSUPPORTED');
     const safetyRoot = rootArgument(options.safetyRoot);
     const sourceRoot = rootArgument(options.sourceRoot);
     const { installationId, wrapper, fault, ownerLocks } = options;
@@ -430,18 +476,48 @@ async function initialize(options, fresh, restoreStage = false) {
     if (!fullMatch(installationId, INSTALLATION_ID)
         || !wrapper || !['isAvailable', 'wrap', 'unwrap'].every(name => typeof wrapper[name] === 'function')
         || (fault !== undefined && typeof fault !== 'function')) fail('SOURCE_VAULT_ARGUMENT');
-    if (safetyRoot === sourceRoot || safetyRoot.startsWith(`${sourceRoot}${path.sep}`)
-        || sourceRoot.startsWith(`${safetyRoot}${path.sep}`)) fail('SOURCE_VAULT_UNSAFE_PATH');
+    const safetyComparison = windows ? safetyRoot.toLowerCase() : safetyRoot;
+    const sourceComparison = windows ? sourceRoot.toLowerCase() : sourceRoot;
+    if (safetyComparison === sourceComparison || safetyComparison.startsWith(sourceComparison + path.sep)
+        || sourceComparison.startsWith(safetyComparison + path.sep)) fail('SOURCE_VAULT_UNSAFE_PATH');
     if (await wrapper.isAvailable() !== true) fail('SOURCE_VAULT_WRAPPING_UNAVAILABLE');
+    if (windows) nativeStorage = await require('./source-vault-windows.cjs').openSourceVaultStorage({
+      windowsBoundary: options.windowsBoundary, safetyRoot, sourceRoot, fail, sameIdentity, sameFileState,
+      projectArgument, maxBlobBytes: MAX_FILE_BYTES + MAX_HEADER_BYTES + 12 });
+    const { privateDirectory, ensureDirectory, directoryEmpty, statOrMissing, readPrivateFile,
+      scanDirectory, scanSourceStore, atomicWrite, syncDirectory, mkdir, entries: directoryEntries } = nativeStorage || posixStorage;
     await privateDirectory(path.dirname(safetyRoot));
     await privateDirectory(path.dirname(sourceRoot));
     const safetyStat = fresh ? await ensureDirectory(safetyRoot) : await privateDirectory(safetyRoot);
     const sourceStat = fresh ? await ensureDirectory(sourceRoot) : await privateDirectory(sourceRoot);
     const keyDirectory = path.join(safetyRoot, 'source-vault');
+    const enrollmentFile = path.join(safetyRoot, 'source-vault.enrollment');
+    let enrollmentStat;
+    if (fresh && await statOrMissing(keyDirectory, { directory: true })) fail('SOURCE_VAULT_NOT_FRESH');
+    const priorEnrollment = await statOrMissing(enrollmentFile);
+    if (fresh && priorEnrollment) fail('SOURCE_VAULT_NOT_FRESH');
+    if (!fresh && !priorEnrollment) fail('SOURCE_VAULT_KEY_MISSING');
+    if (windows) {
+      const enrollment = Buffer.from('source-vault-enrolled-v1');
+      try {
+        // This immutable authenticated marker commits enrollment BEFORE key generation.
+        // Its presence forbids fresh enrollment even if the mutable key directory disappears.
+        const state = await require('./windows-authenticated-state.cjs').openAuthenticatedState({
+          storage: nativeStorage.storage(enrollmentFile), file: enrollmentFile,
+          installationId, purpose: 'source-enrollment', mode: 'append',
+          seal: bytes => wrapper.wrap(bytes), unseal: bytes => wrapper.unwrap(bytes),
+          maxPayloadBytes: 64, maxEncodedBytes: 4096, maxRecords: 1, fresh, initialValue: enrollment });
+        enrollmentStat = await statOrMissing(enrollmentFile);
+        const checked = await state.read();
+        try { if (!checked.equals(enrollment)) fail('SOURCE_VAULT_KEY_INVALID'); }
+        finally { checked.fill(0); }
+      } catch { fail('SOURCE_VAULT_KEY_INVALID'); }
+      finally { enrollment.fill(0); }
+    } else enrollmentStat = await openPosixEnrollment(enrollmentFile, installationId, wrapper, fresh);
     if (fresh) {
-      // The durable directory itself marks prior initialization, even if all keys/blobs were lost.
-      // It is never removed automatically after an interrupted create.
-      try { await fs.mkdir(keyDirectory, { mode: 0o700 }); }
+      // An existing directory marks prior initialization, even if all keys/blobs were lost.
+      // Never remove it automatically after an interrupted create or treat unlink as a commit.
+      try { await mkdir(keyDirectory); }
       catch (error) { if (error.code === 'EEXIST') fail('SOURCE_VAULT_NOT_FRESH'); throw error; }
       await syncDirectory(safetyRoot);
     }
@@ -457,15 +533,44 @@ async function initialize(options, fresh, restoreStage = false) {
     const checkOwnership = () => lock.check();
     const keyFile = path.join(keyDirectory, 'source-keyring.wrapped');
     let keyFileStat;
+    let keyState;
+    const openWindowsKeys = async initialValue => {
+      try {
+        return await require('./windows-authenticated-state.cjs').openAuthenticatedState({
+          storage: nativeStorage.storage(keyFile), file: keyFile, installationId, purpose: 'source-keyring',
+          mode: 'append', seal: bytes => wrapper.wrap(bytes), unseal: bytes => wrapper.unwrap(bytes),
+          maxPayloadBytes: MAX_KEYRING_BYTES, maxEncodedBytes: MAX_WRAPPED_KEYRING_BYTES,
+          maxRecords: MAX_KEYS, fresh, initialValue });
+      } catch { fail('SOURCE_VAULT_KEY_INVALID'); }
+    };
     if (fresh) {
       if (!await directoryEmpty(sourceRoot) || await statOrMissing(keyFile)) fail('SOURCE_VAULT_NOT_FRESH');
       // Only owner.lock is permitted here. Interrupted key creation requires explicit recovery/open.
-      const entries = await fs.opendir(keyDirectory);
+      const entries = await directoryEntries(keyDirectory);
       try { for await (const entry of entries) if (entry.name !== 'owner.lock') fail('SOURCE_VAULT_NOT_FRESH'); }
-      finally { await entries.close().catch(() => {}); }
+      finally { if (entries.close) await entries.close().catch(() => {}); }
       keys = new Map([[crypto.randomBytes(16).toString('hex'), crypto.randomBytes(32)]]);
-      const wrapped = await wrapKeyring(wrapper, installationId, keys);
-      keyFileStat = await atomicWrite(keyDirectory, 'source-keyring.wrapped', wrapped, { fault, kind: 'keyring', checkOwnership });
+      if (windows) {
+        const plaintext = keyringPlaintext(installationId, keys);
+        try {
+          await checkOwnership(); keyState = await openWindowsKeys(plaintext);
+          keyFileStat = await statOrMissing(keyFile);
+          const checked = await keyState.read();
+          try { if (!checked.equals(plaintext)) fail('SOURCE_VAULT_KEY_INVALID'); }
+          finally { checked.fill(0); }
+        } finally { plaintext.fill(0); }
+      } else {
+        const wrapped = await wrapKeyring(wrapper, installationId, keys);
+        try { keyFileStat = await atomicWrite(keyDirectory, 'source-keyring.wrapped', wrapped, { fault, kind: 'keyring', checkOwnership }); }
+        finally { wrapped.fill(0); }
+      }
+    } else if (windows) {
+      if (!await statOrMissing(keyFile)) fail('SOURCE_VAULT_KEY_MISSING');
+      keyState = await openWindowsKeys();
+      keyFileStat = await statOrMissing(keyFile);
+      const plaintext = await keyState.read();
+      try { keys = parseKeyring(plaintext, installationId); }
+      finally { plaintext.fill(0); }
     } else {
       ({ keys, stat: keyFileStat } = await loadKeyring(keyFile, wrapper, installationId));
     }
@@ -482,6 +587,7 @@ async function initialize(options, fresh, restoreStage = false) {
     let pending = 0;
     let queue = Promise.resolve();
     const ensureUsable = () => {
+      nativeStorage?.assertLive();
       if (closed || closing || poisoned || ownerLocks !== undefined && !lock.isHeld()) fail('SOURCE_VAULT_CLOSED');
     };
     const verifyRoots = async () => {
@@ -489,6 +595,10 @@ async function initialize(options, fresh, restoreStage = false) {
       await privateDirectory(sourceRoot, sourceStat);
       await privateDirectory(keyDirectory, keyStat);
       await lock.check();
+      const enrollment = await statOrMissing(enrollmentFile);
+      if (!enrollment) fail('SOURCE_VAULT_KEY_MISSING');
+      checkPrivate(enrollment, false);
+      if (!sameFileState(enrollment, enrollmentStat)) fail('SOURCE_VAULT_KEY_INVALID');
       const current = await statOrMissing(keyFile);
       if (!current) fail('SOURCE_VAULT_KEY_MISSING');
       checkPrivate(current, false);
@@ -516,14 +626,14 @@ async function initialize(options, fresh, restoreStage = false) {
     // The exclusive owner contract forbids external store mutations while this handle is live.
     const accountAttempt = async (expected) => {
       const projectDirectory = path.join(sourceRoot, expected.projectId);
-      const projectStat = await statOrMissing(projectDirectory);
+      const projectStat = await statOrMissing(projectDirectory, { directory: true });
       if (!projectStat) return;
       checkPrivate(projectStat, true);
       const knownProject = store.entries.get(expected.projectId);
       if (knownProject && !sameIdentity(knownProject, projectStat)) fail('SOURCE_VAULT_UNSAFE_PATH');
       store.entries.set(expected.projectId, directoryEntry(projectStat));
       const directory = address(expected);
-      const stat = await statOrMissing(directory);
+      const stat = await statOrMissing(directory, { directory: true });
       if (!stat) return;
       checkPrivate(stat, true);
       const prefix = `${expected.projectId}/${expected.sha256}`;
@@ -539,7 +649,8 @@ async function initialize(options, fresh, restoreStage = false) {
     };
     const readStoredEnvelope = async (expected) => {
       const directory = address(expected);
-      if (!await statOrMissing(directory)) fail('SOURCE_VAULT_MISSING');
+      if (!await statOrMissing(path.dirname(directory), { directory: true })) fail('SOURCE_VAULT_MISSING');
+      if (!await statOrMissing(directory, { directory: true })) fail('SOURCE_VAULT_MISSING');
       const projectStat = await privateDirectory(path.dirname(directory), store.entries.get(expected.projectId));
       const addressStat = await privateDirectory(directory, store.entries.get(`${expected.projectId}/${expected.sha256}`));
       const encrypted = await readPrivateFile(path.join(directory, 'blob.bin'), MAX_FILE_BYTES + MAX_HEADER_BYTES + 12, 'SOURCE_VAULT_MISSING');
@@ -583,7 +694,7 @@ async function initialize(options, fresh, restoreStage = false) {
           const knownProject = store.entries.get(projectId);
           const knownAddress = store.entries.get(prefix);
           if (knownProject) await privateDirectory(projectDirectory, knownProject);
-          else if (await statOrMissing(projectDirectory)) fail('SOURCE_VAULT_UNSAFE_PATH');
+          else if (await statOrMissing(projectDirectory, { directory: true })) fail('SOURCE_VAULT_UNSAFE_PATH');
           if (knownAddress) {
             await privateDirectory(directory, knownAddress);
             const existing = await readStored(expected);
@@ -594,7 +705,8 @@ async function initialize(options, fresh, restoreStage = false) {
               return Object.freeze({ format: FORMAT_MAJOR, ...expected, keyId: existing.keyId, deduplicated: true });
             } finally { existing.bytes.fill(0); }
           }
-          if (await statOrMissing(directory)) fail('SOURCE_VAULT_UNSAFE_PATH');
+          // Native missing checks require existing retained ancestors; an absent project has no address.
+          if (knownProject && await statOrMissing(directory, { directory: true })) fail('SOURCE_VAULT_UNSAFE_PATH');
           const keyId = [...keys.keys()].at(-1);
           const encrypted = encryptBlob({ installationId, ...expected, keyId }, plaintext, keys.get(keyId));
           // Reserve both payload and metadata entries BEFORE creating anything. Rename reuses the temp entry.
@@ -604,15 +716,19 @@ async function initialize(options, fresh, restoreStage = false) {
           try {
             await checkOwnership();
             if (!knownProject) {
-              await fs.mkdir(projectDirectory, { mode: 0o700 });
+              await mkdir(projectDirectory);
               await privateDirectory(projectDirectory);
               await syncDirectory(sourceRoot);
             }
-            await checkOwnership(); await fs.mkdir(directory, { mode: 0o700 });
+            await checkOwnership(); await mkdir(directory);
             // Interrupted reservations remain isolated; ambiguous existing residue is never overwritten/cleaned.
             await privateDirectory(directory);
             await syncDirectory(projectDirectory);
             await atomicWrite(directory, 'blob.bin', encrypted, { fault, kind: 'blob', checkOwnership });
+            // Authenticate persisted bytes before a successful source publication on either platform.
+            const checked = await readStored(expected);
+            try { if (!checked.bytes.equals(plaintext)) fail('SOURCE_VAULT_INTEGRITY'); }
+            finally { checked.bytes.fill(0); }
             await verifyRoots();
             return Object.freeze({ format: FORMAT_MAJOR, ...expected, keyId, deduplicated: false });
           } finally {
@@ -670,7 +786,7 @@ async function initialize(options, fresh, restoreStage = false) {
           const knownAddress = store.entries.get(prefix);
           const receipt = deduplicated => Object.freeze({ format: FORMAT_MAJOR, ...expected, cipherSha256, deduplicated });
           if (knownProject) await privateDirectory(projectDirectory, knownProject);
-          else if (await statOrMissing(projectDirectory)) fail('SOURCE_VAULT_UNSAFE_PATH');
+          else if (await statOrMissing(projectDirectory, { directory: true })) fail('SOURCE_VAULT_UNSAFE_PATH');
           if (knownAddress) {
             await privateDirectory(directory, knownAddress);
             const existing = await readStoredEnvelope(expected);
@@ -682,18 +798,19 @@ async function initialize(options, fresh, restoreStage = false) {
               return receipt(true);
             } finally { existing.bytes.fill(0); }
           }
-          if (await statOrMissing(directory)) fail('SOURCE_VAULT_UNSAFE_PATH');
+          // Native missing checks require existing retained ancestors; an absent project has no address.
+          if (knownProject && await statOrMissing(directory, { directory: true })) fail('SOURCE_VAULT_UNSAFE_PATH');
           const requiredEntries = (knownProject ? 0 : 1) + 2;
           if (store.bytes + envelope.length > maxStoreBytes
               || store.entries.size + requiredEntries > maxStoreEntries) fail('SOURCE_VAULT_LIMIT');
           try {
             await checkOwnership();
             if (!knownProject) {
-              await fs.mkdir(projectDirectory, { mode: 0o700 });
+              await mkdir(projectDirectory);
               await privateDirectory(projectDirectory);
               await syncDirectory(sourceRoot);
             }
-            await checkOwnership(); await fs.mkdir(directory, { mode: 0o700 });
+            await checkOwnership(); await mkdir(directory);
             await privateDirectory(directory);
             await syncDirectory(projectDirectory);
             const committed = await atomicWrite(directory, 'blob.bin', envelope, { fault, kind: 'blob', checkOwnership });
@@ -724,9 +841,26 @@ async function initialize(options, fresh, restoreStage = false) {
           if (next.has(keyId)) { newKey.fill(0); fail('SOURCE_VAULT_IO'); }
           next.set(keyId, newKey);
           try {
-            const wrapped = await wrapKeyring(wrapper, installationId, next);
-            keyFileStat = await atomicWrite(keyDirectory, 'source-keyring.wrapped', wrapped,
-              { previous: keyFileStat, fault, kind: 'keyring', checkOwnership });
+            if (windows) {
+              if (await wrapper.isAvailable() !== true) fail('SOURCE_VAULT_WRAPPING_UNAVAILABLE');
+              const plaintext = keyringPlaintext(installationId, next);
+              try {
+                await checkOwnership();
+                await fault?.('keyring:native-before-append');
+                await keyState.write(plaintext);
+                await fault?.('keyring:native-appended');
+                keyFileStat = await statOrMissing(keyFile);
+                const checked = await keyState.read();
+                try { if (!checked.equals(plaintext)) fail('SOURCE_VAULT_KEY_INVALID'); }
+                finally { checked.fill(0); }
+              } finally { plaintext.fill(0); }
+            } else {
+              const wrapped = await wrapKeyring(wrapper, installationId, next);
+              try {
+                keyFileStat = await atomicWrite(keyDirectory, 'source-keyring.wrapped', wrapped,
+                  { previous: keyFileStat, fault, kind: 'keyring', checkOwnership });
+              } finally { wrapped.fill(0); }
+            }
             keys = next;
             await verifyRoots();
             return publicInfo();
@@ -740,7 +874,8 @@ async function initialize(options, fresh, restoreStage = false) {
           await queue;
           for (const key of keys.values()) key.fill(0);
           closed = true;
-          try { await lock.release(); } catch (error) { throw safeError(error); }
+          try { await nativeStorage?.close(); }
+          finally { try { await lock.release(); } catch (error) { throw safeError(error); } }
         })();
         return closePromise;
       },
@@ -749,6 +884,7 @@ async function initialize(options, fresh, restoreStage = false) {
     return Object.freeze(vault);
   } catch (error) {
     if (keys) for (const key of keys.values()) key.fill(0);
+    if (nativeStorage) await nativeStorage.close().catch(() => {});
     if (lock) await lock.release().catch(() => {});
     throw safeError(error);
   }

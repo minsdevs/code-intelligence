@@ -80,7 +80,7 @@ class LocalPreviewApiIntegrationTest {
         assertThat(preview.path("changes").path("total").asInt()).isEqualTo(1);
         assertThat(preview.path("snapshotId").isNull()).isTrue();
         assertThat(preview.path("localImport").path("acceptedFiles").asInt()).isEqualTo(1);
-        assertThat(preview.toString()).doesNotContain(root.toString(), "manifestSha256", "rootInode");
+        assertThat(preview.toString()).doesNotContain(root.toString(), "manifestSha256", "rootIdentity", "rootOwner");
         String token = preview.path("previewToken").asString();
         assertThat(token).matches("[0-9a-f]{64}");
         assertThat(jdbc.queryForObject(

@@ -250,3 +250,17 @@ test('native workspace owner locks contend and reopen the same permanent marker'
   try { const lock = await reopened.lock('workspace.owner', marker); assert.equal(lock.state.identity, identity); await lock.close(); }
   finally { await reopened.close(); marker.fill(0); }
 });
+
+test('native IPC-directory cleanup requires released handles, exact identity and emptiness', { skip: !enabled }, async t => {
+  const { boundary, root } = fixture(t), held = await boundary.openStorage(root);
+  const identity = held.rootState.identity;
+  try { assert.throws(() => boundary.removeDirectory(root, identity)); }
+  finally { await held.close(); }
+  assert.throws(() => boundary.removeDirectory(root, identity + '0'));
+  assert.equal('WI1:' + boundary.inspect(root, { directory: true }), identity);
+  const file = path.join(root, 'retained.bin'); boundary.writeFresh(file, Buffer.from('owned'));
+  assert.throws(() => boundary.removeDirectory(root, identity));
+  assert.equal(boundary.readPrivate(file, 16).toString(), 'owned');
+  fs.unlinkSync(file); boundary.removeDirectory(root, identity);
+  assert.equal(fs.existsSync(root), false);
+});

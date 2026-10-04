@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const net = require('node:net');
 const path = require('node:path');
+const { createWindowsUnixServer } = require('./windows-unix-server.cjs');
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_FRAME = 3 * 1024 * 1024;
@@ -70,22 +71,25 @@ function frame(value) {
 }
 
 /** Main-only bounded local bridge. It never listens on TCP or exposes key/path operations. */
-async function createSourceBroker({ socketPath, authToken, vault, timeoutMs = 10_000, drainTimeoutMs = 10_000 }) {
+async function createSourceBroker({ socketPath, authToken, vault, timeoutMs = 10_000, drainTimeoutMs = 10_000, windowsBoundary, onLost = () => {} }) {
   if (typeof socketPath !== 'string' || !path.isAbsolute(socketPath) || path.normalize(socketPath) !== socketPath
       || Buffer.byteLength(socketPath) > 100 || !fullMatch(authToken, HEX)
       || !vault || typeof vault.put !== 'function' || typeof vault.read !== 'function'
       || !Number.isSafeInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > 30_000
       || !Number.isSafeInteger(drainTimeoutMs) || drainTimeoutMs < 10 || drainTimeoutMs > 30_000) reject();
   const parent = path.dirname(socketPath);
-  const stat = await fs.lstat(parent);
-  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o700
-      || stat.uid !== process.getuid() || await fs.realpath(parent) !== parent) reject();
-  try { await fs.lstat(socketPath); reject(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (process.platform === 'win32' && !windowsBoundary) reject();
+  if (!windowsBoundary) {
+    const stat = await fs.lstat(parent);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o700
+        || stat.uid !== process.getuid() || await fs.realpath(parent) !== parent) reject();
+    try { await fs.lstat(socketPath); reject(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
   const sockets = new Set();
   const operations = new Set();
   let closing = false;
   let closePromise;
-  const server = net.createServer((socket) => {
+  const connect = (socket) => {
     if (closing || sockets.size >= 8 || operations.size >= 4) { socket.destroy(); return; }
     sockets.add(socket);
     const deadline = setTimeout(() => socket.destroy(), timeoutMs);
@@ -105,11 +109,12 @@ async function createSourceBroker({ socketPath, authToken, vault, timeoutMs = 10
         length = prefix.readUInt32BE(0);
         if (length < 2 || length > MAX_FRAME) { socket.destroy(); return; }
       }
-      if (length === undefined || size < length + 4) return;
+      if (length !== undefined && size > length + 4) socket.destroy();
+    });
+    // Dispatch only after FIN proves there is exactly one complete request.
+    socket.on('end', () => {
       complete = true;
-      // One valid frame can start one operation. Later protocol bytes close transport; they cannot
-      // roll back that content-addressed operation and never start a second one.
-      if (size !== length + 4) { socket.destroy(); return; }
+      if (closing || socket.destroyed || length === undefined || size !== length + 4) { socket.destroy(); return; }
       // Slots belong to vault operations, not their transport; a disconnected client cannot free one.
       if (operations.size >= 4) { socket.destroy(); return; }
       const body = Buffer.concat(chunks, size).subarray(4);
@@ -141,25 +146,28 @@ async function createSourceBroker({ socketPath, authToken, vault, timeoutMs = 10
       operations.add(operation);
       operation.finally(() => operations.delete(operation)).catch(() => socket.destroy());
     });
-  });
+  };
+  const server = windowsBoundary
+    ? createWindowsUnixServer({ windowsBoundary, maxRequest: MAX_FRAME, maxResponse: MAX_FRAME, maxConnections: 8, frameTimeoutMs: timeoutMs, absoluteDeadline: true }, connect)
+    : net.createServer({ allowHalfOpen: true }, connect);
   try {
     await new Promise((resolve, rejectListen) => {
       server.once('error', rejectListen);
       server.listen(socketPath, resolve);
     });
-    await fs.chmod(socketPath, 0o600);
+    if (!windowsBoundary) await fs.chmod(socketPath, 0o600);
   } catch {
     server.close();
     reject();
   }
-  server.on('error', () => {});
+  server.on('error', () => { closing = true; for (const socket of sockets) socket.destroy(); onLost(); });
   return Object.freeze({
     close() {
       if (closePromise) return closePromise;
       closing = true;
       closePromise = (async () => {
         for (const socket of sockets) socket.destroy();
-        await new Promise((resolve) => server.close(resolve));
+        const transportFailure = await new Promise(resolve => server.close(error => resolve(error)));
         let timer;
         try {
           await Promise.race([
@@ -169,6 +177,7 @@ async function createSourceBroker({ socketPath, authToken, vault, timeoutMs = 10
             }),
           ]);
         } finally { clearTimeout(timer); }
+        if (transportFailure) reject();
       })();
       // A failed drain must not be treated as permission to close/replace the source vault.
       return closePromise;

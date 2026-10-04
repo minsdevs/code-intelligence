@@ -506,6 +506,7 @@ class SourceStoreClientTest {
         assertThat(size).isBetween(2, SourceStoreClient.MAX_FRAME);
         ByteBuffer body = ByteBuffer.allocate(size);
         readFully(socket, body);
+        assertThat(socket.read(ByteBuffer.allocate(1))).isEqualTo(-1);
         return JSON.readTree(body.array());
     }
 

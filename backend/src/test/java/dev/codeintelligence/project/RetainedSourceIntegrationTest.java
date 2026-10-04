@@ -19,6 +19,7 @@ import dev.codeintelligence.analysis.core.FileInventoryStep;
 import dev.codeintelligence.analysis.core.FileService;
 import dev.codeintelligence.analysis.core.SnapshotSourceException;
 import dev.codeintelligence.common.AppProperties;
+import dev.codeintelligence.common.DesktopPrivateBootstrap;
 import dev.codeintelligence.job.FinalizeStep;
 import dev.codeintelligence.job.JobConflictException;
 import dev.codeintelligence.job.JobContext;
@@ -35,6 +36,7 @@ import dev.codeintelligence.job.StepStatus;
 import dev.codeintelligence.source.SourceStoreClient;
 import dev.codeintelligence.source.SourceStoreException;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -71,6 +73,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -101,6 +104,21 @@ class RetainedSourceIntegrationTest {
     private static final String A = "package demo; class Sample { String value = \"SOURCE_A\"; }\n";
     private static final String B = "package demo; class Sample { String value = \"SOURCE_B\"; }\n";
     private static NodeBridge bridge;
+
+    @TestBean(methodName = "privateBootstrap")
+    DesktopPrivateBootstrap privateBootstrap;
+
+    static DesktopPrivateBootstrap privateBootstrap() {
+        var json = new JsonMapper();
+        byte[] bytes = json.writeValueAsBytes(Map.of(
+                "version",
+                2,
+                "ai",
+                Map.of("socketPath", "/tmp/retained-ai.sock", "capability", "e".repeat(64), "epoch", "f".repeat(64)),
+                "source",
+                Map.of("socketPath", bridge.socket.toString(), "capability", NodeBridge.TOKEN)));
+        return new DesktopPrivateBootstrap(new ByteArrayInputStream(bytes), json, Duration.ofSeconds(3));
+    }
 
     @TempDir
     static Path root;
@@ -166,8 +184,6 @@ class RetainedSourceIntegrationTest {
         }
         registry.add("app.data-dir", () -> root.resolve("data").toString());
         registry.add("app.local-import.allowed-roots", () -> root.toString());
-        registry.add("app.source-store.socket-path", () -> bridge.socket.toString());
-        registry.add("app.source-store.broker-token", () -> NodeBridge.TOKEN);
     }
 
     @AfterAll

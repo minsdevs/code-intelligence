@@ -5,6 +5,7 @@ const net = require('node:net');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { createWindowsUnixServer } = require('./windows-unix-server.cjs');
 
 const MAX_FRAME = 2 * 1024 * 1024;
 const MAX_RESPONSE = 4 * 1024 * 1024;
@@ -24,20 +25,23 @@ function secureDirectory(stat) {
       || (process.getuid && stat.uid !== process.getuid())) throw invalid();
 }
 
-async function openAiEgressBridge({ directory, capability, epoch, handler, frameTimeoutMs = 3000 }) {
+async function openAiEgressBridge({ directory, capability, epoch, handler, frameTimeoutMs = 3000, windowsBoundary, onLost = () => {} }) {
   if (typeof directory !== 'string' || !path.isAbsolute(directory)
       || typeof capability !== 'string' || capability.match(CAPABILITY)?.[0] !== capability
       || typeof epoch !== 'string' || epoch.match(CAPABILITY)?.[0] !== epoch
       || typeof handler !== 'function' || !Number.isInteger(frameTimeoutMs)
       || frameTimeoutMs < 1 || frameTimeoutMs > 3000) throw invalid();
-  const canonical = await fs.realpath(directory);
+  if (process.platform === 'win32' && !windowsBoundary) throw invalid();
+  const canonical = windowsBoundary ? directory : await fs.realpath(directory);
   if (canonical !== path.resolve(directory)) throw invalid();
-  const before = await fs.lstat(canonical);
-  secureDirectory(before);
+  let before;
   const socketPath = path.join(canonical, 'ai.sock');
   if (Buffer.byteLength(socketPath) > 100) throw invalid();
-  try { await fs.lstat(socketPath); throw invalid(); } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+  if (!windowsBoundary) {
+    before = await fs.lstat(canonical); secureDirectory(before);
+    try { await fs.lstat(socketPath); throw invalid(); } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
   }
   const secret = Buffer.from(capability, 'hex');
   const sessions = new Set();
@@ -46,7 +50,7 @@ async function openAiEgressBridge({ directory, capability, epoch, handler, frame
   let closePromise;
   let socketIdentity;
 
-  const server = net.createServer({ allowHalfOpen: true }, (socket) => {
+  const connect = (socket) => {
     if (closing || sessions.size >= MAX_CONNECTIONS) { socket.destroy(); return; }
     sessions.add(socket);
     let bytes = Buffer.alloc(0);
@@ -114,23 +118,28 @@ async function openAiEgressBridge({ directory, capability, epoch, handler, frame
         }).catch(reject).finally(() => active.delete(task));
       active.add(task);
     });
-  });
+  };
+  const server = windowsBoundary
+    ? createWindowsUnixServer({ windowsBoundary, maxRequest: MAX_FRAME, maxResponse: MAX_RESPONSE, maxConnections: MAX_CONNECTIONS, frameTimeoutMs }, connect)
+    : net.createServer({ allowHalfOpen: true }, connect);
   try {
     await new Promise((resolve, reject) => {
       const failed = (error) => { server.off('listening', ready); reject(error); };
       const ready = () => { server.off('error', failed); resolve(); };
       server.once('error', failed); server.once('listening', ready); server.listen(socketPath);
     });
-    server.on('error', () => { closing = true; for (const socket of sessions) socket.destroy(); });
-    await fs.chmod(socketPath, 0o600);
-    socketIdentity = await fs.lstat(socketPath);
-    const after = await fs.lstat(canonical);
-    secureDirectory(after);
-    if (!socketIdentity.isSocket() || before.dev !== after.dev || before.ino !== after.ino) throw invalid();
+    server.on('error', () => { closing = true; for (const socket of sessions) socket.destroy(); onLost(); });
+    if (!windowsBoundary) {
+      await fs.chmod(socketPath, 0o600);
+      socketIdentity = await fs.lstat(socketPath);
+      const after = await fs.lstat(canonical);
+      secureDirectory(after);
+      if (!socketIdentity.isSocket() || before.dev !== after.dev || before.ino !== after.ino) throw invalid();
+    }
   } catch {
     closing = true; secret.fill(0);
     for (const socket of sessions) socket.destroy();
-    if (server.listening) await new Promise(resolve => server.close(resolve));
+    if (windowsBoundary || server.listening) await new Promise(resolve => server.close(resolve));
     throw invalid();
   }
 
@@ -138,11 +147,13 @@ async function openAiEgressBridge({ directory, capability, epoch, handler, frame
     if (closePromise) return closePromise;
     closing = true;
     closePromise = (async () => {
-      const stopped = new Promise(resolve => server.close(resolve));
+      const stopped = new Promise(resolve => server.close(error => resolve(error)));
       for (const socket of sessions) socket.destroy();
       await Promise.allSettled([...active]);
-      await stopped;
+      const failure = await stopped;
       secret.fill(0);
+      if (failure) throw invalid();
+      if (windowsBoundary) return; // Native owns identity-checked AF_UNIX leaf cleanup.
       // Node normally removes its socket on close. Do not unlink a replacement path.
       try {
         const current = await fs.lstat(socketPath);

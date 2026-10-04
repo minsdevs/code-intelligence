@@ -61,6 +61,10 @@ function createWindowsBoundary(runtimeRoot) {
     readPrivate: (file, maximum = MAX_BYTES) => read('read-private', file, maximum),
     readPublic: (file, maximum = MAX_BYTES) => read('read-public', file, maximum),
     createDirectory: (directory, { inherit = false } = {}) => { invoke(inherit ? 'mkdir-inherited' : 'mkdir', directory); },
+    removeDirectory(directory, identity) {
+      if (typeof identity !== 'string' || !/^WI1:\d+:\d+:\d+$/.test(identity)) refuse();
+      invoke('rmdir-private', directory, field(identity));
+    },
     writeFresh: (file, bytes) => write('write-fresh', file, bytes),
     replacePrivate: (file, bytes) => write('replace-private', file, bytes),
     inspect(file, { directory = false, private: privateObject = true } = {}) {

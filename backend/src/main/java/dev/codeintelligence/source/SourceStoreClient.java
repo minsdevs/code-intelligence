@@ -1,5 +1,6 @@
 package dev.codeintelligence.source;
 
+import dev.codeintelligence.common.DesktopPrivateBootstrap;
 import java.io.IOException;
 import java.net.StandardProtocolFamily;
 import java.net.UnixDomainSocketAddress;
@@ -64,7 +65,11 @@ public class SourceStoreClient {
     private final long deadlineNanos;
 
     @Autowired
-    public SourceStoreClient(SourceStoreProperties properties, JsonMapper json) {
+    public SourceStoreClient(DesktopPrivateBootstrap bootstrap, JsonMapper json) {
+        this(bootstrap.source(), json, MAX_DEADLINE);
+    }
+
+    SourceStoreClient(SourceStoreProperties properties, JsonMapper json) {
         this(properties, json, MAX_DEADLINE);
     }
 
@@ -156,6 +161,7 @@ public class SourceStoreClient {
                     deadline.check();
                     if (channel.write(outgoing) == 0) ready(selector, key, SelectionKey.OP_WRITE, deadline);
                 }
+                channel.shutdownOutput();
                 ByteBuffer prefix = ByteBuffer.allocate(4);
                 readFully(channel, selector, key, prefix, deadline);
                 int length = prefix.flip().getInt();

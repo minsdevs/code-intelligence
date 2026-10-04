@@ -3,6 +3,7 @@ package dev.codeintelligence.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.codeintelligence.TestcontainersConfiguration;
+import dev.codeintelligence.common.DesktopPrivateBootstrap;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.HttpCookie;
@@ -735,8 +736,8 @@ class AiDesktopCostFlowIntegrationTest {
 
         @Bean
         @Primary
-        AiMainGatewayClient desktopCostClient(NodeRuntime runtime, JsonMapper json) {
-            return new AiMainGatewayClient(runtime.process.getInputStream(), json, Duration.ofSeconds(35));
+        DesktopPrivateBootstrap desktopCostBootstrap(NodeRuntime runtime, JsonMapper json) {
+            return new DesktopPrivateBootstrap(runtime.process.getInputStream(), json, Duration.ofSeconds(3));
         }
     }
 

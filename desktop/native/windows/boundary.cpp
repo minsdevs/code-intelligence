@@ -268,6 +268,13 @@ int wmain(int argc, wchar_t** argv) {
         auto p = checkedPath(wide(field(16384)));
         if (op == L"read-private" || op == L"read-public") { auto bytes = readProtected(p, op == L"read-private", number()); output(bytes.data.data(), bytes.data.size()); }
         else if (op == L"mkdir" || op == L"mkdir-inherited") createDirectory(p, op == L"mkdir-inherited");
+        else if (op == L"rmdir-private") {
+            const auto expected = field(256); auto chain = ancestors(p);
+            auto h = openObject(p, true, READ_CONTROL | FILE_READ_ATTRIBUTES | DELETE, FILE_SHARE_READ | FILE_SHARE_WRITE);
+            const auto info = inspect(h.value, true, true);
+            require(expected == "WI1:" + std::to_string(info.dwVolumeSerialNumber) + ":" + std::to_string(info.nFileIndexHigh) + ":" + std::to_string(info.nFileIndexLow));
+            FILE_DISPOSITION_INFO disposition{TRUE}; require(SetFileInformationByHandle(h.value, FileDispositionInfo, &disposition, sizeof(disposition)) != 0);
+        }
         else if (op == L"inspect-private-directory" || op == L"inspect-private" || op == L"inspect-public") {
             bool dir = op == L"inspect-private-directory"; auto chain = ancestors(p);
             auto h = openObject(p, dir, READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE);

@@ -11,10 +11,12 @@ const vm = require('node:vm');
 const { createAiEgressPostgres } = require('../../src/ai-egress-postgres.cjs');
 const { openDesktopAiGateway } = require('../../src/ai-desktop-gateway.cjs');
 const { SUPPORTED_MODEL } = require('../../src/ai-model-contracts.cjs');
+const { createSourceVault } = require('../../src/source-vault.cjs');
+const { createSourceBroker } = require('../../src/source-broker.cjs');
 
 const PUBLIC_SYNTHETIC_KEY = 'sk-publicSyntheticDesktopCostKey0123456789';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-let lifecycle, adapter, root, stopping = false;
+let lifecycle, adapter, root, sourceVault, sourceBroker, stopping = false;
 
 function syntheticStorage() {
   const key = Buffer.alloc(32, 53);
@@ -51,6 +53,10 @@ async function stop() {
   if (stopping) return;
   stopping = true;
   let failed = false;
+  try {
+    if (sourceBroker) await sourceBroker.close();
+    if (sourceVault) await sourceVault.close();
+  } catch { failed = true; }
   try { if (lifecycle) await lifecycle.close(); } catch { failed = true; }
   try { if (adapter) await adapter.close(); } catch { failed = true; }
   if (root) await fs.writeFile(path.join(root, 'closed.json'), JSON.stringify({ closed: !failed }), { mode: 0o600 });
@@ -109,7 +115,22 @@ async function main() {
       return gateway;
     } });
   delete config.tokenEncryptionKey;
-  const bootstrap = gateway.bootstrap();
+  const sourceStorage = syntheticStorage();
+  sourceVault = await createSourceVault({ safetyRoot: path.join(userData, 'source-safety'),
+    sourceRoot: path.join(userData, 'source-blobs'), installationId: config.installationId,
+    wrapper: { isAvailable: sourceStorage.isEncryptionAvailable,
+      wrap: bytes => sourceStorage.encryptString(bytes.toString('base64')),
+      unwrap: bytes => Buffer.from(sourceStorage.decryptString(bytes), 'base64') } });
+  const sourceCapability = crypto.randomBytes(32).toString('hex');
+  const sourceSocket = path.join(temporaryRoot, 'source.sock');
+  sourceBroker = await createSourceBroker({ socketPath: sourceSocket, authToken: sourceCapability, vault: sourceVault });
+  const aiBytes = gateway.bootstrap();
+  let bootstrap;
+  try {
+    const { version, ...ai } = JSON.parse(aiBytes.toString('utf8'));
+    bootstrap = Buffer.from(JSON.stringify({ version: 2, ai,
+      source: { socketPath: sourceSocket, capability: sourceCapability } }));
+  } finally { aiBytes.fill(0); }
   try { syncFs.writeFileSync(1, bootstrap); } finally { bootstrap.fill(0); syncFs.closeSync(1); }
   process.stdin.resume();
   process.stdin.once('end', () => { stop().catch(() => { process.exitCode = 1; }); });

@@ -13,10 +13,10 @@ async function fixture(t) {
   fs.chmodSync(root, 0o700);
   const server = https.createServer();
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  let transport;
+  let transport, allowCloseFailure = false;
   t.after(async () => {
+    await transport?.close().catch(error => { if (!allowCloseFailure) throw error; });
     await new Promise(resolve => server.close(resolve));
-    await transport?.close();
     fs.rmSync(root, { recursive: true });
   });
   let token = crypto.randomBytes(32).toString('hex');
@@ -30,7 +30,7 @@ async function fixture(t) {
     if (req.url === '/redirect') { res.writeHead(302, { Location: transport.backend.origin + '/must-not-follow' }); res.end(); return; }
     res.writeHead(204); res.end();
   });
-  return { root, transport, requests, rotate() { token = crypto.randomBytes(32).toString('hex'); } };
+  return { root, transport, server, requests, allowCloseFailure() { allowCloseFailure = true; }, rotate() { token = crypto.randomBytes(32).toString('hex'); } };
 }
 
 test('pinned TLS rejects a different service before sending HTTP and uses the current launch token', { skip: process.platform === 'win32' }, async t => {
@@ -69,3 +69,42 @@ test('launch secrets stay in owned private files and shared roots are refused', 
   const shared = path.join(f.root, 'shared'); fs.mkdirSync(shared); fs.chmodSync(shared, 0o755);
   await assert.rejects(createServiceTransport({ userData: shared, ports: {}, getApiToken: () => 'a'.repeat(64) }));
 });
+
+test('close drains in-flight pinned and callback requests and refuses reuse', { skip: process.platform === 'win32' }, async t => {
+  const f = await fixture(t);
+  let reached, count = 0; const received = new Promise(resolve => { reached = resolve; });
+  f.server.removeAllListeners('request');
+  f.server.on('request', () => { if (++count === 2) reached(); });
+  const request = f.transport.backend.request(f.transport.backend.origin + '/pending');
+  const rejected = assert.rejects(request);
+  const callbackRejected = assert.rejects(fetch(f.transport.callbackUrl + '?code=x&state=s'));
+  await received;
+  const first = f.transport.close();
+  assert.equal(f.transport.close(), first);
+  await first; await rejected; await callbackRejected;
+  assert.equal(fs.existsSync(f.transport.directory), false);
+  assert.throws(() => f.transport.backend.request(f.transport.backend.origin + '/again'));
+  assert.throws(() => f.transport.redisReady());
+  await assert.rejects(fetch(f.transport.callbackUrl + '?code=x&state=s'));
+});
+
+test('close never recursively removes an unrelated entry', { skip: process.platform === 'win32' }, async t => {
+  const f = await fixture(t);
+  const unrelated = path.join(f.transport.directory, 'unrelated');
+  fs.writeFileSync(unrelated, 'retain me');
+  const file = f.transport.materials.backend.key;
+  await assert.rejects(f.transport.close(), /DESKTOP_TRANSPORT_REFUSED/);
+  assert.equal(fs.readFileSync(unrelated, 'utf8'), 'retain me');
+  assert.ok(fs.existsSync(file));
+  f.allowCloseFailure();
+});
+
+test('failed startup closes resources and removes only its own material directory', { skip: process.platform === 'win32' }, async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-service-failed-')));
+  fs.chmodSync(root, 0o700); t.after(() => fs.rmSync(root, { recursive: true }));
+  fs.writeFileSync(path.join(root, 'unrelated'), 'keep');
+  await assert.rejects(createServiceTransport({ userData: root,
+    ports: { backend: 0, analyzer: 1, postgres: 2, redis: 3 }, getApiToken: () => 'token' }));
+  assert.deepEqual(fs.readdirSync(root), ['unrelated']);
+});
+

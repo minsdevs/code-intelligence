@@ -43,10 +43,18 @@ function decryptCredential(value, key) {
 
 async function openDesktopAiGateway({ installationId, runningBuild, temporaryRoot, tokenEncryptionKey,
   openJournal, freshEnrollmentAllowed, adapter, recoveryMode = false, verifyMaintenanceSeal, verifyMaintenanceCompletion,
-  catalog = contractCatalog, transport = createHttpsTransport() }) {
+  catalog = contractCatalog, transport = createHttpsTransport(), windowsBoundary }) {
   const mainEpoch = crypto.randomUUID(); let channelEpoch = crypto.randomBytes(32).toString('hex');
   let capability = crypto.randomBytes(32).toString('hex');
   let core; let bridge; let directory; let authority; let closed = false; let closePromise;
+  let directoryStorage; let directoryName; let directoryState;
+  async function removeDirectory() {
+    if (directoryStorage) {
+      try { if (directoryState) await directoryStorage.remove(directoryName, directoryState.identity, { directory: true }); }
+      finally { await directoryStorage.close(); }
+    } else if (directory) await fs.rmdir(directory);
+  }
+  function channelLost() { channelFailed = true; void latchOffline('RESTORE').catch(() => {}); }
   let controlEpoch = 0;
   let activeRequests = 0;
   let rotating = false; let channelFailed = false; let rotationTask = null;
@@ -67,15 +75,23 @@ async function openDesktopAiGateway({ installationId, runningBuild, temporaryRoo
       verifyMaintenanceSeal, verifyMaintenanceCompletion,
       bindAuthority(value) { authority = value; adapter.bindAuthority(value); },
     });
-    directory = await fs.realpath(await fs.mkdtemp(path.join(await fs.realpath(temporaryRoot), 'ci-ai-')));
-    await fs.chmod(directory, 0o700);
+    if (process.platform === 'win32' && !windowsBoundary) fail();
+    if (windowsBoundary) {
+      directoryStorage = await windowsBoundary.openStorage(temporaryRoot, { onLost: channelLost });
+      directoryName = 'a-' + crypto.randomBytes(4).toString('hex');
+      directoryState = await directoryStorage.mkdir(directoryName);
+      directory = path.join(temporaryRoot, directoryName);
+    } else {
+      directory = await fs.realpath(await fs.mkdtemp(path.join(await fs.realpath(temporaryRoot), 'ci-ai-')));
+      await fs.chmod(directory, 0o700);
+    }
     async function owner(input) {
       decimal(input.ownerUserId, true);
       const local = await adapter.readLocalOwner();
       equal(local.installationId, installationId); equal(local.ownerUserId, input.ownerUserId);
     }
     async function handler(operation, payload) {
-      if (closed) fail();
+      if (closed || channelFailed) fail();
       switch (operation) {
         case 'STATUS':
           exact(payload, []);
@@ -135,7 +151,7 @@ async function openDesktopAiGateway({ installationId, runningBuild, temporaryRoo
         default: fail();
       }
     }
-    bridge = await openAiEgressBridge({ directory, capability, epoch: channelEpoch, handler });
+    bridge = await openAiEgressBridge({ directory, capability, epoch: channelEpoch, handler, windowsBoundary, onLost: channelLost });
     return Object.freeze({
       diagnostics: core.diagnostics, latchOffline,
       beginMaintenance(input) {
@@ -156,7 +172,7 @@ async function openDesktopAiGateway({ installationId, runningBuild, temporaryRoo
                   await bridge.close();
                   if (closed) fail();
                   capability = crypto.randomBytes(32).toString('hex'); channelEpoch = crypto.randomBytes(32).toString('hex');
-                  bridge = await openAiEgressBridge({ directory, capability, epoch: channelEpoch, handler });
+                  bridge = await openAiEgressBridge({ directory, capability, epoch: channelEpoch, handler, windowsBoundary, onLost: channelLost });
                   if (closed) { await bridge.close(); fail(); }
                 } catch {
                   channelFailed = true;
@@ -188,7 +204,7 @@ async function openDesktopAiGateway({ installationId, runningBuild, temporaryRoo
           try { await core.close(); } catch (error) { failure ||= error; }
           key.fill(0); capability = '';
           // Remove only our now-empty directory. Never recursively remove a replaced socket/root.
-          try { await fs.rmdir(directory); } catch (error) { failure ||= error; }
+          try { await removeDirectory(); } catch (error) { failure ||= error; }
           if (failure) fail();
         })();
         return closePromise;
@@ -198,7 +214,7 @@ async function openDesktopAiGateway({ installationId, runningBuild, temporaryRoo
     if (bridge) await bridge.close().catch(() => {});
     if (core) await core.close().catch(() => {});
     key.fill(0); capability = '';
-    if (directory) await fs.rmdir(directory).catch(() => {});
+    await removeDirectory().catch(() => {});
     fail();
   }
 }
