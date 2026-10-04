@@ -6,6 +6,7 @@ const fs = require('node:fs/promises');
 const { constants } = require('node:fs');
 const path = require('node:path');
 const { acquireNativeOwnerLock } = require('./native-owner-locks.cjs');
+const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 
 const FORMAT = 'code-intelligence-purpose-keyring';
 const MAJOR = 1;
@@ -329,13 +330,16 @@ async function load(file, installationId, wrapper, limits) {
 }
 
 async function prepare(options, fresh) {
-  let lock; let keys;
+  let lock; let keys; let storage; let stateStore; let enrollment;
+  const restoreSessions = new Map();
   try {
-    if (typeof process.getuid !== 'function' || !constants.O_NOFOLLOW || !constants.O_DIRECTORY)
+    const windows = process.platform === 'win32';
+    if (!windows && (typeof process.getuid !== 'function' || !constants.O_NOFOLLOW || !constants.O_DIRECTORY))
       fail('PURPOSE_KEYRING_UNSUPPORTED');
     if (!options || typeof options !== 'object') fail('PURPOSE_KEYRING_ARGUMENT');
     const safetyRoot = rootArgument(options.safetyRoot);
     const { installationId, fault, ownerLocks } = options;
+    if (windows && (!options.windowsBoundary || ownerLocks === undefined)) fail('PURPOSE_KEYRING_UNSUPPORTED');
     if (typeof installationId !== 'string' || installationId.match(INSTALLATION_ID)?.[0] !== installationId
         || !options.wrapper || !['isAvailable', 'wrap', 'unwrap'].every(name => typeof options.wrapper[name] === 'function')
         || (fault !== undefined && typeof fault !== 'function')) fail('PURPOSE_KEYRING_ARGUMENT');
@@ -353,19 +357,34 @@ async function prepare(options, fresh) {
     const restoreRoots = options.restoreRoots.map(rootArgument);
     for (const root of restoreRoots) {
       if (overlaps(safetyRoot, root)) fail('PURPOSE_KEYRING_UNSAFE_PATH');
-      await pathChain(root, true);
+      if (!windows) await pathChain(root, true);
+      else {
+        const parent = path.dirname(root);
+        if (!restoreSessions.has(parent)) restoreSessions.set(parent, await options.windowsBoundary.openStorage(parent, { mode: 'source' }));
+        await restoreSessions.get(parent).stat(path.basename(root), { directory: true, missing: true });
+      }
     }
     await available(wrapper);
-    await privateDirectory(path.dirname(safetyRoot));
-    const safetyStat = fresh ? await ensureDirectory(safetyRoot) : await privateDirectory(safetyRoot);
+    if (!windows) await privateDirectory(path.dirname(safetyRoot));
+    if (windows && fresh) {
+      const parent = await options.windowsBoundary.openStorage(path.dirname(safetyRoot));
+      try { if (!await parent.stat(path.basename(safetyRoot), { directory: true, missing: true })) await parent.mkdir(path.basename(safetyRoot)); }
+      finally { await parent.close(); }
+    }
+    const safetyStat = windows ? null : fresh ? await ensureDirectory(safetyRoot) : await privateDirectory(safetyRoot);
+    if (windows) storage = await options.windowsBoundary.openStorage(safetyRoot);
+    if (windows) enrollment = await openAuthenticatedState({ storage, file: 'purpose-keyring.enrollment',
+      installationId, purpose: 'purpose-keyring-enrollment', mode: 'append', fresh,
+      initialValue: Buffer.from([1]), seal: wrapper.wrap, unseal: wrapper.unwrap,
+      maxPayloadBytes: 1, maxEncodedBytes: 16384, maxRecords: 1 });
     const directory = path.join(safetyRoot, 'purpose-keyring');
     if (fresh) {
-      try { await fs.mkdir(directory, { mode: 0o700 }); }
+      try { if (windows) await storage.mkdir('purpose-keyring'); else await fs.mkdir(directory, { mode: 0o700 }); }
       catch (error) { if (error.code === 'EEXIST') fail('PURPOSE_KEYRING_NOT_FRESH'); throw error; }
       // This marker is never removed after failed initialization; missing keys require explicit recovery.
-      await syncDirectory(safetyRoot, safetyStat);
+      if (!windows) await syncDirectory(safetyRoot, safetyStat);
     }
-    const directoryStat = await privateDirectory(directory);
+    const directoryStat = windows ? await storage.stat('purpose-keyring', { directory: true }) : await privateDirectory(directory);
     if (ownerLocks !== undefined) {
       try {
         const native = await acquireNativeOwnerLock(ownerLocks, { safetyRoot, kind: 'purpose-keyring', installationId });
@@ -374,10 +393,32 @@ async function prepare(options, fresh) {
         }])));
       } catch { fail('PURPOSE_KEYRING_LOCKED'); }
     } else lock = await acquireLock(directory, directoryStat);
-    await checkContents(directory, !fresh);
+    const contents = async initialized => {
+      if (!windows) return checkContents(directory, initialized);
+      let count = 0;
+      for await (const entry of storage.entries('purpose-keyring')) {
+        if (++count > 2 || (entry.name !== 'owner.lock' && (entry.name !== FILENAME || !initialized)))
+          fail(initialized ? 'PURPOSE_KEYRING_INVALID' : 'PURPOSE_KEYRING_NOT_FRESH');
+      }
+    };
+    await contents(!fresh);
     const file = path.join(directory, FILENAME);
     let fileStat;
-    if (fresh) {
+    if (windows) {
+      let initial;
+      if (fresh) {
+        keys = new Map(PURPOSES.map(name => [name, new Map()]));
+        for (const name of PURPOSES) addKey(keys, name);
+        initial = encode(installationId, keys);
+      }
+      try {
+        stateStore = await openAuthenticatedState({ storage, file: 'purpose-keyring/' + FILENAME,
+          installationId, purpose: 'purpose-keyring', mode: 'append', fresh, initialValue: initial,
+          seal: wrapper.wrap, unseal: wrapper.unwrap, maxPayloadBytes: limits.keyringBytes,
+          maxEncodedBytes: limits.wrappedBytes, maxRecords: limits.keysPerPurpose * PURPOSES.length - 1 });
+        if (!fresh) { const plain = await stateStore.read(); try { keys = parse(plain, installationId, limits); } finally { plain.fill(0); } }
+      } finally { initial?.fill(0); }
+    } else if (fresh) {
       keys = new Map(PURPOSES.map(name => [name, new Map()]));
       for (const name of PURPOSES) addKey(keys, name);
       const wrapped = await wrap(keys, installationId, wrapper, limits);
@@ -389,6 +430,15 @@ async function prepare(options, fresh) {
     let queue = Promise.resolve(); let closePromise;
     const ensureUsable = () => { if (poisoned || closing || closed) fail('PURPOSE_KEYRING_CLOSED'); };
     const verify = async () => {
+      if (windows) {
+        await lock.check(); await contents(true);
+        for (const root of restoreRoots) await restoreSessions.get(path.dirname(root)).stat(path.basename(root), { directory: true, missing: true });
+        const proof = await enrollment.read();
+        try { if (proof.length !== 1 || proof[0] !== 1) fail('PURPOSE_KEYRING_INVALID'); } finally { proof.fill(0); }
+        const plain = await stateStore.read();
+        try { const verified = parse(plain, installationId, limits); clearKeys(verified); } finally { plain.fill(0); }
+        await available(wrapper); await lock.check(); return;
+      }
       await privateDirectory(safetyRoot, safetyStat);
       await privateDirectory(directory, directoryStat);
       for (const root of restoreRoots) await pathChain(root, true);
@@ -443,9 +493,11 @@ async function prepare(options, fresh) {
             new Map([...map].map(([id, material]) => [id, Buffer.from(material)]))]));
           try {
             const id = addKey(next, selected);
-            const wrapped = await wrap(next, installationId, wrapper, limits);
-            try { fileStat = await atomicWrite(directory, FILENAME, wrapped, fileStat, fault, () => lock.check()); }
-            finally { wrapped.fill(0); }
+            const wrapped = windows ? encode(installationId, next) : await wrap(next, installationId, wrapper, limits);
+            try {
+              if (windows) { await lock.check(); await stateStore.write(wrapped); await lock.check(); }
+              else fileStat = await atomicWrite(directory, FILENAME, wrapped, fileStat, fault, () => lock.check());
+            } finally { wrapped.fill(0); }
             await verify();
             clearKeys(keys); keys = next;
             return id;
@@ -465,7 +517,11 @@ async function prepare(options, fresh) {
         closing = true;
         closePromise = queue.then(async () => {
           closed = true; clearKeys(keys);
-          await lock.release();
+          try { await storage?.close(); }
+          finally {
+            try { await Promise.all([...restoreSessions.values()].map(session => session.close())); }
+            finally { await lock.release(); }
+          }
         }).catch(error => { throw safeError(error); });
         return closePromise;
       },
@@ -473,6 +529,8 @@ async function prepare(options, fresh) {
     return Object.freeze(keyring);
   } catch (error) {
     clearKeys(keys);
+    await storage?.close().catch(() => {});
+    await Promise.all([...restoreSessions.values()].map(session => session.close().catch(() => {})));
     if (lock) await lock.release().catch(() => {});
     throw safeError(error);
   }
