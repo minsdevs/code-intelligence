@@ -360,6 +360,9 @@ async function harness(t, options = {}) {
       getuid: process.getuid.bind(process) },
     require(name) {
       if (Object.hasOwn(options.modules || {}, name)) return options.modules[name];
+      if (name === './runtime-manifest.cjs') return { validateRuntimeManifest: (root, manifest) =>
+        require(path.join(sourceRoot, name)).validateRuntimeManifest(root, manifest,
+          { platform: context.process.platform, arch: context.process.arch }) };
       if (name === 'electron') return { app, BrowserWindow, safeStorage,
         ipcMain: { on: (key, value) => handlers.set(key, value), handle: (key, value) => handlers.set(key, value) },
         dialog: { showErrorBox: (...values) => dialogs.push(values),

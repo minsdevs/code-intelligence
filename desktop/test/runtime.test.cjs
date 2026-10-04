@@ -75,7 +75,16 @@ function harness(options = {}) {
     require(name) {
       if (name === 'electron') return electron;
       if (Object.hasOwn(options.modules || {}, name)) return options.modules[name];
-      if (name === './safety-lifecycle.cjs' && options.safetyModule) return options.safetyModule;
+      if (name === './runtime-manifest.cjs') return { validateRuntimeManifest: (root, manifest) =>
+        require(path.resolve(__dirname, '../src', name)).validateRuntimeManifest(root, manifest,
+          { platform: context.process.platform, arch: context.process.arch }) };
+      if (name === './safety-lifecycle.cjs') {
+        if (options.safetyModule) return options.safetyModule;
+        const lifecycle = vm.createContext({ module: { exports: {} }, Buffer, process: context.process,
+          require: value => require(value.startsWith('./') ? path.resolve(__dirname, '../src', value) : value) });
+        vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../src', name), 'utf8'), lifecycle);
+        return lifecycle.module.exports;
+      }
       if (name === './service-transport.cjs') return { createServiceTransport: async value => transportFixture(value, context.fetch) };
       if (name === './ai-desktop-gateway.cjs') return { openDesktopAiGateway: async () => gateway };
       if (name === './ai-egress-postgres.cjs') return { createAiEgressPostgres: async () => postgres };
