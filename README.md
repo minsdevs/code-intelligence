@@ -204,17 +204,41 @@ External GitHub redirects use a separate, narrowly bounded HTTP loopback callbac
 only validated callback parameters are forwarded to the pinned HTTPS backend. That
 bridge is not a generic HTTP API listener and does not solve the OAuth provider limitation below.
 
-The Windows native protected-file/lease/Job helper and analyzer reader are implemented,
-but the durable safety lifecycle, private IPC, runtime supply and packaging gates remain
-closed. Neither this transport change nor a successful helper test proves Windows product support.
+Windows runtime IO is restricted to retained fixed-NTFS roots. `WI1` identities bind the
+volume and file ID; `WS1` states also include size, actual allocation size, last-write and
+change timestamps. Writes use bounded chunks, full-state preconditions, file flush and
+readback. Protected SID/DACL checks reject reparse points and hardlinks. Directory
+rename/unlink is not claimed power-loss durable. Safety state and folder grants use
+authenticated retained storage; missing/torn slots or enrollment markers require recovery.
 
-The new native-acceptance.yml workflow runs on fresh hosted machines, on trusted same-repository
-PRs and explicit manual dispatch. It exercises the normal macOS Electron startup rather than
-bypassing isolated-launch guards, and runs Windows boundary/DPAPI checks as a fresh standard
-user. Artifacts distinguish native smoke results from blocked product/signing acceptance.
+Main owns the encrypted source vault and private source broker. Java receives one bounded
+version2 JSON+EOF bootstrap for both AI and source capabilities, never environment fallback.
+Backup quiescence closes backend/analyzer, drains the broker and closes the vault before
+source export/swap. Failed drain retains safety ownership and prevents ordinary exit.
+Source enrollment has its own immutable authenticated marker, independent of paid-AI
+fresh-install eligibility; missing source keys or markers are never silently regenerated.
+Existing local data does not grant a new paid-AI enrollment exemption.
+
+The Windows supply pins PostgreSQL 16.10, pgvector 0.8.1, Temurin21 and self-contained
+Microsoft Garnet 2.2.0 built from source with pinned .NET dependencies. The framework-
+dependent official Garnet executable is not shipped. PE architecture/import closure,
+checksums, provenance and notices are verified before native helper execution. Windows
+release packaging remains blocked pending reviewed native product evidence, signed
+installer/update, clean interactive Windows11, power-loss and provider/license gates.
+
+The native-acceptance.yml workflow runs on fresh hosted machines, on trusted same-repository
+PRs and explicit manual dispatch. It exercises normal Electron startup rather than
+bypassing isolated-launch guards. Windows requires a fresh standard-user token, verified
+loaded profile and CurrentUser DPAPI before native NTFS/AF_UNIX/backup/TLS checks,
+Garnet Spring Session/Lua/pub-sub compatibility and the complete unsigned product flow.
+Native checks may not pass by skipping. Artifacts separate unsigned product results from
+signed release acceptance; raw runtime logs and credential stores are never exported.
 The macOS runner builds PostgreSQL 16, OpenSSL, Redis TLS and pgvector from
 Homebrew-checksummed sources in private prefixes with a macOS 13.0 deployment target,
 instead of repackaging newer-OS bottles or relaxing the native publication policy.
+Only Redis's shipped `redis-server` target is built; upstream development module tests
+are not part of the runtime closure. This avoids their raw-linker/compiler-flag mismatch
+without weakening the deployment target, TLS or relocation checks.
 Source URLs/hashes and relocated native closure hashes are retained in `provisioning.json`.
 Staging failures export bounded compiler/policy IDs and validated public source locations;
 raw build/runtime logs and credentials remain private. Source copying excludes build
@@ -227,7 +251,7 @@ The real native backup fixture now covers pinned Spring HTTPS, authenticated Red
 PostgreSQL verify-full TLS, encrypted backup/restore, and an injected post-health failure
 that rolls back product data while preserving the OFF credentials and unresolved safety seal.
 All three cases passed; its OS key wrapper remains explicitly synthetic.
-A separate cold clone of the real V20 database migrated through actual Flyway to V25;
+A separate cold clone of the real V20 database migrated through actual Flyway to V26;
 existing-table row counts were preserved, and a cold V20 restore reproduced all data digests.
 All 1,602 original DB files retained their bytes, sizes and permissions. This is not a signed-app upgrade.
 
@@ -258,6 +282,10 @@ with a separate enrollment marker. Encrypted maintenance records live under `bac
 Newly staged protocol3 runtimes connect the encrypted backup/restore buttons; older bundles keep
 them disabled. These are internal validation paths, not release acceptance. Legacy format1/2 and
 different-installation archives are rejected. Interrupted transactions block normal startup.
+On Windows, product state is below `private/` inside Electron's user-data profile, with
+protected inheritable DACLs on product workspaces and private child logs. TLS files,
+source state and short private IPC directories are main-owned; cleanup is authorized
+by retained identity and occurs only after proven service/source termination.
 
 To create and directly run the local unsigned directory package:
 
