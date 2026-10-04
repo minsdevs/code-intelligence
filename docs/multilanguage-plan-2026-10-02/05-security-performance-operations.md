@@ -27,6 +27,8 @@ GitHub 가져오기는 기존 JGit 재사용, HTTPS github.com의 검증된 repo
 
 **공식 문서 검증으로 보정한 결정:** [refresh 문서](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens)는 device flow로 생성한 토큰에 client_secret 예외를 명시한다. 따라서 `tokenOrigin=DEVICE`인 토큰만 secret 없이 갱신한다. connector별 단일 갱신 잠금, 새 access/refresh token 원자 교체, 갱신 응답 유실 시 무한 retry 대신 device 재인증. web-origin/legacy 토큰은 재인증 요구하며 secret을 bundle에 내장하지 않는다. 실제 설치 repo 목록·private clone·권한 철회·조직 SSO는 운영 App으로 별도 게이트다.
 
+2026-10-05 구현 경계: 위 자동 갱신·회전은 목표 계약이며 아직 구현 완료가 아니다. 현재 native 흐름은 scope를 보내지 않고 GitHub App의 만료 응답을 검증해 기존 `expires_at`에 저장한다. 만료되거나 과거 OAuth의 만료 시각을 모르면 재인증을 요구하고 PAT로 자동 우회하지 않는다. 기존 PAT 경로는 유지한다. 새 web OAuth는 provider가 준 만료 시각을 저장하며, 만료 시각이 없는 web/legacy OAuth는 사용할 수 없다. refresh token을 저장하지 않으므로 만료 후 사용자가 다시 로그인해야 한다. Client ID는 공개 build metadata 또는 개발 실행 환경으로 전달하며 secret은 포함하지 않는다. 자동 갱신과 실계정 expiry/revoke/SSO를 완료 게이트에서 제거하지 않는다.
+
 기존 GitHub identity 프로젝트는 새 local identity로 임의 전환하지 않는다. migration은 identity ownership map을 검증하여 기존 계정을 보존하고, 로컬 shell identity에 연결할 필요가 있으면 같은 설치의 인증된 explicit account-link 절차를 제공한다. 새 토큰을 받았다는 사실만으로 과거 다른 계정 소유 프로젝트를 읽을 수 없다.
 
 토큰·BYOK 키는 backend 암호화+main safeStorage key wrapping; OS secure storage unavailable이면 plaintext fallback 없이 연결/AI를 비활성화한다. [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)의 OS별 보장 차이는 Windows/Linux 이후 게이트에서도 다시 검증한다. 로그·crash dump·환경 진단·child argv에는 토큰 금지; child env는 꼭 필요한 값만 전달하고 로그에서 redaction한다.

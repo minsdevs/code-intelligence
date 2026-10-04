@@ -82,7 +82,9 @@ Windows/Linux/macOS x64, 조직 공유 서버, 자동 코드 수정, 원본 실�
 
 ## 6. 부모/사용자 운영 입력
 
-**O1 단일 결정 질문(부모에 이미 보고):** GitHub App을 개인 계정과 조직 중 어디에서 소유할 것인가? 추천은 장기 유지 가능한 제품 조직 소유, device flow ON, Contents read-only/Metadata 및 선택 repository 설치다. 개인 소유로 시작해도 프로토콜과 권한은 같으며 App ID/client ID만 운영 설정이다. 실제 등록·계정 생성·허용 권한 설정은 별도 명시 승인 후 수행한다. 입력 전 G-OAUTH는 BLOCKED, 로컬 핵심 개발은 진행 가능하다.
+**O1 운영 소유:** 장기 공개 배포는 제품 조직 소유를 검토한다. 개발 검증은 2026-10-05 사용자의 “등록해” 지시에 따라 기존 개인 계정 `minsdevs` 소유로 등록했다. Contents read-only/Metadata, device flow ON, 사용자 토큰 만료 ON, 해당 계정만 설치 가능으로 제한했다. G-OAUTH는 등록만으로 통과하지 않으며 설치·실계정 검증·갱신 등이 남아 있다.
+
+실제 등록: [Code Intelligence Dev minsdevs](https://github.com/settings/apps/code-intelligence-dev-minsdevs), App ID `5189413`, 공개 Client ID `Iv23licOyolwwPyDe1JY`. 홈페이지는 `https://github.com/minsdevs`, webhook·callback·설치 직후 web OAuth는 사용하지 않는다. 기존 앱 목록이 비어 있음을 확인하고 한 번 생성했으며 완료 화면을 확인했다. 공개 Client ID만 desktop build metadata에 넣었다. 에이전트는 client secret/private key를 생성·수집하지 않았다. GitHub가 설치 전 키 생성을 요구하여 사용자가 직접 생성·보관했고, 키 내용은 열지 않았다. 이어 사용자가 설치를 완료했으며 [설치 설정](https://github.com/settings/installations/167934276)에서 코드·메타데이터 읽기 권한을 확인했다. 설치 ID는 `167934276`이다. 사용자가 “전체 저장소 읽기 유지”를 선택했으므로 현재·향후 본인 저장소 전체를 읽는 범위를 유지한다. 이는 최초 제안한 선택 저장소 범위보다 넓은 사용자 선택이다. 앱 번들에 private key를 넣지 않으며 실제 device 로그인·권한 철회 검증은 별도다. [공식 등록 절차](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app).
 
 O2 Developer ID/공증 권한 및 HTTPS 배포 도메인의 운영 주체·제공 시점은 배포 전 입력이다. 서명키를 코드/문서/일반 채팅에 넣지 않는다. 서명된 로컬 fixture와 mock updater까지 먼저 구현할 수 있으나 G-NATIVE/G-UPDATE를 대체하지 못한다.
 

@@ -2,7 +2,7 @@
 
 # Code Intelligence
 
-2026-10-05 제품 개편: 레포 개요·분석 시점별 검색 표·선택 주변 관계·보관 소스 탐색을 구현했습니다. 학습 관리는 제거하고 기존 데이터는 보존했습니다. [현재 구현과 실제 앱 검증 범위](docs/multilanguage-plan-2026-10-02/11-first-implementation.md)에 최초 native FAIL/후속 PASS와 V26 백업 호환성 제한을 구분했습니다. Developer ID 서명·공증·정식 배포는 아직 완료하지 않았습니다. 아래 날짜별 감사 기록은 과거 범위를 유지합니다.
+2026-10-05 제품 개편: 레포 개요·분석 시점별 검색 표·선택 주변 관계·보관 소스 탐색을 구현했습니다. 학습 관리는 제거하고 기존 데이터는 보존했습니다. [현재 구현과 실제 앱 검증 범위](docs/multilanguage-plan-2026-10-02/11-first-implementation.md)에 최초 native FAIL/후속 PASS, 계정 연결 관리, 검토된 V26→V27 백업 호환성을 구분했습니다. Developer ID 서명·공증·정식 배포는 아직 완료하지 않았습니다. 아래 날짜별 감사 기록은 과거 범위를 유지합니다.
 
 현재 감사: [2026-10-02 출시 점검 보고서](docs/release-audit-2026-10-02.md).
 후속 구현과 검증은 [통합 결과](docs/audit/execution-results-2026-10-02.md),
@@ -154,11 +154,17 @@ docker compose up -d
 (cd frontend && npm ci && npm run dev)
 ```
 
-AI는 선택 사항입니다. Native GitHub OAuth에는 desktop/backend 실행 시
-`GITHUB_NATIVE_CLIENT_ID`가 필요하지만 이것만으로 운영 OAuth가 동작하지는 않습니다.
-현재 code 교환은 GitHub가 요구하는 client secret을 생략하므로, 출시 전에
-device flow 또는 서버에서 비밀키를 보관하는 교환 방식 선택이 필요합니다. client secret은 desktop binary에
-넣지 않으며, PAT login은 secondary 경로로만 지원합니다. 백엔드에는 항상
+AI는 선택 사항입니다. Native GitHub OAuth에는 공개 Client ID와 등록된 앱의 device flow
+활성화가 필요합니다. Client ID는 GitHub 사용자 아이디와 다릅니다. 배포용 앱은
+electron-builder의 `extraMetadata.githubNativeClientId`에 공개 ID를 넣어 Finder에서 실행해도
+로그인 설정을 읽게 합니다. 개발 실행에서는 `GITHUB_NATIVE_CLIENT_ID`로 덮어쓸 수 있습니다.
+누락되거나 형식이 잘못되면 GitHub 로그인만 비활성화하며 로컬 분석은 유지합니다.
+빌드 metadata에는 secret을 넣지 않습니다. 앱은 일회용 코드를 표시하고 사용자가
+선택할 때 GitHub 인증 페이지를 엽니다. 대기 간격·거절·만료·취소를 처리하며 client secret이나
+로컬 HTTP OAuth callback 서버를 사용하지 않습니다. 설정에서 연결·계정 전환·연결 해제를
+제공하고, 연결 해제는 로컬 분석 기록을 삭제하지 않습니다. PAT login은 보조 경로입니다.
+운영 GitHub App의 선택 저장소·읽기 권한·토큰 갱신과 실제 계정 인증은 별도 검증 대상입니다.
+현재 device-flow 테스트를 운영 OAuth 완료로 해석하지 않습니다. 백엔드에는 항상
 `TOKEN_ENC_KEY`가 필요합니다. sidecar를
 활성화하려면 `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040`과
 `TREE_ANALYZER_BASE_URL=http://127.0.0.1:3041`을 설정하십시오.

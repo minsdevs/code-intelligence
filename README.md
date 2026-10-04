@@ -2,7 +2,7 @@
 
 # Code Intelligence
 
-Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, and V26 backup compatibility limit. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
+Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
 
 Current audit: [2026-10-02 release assessment](docs/release-audit-2026-10-02.md).
 Follow-up implementation and verification: [integrated results](docs/audit/execution-results-2026-10-02.md),
@@ -424,12 +424,19 @@ docker compose up -d
 (cd frontend && npm ci && npm run dev)
 ```
 
-AI is optional. Native GitHub OAuth requires the public `GITHUB_NATIVE_CLIENT_ID` at
-desktop/backend launch and device flow enabled on that registered GitHub OAuth App.
+AI is optional. Native GitHub OAuth requires a public client ID and device flow enabled
+on the registered application. This is an application identifier, not a GitHub username.
+For desktop builds, set electron-builder `extraMetadata.githubNativeClientId` to the
+registered public ID so Finder launches work without shell configuration. Development
+can override it with `GITHUB_NATIVE_CLIENT_ID`. Missing or malformed configuration
+disables GitHub login while leaving local analysis available; never put secrets in build metadata.
 The app displays a device code and opens GitHub’s verification page only on explicit user
 action. Polling is attempt/owner-bound, obeys GitHub’s interval and `slow_down`, and stops
 on cancellation or expiry. No client secret is bundled and no local HTTP OAuth callback
-server is used. PAT login remains a secondary path. Real-account consent and live AI
+server is used. Settings provides connection, account switching and disconnection while
+preserving local analysis. PAT login remains a secondary path. Production GitHub App
+installation selection, read-only permissions and token renewal remain separate gates.
+Real-account consent and live AI
 provider calls are separate, explicitly approved checks; device-flow regressions do not
 prove either. `TOKEN_ENC_KEY` is always required by the backend. Set
 `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040` and
