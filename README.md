@@ -211,7 +211,9 @@ readback. Protected SID/DACL checks reject reparse points and hardlinks. Directo
 rename/unlink is not claimed power-loss durable.
 Retained directory and ancestor pins request list access so share-delete exclusion applies;
 canonical DOS paths use internal extended-length paths without accepting device paths on
-the wire. A write commit stabilizes NTFS timestamps before returning its post-close state.
+the wire. A write commit finalizes actual NTFS allocation and timestamps through the same retained
+writer before acknowledging its state; closing cannot change that token. No-op append
+preserves the previous state, and empty/shorter inactive-slot writes truncate the old suffix.
 Safety state and folder grants use authenticated retained storage; missing/torn slots or
 enrollment markers require recovery.
 
