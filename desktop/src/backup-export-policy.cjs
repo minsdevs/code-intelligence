@@ -134,6 +134,11 @@ const MIGRATIONS = [
     "version": 26,
     "filename": "V26__platform_source_identities.sql",
     "sha256": "c371145fd690b2418e2a79996e9842d1b3d5707324248a264c132eb81507d20b"
+  },
+  {
+    "version": 27,
+    "filename": "V27__file_analysis_outcomes.sql",
+    "sha256": "451d6875544abfcb2d2b8b613741e3faed2fb5b762ed25d95421fd3f014fae5c"
   }
 ];
 
@@ -229,6 +234,17 @@ const TABLE_DEFINITIONS = [
     ["size", "bigint", false, "none", "keep"],
     ["line_count", "integer", true, "none", "keep"],
     ["content_hash", "text", false, "none", "keep"],
+    ["analysis_status", "varchar(32)", false, "none", "keep"],
+    ["analysis_reason", "varchar(128)", true, "none", "keep"],
+    ["analysis_targeted", "boolean", false, "none", "keep"],
+  ]],
+  ["snapshot_inventory_measurements", "data", [
+    ["snapshot_id", "bigint", false, "none", "keep"],
+    ["discovered_files", "integer", false, "none", "keep"],
+    ["excluded_for_count", "integer", false, "none", "keep"],
+    ["excluded_for_size", "integer", false, "none", "keep"],
+    ["excluded_binary", "integer", false, "none", "keep"],
+    ["excluded_submodules", "integer", false, "none", "keep"],
   ]],
   ["project_areas", "data", [
     ["id", "bigint", false, "serial", "keep"],
@@ -747,6 +763,7 @@ const ENUMS = deepFreeze({
   'users.identity_type': ['GITHUB', 'LOCAL', 'LOCAL_LINKED'],
   'projects.source_type': ['GITHUB', 'LOCAL'],
   'snapshots.status': ['ANALYZING', 'READY', 'FAILED'],
+  'files.analysis_status': ['LEGACY_UNMEASURED', 'UNMEASURED', 'TARGETED', 'SUCCESS', 'PARTIAL', 'FAILED', 'UNSUPPORTED'],
   'analysis_jobs.type': ['IMPORT', 'REANALYZE'],
   'analysis_jobs.status': ['QUEUED', 'RUNNING', 'CANCELLING', 'DONE', 'FAILED', 'CANCELLED'],
   'analysis_job_steps.status': ['PENDING', 'RUNNING', 'DONE', 'FAILED', 'SKIPPED'],
@@ -1003,6 +1020,11 @@ function validateRowState(table, values) {
   if (table === 'user_ai_preferences' && values.model !== null && values.provider === null) fail();
   if (table === 'projects' && values.current_generation_id !== null && values.current_snapshot_id === null) fail();
   if (table === 'snapshots' && ![0, 1].includes(values.source_contract_version)) fail();
+  if (table === 'snapshot_inventory_measurements') {
+    for (const column of ['discovered_files', 'excluded_for_count', 'excluded_for_size', 'excluded_binary', 'excluded_submodules']) {
+      if (values[column] < 0) fail();
+    }
+  }
   if (table === 'source_manifests' || table === 'analysis_generations') {
     if (values.contract_version !== 1) fail();
   }

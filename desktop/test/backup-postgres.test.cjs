@@ -207,13 +207,14 @@ test('read-only snapshot waits for catalog and owner validation before selecting
   const f = await fixture(t); const rows = [];
   const result = await f.adapter.exportRows({ writeRow: row => rows.push(row) });
   assert.deepEqual(rows, [user()]); assert.equal(result.ownerUserId, ID); assert.equal(result.rowCount, '1');
-  assert.equal(Object.keys(result.tableCounts).length, 52); assert.equal(Object.keys(result.tableSha256).length, 52);
+  assert.equal(Object.keys(result.tableCounts).length, 53); assert.equal(Object.keys(result.tableSha256).length, 53);
   assert.equal(result.catalogSha256, sha(canonical(f.originalHeader.catalog)));
   const c = f.calls[0]; assert.match(c.chunks[0], /repeatable read read only/); assert.match(c.chunks[1], /'kind','header'/);
   assert(!c.chunks[1].includes("'kind','row'")); assert(c.args.includes('-X')); assert(c.args.includes('--file=-'));
   assert.equal(c.options.shell, false); assert(!c.args.join(' ').includes('private-password'));
   assert(!c.args.join(' ').includes('select')); assert.equal(c.options.env.PGPASSWORD, 'private-password');
   for (const key of ['PATH', 'HOME', 'PGOPTIONS', 'PGSERVICE', 'NODE_OPTIONS']) assert.equal(c.options.env[key], undefined);
+  assert.match(c.chunks.join(''), /from public\."snapshot_inventory_measurements" order by "snapshot_id"/);
   assert(Object.isFrozen(result)); assert(Object.isFrozen(rows[0].values));
 });
 for (const [name, mutate, code] of [

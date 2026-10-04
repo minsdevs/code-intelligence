@@ -16,6 +16,7 @@ const definition = table => REVIEWED_SCHEMA.tables.find(item => item.name === ta
 const overrides = {
   users: { identity_type: 'GITHUB', github_id: '101' },
   snapshots: { status: 'READY' },
+  files: { analysis_status: 'LEGACY_UNMEASURED', analysis_targeted: false },
   analysis_jobs: { type: 'IMPORT', status: 'DONE' },
   analysis_job_steps: { status: 'DONE' },
   project_areas: { area_type: 'BACKEND' },
@@ -92,11 +93,11 @@ test('reviewed inventory matches every migration and current source column', () 
       sourceTables.set(match[1], [...match[2].matchAll(/^    ([a-z_][a-z_0-9]*)\s+[^\n]+/gm)]
         .map(column => column[1]).filter(name => !['check', 'primary', 'foreign', 'unique', 'constraint', 'exclude'].includes(name)));
     }
-    for (const match of sql.matchAll(/ALTER TABLE\s+(\w+)\s+([\s\S]*?);/g)) {
-      for (const column of match[2].matchAll(/ADD COLUMN\s+(\w+)\s+/g)) {
+    for (const match of sql.matchAll(/^ALTER TABLE\s+(\w+)\s+([\s\S]*?);/gim)) {
+      for (const column of match[2].matchAll(/ADD COLUMN\s+(\w+)\s+/gi)) {
         sourceTables.get(match[1]).push(column[1]);
       }
-      for (const column of match[2].matchAll(/DROP COLUMN\s+(\w+)/g)) {
+      for (const column of match[2].matchAll(/DROP COLUMN\s+(\w+)/gi)) {
         const columns = sourceTables.get(match[1]); const index = columns.indexOf(column[1]);
         assert.notEqual(index, -1); columns.splice(index, 1);
       }
@@ -195,7 +196,7 @@ for (const table of excluded) {
   });
 }
 
-test('all 49 permitted table projections accept a bounded typed synthetic row', () => {
+test('all 50 permitted table projections accept a bounded typed synthetic row', () => {
   let count = 0;
   for (const { name } of REVIEWED_SCHEMA.tables) {
     if (excluded.includes(name)) continue;
@@ -205,7 +206,7 @@ test('all 49 permitted table projections accept a bounded typed synthetic row', 
     assert.deepEqual(output.values, before); assert.ok(Object.isFrozen(output.values));
     count++;
   }
-  assert.equal(count, 49);
+  assert.equal(count, 50);
 });
 
 const omittedColumns = {
@@ -841,4 +842,28 @@ test('the pure module has no runtime filesystem/process/network imports or produ
   const source = fs.readFileSync(path.join(__dirname, '../src/backup-export-policy.cjs'), 'utf8');
   assert.deepEqual([...source.matchAll(/require\('([^']+)'\)/g)].map(match => match[1]), ['node:util']);
   assert.doesNotMatch(source, /process\.env|child_process|pg_dump|pg_restore|electron|fetch\(/);
+});
+
+
+test('V27 preserves recorded and legacy outcomes exactly and rejects unknown states or negative inventory facts', () => {
+  for (const analysis_status of ['LEGACY_UNMEASURED', 'UNMEASURED', 'TARGETED', 'SUCCESS', 'PARTIAL', 'FAILED', 'UNSUPPORTED']) {
+    const row = fixture('files', { analysis_status, analysis_reason: 'ANALYZER_DISABLED', analysis_targeted: false });
+    assert.deepEqual(policy.projectRow('files', row).values, row);
+  }
+  rejects(() => policy.projectRow('files', fixture('files', { analysis_status: 'COMPLETE' })));
+  rejects(() => policy.projectRow('files', fixture('files', { analysis_reason: 'a'.repeat(129) })));
+  const zero = fixture('snapshot_inventory_measurements', { discovered_files: 0, excluded_for_count: 0,
+    excluded_for_size: 0, excluded_binary: 0, excluded_submodules: 0 });
+  assert.deepEqual(policy.projectRow('snapshot_inventory_measurements', zero).values, zero);
+  for (const column of ['discovered_files', 'excluded_for_count', 'excluded_for_size', 'excluded_binary', 'excluded_submodules']) {
+    rejects(() => policy.projectRow('snapshot_inventory_measurements', { ...zero, [column]: -1 }));
+  }
+});
+
+test('V26 archive schemas remain explicitly incompatible; no historical outcomes are synthesized', () => {
+  const old = schema(); old.migrations = old.migrations.filter(item => item.version < 27);
+  old.tables = old.tables.filter(table => table.name !== 'snapshot_inventory_measurements');
+  old.tables.find(table => table.name === 'files').columns = old.tables.find(table => table.name === 'files').columns
+    .filter(column => !['analysis_status', 'analysis_reason', 'analysis_targeted'].includes(column.name));
+  rejects(() => createBackupExportPolicy(old), 'SCHEMA_MISMATCH');
 });
