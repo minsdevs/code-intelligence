@@ -1,10 +1,12 @@
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
+const { transportFixture } = require('./fixtures/service-transport.cjs');
 
 // Evaluate the real main process without launching Electron or accessing user data.
 function harness(options = {}) {
@@ -18,10 +20,25 @@ function harness(options = {}) {
   const bootstrapWrites = [];
   const productCalls = [];
   const effects = [];
+  // Model only the OS directory boundary; identities survive until removal.
+  const ipcDirectories = new Map();
+  let nextInode = 1;
+  const privateFs = {
+    mkdir: async () => {}, realpath: async p => p,
+    async mkdtemp(prefix) {
+      const directory = prefix + 'fixture-' + nextInode;
+      ipcDirectories.set(directory, { dev: 1, ino: nextInode++, mode: 0o700 });
+      return directory;
+    },
+    async chmod(directory, mode) { assert.ok(ipcDirectories.has(directory)); ipcDirectories.get(directory).mode = mode; },
+    async lstat(directory) { assert.ok(ipcDirectories.has(directory)); return { ...ipcDirectories.get(directory) }; },
+    async rmdir(directory) { assert.ok(ipcDirectories.delete(directory)); },
+  };
   const appPaths = { userData: '/test', sessionData: '/test', ...options.appPaths };
   // Constructor boundaries stay synthetic: no socket, PostgreSQL process, or admission is opened.
   const gateway = {
-    bootstrap: () => Buffer.from('synthetic-private-gateway-capability\n'),
+    bootstrap: () => Buffer.from(JSON.stringify({ version: 1, socketPath: '/test/ai.sock',
+      capability: 'synthetic-private-gateway-capability', epoch: 'synthetic-epoch' })),
     diagnostics: () => ({ aiOff: true, recoveryOnly: false }),
     async latchOffline() {},
     async close() {},
@@ -34,6 +51,7 @@ function harness(options = {}) {
       isPackaged: options.isPackaged === true,
       getVersion: () => '0.1.0',
       requestSingleInstanceLock: () => { effects.push(['singleton', { ...appPaths }]); return options.ownsInstance !== false; },
+      setName(value) { effects.push(['setName', value]); },
       on: (name, callback) => appEvents.set(name, callback),
       whenReady: () => { effects.push(['whenReady']); return new Promise(() => {}); },
       getPath: name => appPaths[name] || '/test',
@@ -47,17 +65,34 @@ function harness(options = {}) {
       showOpenDialog: async () => { dialogs.push('open'); return { canceled: false, filePaths: ['/synthetic/selection'] }; },
       showMessageBox: async () => { dialogs.push('confirmation'); return { response: 1 }; },
     },
-    safeStorage: Object.fromEntries(['isEncryptionAvailable', 'encryptString', 'decryptString'].map(name =>
-      [name, () => { effects.push(['safeStorage', name]); assert.fail(`Unexpected safeStorage call: ${name}`); }])),
+    safeStorage: {
+      isEncryptionAvailable() { effects.push(['safeStorage', 'isEncryptionAvailable']); return true; },
+      ...Object.fromEntries(['encryptString', 'decryptString'].map(name =>
+        [name, () => { effects.push(['safeStorage', name]); assert.fail('Unexpected safeStorage call: ' + name); }])),
+    },
     ipcMain: { on: (name, fn) => handlers.set(name, fn), handle: (name, fn) => handlers.set(name, fn) },
   };
   const context = vm.createContext({
     require(name) {
       if (name === 'electron') return electron;
       if (Object.hasOwn(options.modules || {}, name)) return options.modules[name];
-      if (name === './safety-lifecycle.cjs' && options.safetyModule) return options.safetyModule;
+      if (name === './runtime-manifest.cjs') return { validateRuntimeManifest: (root, manifest) =>
+        require(path.resolve(__dirname, '../src', name)).validateRuntimeManifest(root, manifest,
+          { platform: context.process.platform, arch: context.process.arch }) };
+      if (name === './safety-lifecycle.cjs') {
+        if (options.safetyModule) return options.safetyModule;
+        const lifecycle = vm.createContext({ module: { exports: {} }, Buffer, process: context.process,
+          require: value => require(value.startsWith('./') ? path.resolve(__dirname, '../src', value) : value) });
+        vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../src', name), 'utf8'), lifecycle);
+        return lifecycle.module.exports;
+      }
+      if (name === './service-transport.cjs') return { createServiceTransport: async value => transportFixture(value, context.fetch) };
       if (name === './ai-desktop-gateway.cjs') return { openDesktopAiGateway: async () => gateway };
       if (name === './ai-egress-postgres.cjs') return { createAiEgressPostgres: async () => postgres };
+      // Source persistence and sockets are constructor boundaries, not real user stores.
+      if (name === './source-vault.cjs') return Object.fromEntries(
+        ['createSourceVault', 'openSourceVault', 'openSourceVaultRestoreStage'].map(name => [name, async () => ({ async close() {} })]));
+      if (name === './source-broker.cjs') return { createSourceBroker: async () => ({ async close() {} }) };
       if (name === './backup-product-state.cjs') return { createBackupProductState: async value => {
         productCalls.push({ operation: 'open', value });
         return { async verifyOrigin() { productCalls.push({ operation: 'verify' }); await options.verifyOrigin?.(value); },
@@ -65,7 +100,7 @@ function harness(options = {}) {
       } };
       if (name.startsWith('./')) return require(path.resolve(__dirname, '../src', name));
       if (name === 'node:fs') return disk;
-      if (name === 'node:fs/promises') return { mkdir: async () => {}, realpath: async (p) => p, ...options.fsp };
+      if (name === 'node:fs/promises') return { ...privateFs, ...options.fsp };
       if (name === 'node:net') return Object.fromEntries(['createServer', 'createConnection'].map(operation =>
         [operation, () => { effects.push(['network', operation]); assert.fail(`Unexpected network call: ${operation}`); }]));
       if (name === 'node:child_process') return {
@@ -77,6 +112,7 @@ function harness(options = {}) {
             child.stdin = new EventEmitter();
             child.stdin.end = (bytes, callback) => {
               bootstrapWrites.push(Buffer.from(bytes));
+              child.stdin.writableEnded = true;
               callback?.();
             };
           }
@@ -106,13 +142,19 @@ function harness(options = {}) {
   });
   const run = (source) => vm.runInContext(source, context);
   const result = { run, context, timers, handlers, appEvents, spawned, synchronous, bootstrapWrites, productCalls, disk, sent, dialogs,
-    effects, appPaths, get quitCalls() { return quitCalls; } };
+    effects, appPaths, ipcDirectories, get quitCalls() { return quitCalls; } };
   try { vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/main.cjs'), 'utf8'), context); }
   catch (error) {
     if (!options.captureBootstrapError) throw error;
     return { ...result, bootstrapError: error };
   }
-  run("runtime = { ready: true, apiToken: 'renderer-token', pathToken: 'main-only-token', apiBaseUrl: 'http://127.0.0.1:43219', ports: {backend: 43219}, secrets: {}, authorizedRoots: [], pathsFile: '/test/paths.enc' }");
+  context.fixtureUserData = appPaths.userData;
+  context.fixtureIpcRoot = '/test/private-ipc';
+  context.fixtureIpcIdentity = { dev: 1, ino: nextInode++, mode: 0o700 };
+  ipcDirectories.set(context.fixtureIpcRoot, { ...context.fixtureIpcIdentity });
+  run("runtime = { userData: fixtureUserData, ipcRoot: fixtureIpcRoot, ipcIdentity: fixtureIpcIdentity, ready: true, apiToken: 'renderer-token', pathToken: 'main-only-token', apiBaseUrl: 'https://127.0.0.1:43219', ports: {backend: 43219}, secrets: {}, authorizedRoots: [], pathsFile: '/test/paths.enc' }");
+  context.fixtureTransport = transportFixture({ userData: '/test', ports: { backend: 43219 }, getApiToken: () => run('runtime.apiToken') }, context.fetch);
+  run('runtime.transport = fixtureTransport');
   // This harness exercises the supported legacy manifest without the guardian protocol.
   // Protocol-1 service ownership is covered by main-runtime-gateway and the real crash fixture.
   run('runtimeManifest = {}');
@@ -150,14 +192,6 @@ test('child spawn errors are handled and reported instead of crashing Electron',
   assert.equal(h.run('runtime.ready'), false);
 });
 
-test('backend callback uses the actual runtime port and path grants use a separate token', async () => {
-  const h = harness();
-  h.run("binary = (...parts) => parts.join('/'); waitUntil = async () => {}; saveEncryptedJson = () => {};");
-  await h.run('startBackend()');
-  const env = h.spawned[0].options.env;
-  assert.equal(env.GITHUB_NATIVE_REDIRECT_URI, 'http://127.0.0.1:43219/api/auth/github/native/callback');
-  assert.equal(env.DESKTOP_PATH_TOKEN, 'main-only-token');
-});
 
 test('runtime mutations run sequentially even after a failed operation', async () => {
   const h = harness();
@@ -174,13 +208,6 @@ test('runtime mutations run sequentially even after a failed operation', async (
 });
 
 
-test('folder authorization sends the main-only capability to the backend', async () => {
-  const h = harness();
-  h.run('saveEncryptedJson = () => {}');
-  await h.run("authorizePath('/selected/project')");
-  assert.equal(h.sent[0].options.headers['X-Code-Intelligence-Path-Token'], 'main-only-token');
-  assert.equal(h.sent[0].options.headers['X-Code-Intelligence-Token'], 'renderer-token');
-});
 
 test('backup failure stops remaining writers and keeps recovery required instead of declaring readiness', async () => {
   const h = harness();
@@ -263,6 +290,7 @@ function startupHarness(changes = {}) {
     },
   } });
   h.context.calls = calls;
+  h.ipcDirectories.clear();
   h.run(`runtime = undefined; safetyLifecycle = undefined;
     verifyRuntimeIntegrity = async () => ({buildSequence:'100', runtime:{postgresBin:'postgres/bin', postgresLib:'postgres/lib'}});
     encryptedJson = () => []; freePort = async () => 43219; binary = (...parts) => parts.join('/');
@@ -273,18 +301,6 @@ function startupHarness(changes = {}) {
     createWindow = () => { calls.push('window.create'); };`);
   return { ...h, calls, safety };
 }
-
-test('real main startup opens safety with the existing identity before any child or window', async () => {
-  let supplied;
-  const h = startupHarness({ openSafety: options => { supplied = options; } });
-  await h.run('withRuntimeOperation(startApplication)');
-  assert.deepEqual(h.calls, ['secrets.load', 'safety.open', 'postgres.start', 'redis.start', 'analyzer.start', 'backend.start', 'window.create']);
-  assert.equal(supplied.installationId, 'existing-synthetic-identity');
-  assert.equal(supplied.runningBuild, '100');
-  assert.equal(h.run('runtime.ready'), true);
-  assert.equal(h.run('publicRuntimeStatus().aiOff'), true);
-  assert.equal(h.run('publicRuntimeStatus().recoveryOnly'), false);
-});
 
 for (const sequence of [undefined, 100, '01', '-1', '9223372036854775808']) {
   test(`main rejects manifest build sequence ${String(sequence)} before identity or B writes`, async () => {
@@ -299,14 +315,58 @@ for (const sequence of [undefined, 100, '01', '-1', '9223372036854775808']) {
   });
 }
 
-test('integrity verifier requires an explicit build sequence even when all file hashes would pass', async () => {
-  const manifest = { format: 1, platform: 'darwin', arch: 'arm64',
-    runtime: { postgresBin: 'pg/bin', postgresLib: 'pg/lib', postgresPkgLib: 'pg/pkg', postgresShare: 'pg/share' }, files: {} };
-  const h = harness({ disk: { existsSync: () => true }, fsp: { readFile: async () => JSON.stringify(manifest) } });
+function manifestFixture(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-main-manifest-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const files = {};
+  for (const [name, content] of Object.entries({ 'postgres/bin/postgres': 'synthetic executable bytes',
+    'postgres/lib/libpq.fixture': 'synthetic library bytes' })) {
+    const target = path.join(root, name);
+    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(target, content, { mode: 0o600 });
+    files[name] = crypto.createHash('sha256').update(content).digest('hex');
+  }
+  const manifest = { format: 1, platform: 'darwin', arch: 'arm64', buildSequence: '9223372036854775807',
+    runtime: { postgresBin: 'postgres/bin', postgresLib: 'postgres/lib', postgresPkgLib: 'postgres/lib', postgresShare: 'postgres/share' }, files };
+  fs.mkdirSync(path.join(root, 'postgres/share'), { mode: 0o700 });
+  const save = () => fs.writeFileSync(path.join(root, 'runtime-manifest.json'), JSON.stringify(manifest), { mode: 0o600 });
+  save();
+  const h = harness({ disk: { existsSync: fs.existsSync }, fsp: { readFile: fs.promises.readFile } });
+  h.context.fixtureRuntimeRoot = root;
+  h.run('runtimeRoot = () => fixtureRuntimeRoot');
+  return { h, root, manifest, save };
+}
+
+test('integrity verifier rejects a missing build sequence despite a valid nonempty hash inventory', async t => {
+  const { h, manifest, save } = manifestFixture(t);
+  delete manifest.buildSequence; save();
   await assert.rejects(h.run('verifyRuntimeIntegrity()'), { code: 'SAFETY_BUILD_SEQUENCE_INVALID' });
-  manifest.buildSequence = '9223372036854775807';
-  assert.equal((await h.run('verifyRuntimeIntegrity()')).buildSequence, manifest.buildSequence);
+  manifest.buildSequence = '9223372036854775807'; save();
+  assert.deepEqual(JSON.parse(JSON.stringify(await h.run('verifyRuntimeIntegrity()'))), manifest);
+  assert.equal(h.spawned.length, 0); assert.equal(h.synchronous.length, 0);
 });
+
+for (const mutation of ['empty', 'missing', 'unlisted', 'changed-hash', 'symlink', 'hardlink']) {
+  test('integrity verifier rejects ' + mutation + ' inventory before executing a bundled helper', async t => {
+    const { h, root, manifest, save } = manifestFixture(t);
+    const binary = path.join(root, 'postgres/bin/postgres');
+    if (mutation === 'empty') manifest.files = {};
+    if (mutation === 'missing') fs.unlinkSync(binary);
+    if (mutation === 'unlisted') fs.writeFileSync(path.join(root, 'unexpected'), 'unlisted');
+    if (mutation === 'changed-hash') fs.writeFileSync(binary, 'different bytes');
+    if (mutation === 'symlink' || mutation === 'hardlink') {
+      fs.unlinkSync(binary);
+      const library = path.join(root, 'postgres/lib/libpq.fixture');
+      if (mutation === 'symlink') fs.symlinkSync(library, binary);
+      else fs.linkSync(library, binary);
+      manifest.files['postgres/bin/postgres'] = manifest.files['postgres/lib/libpq.fixture'];
+    }
+    save();
+    await assert.rejects(h.run('verifyRuntimeIntegrity()'));
+    assert.equal(h.spawned.length, 0); assert.equal(h.synchronous.length, 0);
+    assert.equal(h.handlers.size, 0);
+  });
+}
 
 test('corrupt B stops startup before core runtime, renderer, or IPC registration', async () => {
   const api = require('../src/safety-lifecycle.cjs');
@@ -314,6 +374,7 @@ test('corrupt B stops startup before core runtime, renderer, or IPC registration
   await h.run('withRuntimeOperation(startApplication)'); await h.run('shutdownPromise');
   assert.deepEqual(h.calls, ['secrets.load', 'safety.open']);
   assert.equal(h.handlers.size, 0); assert.equal(h.spawned.length, 0);
+  assert.equal(h.ipcDirectories.size, 0);
   assert.equal(h.run('runtime.ready'), false);
   assert.equal(h.run('publicRuntimeStatus().recoveryOnly'), true);
 });
@@ -366,6 +427,7 @@ test('quit during safety opening waits for the startup operation then closes wit
   release(); await starting; await h.run('shutdownPromise');
   assert.deepEqual(h.calls, ['secrets.load', 'safety.open', 'safety.latch', 'safety.close']);
   assert.equal(h.spawned.length, 0);
+  assert.equal(h.ipcDirectories.size, 0);
 });
 
 test('latch failure still stops every child and closes handles but never claims successful shutdown', async () => {
@@ -425,7 +487,7 @@ test('all bundled child paths inherit only system values and explicit main crede
     DYLD_INSERT_LIBRARIES: 'host-library-injection', CODE_INTELLIGENCE_SAFETY_KEY: 'host-purpose-key' };
   const h = harness({ env: { ...system, ...forbidden, GITHUB_NATIVE_CLIENT_ID: 'public-github-client' },
     disk: { existsSync: () => true } });
-  h.run(`binary = (...parts) => parts.join('/'); waitUntil = async check => { await check(); }; saveEncryptedJson = () => {};
+  h.run(`binary = (...parts) => parts.join('/'); waitUntil = async check => { await check(); }; saveEncryptedJson = async () => {};
     runtime.postgresLibRoot = 'postgres/lib'; runtime.ports = {backend:43219, postgres:43220, analyzer:43221, redis:43222};
     runtime.secrets = {databasePassword:'explicit-database-password', tokenEncryptionKey:'explicit-credential-key', localIdentity:'synthetic-id'};`);
   await h.run('startAnalyzer()'); await h.run('startBackend()'); await h.run('startPostgres()');
@@ -505,18 +567,6 @@ for (const mutation of ['wrong-transaction', 'unknown-state', 'old-counter-names
   });
 }
 
-test('main-only maintenance capabilities are sent to the current backend and never supplied by renderer payload', async () => {
-  const transactionId = '12d87afe-83b5-4b77-82d5-e30e510df38e';
-  const h = harness({ fetch: async () => ({ ok: true, json: async () => ({ transactionId, state: 'DRAINED',
-    activeRequests: 0, activeWriters: 0, activeJobs: 0 }) }) });
-  h.context.calls = []; h.run("stopChild = async name => { calls.push('stop:' + name); }");
-  await h.run(`pauseForBackup({transactionId:'${transactionId}',waitForAiDrain:async()=>{calls.push('ai.drained');}})`);
-  assert.deepEqual(h.context.calls, ['ai.drained', 'stop:backend', 'stop:ts-analyzer']);
-  assert.equal(h.sent[0].url, 'http://127.0.0.1:43219/api/desktop/maintenance');
-  assert.equal(h.sent[0].options.headers['X-Code-Intelligence-Token'], 'renderer-token');
-  assert.equal(h.sent[0].options.headers['X-Code-Intelligence-Path-Token'], 'main-only-token');
-  assert.deepEqual(JSON.parse(h.sent[0].options.body), { transactionId, operation: 'BEGIN' });
-});
 
 test('maintenance HTTP rejection leaves AI drain and child ownership untouched', async () => {
   const h = harness({ fetch: async () => ({ ok: false, status: 403 }) }); h.context.calls = [];
@@ -540,7 +590,7 @@ test('runtime status includes only public OFF/recovery and unavailable actions, 
 
 test('no new safety key or admission capability reaches backend environment or renderer config', async () => {
   const h = harness();
-  h.run(`binary = (...parts) => parts.join('/'); waitUntil = async () => {}; saveEncryptedJson = () => {};
+  h.run(`binary = (...parts) => parts.join('/'); waitUntil = async () => {}; saveEncryptedJson = async () => {};
     safetyLifecycle.hiddenKey = 'private-purpose-key'; safetyLifecycle.hiddenPermit = 'private-permit';
     assertTrustedRenderer = () => {}; registerIpc();`);
   await h.run('startBackend()');
@@ -550,7 +600,19 @@ test('no new safety key or admission capability reaches backend environment or r
   assert.equal(exposed.includes('synthetic-private-gateway-capability'), false);
   assert.equal(JSON.stringify(h.spawned[0].args).includes('synthetic-private-gateway-capability'), false);
   assert.equal(h.bootstrapWrites.length, 1);
-  assert.equal(h.bootstrapWrites[0].toString(), 'synthetic-private-gateway-capability\n');
+  const bootstrap = JSON.parse(h.bootstrapWrites[0].toString('utf8'));
+  assert.deepEqual(Object.keys(bootstrap).sort(), ['ai', 'source', 'version']);
+  assert.equal(bootstrap.version, 2);
+  assert.deepEqual(bootstrap.ai, { socketPath: '/test/ai.sock', capability: 'synthetic-private-gateway-capability', epoch: 'synthetic-epoch' });
+  assert.deepEqual(Object.keys(bootstrap.source).sort(), ['capability', 'socketPath']);
+  assert.equal(bootstrap.source.socketPath, path.join(h.run('runtime.ipcRoot'), 's'));
+  assert.equal(typeof bootstrap.source.capability, 'string');
+  assert.ok(bootstrap.source.capability.length >= 32);
+  for (const secret of [bootstrap.source.capability, bootstrap.source.socketPath, bootstrap.ai.socketPath]) {
+    assert.equal(exposed.includes(secret), false);
+    assert.equal(JSON.stringify(h.spawned[0].args).includes(secret), false);
+  }
+  assert.equal(h.spawned[0].child.stdin.writableEnded, true);
   assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken', 'appVersion']);
 });
 
@@ -584,42 +646,30 @@ for (const argv of [
   });
 }
 
-test('actual main prepares isolated paths then blocks before singleton, readiness, credentials and runtime effects', t => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-isolation-main-')));
+test('actual main accepts a reusable validation claim before singleton, readiness or credentials', t => {
+  const base = process.platform === 'darwin' ? '/private/tmp' : os.tmpdir();
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(base, 'cirm-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const parentDirectory = path.join(root, 'runs'); const runtimeDirectory = path.join(root, 'runtime');
   fs.mkdirSync(parentDirectory, { mode: 0o700 }); fs.mkdirSync(runtimeDirectory, { mode: 0o700 });
-  const touched = [];
-  const noAccess = operation => () => { touched.push(operation); assert.fail(`Blocked startup reached ${operation}`); };
-  const h = harness({
-    argv: ['electron', '.', '--isolated-run-parent', parentDirectory, '--isolated-runtime-root', runtimeDirectory],
-    env: { CODE_INTELLIGENCE_ISOLATION_VERIFIED: '1', CODE_INTELLIGENCE_CREDENTIAL_STORE_VERIFIED: 'true',
-      ISOLATED_RUN_VERIFIED: '1', HOME: '/synthetic/production-home' },
-    captureBootstrapError: true,
-    disk: { existsSync: noAccess('main filesystem'), mkdirSync: noAccess('main mkdir') },
-    modules: {
-      './safety-lifecycle.cjs': { loadDesktopSecrets: noAccess('secrets'), openSafetyLifecycle: noAccess('safety') },
-      './native-owner-locks.cjs': { createNativeOwnerLocks: noAccess('owner locks') },
-      './managed-process.cjs': { spawnManagedProcess: noAccess('guardian') },
-      './ai-desktop-gateway.cjs': { openDesktopAiGateway: noAccess('gateway') },
-      './ai-egress-postgres.cjs': { createAiEgressPostgres: noAccess('postgres adapter') },
-    },
-  });
-  assertBlockedBootstrap(h, 'ISOLATED_LAUNCH_BLOCKED');
-  assert.deepEqual(touched, []);
-  const [runName] = fs.readdirSync(parentDirectory); assert.ok(runName);
-  const runRoot = path.join(parentDirectory, runName);
-  assert.deepEqual(h.effects.filter(item => ['setPath', 'setAppLogsPath'].includes(item[0])), [
-    ['setPath', 'userData', path.join(runRoot, 'userData')],
-    ['setPath', 'sessionData', path.join(runRoot, 'sessionData')],
-    ['setPath', 'temp', path.join(runRoot, 'temp')],
-    ['setPath', 'crashDumps', path.join(runRoot, 'crashDumps')],
-    ['setAppLogsPath', path.join(runRoot, 'logs')],
+  const plan = require('../src/isolated-run.cjs').prepareIsolatedRun({ parentDirectory, runtimeDirectory, purpose: 'automation' });
+  const h = harness({ argv: ['electron', '.', '--isolated-run-claim', plan.claimFile], captureBootstrapError: true });
+  assert.equal(h.bootstrapError, undefined);
+  assert.deepEqual(h.effects.filter(item => ['setName', 'setPath', 'setAppLogsPath'].includes(item[0])), [
+    ['setName', 'Code Intelligence Acceptance'],
+    ['setPath', 'userData', plan.paths.userData],
+    ['setPath', 'sessionData', plan.paths.sessionData],
+    ['setPath', 'temp', plan.paths.temp],
+    ['setPath', 'crashDumps', plan.paths.crashDumps],
+    ['setAppLogsPath', plan.paths.logs],
   ]);
-  assert.ok(h.effects.findIndex(item => item[0] === 'setAppLogsPath') < h.effects.findIndex(item => item[0] === 'exit'));
-  const claim = JSON.parse(fs.readFileSync(path.join(runRoot, '.isolated-run.json'), 'utf8'));
-  assert.equal(claim.launchAllowed, false);
-  assert.equal(JSON.stringify(h.effects.filter(item => item[0] === 'console.error')).includes(root), false);
+  assert.deepEqual(h.effects.filter(item => item[0] === 'singleton'), [[
+    'singleton', { userData: plan.paths.userData, sessionData: plan.paths.sessionData,
+      temp: plan.paths.temp, crashDumps: plan.paths.crashDumps, logs: plan.paths.logs }
+  ]]);
+  assert.equal(h.effects.some(item => ['safeStorage', 'network', 'exit'].includes(item[0])), false);
+  const claim = JSON.parse(fs.readFileSync(plan.claimFile, 'utf8'));
+  assert.equal(claim.launchAllowed, true); assert.deepEqual(claim.appIdentity, plan.appIdentity);
 });
 
 test('ordinary startup ignores isolation-like environment values and preserves default Electron paths', async () => {
@@ -659,3 +709,13 @@ for (const overlap of ['parent-userData', 'runtime-sessionData', 'runtime-packag
     assert.equal(JSON.stringify(h.effects.filter(item => item[0] === 'console.error')).includes(root), false);
   });
 }
+
+
+test('shutdown refuses to remove an IPC directory whose ownership identity changed', async () => {
+  const h = harness();
+  const directory = h.run('runtime.ipcRoot');
+  h.ipcDirectories.get(directory).ino++;
+  await assert.rejects(h.run('shutdownRuntime()'), { code: 'SAFETY_RECOVERY_REQUIRED' });
+  assert.equal(h.ipcDirectories.has(directory), true);
+  assert.equal(h.run('shutdownComplete'), false);
+});

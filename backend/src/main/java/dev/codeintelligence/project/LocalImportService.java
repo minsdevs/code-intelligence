@@ -2,17 +2,15 @@ package dev.codeintelligence.project;
 
 import dev.codeintelligence.common.AnalysisProperties;
 import dev.codeintelligence.common.AppProperties;
+import dev.codeintelligence.common.SourceAccess;
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
@@ -47,6 +45,13 @@ import org.springframework.stereotype.Service;
 public class LocalImportService {
 
     private static final Set<String> BLOCKED_ROOTS = Set.of("/etc", "/usr", "/bin", "/sbin", "/System");
+    private static final Set<String> BLOCKED_WINDOWS_ROOT_CHILDREN = Set.of(
+            "windows",
+            "program files",
+            "program files (x86)",
+            "programdata",
+            "system volume information",
+            "$recycle.bin");
 
     private final AppProperties appProperties;
     private final LocalImportProperties localImportProperties;
@@ -132,10 +137,10 @@ public class LocalImportService {
         Path source;
         try {
             source = validateSource(Path.of(expected.canonicalRoot()));
-            requireRootIdentity(expected, source);
-        } catch (LocalImportException e) {
-            throw LocalSourceApprovalException.sourceChanged();
-        } catch (IOException e) {
+            try (SourceAccess.Scope ignored = SourceAccess.open(source, "source")) {
+                requireRootIdentity(expected, source);
+            }
+        } catch (LocalImportException | IOException e) {
             throw LocalSourceApprovalException.sourceChanged();
         }
         return importSource(
@@ -153,11 +158,11 @@ public class LocalImportService {
         ensureDisjointSource(source);
         Path staging = target.resolveSibling(target.getFileName() + ".staging-" + UUID.randomUUID());
         ensureUnderReposRoot(staging);
-
-        try {
-            Files.createDirectories(staging.getParent());
-            Files.createDirectory(
-                    staging, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+        try (SourceAccess.Scope workspace = SourceAccess.open(
+                        appProperties.reposRoot().toAbsolutePath().normalize(), "workspace");
+                SourceAccess.Scope liveSource = SourceAccess.open(source, "source")) {
+            SourceAccess.directories(staging.getParent());
+            SourceAccess.mkdir(staging);
             SnapshotCopy copied = copySnapshot(source, staging, expected, retainedSource);
             beforePublish.run();
             replaceTarget(staging, target);
@@ -179,42 +184,56 @@ public class LocalImportService {
     /** Validates and resolves a local source. The returned path is the real path. */
     public Path validateSource(Path localPath) {
         Path resolved = localPath.toAbsolutePath().normalize();
-        if (!Files.isDirectory(resolved)) {
-            throw new LocalImportException("Path is not a directory.", null);
-        }
-        if (!Files.isReadable(resolved)) {
-            throw new LocalImportException("Path is not readable.", null);
-        }
-
         Path realPath;
-        try {
-            realPath = resolved.toRealPath();
-        } catch (IOException e) {
-            throw new LocalImportException("Failed to resolve local path.", e);
+        if (SourceAccess.windows()) {
+            try (SourceAccess.Scope ignored = SourceAccess.open(resolved, "source")) {
+                BasicFileAttributes attrs = SourceAccess.attributes(resolved, true);
+                if (!attrs.isDirectory() || attrs.isSymbolicLink()) throw new IOException("not a directory");
+                realPath = resolved;
+            } catch (IOException e) {
+                throw new LocalImportException("Path is not an accessible directory.", e);
+            }
+        } else {
+            if (!Files.isDirectory(resolved) || !Files.isReadable(resolved))
+                throw new LocalImportException("Path is not an accessible directory.", null);
+            try {
+                realPath = resolved.toRealPath();
+            } catch (IOException e) {
+                throw new LocalImportException("Failed to resolve local path.", e);
+            }
         }
         if (LocalSourcePolicy.secretAncestor(realPath) || LocalSourcePolicy.secretAncestor(resolved)) {
             throw new LocalImportException("Choose a project folder outside credential directories.", null);
         }
-        for (String blocked : BLOCKED_ROOTS) {
-            Path blockedPath = Path.of(blocked);
-            try {
-                if (Files.exists(blockedPath)) blockedPath = blockedPath.toRealPath();
-            } catch (IOException e) {
-                throw new LocalImportException("System directory policy could not be verified.", null);
+        if (!SourceAccess.windows()) {
+            for (String blocked : BLOCKED_ROOTS) {
+                Path blockedPath = Path.of(blocked);
+                try {
+                    if (Files.exists(blockedPath)) blockedPath = blockedPath.toRealPath();
+                } catch (IOException e) {
+                    throw new LocalImportException("System directory policy could not be verified.", null);
+                }
+                if (isUnder(realPath, blockedPath) || isUnder(resolved, Path.of(blocked)))
+                    throw new LocalImportException("System directory is not allowed.", null);
             }
-            if (isUnder(realPath, blockedPath) || isUnder(resolved, Path.of(blocked))) {
+        }
+        if (SourceAccess.windows()) {
+            Path relative = realPath.getRoot().relativize(realPath);
+            if (relative.getNameCount() > 0
+                    && BLOCKED_WINDOWS_ROOT_CHILDREN.contains(
+                            relative.getName(0).toString().toLowerCase(java.util.Locale.ROOT)))
                 throw new LocalImportException("System directory is not allowed.", null);
-            }
         }
 
         if (realPath.getParent() == null)
             throw new LocalImportException("Choose a project folder, not a volume root.", null);
-        try {
-            if (!Files.getFileStore(realPath).equals(Files.getFileStore(realPath.getParent()))) {
-                throw new LocalImportException("Choose a project folder, not a volume root.", null);
+        if (!SourceAccess.windows()) {
+            try {
+                if (!Files.getFileStore(realPath).equals(Files.getFileStore(realPath.getParent())))
+                    throw new LocalImportException("Choose a project folder, not a volume root.", null);
+            } catch (IOException e) {
+                throw new LocalImportException("Local source volume could not be verified.", null);
             }
-        } catch (IOException e) {
-            throw new LocalImportException("Local source volume could not be verified.", null);
         }
 
         String home = System.getProperty("user.home");
@@ -260,11 +279,10 @@ public class LocalImportService {
         return inspect(localPath).gitFingerprints();
     }
 
-    /** One bounded preview; the returned binding is for private server-side persistence only. */
     public LocalSourceInspection inspect(Path localPath) {
         Path source = validateSource(localPath);
         ensureDisjointSource(source);
-        try {
+        try (SourceAccess.Scope ignored = SourceAccess.open(source, "source")) {
             LocalSourcePolicy.Selection selection = policy.select(source, (file, bytes) -> {});
             Map<String, String> result = new TreeMap<>();
             selection.files().forEach((path, file) -> result.put(path, file.oid()));
@@ -287,8 +305,8 @@ public class LocalImportService {
                     throw LocalSourceApprovalException.sourceChanged();
                 }
                 try {
-                    Files.createDirectories(destination.getParent());
-                    Files.write(destination, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+                    SourceAccess.directories(destination.getParent());
+                    SourceAccess.fresh(destination, bytes);
                 } catch (IOException e) {
                     throw new StagingWriteException(e);
                 }
@@ -310,14 +328,15 @@ public class LocalImportService {
             throw e;
         }
         // The first verifier scan rejects even an injected .git subtree. Metadata starts here.
-        Files.createDirectory(git);
+        SourceAccess.mkdir(git);
         verifier.allowGeneratedGitDirectory();
-        Files.createDirectories(git.resolve("refs/heads"));
-        Files.writeString(
+        SourceAccess.directories(git.resolve("refs/heads"));
+        SourceAccess.fresh(
                 git.resolve("config"),
-                "[core]\nrepositoryformatversion = 0\nbare = false\nfilemode = false\n",
-                StandardOpenOption.CREATE_NEW);
-        Files.writeString(git.resolve("HEAD"), "ref: refs/heads/snapshot\n", StandardOpenOption.CREATE_NEW);
+                "[core]\nrepositoryformatversion = 0\nbare = false\nfilemode = false\n"
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        SourceAccess.fresh(
+                git.resolve("HEAD"), "ref: refs/heads/snapshot\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         // ObjectDirectory accepts a plain, parentless Config. Unlike Git.init/open/add/commit,
         // it does not load ambient user/system config or execute hooks, clean filters or attributes.
         try (ObjectDatabase objects = new ObjectDirectory(
@@ -371,7 +390,9 @@ public class LocalImportService {
                 commit.setMessage("Code Intelligence local snapshot");
                 ObjectId oid = inserter.insert(commit);
                 inserter.flush();
-                Files.writeString(git.resolve("refs/heads/snapshot"), oid.name() + "\n", StandardOpenOption.CREATE_NEW);
+                SourceAccess.fresh(
+                        git.resolve("refs/heads/snapshot"),
+                        (oid.name() + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 return new SnapshotCopy(oid.name(), selection);
             }
         }
@@ -382,7 +403,12 @@ public class LocalImportService {
                 || expected.schemaVersion() != 1
                 || expected.canonicalRoot() == null
                 || expected.canonicalRoot().isEmpty()
-                || expected.canonicalRoot().length() > 4096
+                || expected.canonicalRoot().length() > 16384
+                || !Set.of("posix", "win32").contains(expected.rootPlatform())
+                || expected.rootIdentity() == null
+                || expected.rootIdentity().length() > 256
+                || expected.rootOwner() != null && expected.rootOwner().length() > 256
+                || expected.rootPlatform().equals("posix") && expected.rootOwner() != null
                 || !LocalSourcePolicy.VERSION.equals(expected.policyVersion())
                 || !policy.limitsSha256().equals(expected.limitsSha256())
                 || expected.manifestSha256() == null
@@ -390,35 +416,39 @@ public class LocalImportService {
                 || expected.selectedFiles() < 0
                 || expected.selectedFiles() > policy.limits().files()
                 || expected.selectedBytes() < 0
-                || expected.selectedBytes() > policy.limits().totalBytes()) {
+                || expected.selectedBytes() > policy.limits().totalBytes()
+                || expected.rootPlatform().equals("posix")
+                        && !expected.rootIdentity().matches("PI1:-?[0-9]+:-?[0-9]+")
+                || expected.rootPlatform().equals("win32")
+                        && (!expected.rootIdentity().matches("WI1:[0-9]+:[0-9]+:[0-9]+")
+                                || expected.rootOwner() == null
+                                || !expected.rootOwner().matches("S-1-(?:[0-9]+-)*[0-9]+"))) {
             throw LocalSourceApprovalException.sourceChanged();
         }
         try {
             Path root = Path.of(expected.canonicalRoot());
-            if (!root.isAbsolute() || !root.normalize().toString().equals(expected.canonicalRoot())) {
+            if (!root.isAbsolute() || !root.normalize().toString().equals(expected.canonicalRoot()))
                 throw LocalSourceApprovalException.sourceChanged();
-            }
         } catch (java.nio.file.InvalidPathException e) {
             throw LocalSourceApprovalException.sourceChanged();
         }
     }
 
     private static void requireRootIdentity(LocalSourceBinding expected, Path source) throws IOException {
+        SourceAccess.Identity identity = SourceAccess.identity(source);
         if (!source.toString().equals(expected.canonicalRoot())
-                || expected.rootDevice()
-                        != ((Number) Files.getAttribute(source, "unix:dev", LinkOption.NOFOLLOW_LINKS)).longValue()
-                || expected.rootInode()
-                        != ((Number) Files.getAttribute(source, "unix:ino", LinkOption.NOFOLLOW_LINKS)).longValue()) {
+                || !expected.rootPlatform().equals(identity.platform())
+                || !expected.rootIdentity().equals(identity.identity())
+                || !java.util.Objects.equals(expected.rootOwner(), identity.owner()))
             throw LocalSourceApprovalException.sourceChanged();
-        }
     }
 
     private void replaceTarget(Path staging, Path target) throws IOException {
         Path previous = target.resolveSibling(target.getFileName() + ".previous-" + UUID.randomUUID());
         boolean movedPrevious = false;
         try {
-            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
-                if (!Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(target)) {
+            if (SourceAccess.exists(target, true)) {
+                if (!SourceAccess.attributes(target, true).isDirectory()) {
                     throw new IOException("Analysis target must be a regular directory.");
                 }
                 mover.move(target, previous);
@@ -440,21 +470,28 @@ public class LocalImportService {
     }
 
     static void moveDirectory(Path source, Path target) throws IOException {
-        try {
-            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(source, target);
+        if (SourceAccess.windows()) SourceAccess.move(source, target);
+        else {
+            try {
+                Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(source, target);
+            }
         }
     }
 
     private void ensureDisjointSource(Path source) {
-        Path root = appProperties.reposRoot();
+        Path root = appProperties.reposRoot().toAbsolutePath().normalize();
+        if (SourceAccess.windows()) {
+            if (source.startsWith(root) || root.startsWith(source))
+                throw new LocalImportException("Local source and managed repository storage must be separate.", null);
+            return;
+        }
         try {
             Path parent = Files.exists(root) ? root : nearestExistingParent(root);
             Path canonical = parent.toRealPath().resolve(parent.relativize(root));
-            if (source.startsWith(canonical) || canonical.startsWith(source)) {
+            if (source.startsWith(canonical) || canonical.startsWith(source))
                 throw new LocalImportException("Local source and managed repository storage must be separate.", null);
-            }
         } catch (IOException e) {
             throw new LocalImportException("Repository storage could not be verified.", null);
         }
@@ -465,6 +502,7 @@ public class LocalImportService {
         if (!target.startsWith(root) || target.equals(root)) {
             throw new LocalImportException("Target path escapes the repository storage root", null);
         }
+        if (SourceAccess.windows()) return;
         try {
             if (Files.exists(root)) {
                 Path realRoot = root.toRealPath();
@@ -492,25 +530,39 @@ public class LocalImportService {
     }
 
     private static void deleteTree(Path root) throws IOException {
-        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+        List<Path> entries = new ArrayList<>();
+        Map<Path, Object> keys = new java.util.HashMap<>();
+        Set<Path> directories = new java.util.HashSet<>();
+        SourceAccess.walk(root, 70, new SimpleFileVisitor<>() {
             @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                Files.delete(file);
+            public FileVisitResult preVisitDirectory(Path path, BasicFileAttributes attributes) {
+                entries.add(path);
+                keys.put(path, SourceAccess.proof(attributes));
+                directories.add(path);
                 return FileVisitResult.CONTINUE;
             }
 
             @Override
-            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                if (exc != null) throw exc;
-                Files.delete(dir);
+            public FileVisitResult visitFile(Path path, BasicFileAttributes attributes) {
+                entries.add(path);
+                keys.put(path, SourceAccess.proof(attributes));
                 return FileVisitResult.CONTINUE;
             }
         });
+        for (int index = entries.size() - 1; index >= 0; index--) {
+            Path path = entries.get(index);
+            SourceAccess.remove(path, directories.contains(path), keys.get(path));
+        }
     }
 
-    private static void deleteTreeQuietly(Path root) {
+    private void deleteTreeQuietly(Path root) {
         try {
-            if (Files.exists(root)) deleteTree(root);
+            if (SourceAccess.windows()) {
+                try (SourceAccess.Scope ignored = SourceAccess.open(
+                        appProperties.reposRoot().toAbsolutePath().normalize(), "workspace")) {
+                    if (SourceAccess.exists(root, true)) deleteTree(root);
+                }
+            } else if (Files.exists(root)) deleteTree(root);
         } catch (IOException ignored) {
             // Best-effort staging cleanup. The source and current promoted snapshot remain untouched.
         }

@@ -1,15 +1,7 @@
-package dev.codeintelligence.source;
+package dev.codeintelligence.common;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.bind.DefaultValue;
-
-/** Main-owned local bridge capability. This configuration never contains a source encryption key. */
-@ConfigurationProperties("app.source-store")
-public record SourceStoreProperties(
-        @DefaultValue("") String socketPath,
-        @DefaultValue("") String brokerToken) {
+/** Main-owned local bridge capability, supplied only by the inherited private bootstrap. */
+public record SourceStoreProperties(String socketPath, String brokerToken) {
 
     public SourceStoreProperties {
         boolean noSocket = socketPath == null || socketPath.isBlank();
@@ -20,10 +12,7 @@ public record SourceStoreProperties(
         } else {
             if (noSocket || noToken || !brokerToken.matches("[0-9a-f]{64}")) throw invalid();
             try {
-                Path path = Path.of(socketPath);
-                if (!path.isAbsolute()
-                        || !path.normalize().toString().equals(socketPath)
-                        || socketPath.getBytes(StandardCharsets.UTF_8).length > 100) throw invalid();
+                DesktopPrivateBootstrap.validatePath(socketPath);
             } catch (RuntimeException ex) {
                 throw invalid();
             }

@@ -1,9 +1,8 @@
 package dev.codeintelligence.project;
 
+import dev.codeintelligence.common.SourceAccess;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -29,10 +28,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class LocalSourceApprovalService {
     private static final int MAX_UNEXPIRED_PREVIEWS = 16;
-    private static final String BINDING_COLUMNS = "schema_version, canonical_root, root_device, root_inode, "
-            + "policy_version, limits_sha256, manifest_sha256, selected_files, selected_bytes";
+    private static final String BINDING_COLUMNS =
+            "schema_version, canonical_root, root_platform, root_identity, root_owner, "
+                    + "policy_version, limits_sha256, manifest_sha256, selected_files, selected_bytes";
     private static final String BINDING_VALUES =
-            ":schema, :root, :device, :inode, :policy, :limits, :manifest, :files, :bytes";
+            ":schema, :root, :platform, :identity, :owner, :policy, :limits, :manifest, :files, :bytes";
     private final JdbcClient jdbc;
     private final LocalImportService imports;
     private final TransactionTemplate transactions;
@@ -370,15 +370,17 @@ public class LocalSourceApprovalService {
     }
 
     private void verifyRoot(LocalSourceBinding binding, String submittedPath) {
-        try {
-            Path resolved = imports.validateSource(sourcePath(submittedPath));
-            Map<String, Object> identity = Files.readAttributes(resolved, "unix:dev,ino", LinkOption.NOFOLLOW_LINKS);
+        Path resolved = imports.validateSource(sourcePath(submittedPath));
+        try (SourceAccess.Scope ignored = SourceAccess.open(resolved, "source")) {
+            SourceAccess.Identity identity = SourceAccess.identity(resolved);
             if (!resolved.toString().equals(binding.canonicalRoot())
-                    || ((Number) identity.get("dev")).longValue() != binding.rootDevice()
-                    || ((Number) identity.get("ino")).longValue() != binding.rootInode()) {
+                    || !identity.platform().equals(binding.rootPlatform())
+                    || !identity.identity().equals(binding.rootIdentity())
+                    || !Objects.equals(identity.owner(), binding.rootOwner())) {
                 throw LocalSourceApprovalException.sourceChanged();
             }
         } catch (IOException | RuntimeException ex) {
+            if (ex instanceof LocalSourceApprovalException approval) throw approval;
             throw LocalSourceApprovalException.sourceChanged();
         }
     }
@@ -465,8 +467,9 @@ public class LocalSourceApprovalService {
         return new LocalSourceBinding(
                 rs.getInt("schema_version"),
                 rs.getString("canonical_root"),
-                rs.getLong("root_device"),
-                rs.getLong("root_inode"),
+                rs.getString("root_platform"),
+                rs.getString("root_identity"),
+                rs.getString("root_owner"),
                 rs.getString("policy_version"),
                 rs.getString("limits_sha256"),
                 rs.getString("manifest_sha256"),
@@ -479,8 +482,9 @@ public class LocalSourceApprovalService {
         return statement
                 .param("schema", binding.schemaVersion())
                 .param("root", binding.canonicalRoot())
-                .param("device", binding.rootDevice())
-                .param("inode", binding.rootInode())
+                .param("platform", binding.rootPlatform())
+                .param("identity", binding.rootIdentity())
+                .param("owner", binding.rootOwner())
                 .param("policy", binding.policyVersion())
                 .param("limits", binding.limitsSha256())
                 .param("manifest", binding.manifestSha256())

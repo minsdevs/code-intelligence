@@ -2,7 +2,9 @@
 
 // Main-only composition. The renderer supplies only a native-dialog selection; every database,
 // source root, key and recovery operation below is supplied by fixed application code.
-const fs = require('node:fs/promises');
+const posixFs = require('node:fs/promises');
+const { createBackupPlatformIO } = require('./backup-platform-io.cjs');
+const native = require('./backup-windows-io.cjs');
 const { constants } = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -32,27 +34,35 @@ class BackupRuntimeError extends Error {
   }
 }
 function fail(code) { throw new BackupRuntimeError(code); }
+
+
+async function createDesktopBackupRuntime(options) {
+  const { userData, installationId, runningBuild, keyProvider, journal, gateway, adapter, ports, windowsBoundary } = options;
+  const fs = windowsBoundary ? await createBackupPlatformIO(windowsBoundary, userData) : posixFs;
+  try {
 async function missing(file) {
   try { await fs.lstat(file); return false; } catch (error) { if (error.code === 'ENOENT') return true; throw error; }
 }
 function privateStat(stat, directory) {
+  if (stat.platform === 'win32') { if (stat.kind !== (directory ? 'directory' : 'file')) fail(); return; }
   if (stat.isSymbolicLink() || !(directory ? stat.isDirectory() : stat.isFile())
       || stat.uid !== BigInt(process.getuid()) || (stat.mode & 0o777n) !== (directory ? 0o700n : 0o600n)
       || (!directory && stat.nlink !== 1n)) fail();
 }
-const identity = stat => `${stat.dev}:${stat.ino}`;
-const state = stat => `${identity(stat)}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+const identity = stat => stat.platform === 'win32' ? stat.identity : `${stat.dev}:${stat.ino}`;
+const state = stat => stat.platform === 'win32' ? stat.token : `${identity(stat)}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
 async function directory(root, privateOnly = true) {
   if (typeof root !== 'string' || !path.isAbsolute(root) || path.resolve(root) !== root || root === path.parse(root).root
       || await fs.realpath(root) !== root) fail('INPUT');
   const stat = await fs.lstat(root, { bigint: true });
   if (privateOnly) privateStat(stat, true);
-  else if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== BigInt(process.getuid())
-    || (stat.mode & 0o022n)) fail('INPUT');
+  else if (stat.platform !== 'win32' && (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== BigInt(process.getuid())
+    || (stat.mode & 0o022n))) fail('INPUT');
   return stat;
 }
 async function sync(root, privateOnly = true) {
   const before = await directory(root, privateOnly);
+  if (windowsBoundary) { if (identity(await fs.syncNamespace(root)) !== identity(before)) fail(); return; }
   const fd = await fs.open(root, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
   try { if (identity(before) !== identity(await fd.stat({ bigint: true }))) fail(); await fd.sync(); }
   finally { await fd.close(); }
@@ -82,6 +92,7 @@ async function removeOwnedPayload(root, expected) {
   await fs.unlink(file); await sync(root);
 }
 async function freeSpace(root, expectedBytes) {
+  if (windowsBoundary) { if ((await fs.capacity(root)).available < (expectedBytes * 6n + 4n) / 5n + 64n * 1024n * 1024n) fail('CAPACITY'); return; }
   const stat = await fs.statfs(root, { bigint: true });
   if (stat.bavail * stat.bsize < (expectedBytes * 6n + 4n) / 5n + 64n * 1024n * 1024n) fail('CAPACITY');
 }
@@ -103,6 +114,19 @@ async function cleanupOwnedScratch(owned) {
   }
 }
 async function copySelectedFile(selected, destination, created) {
+  if (windowsBoundary) {
+    const { stat: before, handle: source } = await fs.openSource(selected); let output;
+    try {
+      if (before.size < 12n || before.size > BigInt(MAX_BYTES)) fail('INPUT');
+      await freeSpace(path.dirname(destination), before.size * 3n);
+      output = await fs.open(destination, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+      created(identity(await output.stat())); let copied = 0n;
+      for await (const chunk of source.createReadStream()) { copied += BigInt(chunk.length); if (copied > before.size) fail('INPUT'); await output.write(chunk); }
+      if (copied !== before.size || state(before) !== state(await source.stat())) fail('INPUT');
+      await output.sync();
+    } finally { await output?.close(); await source.close(); }
+    return;
+  }
   if (typeof selected !== 'string' || !path.isAbsolute(selected) || path.resolve(selected) !== selected
       || await fs.realpath(selected) !== selected) fail('INPUT');
   const before = await fs.lstat(selected, { bigint: true });
@@ -127,9 +151,8 @@ async function copySelectedFile(selected, destination, created) {
   } finally { await output?.close(); await source.close(); }
   await sync(path.dirname(destination));
 }
-
-async function createDesktopBackupRuntime(options) {
-  const { userData, installationId, runningBuild, keyProvider, journal, gateway, adapter, ports } = options;
+  const identityRecord = stat => stat.platform === 'win32' ? native.identity(stat) : { dev: String(stat.dev), ino: String(stat.ino) };
+  const validIdentity = value => typeof value === 'string' && (windowsBoundary ? /^WI1:[0-9]+:[0-9]+:[0-9]+$/ : /^[0-9]+:[0-9]+$/).test(value);
   const recoveryMode = options.recoveryMode ?? false;
   if (typeof recoveryMode !== 'boolean') fail();
   await directory(userData);
@@ -137,7 +160,7 @@ async function createDesktopBackupRuntime(options) {
       || runningBuild.match(/^(0|[1-9][0-9]{0,18})$/)?.[0] !== runningBuild || BigInt(runningBuild) > 9223372036854775807n) fail();
   for (const key of ['pause', 'prepareResume', 'resume', 'failure', 'openExport', 'openStage', 'sourceWorker', 'database', 'productState',
     'exportVault', 'restoreVault', 'invalidateAuthority']) if (typeof ports?.[key] !== 'function') fail();
-  const readOptions = root => ({ root, installationId, runningBuild });
+  const readOptions = root => ({ root, installationId, runningBuild, windowsBoundary });
   const recoveryRoot = path.join(userData, 'recovery'), recordsRoot = path.join(userData, 'backup-maintenance');
   const dataRoot = path.join(userData, 'data');
   const initial = journal.snapshot();
@@ -145,7 +168,7 @@ async function createDesktopBackupRuntime(options) {
   if (initialize && (initial.pendingRestore || initial.pendingMaintenance || initial.maintenanceReceipt)) fail();
   const verifier = createMaintenanceVerifier({ installationId, readProjection: adapter.readProjection });
   const retentionHistory = new Map();
-  const records = await createBackupRecoveryRecords({ root: recordsRoot, installationId, runningBuild,
+  const records = await createBackupRecoveryRecords({ root: recordsRoot, installationId, runningBuild, windowsBoundary,
     keyProvider, initialize, verifyCompletion: async (_record, { transactionId, receipt }) => {
       const snapshot = journal.snapshot();
       if (snapshot.pendingRestore || snapshot.pendingMaintenance || snapshot.aiOff !== true
@@ -171,7 +194,7 @@ async function createDesktopBackupRuntime(options) {
           && !(recoveryMode && previous.active?.transactionId === initial.maintenanceReceipt.transactionId)) fail();
     } else if (previous.completed.length && !previous.active) fail();
   } catch {
-    await records.close(); fail();
+    try { await records.close(); } finally { if (windowsBoundary) await fs.close(); } fail();
   }
   let busy = false, closed = false, current;
   async function readRetentionAuthority() {
@@ -203,7 +226,7 @@ async function createDesktopBackupRuntime(options) {
       const stat = await fs.lstat(path.join(root, name), { bigint: true });
       if (/^(?:previous|failed)-(?:repos|sources)$/.test(name)) await directory(path.join(root, name), false);
       else privateStat(stat, name !== 'checkpoint.cibackup');
-      topLevel.push({ name, type: name === 'checkpoint.cibackup' ? 'file' : 'directory', dev: String(stat.dev), ino: String(stat.ino) });
+      topLevel.push({ name, type: name === 'checkpoint.cibackup' ? 'file' : 'directory', ...identityRecord(stat) });
     }
     const stat = await directory(root), checkpoint = path.join(root, 'checkpoint.cibackup');
     const db = await database.inspect(transactionId), databases = [];
@@ -214,14 +237,14 @@ async function createDesktopBackupRuntime(options) {
         databases.push({ slot, oid: value.oid });
       }
     }
-    return validateRetentionManifest({ root: { dev: String(stat.dev), ino: String(stat.ino) },
+    return validateRetentionManifest({ root: identityRecord(stat),
       checkpoint: { bytes: String((await fs.lstat(checkpoint, { bigint: true })).size), sha256: await fileHash(checkpoint) }, databases, topLevel });
   }
   async function collectCompleted(database, product) {
     const authority = await readRetentionAuthority();
     if (authority.completed.length < 3) return;
     await product.verifyOrigin();
-    const retention = await createBackupRetention({ recoveryRoot, readAuthority: readRetentionAuthority,
+    const retention = await createBackupRetention({ recoveryRoot, readAuthority: readRetentionAuthority, windowsBoundary,
       beginCollection: records.beginCollection, finishCollection: records.finishCollection,
       dropDatabase: value => database.dropRetained(value) });
     try { await retention.collect(); } finally { await retention.close(); }
@@ -235,7 +258,7 @@ async function createDesktopBackupRuntime(options) {
     return result;
   }
   async function rememberScratch(transactionId, root, item) {
-    await records.registerScratch({ transactionId, relativeDirectory: path.relative(root, item.root),
+    await records.registerScratch({ transactionId, relativeDirectory: path.relative(root, item.root).split(path.sep).join('/'),
       directoryIdentity: identity(await directory(item.root)), payloadIdentity: item.value.payloadIdentity,
       payloadSha256: item.value.payloadSha256 });
   }
@@ -289,7 +312,7 @@ async function createDesktopBackupRuntime(options) {
       payloadIdentity: identity(await fs.lstat(file, { bigint: true })) };
   }
   async function exportCurrent(root, lease) {
-    const writer = await createBackupPayload({ root, installationId, minimumVersion: runningBuild,
+    const writer = await createBackupPayload({ root, installationId, minimumVersion: runningBuild, windowsBoundary,
       ...(lease ? { beforeWrite: bytes => lease.consume('checkpointPayload', bytes) } : {}) });
     const inventory = createBackupSourceInventory(); const costs = createBackupCostCollector(installationId);
     let db, worker, sourceReader;
@@ -337,7 +360,7 @@ async function createDesktopBackupRuntime(options) {
     }
   }
   async function encrypt(root, destinationRoot, name, lease, component) {
-    return encryptFile({ sourceRoot: root, sourcePath: path.join(root, 'payload.bin'), destinationRoot,
+    return encryptFile({ windowsBoundary, sourceRoot: root, sourcePath: path.join(root, 'payload.bin'), destinationRoot,
       destinationPath: path.join(destinationRoot, name), installationId, keyProvider,
       ...(lease ? { beforeWrite: bytes => lease.consume(component, bytes) } : {}) });
   }
@@ -346,8 +369,8 @@ async function createDesktopBackupRuntime(options) {
       : { postgres: path.join(userData, 'postgres'), source: dataRoot, bundle: recoveryRoot };
     if (!fixedRoots || Object.keys(fixedRoots).sort().join(',') !== 'bundle,postgres,source') fail();
     const sizes = await database.readSizes({ transactionId });
-    const source = await measureBackupTree({ root: fixedRoots.source });
-    const bundle = await measureBackupTree({ root: fixedRoots.bundle });
+    const source = await measureBackupTree({ root: fixedRoots.source, windowsBoundary });
+    const bundle = await measureBackupTree({ root: fixedRoots.bundle, windowsBoundary });
     const exported = await ports.openExport(); let measurement;
     try { measurement = await exported.measureExport(); } finally { await exported.close(); }
     const max = (...values) => values.reduce((a, b) => a > b ? a : b, 0n);
@@ -377,7 +400,7 @@ async function createDesktopBackupRuntime(options) {
         liveDatabaseBytes: String(live), liveSourceBytes: String(baseSource), previousBundleBytes: String(baseBundle),
         checkpointPayloadLimitBytes: String(checkpointLimit), incomingArchiveBytes: String(incomingArchive),
         incomingPayloadBytes: String(incomingPayload), stagedDatabaseLimitBytes: String(stagedDatabase), stagedSourceLimitBytes: String(stagedSource) });
-      capacity = await createBackupCapacity({ roots: { ...fixedRoots, recovery: recoveryRoot, destination: destinationRoot || null } });
+      capacity = await createBackupCapacity({ windowsBoundary, roots: { ...fixedRoots, recovery: recoveryRoot, destination: destinationRoot || null } });
       const lease = await capacity.begin(plan);
       if (archived && !recovery) {
         await lease.consume('incomingArchive', String(incomingArchive));
@@ -438,18 +461,18 @@ async function createDesktopBackupRuntime(options) {
         || input.version !== 2 || input.transactionId !== active.transactionId || input.kind !== active.kind
         || !['BACKUP', 'RESTORE'].includes(input.kind)
         || ['payloadSha256', 'checkpointSha256'].some(key => typeof input[key] !== 'string' || !/^[0-9a-f]{64}$/.test(input[key]))
-        || typeof input.rootIdentity !== 'string' || !/^[0-9]+:[0-9]+$/.test(input.rootIdentity)
-        || typeof input.verificationIdentity !== 'string' || !/^[0-9]+:[0-9]+$/.test(input.verificationIdentity)
+        || !validIdentity(input.rootIdentity)
+        || !validIdentity(input.verificationIdentity)
         || typeof input.liveDatabaseOid !== 'string' || !/^[1-9][0-9]{0,9}$/.test(input.liveDatabaseOid)
         || !input.originalSources || Object.keys(input.originalSources).sort().join(',') !== 'repos,sources'
-        || Object.values(input.originalSources).some(id => id !== null && (typeof id !== 'string' || !/^[0-9]+:[0-9]+$/.test(id)))
+        || Object.values(input.originalSources).some(id => id !== null && !validIdentity(id))
         || !Array.isArray(input.mergeInputs) || !input.mergeInputs.length || input.mergeInputs.length > 2) fail();
     if (!input.scratchPayloads || Object.keys(input.scratchPayloads).sort().join(',') !== 'checkpoint,incoming') fail();
     for (const name of ['checkpoint', 'incoming']) {
       const item = input.scratchPayloads[name];
       if (name === 'incoming' && input.kind === 'BACKUP') { if (item !== null) fail(); continue; }
       if (!item || Object.keys(item).sort().join(',') !== 'directoryIdentity,payloadIdentity,sha256'
-          || ['directoryIdentity', 'payloadIdentity'].some(key => typeof item[key] !== 'string' || !/^[0-9]+:[0-9]+$/.test(item[key]))
+          || ['directoryIdentity', 'payloadIdentity'].some(key => !validIdentity(item[key]))
           || item.sha256 !== (name === 'checkpoint' ? input.checkpointSha256 : input.payloadSha256)) fail();
     }
     const first = input.mergeInputs[0];
@@ -462,7 +485,7 @@ async function createDesktopBackupRuntime(options) {
   }
   async function recoverPayload(root, archiveRoot, archiveName, expectedHash, scratchName, lease) {
     const scratch = await fresh(root, `${scratchName}-${crypto.randomUUID()}`);
-    const result = await decryptFile({ sourceRoot: archiveRoot, sourcePath: path.join(archiveRoot, archiveName),
+    const result = await decryptFile({ windowsBoundary, sourceRoot: archiveRoot, sourcePath: path.join(archiveRoot, archiveName),
       destinationRoot: scratch, destinationPath: path.join(scratch, 'payload.bin'), installationId, keyProvider,
       beforeWrite: bytes => lease.consume('incomingPayload', bytes) });
     await freeSpace(root, BigInt(result.payloadBytes) * 3n);
@@ -547,7 +570,7 @@ async function createDesktopBackupRuntime(options) {
             || plan.liveOid !== input.liveDatabaseOid || typeof plan.stageOid !== 'string'
             || !/^[1-9][0-9]{0,9}$/.test(plan.stageOid) || plan.stageOid === plan.liveOid
             || plan.stageDatabase !== `ci_backup_stage_${transactionId.replaceAll('-', '')}`) fail();
-        sourceSwap = await createBackupSourceSwap({ dataRoot, stageRoot: root, transactionId, resumePlan: staged.sources,
+        sourceSwap = await createBackupSourceSwap({ windowsBoundary, dataRoot, stageRoot: root, transactionId, resumePlan: staged.sources,
           onTransition: transition => records.append({ transactionId, phase: 'SOURCES_SWAPPED', data: transition }) });
         if (!completedInB && !rolledBack) {
           // No backend is running here. Preserve both images and restore only the captured A
@@ -630,7 +653,7 @@ async function createDesktopBackupRuntime(options) {
         const selectedCopy = path.join(input, 'archive.cibackup');
         await copySelectedFile(selected, selectedCopy, fileIdentity => owned.set(selectedCopy, { directory: false, identity: fileIdentity }));
         let remainingInput = (await fs.lstat(selectedCopy, { bigint: true })).size;
-        const decoded = await decryptFile({ sourceRoot: input, sourcePath: selectedCopy, destinationRoot: payload,
+        const decoded = await decryptFile({ windowsBoundary, sourceRoot: input, sourcePath: selectedCopy, destinationRoot: payload,
           destinationPath: path.join(payload, 'payload.bin'), installationId, keyProvider,
           beforeWrite: async bytes => {
             if (BigInt(bytes) > remainingInput) fail('INPUT');
@@ -710,7 +733,7 @@ async function createDesktopBackupRuntime(options) {
         await lease.check();
         await restoreSources(payload, stage, archived.sources);
         const treeBytes = async name => {
-          const measured = await measureBackupTree({ root: path.join(stage, name) });
+          const measured = await measureBackupTree({ root: path.join(stage, name), windowsBoundary });
           return BigInt(measured.logicalBytes) > BigInt(measured.allocatedBytes)
             ? BigInt(measured.logicalBytes) : BigInt(measured.allocatedBytes);
         };
@@ -724,7 +747,7 @@ async function createDesktopBackupRuntime(options) {
         if (BigInt(finalStage.bytes) > BigInt(stagedSizes.databases.stage.bytes)) {
           await lease.consume('stagedDatabase', String(BigInt(finalStage.bytes) - BigInt(stagedSizes.databases.stage.bytes)));
         }
-        sourceSwap = await createBackupSourceSwap({ dataRoot, stageRoot: stage, transactionId,
+        sourceSwap = await createBackupSourceSwap({ windowsBoundary, dataRoot, stageRoot: stage, transactionId,
           onTransition: async transition => records.append({ transactionId, phase: 'SOURCES_SWAPPED', data: transition }) });
         const sourcePlan = await sourceSwap.plan();
         await records.append({ transactionId, phase: 'STAGED', data: { database: dbPlan, sources: sourcePlan } });
@@ -795,7 +818,8 @@ async function createDesktopBackupRuntime(options) {
       const task = perform('BACKUP', selected); current = task; return task; },
     restore(selected) { if (busy) return Promise.reject(new BackupRuntimeError('BUSY'));
       const task = perform('RESTORE', selected); current = task; return task; },
-    async close() { closed = true; await current?.catch(() => {}); if (busy) fail(); await records.close(); },
+    async close() { closed = true; await current?.catch(() => {}); if (busy) fail(); try { await records.close(); } finally { if (windowsBoundary) await fs.close(); } },
   });
+  } catch (error) { if (windowsBoundary) await fs.close().catch(() => {}); throw error; }
 }
 module.exports = Object.freeze({ createDesktopBackupRuntime, BackupRuntimeError });

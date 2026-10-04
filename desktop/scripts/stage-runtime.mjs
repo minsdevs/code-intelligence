@@ -109,10 +109,11 @@ function copyDynamicLibraries(executables, destination) {
     const executable = pending.pop();
     if (!fs.existsSync(executable) || visited.has(executable)) continue;
     visited.add(executable);
-    const lines = output('otool', ['-L', executable]).split('\n').slice(1);
-    for (const line of lines) {
-      const reference = line.trim().split(' ')[0];
-      if (!reference) continue;
+    // otool -L also prints LC_ID_DYLIB: a relocated library can retain its
+    // original install ID without loading it. Copy only real load-command edges;
+    // comparing that ID with the relocated bytes creates a false collision.
+    const { dependencies } = nativePolicy.parseLoadCommands(output('otool', ['-l', executable]));
+    for (const reference of dependencies) {
       const dependency = resolveMachODependency(reference, executable);
       const target = nativePolicy.verifyDependencyCopy({ reference, dependency, destination });
       if (target === null) continue;
@@ -132,6 +133,38 @@ function filesUnder(directory) {
   return result;
 }
 
+function closeJreVmReferences(jre) {
+  guardStageDestination(jre);
+  const library = guardStageDestination(path.join(jre, 'lib'));
+  const jvm = guardStageDestination(path.join(library, 'server', 'libjvm.dylib'));
+  const reference = '@rpath/libjvm.dylib';
+  const inspect = file => nativePolicy.parseLoadCommands(output('/usr/bin/otool', ['-arch', 'arm64', '-l', file]));
+  // HotSpot is explicitly dlopened by the Java launcher. Temurin JNI libraries
+  // rely on its loaded-image/runpath context rather than declaring server/ as
+  // their own RPATH. Make that reviewed bootstrap edge self-resolving in the
+  // fresh image instead of relaxing the publication gate for arbitrary plugins.
+  if (!fs.lstatSync(jvm).isFile()
+      || !/Mach-O 64-bit dynamically linked shared library arm64\b/.test(output('/usr/bin/file', ['-b', jvm]))
+      || inspect(jvm).installName !== reference) {
+    throw new Error('JRE_VM_IDENTITY_REQUIRED');
+  }
+  const plans = [];
+  for (const file of filesUnder(library)) {
+    if (!file.endsWith('.dylib')) continue;
+    guardStageDestination(file);
+    const metadata = inspect(file);
+    if (!metadata.dependencies.includes(reference)) continue;
+    const replacement = '@loader_path/' + path.relative(path.dirname(file), jvm).split(path.sep).join('/');
+    plans.push({ file, replacement });
+  }
+  for (const { file, replacement } of plans) {
+    guardStageDestination(jvm); guardStageDestination(file);
+    output('/usr/bin/install_name_tool', ['-change', reference, replacement, file]);
+    output('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', file]);
+  }
+  return plans.length;
+}
+
 function commonDirectory(paths) {
   if (!paths.length || paths.some(value => typeof value !== 'string' || value.includes('\0') || !path.isAbsolute(value)
       || path.normalize(value) !== value)) throw new Error('PostgreSQL layout requires absolute normalized build directories.');
@@ -146,10 +179,54 @@ function commonDirectory(paths) {
   return segments[0].slice(0, Math.max(length, 1)).join(path.sep) || path.sep;
 }
 
+function emitNativeStageClosure(error, staging) {
+  if (!(error instanceof nativePolicy.NativeRuntimePolicyError)) return;
+  const safeRelative = value => typeof value === 'string' && value.length <= 256
+    && /^(?:jre|postgres|redis)\/[A-Za-z0-9_.+/-]+$/.test(value)
+    && value === path.posix.normalize(value) && !value.split('/').includes('..');
+  const safeReference = value => typeof value === 'string' && value.length <= 256
+    && /^@(loader_path|executable_path|rpath)\/[A-Za-z0-9_.+/-]+$/.test(value);
+  let emitted = 0;
+  for (const finding of error.findings) {
+    if (emitted >= 12) break;
+    if (finding.code !== 'UNRESOLVED_NATIVE_REFERENCE' || !safeRelative(finding.file) || !safeReference(finding.detail)) continue;
+    try {
+      const file = guardStageDestination(path.join(staging, finding.file));
+      const stat = fs.lstatSync(file);
+      if (!stat.isFile() || stat.nlink !== 1) continue;
+      const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW), magic = Buffer.alloc(4);
+      try { fs.readSync(fd, magic, 0, 4, 0); } finally { fs.closeSync(fd); }
+      if (!['cffaedfe', 'feedfacf', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca'].includes(magic.toString('hex'))) continue;
+      const metadata = nativePolicy.parseLoadCommands(output('otool', ['-arch', 'arm64', '-l', file]));
+      if (!metadata.dependencies.includes(finding.detail)) continue;
+      const rpaths = [];
+      for (const reference of metadata.rpaths.slice(0, 16)) {
+        const match = reference.match(/^@(loader_path|executable_path)(?:\/([A-Za-z0-9_.+/-]+))?$/);
+        if (!match || reference.length > 256) continue;
+        // An arbitrary dylib does not establish the executable of a dlopen caller.
+        if (match[1] === 'executable_path' && !/Mach-O 64-bit executable arm64\b/.test(output('file', ['-b', file]))) continue;
+        const directory = path.resolve(path.dirname(file), match[2] || '.');
+        const relative = path.relative(staging, directory);
+        if (!safeRelative(relative) || !fs.existsSync(directory)) continue;
+        guardStageDestination(directory);
+        if (!fs.lstatSync(directory).isDirectory()) continue;
+        rpaths.push({ kind: match[1] === 'loader_path' ? 'loader' : 'executable', directory: relative });
+      }
+      process.stderr.write('NATIVE_STAGE_CLOSURE ' + JSON.stringify({ file: finding.file, reference: finding.detail, rpaths }) + '\n');
+      emitted++;
+    } catch { /* Diagnostics must neither replace the gate failure nor expose tool stderr. */ }
+  }
+}
+
 function hash(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
+if (process.platform === 'win32' && process.arch === 'x64') {
+  const { stageWindowsRuntime } = await import('./stage-windows-runtime.cjs');
+  stageWindowsRuntime({ desktop, buildSequence });
+  process.exit(0);
+}
 if (process.platform !== 'darwin' || process.arch !== 'arm64') {
   throw new Error('The verified desktop package target is currently macOS arm64 only.');
 }
@@ -189,6 +266,7 @@ exec(jlink, [
   '--output', guardStageDestination(path.join(staging, 'jre'))
 ]);
 stageTransaction.materializeJreLegal();
+closeJreVmReferences(path.join(staging, 'jre'));
 
 const pgConfig = process.env.PG_CONFIG || output('which', ['pg_config']);
 const pgBin = output(pgConfig, ['--bindir']);
@@ -241,12 +319,17 @@ const redisServer = process.env.REDIS_SERVER || output('which', ['redis-server']
 copy(redisServer, path.join(staging, 'redis', 'bin', 'redis-server'));
 copyDynamicLibraries([redisServer], path.join(staging, 'redis', 'lib'));
 
-nativePolicy.verifyNativeRuntime({ root: staging,
-  minimumSystemVersion: JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8')).build.mac.minimumSystemVersion,
-  requiredExecutables: ['jre/bin/java', ...requiredPgBinaries.map(name => path.relative(staging, path.join(postgresBin, name))), 'redis/bin/redis-server'],
-  requiredModules: ['jre/lib/libjli.dylib', 'jre/lib/libjava.dylib', 'jre/lib/server/libjvm.dylib',
-    ...['vector', 'pg_trgm'].map(name => path.relative(staging, path.join(postgresPkgLib, `${name}.dylib`)))],
-  postgresShare: path.relative(staging, postgresShare) });
+try {
+  nativePolicy.verifyNativeRuntime({ root: staging,
+    minimumSystemVersion: JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8')).build.mac.minimumSystemVersion,
+    requiredExecutables: ['jre/bin/java', ...requiredPgBinaries.map(name => path.relative(staging, path.join(postgresBin, name))), 'redis/bin/redis-server'],
+    requiredModules: ['jre/lib/libjli.dylib', 'jre/lib/libjava.dylib', 'jre/lib/server/libjvm.dylib',
+      ...['vector', 'pg_trgm'].map(name => path.relative(staging, path.join(postgresPkgLib, `${name}.dylib`)))],
+    postgresShare: path.relative(staging, postgresShare) });
+} catch (error) {
+  emitNativeStageClosure(error, staging);
+  throw error;
+}
 
 const manifest = {};
 for (const file of filesUnder(staging)) {

@@ -22,7 +22,9 @@ class MaintenanceFilterTest {
 
     @ParameterizedTest
     @CsvSource({
-        "GET,/api/auth/github/native/callback",
+        "POST,/api/auth/github/native/start",
+        "POST,/api/auth/github/native/poll/00000000-0000-0000-0000-000000000001",
+        "POST,/api/auth/github/native/cancel/00000000-0000-0000-0000-000000000001",
         "GET,/login/oauth2/code/github",
         "GET,/oauth2/authorization/github",
         "POST,/api/auth/pat",

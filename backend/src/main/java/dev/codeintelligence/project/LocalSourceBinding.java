@@ -4,8 +4,9 @@ package dev.codeintelligence.project;
 public record LocalSourceBinding(
         int schemaVersion,
         String canonicalRoot,
-        long rootDevice,
-        long rootInode,
+        String rootPlatform,
+        String rootIdentity,
+        String rootOwner,
         String policyVersion,
         String limitsSha256,
         String manifestSha256,

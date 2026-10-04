@@ -9,7 +9,8 @@ const { TextDecoder, types: { isProxy } } = require('node:util');
 const MAX_FRAME = 256 * 1024;
 const MAX_BOOTSTRAP = 16 * 1024;
 const MAX_REPLY = 4096;
-const SYSTEM_ENV = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'USER', 'LOGNAME'];
+const { inheritedEnvironment } = require('./runtime-platform.cjs');
+const { boundaryFromJava, managedWire } = require('./windows-native-boundary.cjs');
 const HELPER_ERRORS = new Set(['START_FAILED', 'CONTROL_INVALID', 'BOOTSTRAP_FAILED', 'STOP_UNVERIFIED']);
 const ERROR_CODES = new Set(['INVALID', 'HELPER_START', 'START_TIMEOUT', 'PROTOCOL', 'CONTROL_LOST', 'HELPER_DIED', ...HELPER_ERRORS]);
 
@@ -70,8 +71,9 @@ function specification(options) {
   }
   const bootstrap = options.bootstrap ?? Buffer.alloc(0);
   if (!Buffer.isBuffer(bootstrap) || bootstrap.length > MAX_BOOTSTRAP) invalid();
-  const wire = frame({ version: 1, kind: 'START', command: options.command, args, cwd: options.cwd,
-    env, logPath: options.logPath, bootstrap: bootstrap.toString('base64') });
+  const wire = process.platform === 'win32' ? managedWire({ ...options, bootstrap })
+    : frame({ version: 1, kind: 'START', command: options.command, args, cwd: options.cwd,
+      env, logPath: options.logPath, bootstrap: bootstrap.toString('base64') });
   bootstrap.fill(0);
   return { javaPath: options.javaPath, jarPath: options.jarPath, bootstrap, wire };
 }
@@ -162,11 +164,15 @@ function createManagedProcessSpawner({ spawn = childProcess.spawn, startTimeoutM
     };
     const startTimer = setTimeout(() => { report('START_TIMEOUT'); closeLease(); }, startTimeoutMs);
     try {
-      const env = {};
-      for (const name of SYSTEM_ENV) if (typeof process.env[name] === 'string') env[name] = process.env[name];
-      helper = spawn(spec.javaPath, ['-jar', spec.jarPath, '--ci-managed-process'], {
-        env, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true,
-      });
+      const env = inheritedEnvironment(process.env);
+      helper = process.platform === 'win32' ? boundaryFromJava(spec.javaPath).launch('managed', spawn)
+        : spawn(spec.javaPath, ['-jar', spec.jarPath, '--ci-managed-process'], {
+          env, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true,
+        });
+      if (helper.stderr) {
+        helper.stderr.on('data', badProtocol);
+        helper.stderr.on('error', badProtocol);
+      }
       helper.on('error', () => { report('HELPER_START'); closeLease(); });
       helper.stdin.on('error', () => { if (!provedStopped && !helperClosed) { report('CONTROL_LOST'); closeLease(); } });
       helper.stdout.on('data', chunk => {

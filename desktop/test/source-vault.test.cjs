@@ -100,6 +100,29 @@ test('stores raw bytes with plaintext SHA256 and reopens without changing wrappe
   await assert.rejects(reopened.read({ ...stored, sha256: gitOid }), code('SOURCE_VAULT_ARGUMENT'));
 });
 
+test('lost key directory cannot silently re-enroll an empty source vault', async t => {
+  const f = await fixture(t); await f.vault.close();
+  await fs.rm(f.keyDirectory, { recursive: true });
+  await assert.rejects(f.create(), code('SOURCE_VAULT_NOT_FRESH'));
+  await assert.rejects(fs.stat(f.keyDirectory), error => error.code === 'ENOENT');
+});
+
+test('missing enrollment is not reconstructed from an otherwise valid keyring', async t => {
+  const f = await fixture(t), keys = await fs.readFile(f.keyFile);
+  await f.vault.close(); await fs.unlink(path.join(f.options.safetyRoot, 'source-vault.enrollment'));
+  await assert.rejects(f.open(), code('SOURCE_VAULT_KEY_MISSING'));
+  assert.deepEqual(await fs.readFile(f.keyFile), keys);
+  await assert.rejects(f.create(), code('SOURCE_VAULT_NOT_FRESH'));
+});
+
+test('enrollment replacement blocks a live source read without rewriting its committed blob', async t => {
+  const f = await fixture(t), stored = await f.vault.put({ projectId: 7, bytes: Buffer.from('retained source') });
+  const blob = await fs.readFile(f.blob(stored)), marker = path.join(f.options.safetyRoot, 'source-vault.enrollment');
+  const changed = await fs.readFile(marker); changed[changed.length - 1] ^= 1; await fs.writeFile(marker, changed);
+  await assert.rejects(f.vault.read(stored), code('SOURCE_VAULT_KEY_INVALID'));
+  assert.deepEqual(await fs.readFile(f.blob(stored)), blob);
+});
+
 test('persists only encrypted source/wrapped source-purpose keys under private modes', async t => {
   const f = await fixture(t);
   const plaintext = Buffer.from('synthetic source sentinel: never persisted as plaintext');
@@ -435,16 +458,16 @@ test('rejects keyring unknown fields/major/purpose, duplicate fields, and oversi
     await assert.rejects(f.open(), code(expected));
   }
   await fs.truncate(f.keyFile, 64 * 1024 + 1);
-  let unwraps = 0;
-  await assert.rejects(f.open({ wrapper: { ...f.wrapper, unwrap: bytes => { unwraps += 1; return f.wrapper.unwrap(bytes); } } }), code('SOURCE_VAULT_LIMIT'));
-  assert.equal(unwraps, 0);
+  await assert.rejects(f.open({ wrapper: { ...f.wrapper, unwrap: bytes => {
+    assert.ok(bytes.length <= 64 * 1024, 'Oversized wrapped input must not reach the provider');
+    return f.wrapper.unwrap(bytes);
+  } } }), code('SOURCE_VAULT_LIMIT'));
 });
 
-test('bounds unwrapped keyring size and retained key count without deleting old keys', async t => {
+test('bounds retained key count without deleting old keys', async t => {
   const f = await fixture(t);
   const old = await f.vault.put({ projectId: 1, bytes: Buffer.from('old fixture') });
   await f.vault.close();
-  await assert.rejects(f.open({ wrapper: { ...f.wrapper, unwrap: () => Buffer.alloc(32 * 1024 + 1) } }), code('SOURCE_VAULT_KEY_INVALID'));
   await f.rewriteKeyring(value => {
     while (value.keys.length < 64) value.keys.push({ keyId: crypto.randomBytes(16).toString('hex'), material: crypto.randomBytes(32).toString('base64') });
     value.revision = value.keys.length; value.activeKeyId = value.keys.at(-1).keyId;

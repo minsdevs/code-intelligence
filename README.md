@@ -190,13 +190,152 @@ The backend checks the exact certificate, validity and IP subject alternative na
 before sending the caller token or source; it does not use a proxy, follow redirects
 or fall back to HTTP. The analyzer authenticates before parsing request JSON.
 Incomplete TLS configuration is rejected, including HTTPS without a pin. Development
-HTTP remains available when no TLS settings are supplied. No certificate or token is
-generated or trusted automatically. Protected TLS file loading currently refuses
-Windows pending native file-access validation.
+HTTP remains available for the browser development profile when no TLS settings are
+supplied. Electron startup now generates separate launch-scoped loopback certificates
+for PostgreSQL, Redis, the analyzer and the backend in an owned private directory;
+it never changes the system trust store. PostgreSQL requires SCRAM over verify-full TLS,
+Redis requires a launch password over TLS, and analyzer/backend requests require the
+current capability after peer authentication. Backend health and static resources are
+not authentication exceptions. Session and CSRF cookies are Secure in the desktop profile.
+Certificates are regenerated on each full application launch and are valid for one year;
+they are removed only after owned children stop. They are never long-term OS trust anchors.
 
-This connection is not yet wired into Electron startup. It does not establish
-PostgreSQL, Redis or backend endpoint ownership, isolate the OS credential store,
-or remove either isolated-launch blocker above.
+External GitHub redirects use a separate, narrowly bounded HTTP loopback callback;
+only validated callback parameters are forwarded to the pinned HTTPS backend. That
+bridge is not a generic HTTP API listener and does not solve the OAuth provider limitation below.
+
+Windows runtime IO is restricted to retained fixed-NTFS roots. `WI1` identities bind the
+volume and file ID; `WS1` states also include size, actual allocation size, last-write and
+change timestamps. Writes use bounded chunks, full-state preconditions, file flush and
+readback. Protected SID/DACL checks reject reparse points and hardlinks. Directory
+rename/unlink is not claimed power-loss durable.
+Retained directory and ancestor pins request list access so share-delete exclusion applies;
+canonical DOS paths use internal extended-length paths without accepting device paths on
+the wire. A write commit finalizes actual NTFS allocation and timestamps through the same retained
+writer before acknowledging its state; closing cannot change that token. No-op append
+preserves the previous state, and empty/shorter inactive-slot writes truncate the old suffix.
+Safety state and folder grants use authenticated retained storage; missing/torn slots or
+enrollment markers require recovery.
+The native boundary suite exercises real Java21 Unicode socket paths through UTF-8 bootstrap,
+full-size source frames, FIN/EOF and capability/epoch refusal. Guardian-death acceptance waits
+on pre-retained query/synchronization process handles, not PID-existence polling. Passing these
+boundaries alone does not attest Electron credential-store restart or full product acceptance.
+The standalone Electron credential probe uses normal `app.quit()` shutdown: an immediate
+`app.exit()` from Electron44's ready callback can bypass the Local State commit. This
+restart proof does not attest crash or power-loss durability. Native product actions share
+one nine-minute monotonic deadline across all restarts; cleanup is reserved within ten minutes.
+Each Electron launch plus first window has a 90-second deadline. Build commands are separate
+and limited to eight minutes; the disposable OS job has a 20-minute infrastructure backstop
+including provisioning, builds and evidence upload, rather than waiting 45–75 minutes.
+Only static startup phases/error codes and bounded public runtime dependency names enter reports.
+Primary failures are saved before cleanup; forced termination of the SDK-owned launcher can
+never pass clean-shutdown acceptance.
+
+Main owns the encrypted source vault and private source broker. Java receives one bounded
+version2 JSON+EOF bootstrap for both AI and source capabilities, never environment fallback.
+Backup quiescence closes backend/analyzer, drains the broker and closes the vault before
+source export/swap. Failed drain retains safety ownership and prevents ordinary exit.
+The native product scenario drives Settings backup, restore and restoration of the
+pre-replacement recovery checkpoint through the real trusted IPC and storage pipeline.
+It checks database snapshots, encrypted source contents, refusal of the old API token,
+service resumption and persistence after restarting the process. Only the OS file-picker
+selection is a single-use controlled fixture; the report does not claim native picker
+interaction or replace PostgreSQL, the vault, archive IO or quiescence with test adapters.
+Source enrollment has its own immutable authenticated marker, independent of paid-AI
+fresh-install eligibility; missing source keys or markers are never silently regenerated.
+Existing local data does not grant a new paid-AI enrollment exemption.
+
+The Windows supply pins PostgreSQL 16.10, pgvector 0.8.1, Temurin21 and self-contained
+Microsoft Garnet 2.2.0 built from source with pinned .NET dependencies. The framework-
+dependent official Garnet executable is not shipped. PE architecture/import closure,
+checksums, provenance and notices are verified before native helper execution. Windows
+release packaging remains blocked pending reviewed native product evidence, signed
+installer/update, clean interactive Windows11, power-loss and provider/license gates.
+Windows JRE linking excludes the pinned JDK's compatibility copies of allowlisted inbox
+UCRT and API-set DLLs. App-local MSVC redistributables remain included and byte-identical;
+the system-DLL shadow, architecture and transitive import gates are not relaxed.
+
+The native-acceptance.yml workflow runs on fresh hosted machines, on trusted same-repository
+PRs and explicit manual dispatch. It exercises normal Electron startup rather than
+bypassing isolated-launch guards. Windows requires a fresh standard-user token, verified
+loaded profile and CurrentUser DPAPI before native NTFS/AF_UNIX/backup/TLS checks,
+Garnet Spring Session/Lua/pub-sub compatibility and the complete unsigned product flow.
+Its build selects an installed x64 MSVC/Windows SDK after a compile/link/run probe
+under that same token, then pins the installation and versions for the helper and
+pgvector. CMake uses explicit NMake/compiler/SDK paths; the runner's PATH and developer
+environment are not inherited.
+Native checks may not pass by skipping. Artifacts separate unsigned product results from
+signed release acceptance; raw runtime logs and credential stores are never exported.
+Windows physical-device acceptance remains operator-owned and was not run on the macOS host.
+`npm run check:windows` reports outstanding gates; `pack:win` and `dist:win` remain
+fail-closed until native evidence and signed installer/update/recovery review are complete.
+For CI-independent macOS functional validation, run
+`npm run accept:mac:local` from `desktop/` only after explicitly approving creation of
+the validation-only macOS Keychain item `Code Intelligence Validation Safe Storage`
+(account `Code Intelligence Validation Key`). The command accepts no path or identity
+overrides. It copies current source into a fresh mode-0700 host work root, removes provider
+credentials from the child environment, and uses a short-lived mode-0600 context descriptor.
+The ordinary safeStorage restart probe uses app name `Code Intelligence Validation`;
+the Playwright whole-product flow uses the separate `Code Intelligence Acceptance`
+identity and a private reusable claim for userData, sessionData, temp, logs and crash data.
+Those identities map to bundle IDs `dev.codeintelligence.desktop.validation` and
+`dev.codeintelligence.desktop.acceptance` and do not reuse the production app profile
+or Keychain namespace. Installed JDK21 is used only when its reported major is exactly21;
+otherwise the command downloads the current official macOS AArch64 Temurin21 archive into
+the private run, verifies the API-provided SHA-256, and never changes the shared JDK.
+Tart/Apple Virtualization remains the clean-OS installation/update gate, not a prerequisite
+for host functional verification. Each provision/acceptance/product phase claims its work
+root once; a retry never erases an existing profile or claim receipt.
+The macOS runner builds PostgreSQL 16, OpenSSL, Redis TLS and pgvector from
+Homebrew-checksummed sources in private prefixes with a macOS 13.0 deployment target,
+instead of repackaging newer-OS bottles or relaxing the native publication policy.
+Only Redis's shipped `redis-server` target is built; upstream development module tests
+are not part of the runtime closure. This avoids their raw-linker/compiler-flag mismatch
+without weakening the deployment target, TLS or relocation checks.
+Mach-O staging follows actual dynamic-library load commands, not LC_ID_DYLIB install
+identities. A real dependency edge to different-content bytes still fails the digest
+collision guard, and publication still requires a closed relocated dependency graph.
+Temurin21 JNI libraries rely on the already loaded HotSpot VM rather than declaring its
+server directory in every RPATH. Fresh JRE staging rewrites only their verified JVM load
+edges to the contained loader-relative lib/server/libjvm.dylib and ad-hoc signs changed
+images; it does not relax per-object closure or modify the source JDK. This is relocation,
+not Developer ID signing or release acceptance.
+Source URLs/hashes and relocated native closure hashes are retained in `provisioning.json`.
+Staging failures export bounded compiler/policy IDs and validated public source locations.
+Before an unsuccessful transaction removes its incoming stage, verified Mach-O closure
+failures retain only staged-relative objects, token-relative load edges and contained RPATH
+directories. Windows test failures retain fixed error/phase enums and public source locations,
+not assertion values or messages. Raw build/runtime logs and credentials remain private.
+Source copying excludes build outputs only at package roots, preserving real source packages
+such as analysis/coverage.
+Each loopback service has a distinct ephemeral CA and a CA-signed `127.0.0.1` server
+certificate. CA private keys remain in the main process; clients receive only that service’s
+public trust anchor. HTTPS additionally pins the exact server leaf. This trust chain is
+checked with real Electron, not inferred from the system Node/OpenSSL implementation.
+Current local transport proof covers real PostgreSQL 16 and Redis TLS/authentication,
+wrong-peer/plaintext rejection, HTTPS pinning, token rotation and callback refusal.
+A disposable macOS VM also displayed the actual project-list window, app version and
+normal process exit. Host-local functional proof now covers real Keychain encryption and
+restart decryption, project import/analysis/source navigation, native 980×700/1280×800/
+1440×900 windows, encrypted backup and recovery-checkpoint restore, stale API-token
+refusal over pinned TLS, restart persistence, project deletion and clean shutdown.
+The original run and successful restore/restart continuation retain separate reports;
+previously passed builds and checks were not repeated. Restore confirmation targets its
+button rather than Monaco's global alerts. Token revocation is probed outside Chromium,
+whose main-process request hook deliberately replaces renderer-supplied API tokens.
+Hosted whole-app results, signed installation/update, real OAuth and provider approval
+remain separate acceptance gates.
+
+The real native backup fixture now covers pinned Spring HTTPS, authenticated Redis,
+PostgreSQL verify-full TLS, encrypted backup/restore, and an injected post-health failure
+that rolls back product data while preserving the OFF credentials and unresolved safety seal.
+All three cases passed; its OS key wrapper remains explicitly synthetic.
+Archive failures preserve the original integrity/source-change rejection while attempting
+every owned-resource close. A cleanup-only failure still prevents success acknowledgement;
+cleanup errors do not turn a failed operation into success or replace its primary cause.
+A separate cold clone of the real V20 database migrated through actual Flyway to V26;
+existing-table row counts were preserved, and a cold V20 restore reproduced all data digests.
+All 1,602 original DB files retained their bytes, sizes and permissions. This is not a signed-app upgrade.
 
 The explicit macOS integration fixture below compiles private copies of the actual
 Java client and Nest analyzer using existing dependencies, generates short-lived
@@ -225,17 +364,40 @@ with a separate enrollment marker. Encrypted maintenance records live under `bac
 Newly staged protocol3 runtimes connect the encrypted backup/restore buttons; older bundles keep
 them disabled. These are internal validation paths, not release acceptance. Legacy format1/2 and
 different-installation archives are rejected. Interrupted transactions block normal startup.
+On Windows, product state is below `private/` inside Electron's user-data profile, with
+protected inheritable DACLs on product workspaces and private child logs. TLS files,
+source state and short private IPC directories are main-owned; cleanup is authorized
+by retained identity and occurs only after proven service/source termination.
 
-To create and directly run the local unsigned directory package:
+To create and directly run the local unsigned production-name directory package:
 
 ```bash
-(cd desktop && npm run stage && npm run pack:mac)
+(cd desktop && npm run pack:mac)
 open "desktop/dist/mac-arm64/Code Intelligence.app"
 ```
 
-This produces a local `electron-builder --mac dir` package. The package was
-directly launched for macOS acceptance, but it was not copied to
-`/Applications`; no release, publishing, or deployment was performed.
+For local installation checks without sharing the production bundle, profile or Keychain
+identity, build the separately branded validation target:
+
+```bash
+(cd desktop && npm run pack:mac:validation)
+open "desktop/dist-validation/mac-arm64/Code Intelligence Validation.app"
+```
+
+`pack:mac` and `pack:mac:validation` each stage once and create an arm64
+ad-hoc-signed directory package without publishing or notarization. The validation target
+uses bundle ID `dev.codeintelligence.desktop.validation`.
+Stable `electron-builder` 26.15.3 uses the owned
+`desktop/scripts/builder-downloader` adapter for `@electron/get` 5.1 and Undici 7.30.0;
+keep the file dependency installed as a copy (`npm ci --install-links`). This removes the
+legacy vulnerable downloader while retaining real download/cache/proxy/TLS behavior.
+The copied runtime’s native Mach-O files are signed first, their manifest hashes refreshed,
+and the outer app signed last. Non-native hashes stay unchanged; the source stage is not
+modified. The directory-package smoke verified its 5,120-file runtime manifest and
+`codesign --verify --deep --strict`; this is not Developer ID/notarization acceptance.
+Release DMG/ZIP builds require a real Developer ID Application identity, hardened runtime
+and notarization credentials before packaging; an ad-hoc release or skipped signing hook
+fails closed. No installation into `/Applications` or publishing was performed.
 
 `./start-local` is a development helper, not a production supervisor. It starts
 the analyzer containers only when `TS_ANALYZER_BASE_URL` or
@@ -252,13 +414,14 @@ docker compose up -d
 (cd frontend && npm ci && npm run dev)
 ```
 
-AI is optional. Native GitHub OAuth requires `GITHUB_NATIVE_CLIENT_ID` at
-desktop/backend launch, but a client ID alone does not make the current native
-OAuth flow production-ready. The authorization-code exchange currently omits the
-client secret required by GitHub; select a supported device flow or a hosted
-secret-bearing exchange before release. Never package a client secret in the
-desktop binary. PAT login is supported as a secondary path. `TOKEN_ENC_KEY` is always
-required by the backend. Set
+AI is optional. Native GitHub OAuth requires the public `GITHUB_NATIVE_CLIENT_ID` at
+desktop/backend launch and device flow enabled on that registered GitHub OAuth App.
+The app displays a device code and opens GitHub’s verification page only on explicit user
+action. Polling is attempt/owner-bound, obeys GitHub’s interval and `slow_down`, and stops
+on cancellation or expiry. No client secret is bundled and no local HTTP OAuth callback
+server is used. PAT login remains a secondary path. Real-account consent and live AI
+provider calls are separate, explicitly approved checks; device-flow regressions do not
+prove either. `TOKEN_ENC_KEY` is always required by the backend. Set
 `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040` and
 `TREE_ANALYZER_BASE_URL=http://127.0.0.1:3041` to enable the sidecars.
 
@@ -284,7 +447,7 @@ Run these commands from the repository root:
 
 # Desktop syntax and local macOS staging/package checks
 (cd desktop && npm test && node --check src/main.cjs && node --check src/preload.cjs)
-(cd desktop && npm run stage && npm run pack:mac)
+(cd desktop && npm run pack:mac)
 ```
 
 CI runs the backend, frontend, TypeScript analyzer, and tree-sitter analyzer
@@ -308,13 +471,17 @@ analysis-only fixture manifests pin Vitest 4.1.11 without installing the fixture
 or adding lockfiles. Fresh isolated frontend/TS/tree dependency audits reported
 zero vulnerabilities; that is not a repository-wide or release acceptance claim.
 
-Desktop build tooling still includes `http-cache-semantics 4.2.0` through
-`app-builder-lib → @electron/get 3.1.0 → got → cacheable-request`.
-[GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) has no
-published patched version at this check. The locked chain is development-only,
-and the checked Got default has HTTP caching disabled. A packaged runtime exploit
-path was not established; neither observation proves the advisory inapplicable.
-The alert remains open, with no speculative version override or dismissal.
+Desktop build tooling still includes http-cache-semantics 4.2.0 through
+app-builder-lib → @electron/get 3.1.0 → got → cacheable-request.
+GHSA-ch52-4w7c-c8xp still reports no patched version. The newly published 4.3.0 was
+also exercised directly: a security-zeroed shared response containing Set-Cookie was
+returned to a second-user request with max-stale. Therefore a version bump alone is
+not accepted as remediation and the production lock remains unchanged.
+The chain is development-only. Two actual downloads through the locked @electron/get
+GotDownloader, with different synthetic user cookies and max-stale, made two origin
+requests and returned distinct fresh artifacts: default download caching did not expose
+the policy bug in that scenario. This does not prove every configured build path safe.
+No alert suppression or unsupported claim of a repository-wide clean audit is made.
 
 The patched frontend production build was exercised in an owned Chrome instance
 at 980×700, 1280×800 and 1440×900. [Results and seven screenshots](validation/ui-layout/2026-10-04/results.json)
@@ -465,8 +632,8 @@ and blockers in [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md).
 |---|---|
 | Local browser + Spring Boot backend | Supported development path |
 | Docker Compose PostgreSQL/Redis/sidecars | Supported local infrastructure |
-| macOS arm64 Electron runtime | Local staged/package RC; unsigned/notarized acceptance pending |
-| Windows native installer | x64 NSIS configuration prepared; packaging blocked pending native safety/runtime work; not verified |
+| macOS arm64 Electron runtime | Host-local product/Keychain/backup/recovery/restart and native window sizes verified; ad-hoc package integrity and VM startup verified; signed release acceptance pending |
+| Windows native installer | x64 NSIS/native acceptance path configured; physical-device build and acceptance not verified |
 | Linux native package | Not verified |
 | Production hosted deployment | Deployment-specific; no release workflow is included |
 

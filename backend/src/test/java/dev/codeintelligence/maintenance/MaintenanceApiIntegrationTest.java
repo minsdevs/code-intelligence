@@ -205,17 +205,31 @@ class MaintenanceApiIntegrationTest {
     }
 
     @Test
-    void authenticationCallbacksAndOrdinaryReadsAreStoppedWhileHealthAndControlRemainReachable() throws Exception {
+    void authenticationAndOrdinaryReadsAreStoppedWhileHealthAndControlRemainReachable() throws Exception {
         assertThat(command("BEGIN").statusCode()).isEqualTo(200);
         Long users = jdbc.queryForObject("select count(*) from users", Long.class);
         for (String path : new String[] {
             "/api/auth/me",
-            "/api/auth/github/native/callback?code=synthetic&state=synthetic",
+            "/api/auth/github/connection",
             "/login/oauth2/code/github?code=synthetic",
             "/oauth2/authorization/github",
             "/api/projects"
         }) {
             assertThat(get(path).statusCode()).as(path).isEqualTo(503);
+        }
+        for (String path : new String[] {
+            "/api/auth/github/native/start",
+            "/api/auth/github/native/poll/00000000-0000-0000-0000-000000000001",
+            "/api/auth/github/native/cancel/00000000-0000-0000-0000-000000000001"
+        }) {
+            assertThat(http.send(
+                                    request(path, true)
+                                            .POST(HttpRequest.BodyPublishers.noBody())
+                                            .build(),
+                                    HttpResponse.BodyHandlers.ofString())
+                            .statusCode())
+                    .as(path)
+                    .isEqualTo(503);
         }
         assertThat(get("/actuator/health").statusCode()).isEqualTo(200);
         assertThat(command("STATUS").statusCode()).isEqualTo(200);

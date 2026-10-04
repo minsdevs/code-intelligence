@@ -98,10 +98,11 @@ class LocalSourceBindingTest {
         assertThat(first).isEqualTo(second);
         assertThat(first.binding().canonicalRoot())
                 .isEqualTo(source.toRealPath().toString());
-        assertThat(first.binding().rootDevice())
-                .isEqualTo(((Number) Files.getAttribute(source, "unix:dev")).longValue());
-        assertThat(first.binding().rootInode())
-                .isEqualTo(((Number) Files.getAttribute(source, "unix:ino")).longValue());
+        assertThat(first.binding().rootPlatform()).isEqualTo("posix");
+        assertThat(first.binding().rootIdentity())
+                .isEqualTo(
+                        "PI1:" + Files.getAttribute(source, "unix:dev") + ":" + Files.getAttribute(source, "unix:ino"));
+        assertThat(first.binding().rootOwner()).isNull();
         assertThat(first.binding().schemaVersion()).isEqualTo(1);
         assertThat(first.binding().manifestSha256()).matches("[0-9a-f]{64}");
         assertThat(first.binding().limitsSha256()).matches("[0-9a-f]{64}");
@@ -214,15 +215,27 @@ class LocalSourceBindingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"schema", "policy", "manifest", "count", "bytes", "canonical-root"})
+    @ValueSource(
+            strings = {
+                "schema",
+                "platform",
+                "identity",
+                "owner",
+                "policy",
+                "manifest",
+                "count",
+                "bytes",
+                "canonical-root"
+            })
     void malformedOrIncompatibleReceiptFieldsFailClosed(String field) throws Exception {
         Path source = oldTargetAndNewSource();
         var original = service().inspect(source).binding();
         var altered = new LocalSourceBinding(
                 field.equals("schema") ? 2 : original.schemaVersion(),
                 field.equals("canonical-root") ? original.canonicalRoot() + "/." : original.canonicalRoot(),
-                original.rootDevice(),
-                original.rootInode(),
+                field.equals("platform") ? "win32" : original.rootPlatform(),
+                field.equals("identity") ? "PI1:0:0" : original.rootIdentity(),
+                field.equals("owner") ? "S-1-5-18" : original.rootOwner(),
                 field.equals("policy") ? "future-policy" : original.policyVersion(),
                 original.limitsSha256(),
                 field.equals("manifest") ? "0".repeat(64) : original.manifestSha256(),

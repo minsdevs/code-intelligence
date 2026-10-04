@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { TextDecoder, types: { isProxy } } = require('node:util');
-
+const { inheritedEnvironment } = require('./runtime-platform.cjs');
 const LIMITS = Object.freeze({ frameBytes: 16 * 1024 * 1024, objectBytes: 2 * 1024 * 1024,
   objects: 200000, objectBytesTotal: 10 * 1024 ** 3, stderrBytes: 64 * 1024,
   wireBytes: Math.ceil(10 * 1024 ** 3 * 4 / 3) + 200000 * 1024 + 32 * 1024 * 1024,
@@ -243,7 +243,11 @@ async function* frames(stream, check) {
     if (payload || prefixUsed) fail('PROTOCOL');
   } finally { prefix.fill(0); payload?.fill(0); }
 }
-async function stamp(file, executable) {
+async function stamp(file, executable, windowsBoundary) {
+  if (windowsBoundary) {
+    const storage = await windowsBoundary.openStorage(path.dirname(file), { mode: 'source' });
+    try { return (await storage.stat(path.basename(file))).token; } finally { await storage.close(); }
+  }
   absolute(file);
   const stat = await fs.lstat(file, { bigint: true });
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1n || file !== await fs.realpath(file)
@@ -270,15 +274,18 @@ async function end(stream) {
 async function createBackupSourceWorker(options) {
   plain(options); const javaPath = absolute(options.javaPath), jarPath = absolute(options.jarPath);
   const spawn = options.spawn === undefined ? childProcess.spawn : options.spawn;
+  const runtimeRoot = options.windowsBoundary ? absolute(options.runtimeRoot) : null;
+  if (runtimeRoot && (javaPath !== path.join(runtimeRoot, 'jre', 'bin', 'java.exe')
+      || jarPath !== path.join(runtimeRoot, 'backend', 'code-intelligence.jar'))) fail('INVALID');
   if (typeof spawn !== 'function') fail('INVALID');
   const timeoutMs = options.timeoutMs ?? LIMITS.timeoutMs, killGraceMs = options.killGraceMs ?? LIMITS.killGraceMs;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > LIMITS.timeoutMs
       || !Number.isInteger(killGraceMs) || killGraceMs < 1 || killGraceMs > 5000) fail('INVALID');
   const inherited = options.env === undefined ? process.env : options.env;
   if (options.env !== undefined) plain(inherited);
-  const env = Object.freeze(Object.fromEntries(SYSTEM_ENV.filter(key => typeof inherited[key] === 'string').map(key => [key, inherited[key]])));
+  const env = Object.freeze(options.windowsBoundary ? inheritedEnvironment(inherited) : Object.fromEntries(SYSTEM_ENV.filter(key => typeof inherited[key] === 'string').map(key => [key, inherited[key]])));
   let javaStamp, jarStamp;
-  try { javaStamp = await stamp(javaPath, true); jarStamp = await stamp(jarPath, false); } catch { fail('INVALID'); }
+  try { javaStamp = await stamp(javaPath, true, options.windowsBoundary); jarStamp = await stamp(jarPath, false, options.windowsBoundary); } catch { fail('INVALID'); }
   let active = null, closing = false, poisoned = false;
 
   async function terminate(state) {
@@ -305,9 +312,9 @@ async function createBackupSourceWorker(options) {
     state.abort = abort;
     const check = () => { if (state.aborted || closing) fail('CLOSED'); };
     try {
-      if (await stamp(javaPath, true) !== javaStamp || await stamp(jarPath, false) !== jarStamp) fail('BINARY_CHANGED');
+      if (await stamp(javaPath, true, options.windowsBoundary) !== javaStamp || await stamp(jarPath, false, options.windowsBoundary) !== jarStamp) fail('BINARY_CHANGED');
       check();
-      state.child = spawn(javaPath, ['-Xmx512m', '-jar', jarPath, '--ci-backup-source-worker'],
+      state.child = spawn(javaPath, ['-Xmx512m', ...(runtimeRoot ? ['-Dcodeintelligence.windows.runtimeRoot=' + runtimeRoot] : []), '-jar', jarPath, '--ci-backup-source-worker'],
         { cwd: path.dirname(jarPath), env: { ...env }, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
       const child = state.child;
       if (!child || typeof child.once !== 'function' || typeof child.on !== 'function' || typeof child.kill !== 'function') fail('PROCESS');

@@ -1,0 +1,26 @@
+# Certificates, trust roots, ports and capabilities come from the private per-launch configuration.
+server:
+  address: 127.0.0.1
+  forward-headers-strategy: none
+  ssl:
+    enabled: true
+    bundle: desktopbackend
+  servlet:
+    session:
+      cookie:
+        secure: true
+        http-only: true
+        same-site: lax
+spring:
+  ssl:
+    bundle:
+      pem:
+        desktopbackend:
+          options:
+            enabled-protocols: TLSv1.3,TLSv1.2
+  data:
+    redis:
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: true
+        bundle: desktopredis

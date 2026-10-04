@@ -1,17 +1,15 @@
 package dev.codeintelligence.auth;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import dev.codeintelligence.common.security.CredentialKind;
 import dev.codeintelligence.github.GithubApiClient;
+import dev.codeintelligence.github.GithubRateLimitException;
+import dev.codeintelligence.github.GithubRepositoryAccessException;
 import dev.codeintelligence.github.GithubUserInfo;
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
+import dev.codeintelligence.github.InvalidGithubTokenException;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,13 +22,14 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
-import org.springframework.web.util.UriComponentsBuilder;
 
-/** Public-client authorization-code flow. Secrets and access tokens never leave the backend. */
+/** GitHub device authorization. Device codes and access tokens never leave the backend. */
 @Service
 public class GithubNativeOAuthService {
 
-    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String VERIFICATION_URI = "https://github.com/login/device";
+    private static final String DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
+    private static final String FAILED_MESSAGE = "GitHub login could not be completed. Retry from the app.";
 
     private final GithubNativeOAuthProperties properties;
     private final GithubApiClient githubApiClient;
@@ -38,7 +37,6 @@ public class GithubNativeOAuthService {
     private final RestClient restClient;
     private final Clock clock;
     private final Map<UUID, Attempt> attempts = new ConcurrentHashMap<>();
-    private final Map<String, UUID> attemptByState = new ConcurrentHashMap<>();
 
     @Autowired
     public GithubNativeOAuthService(
@@ -63,100 +61,144 @@ public class GithubNativeOAuthService {
     }
 
     public StartResult start(long userId) {
-        requireConfigured();
+        if (!configured()) {
+            throw new GithubNativeOAuthUnavailableException();
+        }
         cleanupExpired();
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("client_id", properties.clientId());
+        form.add("scope", properties.scope());
+        DeviceResponse response;
+        Instant requestedAt = clock.instant();
+        try {
+            response = restClient
+                    .post()
+                    .uri(properties.deviceCodeUri())
+                    .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
+                    .retrieve()
+                    .body(DeviceResponse.class);
+        } catch (RestClientException failure) {
+            throw new GithubNativeOAuthUnavailableException("GitHub device authorization is temporarily unavailable.");
+        }
+        if (response != null && "device_flow_disabled".equals(response.error())) {
+            throw new GithubNativeOAuthUnavailableException("Enable device flow for the configured GitHub OAuth app.");
+        }
+        if (response == null
+                || StringUtils.hasText(response.error())
+                || !StringUtils.hasText(response.deviceCode())
+                || !StringUtils.hasText(response.userCode())
+                || !VERIFICATION_URI.equals(response.verificationUri())
+                || response.expiresIn() == null
+                || response.expiresIn() <= 0
+                || response.expiresIn() > 900
+                || response.interval() == null
+                || response.interval() <= 0
+                || response.interval() > response.expiresIn()) {
+            throw new GithubNativeOAuthUnavailableException(
+                    "GitHub returned an invalid device authorization response.");
+        }
+        Instant expiresAt = requestedAt.plusSeconds(Math.min(properties.attemptTtlSeconds(), response.expiresIn()));
+        if (!clock.instant().isBefore(expiresAt)) {
+            throw new GithubNativeOAuthUnavailableException(
+                    "GitHub device authorization expired before it could start.");
+        }
         UUID id = UUID.randomUUID();
-        String state = randomUrlToken(32);
-        String verifier = randomUrlToken(64);
-        String challenge = sha256Url(verifier);
-        Instant expiresAt = clock.instant().plusSeconds(properties.attemptTtlSeconds());
-        Attempt attempt = new Attempt(id, userId, state, verifier, expiresAt);
+        Attempt attempt =
+                new Attempt(id, userId, response.deviceCode(), expiresAt, response.interval(), clock.instant());
         attempts.put(id, attempt);
-        attemptByState.put(state, id);
-
-        URI authorizationUrl = UriComponentsBuilder.fromUriString(properties.authorizationUri())
-                .queryParam("client_id", properties.clientId())
-                .queryParam("redirect_uri", properties.redirectUri())
-                .queryParam("state", state)
-                .queryParam("code_challenge", challenge)
-                .queryParam("code_challenge_method", "S256")
-                .build(true)
-                .toUri();
-        return new StartResult(id, authorizationUrl.toString(), expiresAt);
+        return new StartResult(id, VERIFICATION_URI, response.userCode(), expiresAt, attempt.intervalSeconds);
     }
 
-    public StatusResult status(long userId, UUID id) {
+    public StatusResult poll(long userId, UUID id) {
         Attempt attempt = requireOwned(userId, id);
+        String deviceCode;
         synchronized (attempt) {
             expireIfNeeded(attempt);
-            return attempt.statusResult();
+            if (attempt.status != Status.WAITING
+                    || attempt.polling
+                    || clock.instant().isBefore(attempt.nextPollAt)) {
+                return statusResult(attempt);
+            }
+            attempt.polling = true;
+            deviceCode = attempt.deviceCode;
+        }
+        // Provider I/O must not hold the cancellation lock. Recheck before publishing credentials.
+        try {
+            TokenResponse response = exchange(deviceCode);
+            GithubUserInfo profile = null;
+            boolean authorized = response != null
+                    && !StringUtils.hasText(response.error())
+                    && StringUtils.hasText(response.accessToken())
+                    && "bearer".equalsIgnoreCase(response.tokenType());
+            if (authorized) {
+                synchronized (attempt) {
+                    expireIfNeeded(attempt);
+                    if (attempt.status != Status.WAITING) {
+                        return statusResult(attempt);
+                    }
+                }
+                profile = githubApiClient.getUser(response.accessToken());
+            }
+            synchronized (attempt) {
+                expireIfNeeded(attempt);
+                if (attempt.status == Status.WAITING) {
+                    if (authorized) {
+                        accountService.linkGithub(
+                                attempt.userId, profile, CredentialKind.OAUTH, response.accessToken());
+                        finish(attempt, Status.CONNECTED, "GitHub account connected.");
+                    } else {
+                        applyProviderError(attempt, response);
+                    }
+                }
+            }
+        } catch (GithubAccountConflictException conflict) {
+            synchronized (attempt) {
+                expireIfNeeded(attempt);
+                if (attempt.status == Status.WAITING) {
+                    finish(attempt, Status.CONFLICT, "This GitHub account is already connected to another account.");
+                }
+            }
+        } catch (RestClientException
+                | InvalidGithubTokenException
+                | GithubRateLimitException
+                | GithubRepositoryAccessException failure) {
+            synchronized (attempt) {
+                expireIfNeeded(attempt);
+                if (attempt.status == Status.WAITING) {
+                    finish(attempt, Status.FAILED, FAILED_MESSAGE);
+                }
+            }
+        } catch (RuntimeException failure) {
+            synchronized (attempt) {
+                if (attempt.status == Status.WAITING) {
+                    finish(attempt, Status.FAILED, FAILED_MESSAGE);
+                }
+            }
+            throw failure;
+        } finally {
+            synchronized (attempt) {
+                attempt.polling = false;
+                expireIfNeeded(attempt);
+                if (attempt.status == Status.WAITING) {
+                    attempt.nextPollAt = clock.instant().plusSeconds(attempt.intervalSeconds);
+                }
+            }
+        }
+        synchronized (attempt) {
+            return statusResult(attempt);
         }
     }
 
     public StatusResult cancel(long userId, UUID id) {
         Attempt attempt = requireOwned(userId, id);
         synchronized (attempt) {
+            expireIfNeeded(attempt);
             if (attempt.status == Status.WAITING) {
-                attempt.status = Status.CANCELLED;
-                attempt.message = "GitHub login was cancelled.";
-                attemptByState.remove(attempt.state, attempt.id);
-                attempt.clearVerifier();
+                finish(attempt, Status.CANCELLED, "GitHub login was cancelled.");
             }
-            return attempt.statusResult();
-        }
-    }
-
-    public CallbackResult callback(String code, String state, String error) {
-        if (!StringUtils.hasText(state)) {
-            return new CallbackResult(Status.INVALID, "Invalid login callback.");
-        }
-        UUID id = attemptByState.remove(state);
-        if (id == null) {
-            return new CallbackResult(Status.INVALID, "This login callback is invalid or was already used.");
-        }
-        Attempt attempt = attempts.get(id);
-        if (attempt == null) {
-            return new CallbackResult(Status.INVALID, "This login attempt no longer exists.");
-        }
-        synchronized (attempt) {
-            if (attempt.status != Status.WAITING
-                    || !MessageDigest.isEqual(
-                            attempt.state.getBytes(StandardCharsets.UTF_8), state.getBytes(StandardCharsets.UTF_8))) {
-                return new CallbackResult(Status.INVALID, "This login callback is invalid or was already used.");
-            }
-            if (expireIfNeeded(attempt)) {
-                return new CallbackResult(attempt.status, attempt.message);
-            }
-            if (StringUtils.hasText(error)) {
-                attempt.status = "access_denied".equals(error) ? Status.DENIED : Status.FAILED;
-                attempt.message = attempt.status == Status.DENIED
-                        ? "GitHub authorization was denied."
-                        : "GitHub authorization failed.";
-                attempt.clearVerifier();
-                return new CallbackResult(attempt.status, attempt.message);
-            }
-            if (!StringUtils.hasText(code)) {
-                attempt.status = Status.FAILED;
-                attempt.message = "GitHub returned no authorization code.";
-                attempt.clearVerifier();
-                return new CallbackResult(attempt.status, attempt.message);
-            }
-            try {
-                String token = exchange(code, attempt.verifier);
-                GithubUserInfo profile = githubApiClient.getUser(token);
-                accountService.linkGithub(attempt.userId, profile, CredentialKind.OAUTH, token);
-                attempt.status = Status.CONNECTED;
-                attempt.message = "GitHub account connected. You can return to the app.";
-            } catch (GithubAccountConflictException conflict) {
-                attempt.status = Status.CONFLICT;
-                attempt.message = conflict.getMessage();
-            } catch (RestClientException | IllegalStateException failure) {
-                attempt.status = Status.FAILED;
-                attempt.message = "GitHub login could not be completed. Retry from the app.";
-            } finally {
-                attempt.clearVerifier();
-            }
-            return new CallbackResult(attempt.status, attempt.message);
+            return statusResult(attempt);
         }
     }
 
@@ -165,19 +207,15 @@ public class GithubNativeOAuthService {
     }
 
     public String revocationUrl() {
-        if (!properties.configured()) {
-            return null;
-        }
-        return "https://github.com/settings/connections/applications/" + properties.clientId();
+        return configured() ? "https://github.com/settings/connections/applications/" + properties.clientId() : null;
     }
 
-    private String exchange(String code, String verifier) {
+    private TokenResponse exchange(String deviceCode) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("client_id", properties.clientId());
-        form.add("code", code);
-        form.add("redirect_uri", properties.redirectUri());
-        form.add("code_verifier", verifier);
-        TokenResponse response = restClient
+        form.add("device_code", deviceCode);
+        form.add("grant_type", DEVICE_GRANT);
+        return restClient
                 .post()
                 .uri(properties.tokenUri())
                 .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
@@ -185,10 +223,29 @@ public class GithubNativeOAuthService {
                 .body(form)
                 .retrieve()
                 .body(TokenResponse.class);
-        if (response == null || !StringUtils.hasText(response.accessToken()) || StringUtils.hasText(response.error())) {
-            throw new IllegalStateException("GitHub returned no access token");
+    }
+
+    private void applyProviderError(Attempt attempt, TokenResponse response) {
+        String error = response == null || response.error() == null ? "" : response.error();
+        switch (error) {
+            case "authorization_pending" -> {}
+            case "slow_down" -> {
+                int requested = response.interval() == null ? 0 : response.interval();
+                if (requested < 0 || requested > 900 || attempt.intervalSeconds > 895) {
+                    finish(attempt, Status.FAILED, FAILED_MESSAGE);
+                } else {
+                    attempt.intervalSeconds = Math.max(attempt.intervalSeconds + 5, requested);
+                }
+            }
+            case "expired_token", "token_expired" ->
+                finish(attempt, Status.EXPIRED, "GitHub login expired. Start a new login.");
+            case "access_denied" -> finish(attempt, Status.DENIED, "GitHub authorization was denied.");
+            case "device_flow_disabled" ->
+                finish(attempt, Status.FAILED, "Enable device flow for the configured GitHub OAuth app.");
+            case "incorrect_client_credentials" ->
+                finish(attempt, Status.FAILED, "The configured GitHub OAuth client ID is invalid.");
+            default -> finish(attempt, Status.FAILED, FAILED_MESSAGE);
         }
-        return response.accessToken();
     }
 
     private Attempt requireOwned(long userId, UUID id) {
@@ -199,48 +256,34 @@ public class GithubNativeOAuthService {
         return attempt;
     }
 
-    private void requireConfigured() {
-        if (!properties.configured()) {
-            throw new GithubNativeOAuthUnavailableException();
+    private void expireIfNeeded(Attempt attempt) {
+        if (attempt.status == Status.WAITING && !clock.instant().isBefore(attempt.expiresAt)) {
+            finish(attempt, Status.EXPIRED, "GitHub login expired. Start a new login.");
         }
     }
 
-    private boolean expireIfNeeded(Attempt attempt) {
-        if (attempt.status == Status.WAITING && !clock.instant().isBefore(attempt.expiresAt)) {
-            attempt.status = Status.EXPIRED;
-            attempt.message = "GitHub login expired. Start a new login.";
-            attemptByState.remove(attempt.state, attempt.id);
-            attempt.clearVerifier();
-            return true;
-        }
-        return false;
+    private static void finish(Attempt attempt, Status status, String message) {
+        attempt.status = status;
+        attempt.message = message;
+        attempt.deviceCode = null;
+    }
+
+    private StatusResult statusResult(Attempt attempt) {
+        int waitSeconds = attempt.status == Status.WAITING
+                ? (int) Math.max(1, (attempt.nextPollAt.toEpochMilli() - clock.millis() + 999) / 1000)
+                : 0;
+        return new StatusResult(attempt.id, attempt.status, attempt.message, attempt.expiresAt, waitSeconds);
     }
 
     private void cleanupExpired() {
-        attempts.values().forEach(attempt -> {
+        Instant discardBefore = clock.instant().minusSeconds(properties.attemptTtlSeconds());
+        attempts.entrySet().removeIf(entry -> {
+            Attempt attempt = entry.getValue();
             synchronized (attempt) {
                 expireIfNeeded(attempt);
+                return attempt.status != Status.WAITING && attempt.expiresAt.isBefore(discardBefore);
             }
         });
-        Instant discardBefore = clock.instant().minusSeconds(properties.attemptTtlSeconds());
-        attempts.entrySet()
-                .removeIf(entry -> entry.getValue().status != Status.WAITING
-                        && entry.getValue().expiresAt.isBefore(discardBefore));
-    }
-
-    private static String randomUrlToken(int bytes) {
-        byte[] value = new byte[bytes];
-        RANDOM.nextBytes(value);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
-    }
-
-    private static String sha256Url(String value) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.US_ASCII));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("SHA-256 is unavailable", impossible);
-        }
     }
 
     public enum Status {
@@ -250,45 +293,49 @@ public class GithubNativeOAuthService {
         DENIED,
         EXPIRED,
         CONFLICT,
-        FAILED,
-        INVALID
+        FAILED
     }
 
-    public record StartResult(UUID attemptId, String authorizationUrl, Instant expiresAt) {}
+    public record StartResult(
+            UUID attemptId, String verificationUri, String userCode, Instant expiresAt, int pollAfterSeconds) {}
 
-    public record StatusResult(UUID attemptId, Status status, String message, Instant expiresAt) {}
+    public record StatusResult(
+            UUID attemptId, Status status, String message, Instant expiresAt, int pollAfterSeconds) {}
 
-    public record CallbackResult(Status status, String message) {}
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record DeviceResponse(
+            @JsonProperty("device_code") String deviceCode,
+            @JsonProperty("user_code") String userCode,
+            @JsonProperty("verification_uri") String verificationUri,
+            @JsonProperty("expires_in") Integer expiresIn,
+            Integer interval,
+            String error) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private record TokenResponse(
             @JsonProperty("access_token") String accessToken,
             @JsonProperty("token_type") String tokenType,
-            String scope,
-            String error) {}
+            String error,
+            Integer interval) {}
 
     private static final class Attempt {
         private final UUID id;
         private final long userId;
-        private final String state;
-        private String verifier;
+        private String deviceCode;
         private final Instant expiresAt;
         private Status status = Status.WAITING;
         private String message = "Waiting for GitHub authorization.";
+        private int intervalSeconds;
+        private Instant nextPollAt;
+        private boolean polling;
 
-        private Attempt(UUID id, long userId, String state, String verifier, Instant expiresAt) {
+        private Attempt(UUID id, long userId, String deviceCode, Instant expiresAt, int intervalSeconds, Instant now) {
             this.id = id;
             this.userId = userId;
-            this.state = state;
-            this.verifier = verifier;
+            this.deviceCode = deviceCode;
             this.expiresAt = expiresAt;
-        }
-
-        private void clearVerifier() {
-            verifier = null;
-        }
-
-        private StatusResult statusResult() {
-            return new StatusResult(id, status, message, expiresAt);
+            this.intervalSeconds = intervalSeconds;
+            this.nextPollAt = now.plusSeconds(intervalSeconds);
         }
     }
 }

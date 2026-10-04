@@ -10,6 +10,7 @@ const { createBackupExportPolicy, REVIEWED_SCHEMA } = require('./backup-export-p
 const { validateBackupSummary } = require('./backup-postgres.cjs');
 const { sourceSelectionSha256 } = require('./backup-source-selection.cjs');
 const POLICY = createBackupExportPolicy(REVIEWED_SCHEMA);
+const native = require('./backup-windows-io.cjs');
 const LIMITS = Object.freeze({ frameBytes: 16 * 1024 * 1024, payloadBytes: 10 * 1024 * 1024 * 1024,
   records: 1_000_000, depth: 64, metadataBytes: 64 * 1024 * 1024 });
 const TABLES = REVIEWED_SCHEMA.tables.map(table => table.name);
@@ -186,7 +187,8 @@ function frame(value) {
   const body = Buffer.from(canonical(value)); if (!body.length || body.length > LIMITS.frameBytes) fail('LIMIT');
   const bytes = Buffer.alloc(4 + body.length); bytes.writeUInt32BE(body.length); body.copy(bytes, 4); body.fill(0); return bytes;
 }
-async function createBackupPayload({ root, installationId, minimumVersion, beforeWrite }) {
+async function createBackupPayload({ root, installationId, minimumVersion, beforeWrite, windowsBoundary }) {
+  if (windowsBoundary) return createNativePayload({ root, installationId, minimumVersion, beforeWrite, windowsBoundary });
   // Capture this trusted-main hook once. One approval covers a complete frame, including
   // its length prefix; OS short-write retries consume that same approved buffer.
   if (beforeWrite !== undefined && typeof beforeWrite !== 'function') fail('INVALID');
@@ -237,14 +239,15 @@ async function createBackupPayload({ root, installationId, minimumVersion, befor
     async close() { if (!closed) { closed = true; await fd.close(); } },
   });
 }
-async function* readBackupPayload({ root, installationId, runningBuild }) {
-  let fd;
+async function* readBackupPayload({ root, installationId, runningBuild, windowsBoundary }) {
+  let fd, storage;
   try {
-    const before = await rootState(root); const filePath = path.join(root, 'payload.bin');
-    const info = await fs.lstat(filePath, { bigint: true }); privateStat(info, false);
-    if (info.size > BigInt(LIMITS.payloadBytes)) fail('LIMIT');
-    fd = await fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    if (!unchanged(info, await fd.stat({ bigint: true }))) fail('CHANGED');
+    if (windowsBoundary) storage = await windowsBoundary.openStorage(root, { mode: 'private' });
+    const before = storage ? await storage.stat('', { directory: true }) : await rootState(root); const filePath = path.join(root, 'payload.bin');
+    const info = storage ? await storage.stat('payload.bin') : await fs.lstat(filePath, { bigint: true }); if (!storage) privateStat(info, false);
+    if (BigInt(info.size) > BigInt(LIMITS.payloadBytes)) fail('LIMIT');
+    fd = storage ? await native.readHandle(storage, 'payload.bin', LIMITS.payloadBytes, info) : await fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    if (!(storage ? native.sameState(info, await fd.stat()) : unchanged(info, await fd.stat({ bigint: true })))) fail('CHANGED');
     const machine = stateMachine(installationId, runningBuild); let offset = 0;
     async function read(length) {
       if (offset + length > Number(info.size)) fail('TRUNCATED'); const bytes = Buffer.alloc(length);
@@ -262,10 +265,11 @@ async function* readBackupPayload({ root, installationId, runningBuild }) {
       yield record;
     }
     const probe = Buffer.alloc(1); if ((await fd.read(probe, 0, 1, offset)).bytesRead) fail('CHANGED');
-    if (!unchanged(info, await fd.stat({ bigint: true })) || !unchanged(info, await fs.lstat(filePath, { bigint: true }))) fail('CHANGED');
-    await rootState(root, before); machine.result();
+    if (storage) { if (!native.sameState(info, await fd.stat()) || !native.sameIdentity(before, await storage.stat('', { directory: true }))) fail('CHANGED'); }
+    else { if (!unchanged(info, await fd.stat({ bigint: true })) || !unchanged(info, await fs.lstat(filePath, { bigint: true }))) fail('CHANGED'); await rootState(root, before); }
+    machine.result();
   } catch (error) { throw error instanceof BackupPayloadError ? error : new BackupPayloadError('INVALID'); }
-  finally { await fd?.close(); }
+  finally { try { await fd?.close(); } finally { await storage?.close(); } }
 }
 async function inspectBackupPayload(options) {
   let header, summary, footer;
@@ -275,5 +279,41 @@ async function inspectBackupPayload(options) {
     else if (record.kind === 'FOOTER') footer = record;
   }
   return { header, summary, footer };
+}
+async function createNativePayload(options) {
+  const { root, installationId, minimumVersion, beforeWrite, windowsBoundary } = options;
+  if (beforeWrite !== undefined && typeof beforeWrite !== 'function') fail('INVALID');
+  const machine = stateMachine(installationId, minimumVersion);
+  const storage = await windowsBoundary.openStorage(root, { mode: 'private' });
+  let writer, total = 0, busy = false, closed = false, poisoned = false;
+  async function close() { if (!closed) { closed = true; try { await writer?.close(); } finally { await storage.close(); } } }
+  async function write(value) {
+    if (closed || poisoned || busy) fail('CLOSED'); busy = true; let bytes;
+    try {
+      bytes = frame(value); machine.accept(JSON.parse(bytes.subarray(4).toString('utf8')), bytes);
+      if (total + bytes.length > LIMITS.payloadBytes) fail('LIMIT');
+      if (beforeWrite) await beforeWrite(String(bytes.length));
+      await writer.write(bytes); total += bytes.length;
+    } catch (error) { poisoned = true; throw error instanceof BackupPayloadError ? error : new BackupPayloadError('IO'); }
+    finally { bytes?.fill(0); busy = false; }
+  }
+  try {
+    writer = await storage.openWrite('payload.bin', { mode: 'create', maxBytes: LIMITS.payloadBytes });
+    await write({ kind: 'HEADER', format: 'code-intelligence-backup-payload', version: 1,
+      installationSha256: identity(installationId), minimumVersion });
+  } catch (error) { await close(); throw error; }
+  const filePath = path.join(root, 'payload.bin');
+  return Object.freeze({ filePath, writeRow: row => write({ kind: 'ROW', row }),
+    writeDatabase: summary => write({ kind: 'DATABASE', summary }), writeSource: write,
+    async finish() {
+      try {
+        await write(machine.footer()); const written = await writer.commit();
+        if (Number(written.size) !== total) fail('CHANGED');
+        await inspectBackupPayload({ root, installationId, runningBuild: minimumVersion, windowsBoundary });
+        if (!native.sameState(written, await storage.stat('payload.bin'))) fail('CHANGED');
+        await close(); return { ...machine.result(), filePath, payloadBytes: total };
+      } catch (error) { poisoned = true; await close(); throw error instanceof BackupPayloadError ? error : new BackupPayloadError('IO'); }
+    }, close,
+  });
 }
 module.exports = Object.freeze({ createBackupPayload, readBackupPayload, inspectBackupPayload, BackupPayloadError, LIMITS });

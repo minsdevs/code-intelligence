@@ -173,7 +173,7 @@ test('actual isolated PostgreSQL swaps and rolls back by OID without deleting ei
     assert.match(liveDatabase, /^ci_backup_live_[0-9a-f]{16,32}$/);
     const psqlPath = await fs.realpath(process.env.CI_BACKUP_PG_TEST_PSQL);
     const connection = { host: '127.0.0.1', port: Number(process.env.CI_BACKUP_PG_TEST_PORT), user: 'postgres' };
-    const env = { PGPASSWORD: process.env.CI_BACKUP_PG_TEST_PASSWORD };
+    const env = { PGPASSWORD: process.env.CI_BACKUP_PG_TEST_PASSWORD, PGSSLMODE: 'verify-full', PGSSLROOTCERT: process.env.PGSSLROOTCERT };
     function sql(database, text) {
       const result = spawnSync(psqlPath, ['-X', '--no-password', '--quiet', '--tuples-only', '--no-align',
         '--set=ON_ERROR_STOP=1', '--host=127.0.0.1', `--port=${connection.port}`, '--username=postgres', `--dbname=${database}`, '--file=-'],
@@ -213,7 +213,7 @@ test('actual isolated PostgreSQL retention drops only an authenticated completed
     assert.match(liveDatabase, /^ci_backup_live_[0-9a-f]{16,32}$/);
     const psqlPath = await fs.realpath(process.env.CI_BACKUP_PG_TEST_PSQL);
     const connection = { host: '127.0.0.1', port: Number(process.env.CI_BACKUP_PG_TEST_PORT), user: 'postgres' };
-    const env = { PGPASSWORD: process.env.CI_BACKUP_PG_TEST_PASSWORD };
+    const env = { PGPASSWORD: process.env.CI_BACKUP_PG_TEST_PASSWORD, PGSSLMODE: 'verify-full', PGSSLROOTCERT: process.env.PGSSLROOTCERT };
     if (process.env.CI_BACKUP_PG_TEST_LIBRARY) env.DYLD_LIBRARY_PATH = process.env.CI_BACKUP_PG_TEST_LIBRARY;
     const transactionId = crypto.randomUUID(), authority = { active: null, pendingMaintenance: null, completed: [], tombstones: [] };
     const control = await createBackupDatabaseControl({ psqlPath, connection, env, liveDatabase,

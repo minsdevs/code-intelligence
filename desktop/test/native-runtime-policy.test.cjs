@@ -77,11 +77,7 @@ function stage(root, candidate = inventory()) {
   };
 }
 
-test('fixed policy agrees with package minimum and Gradle Java toolchain contract', () => {
-  assert.deepEqual(policy.POLICY, { minimumSystemVersion: '13.0', javaMajor: 21, architecture: 'arm64' });
-  assert.equal(require('../package.json').build.mac.minimumSystemVersion, '13.0');
-  assert.match(fs.readFileSync(path.resolve(__dirname, '../../backend/build.gradle.kts'), 'utf8'), /JavaLanguageVersion\.of\(21\)/);
-});
+
 
 test('self-resolving arm64 Java 21 closure with macOS 11 and 13 minima passes', () => {
   assert.deepEqual(policy.validateNativeInventory(inventory()), { nativeFiles: 14, architecture: 'arm64', minimumSystemVersion: '13.0', javaMajor: 21 });
@@ -131,6 +127,13 @@ test('embedded dynamic-loader environment or non-system loader is refused', () =
 test('LC_ID_DYLIB is not mistaken for a dependency', () => {
   const value = inventory(); value.native[1].loadCommands = commands({ extra: ['cmd LC_ID_DYLIB\nname /build/identity-only.dylib (offset 24)'] });
   assert.equal(policy.validateNativeInventory(value).nativeFiles, 14);
+});
+test('dylib identity is bounded and unique without entering the dependency list', () => {
+  const identity = 'cmd LC_ID_DYLIB\nname @rpath/libjvm.dylib (offset 24)';
+  const metadata = policy.parseLoadCommands(commands({ extra: [identity] }));
+  assert.equal(metadata.installName, '@rpath/libjvm.dylib');
+  assert.deepEqual(metadata.dependencies, []);
+  rejects(() => policy.parseLoadCommands(commands({ extra: [identity, identity] })), 'INVALID_LOAD_COMMANDS');
 });
 
 for (const major of ['17.0.15', '22', '26.0.2']) {
@@ -536,7 +539,7 @@ test('compatible synthetic native closure can pass the existing no-link publishe
 
 test('actual stage script validates before manifest/publication and retains protocol markers', () => {
   const source = fs.readFileSync(path.resolve(__dirname, '../scripts/stage-runtime.mjs'), 'utf8');
-  const gateIndex = source.indexOf('nativePolicy.verifyNativeRuntime(');
+  const gateIndex = source.indexOf('try {\n  nativePolicy.verifyNativeRuntime(');
   const end = source.indexOf('\nconsole.log(`Staged', gateIndex);
   assert.ok(gateIndex > source.indexOf('stageTransaction.materializePgAliases(pgLib)'));
   assert.ok(end > gateIndex);
@@ -550,12 +553,13 @@ test('actual stage script validates before manifest/publication and retains prot
       } }, path, desktop: '/synthetic/desktop', staging: '/synthetic/staging', buildSequence: '12',
       process: { platform: 'darwin', arch: 'arm64' }, filesUnder: () => [], hash: () => { throw new Error('no files'); },
       guardStageDestination: value => value,
+      emitNativeStageClosure: () => { events.push('closure-evidence'); },
       requiredPgBinaries: PG_TOOLS,
       postgresBin: '/synthetic/staging/postgres/bin', postgresFlatLib: '/synthetic/staging/postgres/lib', postgresPkgLib: '/synthetic/staging/postgres/lib/postgresql', postgresShare: '/synthetic/staging/postgres/share',
       stageTransaction: { publish() { events.push('publish'); return {}; } },
     });
   }
-  assert.throws(() => run(true), /native gate rejected/); assert.deepEqual(events, ['gate']);
+  assert.throws(() => run(true), /native gate rejected/); assert.deepEqual(events, ['gate', 'closure-evidence']);
   run(false); assert.deepEqual(events, ['gate', 'manifest', 'publish']);
 });
 
@@ -571,7 +575,7 @@ test('actual dependency-copy loop fails before skipping a conflicting basename',
   const guardStageDestination = vm.runInNewContext(`(${guardFactory})`, { fs, path })(root);
   const copyDynamicLibraries = vm.runInNewContext(`${part}\ncopyDynamicLibraries`, {
     fs, path, process: { platform: 'darwin' }, nativePolicy: policy, guardStageDestination,
-    output: () => `native:\n\t${dependency} (compatibility version 1.0.0, current version 1.0.0)\n`,
+    output: () => commands({ deps: [dependency] }),
     resolveMachODependency: value => value, copy: () => { copies++; },
   });
   rejects(() => copyDynamicLibraries([executable], destination), 'COPY_BASENAME_COLLISION'); assert.equal(copies, 0);

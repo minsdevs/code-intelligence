@@ -104,7 +104,7 @@ test('production adapter round-trips arbitrary bytes through the string storage 
 });
 
 for (const platform of ['linux', 'win32']) {
-  test(`production adapter refuses unsupported ${platform} even if storage claims availability`, () => {
+  test(`production adapter refuses ${platform} without supported ready-platform evidence even if storage claims availability`, () => {
     const fake = storage();
     const api = loadModule({ platform });
     assert.throws(() => api.createSafeStorageWrapper(fake), { code: 'SAFETY_STORAGE_UNAVAILABLE' });

@@ -3,6 +3,7 @@ package dev.codeintelligence.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.codeintelligence.common.DesktopPrivateBootstrap;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -327,7 +328,7 @@ class AiMainGatewayClientTest {
                 .withProperty("app.desktop.ai-bootstrap-stdin", "false")
                 .withProperty("app.desktop.ai-socket", "/private/tmp/unused.sock")
                 .withProperty("app.desktop.ai-token", CAPABILITY);
-        AiMainGatewayClient client = new AiMainGatewayClient(environment, JSON);
+        AiMainGatewayClient client = new AiMainGatewayClient(new DesktopPrivateBootstrap(environment, JSON), JSON);
         assertThat(client.enabled()).isFalse();
         fails(client::channelEpoch);
         fails(() -> client.exchange("STATUS", Map.of()));
@@ -409,7 +410,7 @@ class AiMainGatewayClientTest {
             AiMainGatewayClient correct = node.client();
             Map<String, Object> forged =
                     new LinkedHashMap<>(bootstrapMap(node.socketPath().toString()));
-            forged.put(field, "c".repeat(64));
+            ((Map<String, Object>) forged.get("ai")).put(field, "c".repeat(64));
             AiMainGatewayClient wrong = new AiMainGatewayClient(
                     new ByteArrayInputStream(JSON.writeValueAsBytes(forged)), JSON, Duration.ofSeconds(2));
             fails(() -> wrong.exchange("EXECUTE", Map.of("source", PUBLIC_SECRET_SENTINEL)));
@@ -456,8 +457,13 @@ class AiMainGatewayClientTest {
     }
 
     private static Map<String, Object> bootstrapMap(String socket) {
-        return new LinkedHashMap<>(
-                Map.of("version", 1, "socketPath", socket, "capability", CAPABILITY, "epoch", EPOCH));
+        return new LinkedHashMap<>(Map.of(
+                "version",
+                2,
+                "ai",
+                new LinkedHashMap<>(Map.of("socketPath", socket, "capability", CAPABILITY, "epoch", EPOCH)),
+                "source",
+                Map.of("socketPath", "/tmp/source-fixture.sock", "capability", "d".repeat(64))));
     }
 
     private static byte[] bootstrap(String socket) {
@@ -465,7 +471,8 @@ class AiMainGatewayClientTest {
     }
 
     private static byte[] attackedBootstrap(String attack) {
-        Map<String, Object> value = bootstrapMap("/private/tmp/synthetic-private-fixture.sock");
+        Map<String, Object> root = bootstrapMap("/private/tmp/synthetic-private-fixture.sock");
+        Map<String, Object> value = (Map<String, Object>) root.get("ai");
         switch (attack) {
             case "empty" -> {
                 return new byte[0];
@@ -473,10 +480,10 @@ class AiMainGatewayClientTest {
             case "one-byte" -> {
                 return new byte[] {'{'};
             }
-            case "version" -> value.put("version", 2);
-            case "version-type" -> value.put("version", "1");
-            case "version-float" -> value.put("version", 1.0);
-            case "version-overflow" -> value.put("version", 4294967297L);
+            case "version" -> root.put("version", 1);
+            case "version-type" -> root.put("version", "2");
+            case "version-float" -> root.put("version", 2.0);
+            case "version-overflow" -> root.put("version", 4294967298L);
             case "missing" -> value.remove("capability");
             case "extra" -> value.put("private", PUBLIC_SECRET_SENTINEL);
             case "relative-path" -> value.put("socketPath", "relative.sock");
@@ -495,16 +502,16 @@ class AiMainGatewayClientTest {
                 return new byte[] {(byte) 0xc3, 0x28};
             }
             case "duplicate" -> {
-                return JSON.writeValueAsString(value)
-                        .replace("\"version\":1", "\"version\":1,\"version\":1")
+                return JSON.writeValueAsString(root)
+                        .replace("\"version\":2", "\"version\":2,\"version\":2")
                         .getBytes(StandardCharsets.UTF_8);
             }
             case "trailing-json" -> {
-                return (JSON.writeValueAsString(value) + "{}").getBytes(StandardCharsets.UTF_8);
+                return (JSON.writeValueAsString(root) + "{}").getBytes(StandardCharsets.UTF_8);
             }
             default -> throw new AssertionError(attack);
         }
-        return JSON.writeValueAsBytes(value);
+        return JSON.writeValueAsBytes(root);
     }
 
     private static byte[] attackedResponse(JsonNode request, String attack) {
@@ -826,7 +833,8 @@ class AiMainGatewayClientTest {
                   process.stdin.once('end', () => close().catch(() => { process.exitCode = 1; }));
                   // Node's process.stdout.end() does not close fd 1 while this bridge stays alive.
                   // Bootstrap is an owned EOF-delimited pipe, so explicitly close that descriptor.
-                  const bootstrap = Buffer.from(JSON.stringify({version:1,socketPath:bridge.socketPath,capability,epoch}));
+                  const bootstrap = Buffer.from(JSON.stringify({version:2,ai:{socketPath:bridge.socketPath,capability,epoch},
+                    source:{socketPath:path.join(directory,'source-unused.sock'),capability:'d'.repeat(64)}}));
                   try { syncFs.writeFileSync(1, bootstrap); }
                   finally { bootstrap.fill(0); syncFs.closeSync(1); }
                 })().catch(() => { process.stderr.write('NODE_FIXTURE_FAILED'); process.exitCode = 1; });

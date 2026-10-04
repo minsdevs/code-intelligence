@@ -245,7 +245,7 @@ test('real isolated PG maintenance enrollment, conservative stage insert and imm
   const source = process.env.CI_BACKUP_COST_PG_TEST_SOURCE, target = process.env.CI_BACKUP_COST_PG_TEST_TARGET;
   assert.match(source || '', /^ci_backup_stage_[0-9a-f]{16,32}$/); assert.match(target || '', /^ci_backup_stage_[0-9a-f]{16,32}$/); assert.notEqual(source, target);
   const port = Number(process.env.CI_BACKUP_COST_PG_TEST_PORT); assert(Number.isInteger(port) && port > 1024 && port <= 65535);
-  const user = process.env.CI_BACKUP_COST_PG_TEST_USER, env = { PGPASSWORD: process.env.CI_BACKUP_COST_PG_TEST_PASSWORD };
+  const user = process.env.CI_BACKUP_COST_PG_TEST_USER, env = { PGPASSWORD: process.env.CI_BACKUP_COST_PG_TEST_PASSWORD, PGSSLMODE: 'verify-full', PGSSLROOTCERT: process.env.PGSSLROOTCERT };
   if (process.env.CI_BACKUP_COST_PG_TEST_LIBRARY) env.DYLD_LIBRARY_PATH = process.env.CI_BACKUP_COST_PG_TEST_LIBRARY;
   const sql = (database, text, expected = 0) => {
     const r = spawnSync(psqlPath, ['-X', '--no-password', '--quiet', '--tuples-only', '--no-align', '--set=ON_ERROR_STOP=1',

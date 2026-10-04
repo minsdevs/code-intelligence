@@ -30,7 +30,7 @@ async function exchange(socketPath, input) {
     const chunks = [];
     const socket = net.createConnection(socketPath);
     socket.setTimeout(2000, () => socket.destroy(new Error('fixture timeout')));
-    socket.once('connect', () => socket.write(Buffer.isBuffer(input) ? input : frame(input)));
+    socket.once('connect', () => socket.end(Buffer.isBuffer(input) ? input : frame(input)));
     socket.on('data', (data) => chunks.push(data));
     socket.once('error', reject);
     socket.once('close', () => {
@@ -235,26 +235,18 @@ test('trickled incomplete frames cannot extend the absolute connection deadline'
   assert.equal(f.calls.length, 0);
 });
 
-test('a fragmented second frame cannot start a second operation', async (t) => {
-  let first;
-  let release;
-  let calls = 0;
-  const started = new Promise((resolve) => { first = resolve; });
-  const pending = new Promise((resolve) => { release = resolve; });
-  const f = await fixture(t, { async put(value) {
-    calls++; first(); await pending;
-    return { projectId: value.projectId, sha256, byteSize: bytes.length, keyId: 'b'.repeat(32) };
-  } });
+test('complete request without FIN never dispatches and fragmented extra bytes reject it', async (t) => {
+  const f = await fixture(t);
   const socket = net.createConnection(f.socketPath);
   socket.on('error', () => {});
-  const closed = new Promise((resolve) => socket.once('close', resolve));
-  await new Promise((resolve) => socket.once('connect', resolve));
+  const closed = new Promise(resolve => socket.once('close', resolve));
+  await new Promise(resolve => socket.once('connect', resolve));
   socket.write(frame(request()));
-  await started;
-  socket.write(frame(request()));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(f.calls.length, 0);
+  socket.end(Buffer.from([0]));
   await closed;
-  release();
-  assert.equal(calls, 1);
+  assert.equal(f.calls.length, 0);
 });
 
 test('read response content is verified independently of the vault port', async (t) => {

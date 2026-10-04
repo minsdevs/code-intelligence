@@ -2,6 +2,7 @@ package dev.codeintelligence.backup;
 
 import static dev.codeintelligence.backup.SourceProtocol.*;
 
+import dev.codeintelligence.common.SourceAccess;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -84,31 +85,55 @@ public final class BackupSourceWorker {
             String project = id(request.get("projectId"));
             SourceSelection selection = SourceSelection.parse(request.get("selection"));
             Budget budget = new Budget();
-            if (operation.equals("EXPORT")) {
-                eof(source);
-                exportSource(text(request.get("reposRoot")), project, selection, target, budget);
-            } else if (operation.equals("EXPORT_RETAINED")) {
-                int count = (int) number(
-                        request.get("retainedCount"), selection.snapshots().size());
-                if (count == 0) throw failure("SOURCE_SELECTION_INVALID");
-                exportRetained(
-                        text(request.get("reposRoot")),
-                        text(request.get("scratchRoot")),
-                        project,
-                        selection,
-                        count,
-                        source,
-                        target,
-                        budget);
-            } else {
-                importSource(
-                        text(request.get("stageRoot")),
-                        project,
-                        selection,
-                        Receipt.parse(request.get("expected")),
-                        source,
-                        target,
-                        budget);
+            java.util.ArrayList<SourceAccess.Scope> scopes = new java.util.ArrayList<>();
+            try {
+                if (operation.equals("EXPORT") || operation.equals("EXPORT_RETAINED"))
+                    scopes.add(SourceAccess.open(
+                            Path.of(text(request.get("reposRoot")))
+                                    .toAbsolutePath()
+                                    .normalize(),
+                            "workspace"));
+                if (operation.equals("EXPORT_RETAINED"))
+                    scopes.add(SourceAccess.open(
+                            Path.of(text(request.get("scratchRoot")))
+                                    .toAbsolutePath()
+                                    .normalize(),
+                            "private"));
+                if (operation.equals("IMPORT"))
+                    scopes.add(SourceAccess.open(
+                            Path.of(text(request.get("stageRoot")))
+                                    .toAbsolutePath()
+                                    .normalize(),
+                            "private"));
+                if (operation.equals("EXPORT")) {
+                    eof(source);
+                    exportSource(text(request.get("reposRoot")), project, selection, target, budget);
+                } else if (operation.equals("EXPORT_RETAINED")) {
+                    int count = (int) number(
+                            request.get("retainedCount"), selection.snapshots().size());
+                    if (count == 0) throw failure("SOURCE_SELECTION_INVALID");
+                    exportRetained(
+                            text(request.get("reposRoot")),
+                            text(request.get("scratchRoot")),
+                            project,
+                            selection,
+                            count,
+                            source,
+                            target,
+                            budget);
+                } else {
+                    importSource(
+                            text(request.get("stageRoot")),
+                            project,
+                            selection,
+                            Receipt.parse(request.get("expected")),
+                            source,
+                            target,
+                            budget);
+                }
+            } finally {
+                for (int index = scopes.size() - 1; index >= 0; index--)
+                    scopes.get(index).close();
             }
             return 0;
         } catch (Exception error) {
@@ -200,13 +225,11 @@ public final class BackupSourceWorker {
             this.root = root;
             rootKey = SourceFiles.directory(root).fileKey();
             repo = root.resolve(project);
-            repoKey = Files.exists(repo, LinkOption.NOFOLLOW_LINKS)
+            repoKey = SourceAccess.exists(repo, true)
                     ? SourceFiles.directory(repo).fileKey()
                     : null;
             git = repo.resolve(".git");
-            before = repoKey != null && Files.exists(git, LinkOption.NOFOLLOW_LINKS)
-                    ? SourceFiles.inspect(git, budget)
-                    : null;
+            before = repoKey != null && SourceAccess.exists(git, true) ? SourceFiles.inspect(git, budget) : null;
             database = before == null ? null : objectDatabase(git);
             reader = database == null ? null : database.newReader();
         }
@@ -214,10 +237,10 @@ public final class BackupSourceWorker {
         void unchanged(Budget budget) throws IOException {
             if (!rootKey.equals(SourceFiles.directory(root).fileKey())) throw failure("SOURCE_CHANGED");
             if (repoKey == null) {
-                if (Files.exists(repo, LinkOption.NOFOLLOW_LINKS)) throw failure("SOURCE_CHANGED");
+                if (SourceAccess.exists(repo, true)) throw failure("SOURCE_CHANGED");
             } else if (before == null) {
-                if (!repoKey.equals(SourceFiles.directory(repo).fileKey())
-                        || Files.exists(git, LinkOption.NOFOLLOW_LINKS)) throw failure("SOURCE_CHANGED");
+                if (!repoKey.equals(SourceFiles.directory(repo).fileKey()) || SourceAccess.exists(git, true))
+                    throw failure("SOURCE_CHANGED");
             } else BackupSourceWorker.unchanged(repo, repoKey, git, before, budget);
         }
 

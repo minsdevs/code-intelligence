@@ -7,6 +7,7 @@ const { constants } = require('node:fs');
 const path = require('node:path');
 const { initializePurposeKeyring, openPurposeKeyring } = require('./purpose-keyring.cjs');
 const { initializeSafetyJournal, openSafetyJournal } = require('./safety-journal.cjs');
+const { readStorageFile, writeStorageFile } = require('./windows-storage-files.cjs');
 
 const ENROLLMENT_FILE = '.safety-enrollment.json';
 const MAX_BUILD = 9223372036854775807n;
@@ -42,24 +43,26 @@ function identity(value) {
     fail('SAFETY_IDENTITY_UNAVAILABLE');
   return value;
 }
-function requireSecureStorage(storage) {
-  // The packaged product currently targets macOS. In particular, Linux basic_text is never accepted.
+function requireSecureStorage(storage, electronApp) {
   try {
-    if (process.platform !== 'darwin' || !storage || storage.isEncryptionAvailable() !== true
+    if (!['darwin', 'win32'].includes(process.platform)
+        || process.platform === 'win32' && electronApp?.isReady() !== true
+        || !storage || storage.isEncryptionAvailable() !== true
         || typeof storage.encryptString !== 'function' || typeof storage.decryptString !== 'function')
       fail('SAFETY_STORAGE_UNAVAILABLE');
   } catch { fail('SAFETY_STORAGE_UNAVAILABLE'); }
 }
-function createSafeStorageWrapper(storage) {
-  requireSecureStorage(storage);
+function createSafeStorageWrapper(storage, { electronApp, maxPayloadBytes = 32768 } = {}) {
+  requireSecureStorage(storage, electronApp);
+  if (!Number.isSafeInteger(maxPayloadBytes) || maxPayloadBytes < 1 || maxPayloadBytes > 2 * 1024 * 1024) fail('SAFETY_STORAGE_UNAVAILABLE');
   const magic = Buffer.from('CIPKR001');
   const domain = Buffer.from('code-intelligence-purpose-keyring-aead-v1\0');
   const prefix = 'code-intelligence-purpose-dek:v1:';
   return Object.freeze({
-    isAvailable() { requireSecureStorage(storage); return true; },
+    isAvailable() { requireSecureStorage(storage, electronApp); return true; },
     wrap(bytes) {
-      requireSecureStorage(storage);
-      if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > 32768) fail('SAFETY_STORAGE_UNAVAILABLE');
+      requireSecureStorage(storage, electronApp);
+      if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > maxPayloadBytes) fail('SAFETY_STORAGE_UNAVAILABLE');
       const dek = crypto.randomBytes(32); const nonce = crypto.randomBytes(12);
       let wrapped; let encrypted; let tail;
       try {
@@ -75,13 +78,13 @@ function createSafeStorageWrapper(storage) {
       finally { dek.fill(0); wrapped?.fill(0); encrypted?.fill(0); tail?.fill(0); }
     },
     unwrap(bytes) {
-      requireSecureStorage(storage);
+      requireSecureStorage(storage, electronApp);
       let dek; let partial; let tail;
       try {
-        if (!Buffer.isBuffer(bytes) || bytes.length < 46 || bytes.length > 41004
+        if (!Buffer.isBuffer(bytes) || bytes.length < 46 || bytes.length > maxPayloadBytes + 8236
             || !bytes.subarray(0, 8).equals(magic)) fail('SAFETY_STORAGE_UNAVAILABLE');
         const wrappedLength = bytes.readUInt32BE(8); const plaintextLength = bytes.readUInt32BE(12);
-        if (wrappedLength < 1 || wrappedLength > 8192 || plaintextLength < 1 || plaintextLength > 32768
+        if (wrappedLength < 1 || wrappedLength > 8192 || plaintextLength < 1 || plaintextLength > maxPayloadBytes
             || bytes.length !== 16 + wrappedLength + 12 + plaintextLength + 16) fail('SAFETY_STORAGE_UNAVAILABLE');
         const header = bytes.subarray(0, 16); const wrapped = bytes.subarray(16, 16 + wrappedLength);
         const nonceOffset = 16 + wrappedLength; const ciphertextOffset = nonceOffset + 12;
@@ -103,7 +106,8 @@ function createSafeStorageWrapper(storage) {
     },
   });
 }
-async function statOrMissing(file) {
+async function statOrMissing(file, storage, directory = false) {
+  if (storage) return storage.stat(path.basename(file), { missing: true, directory });
   try { return await fs.lstat(file, { bigint: true }); }
   catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }
@@ -117,9 +121,14 @@ function sameState(a, b) {
   return a.dev === b.dev && a.ino === b.ino && a.size === b.size
     && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
 }
-async function userDataRoot(input) {
+async function userDataRoot(input, windowsBoundary) {
   if (typeof input !== 'string' || !path.isAbsolute(input) || input.includes('\0')
       || path.resolve(input) !== input || path.parse(input).root === input) fail();
+  if (process.platform === 'win32') {
+    if (!windowsBoundary) fail();
+    await windowsBoundary.createDirectory(input);
+    return input;
+  }
   let stat = await statOrMissing(input);
   if (!stat) {
     await fs.mkdir(input, { recursive: true, mode: 0o700 });
@@ -141,7 +150,8 @@ async function syncDirectory(directory) {
     await handle.sync();
   } finally { await handle.close(); }
 }
-async function readPrivate(file, maximum) {
+async function readPrivate(file, maximum, storage) {
+  if (storage) return (await readStorageFile(storage, path.basename(file), maximum)).bytes;
   const before = await fs.lstat(file, { bigint: true }); privateStat(before);
   if (before.size < 1n || before.size > BigInt(maximum)) fail();
   const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -163,7 +173,13 @@ async function readPrivate(file, maximum) {
   } catch (error) { bytes?.fill(0); throw error; }
   finally { await handle.close(); }
 }
-async function writeFresh(file, bytes) {
+async function writeFresh(file, bytes, storage) {
+  if (storage) {
+    const state = await writeStorageFile(storage, path.basename(file), bytes);
+    const verified = await readStorageFile(storage, path.basename(file), bytes.length, { expected: state });
+    try { if (!verified.bytes.equals(bytes)) fail(); } finally { verified.bytes.fill(0); }
+    return;
+  }
   const handle = await fs.open(file, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
   try {
     privateStat(await handle.stat({ bigint: true }));
@@ -188,58 +204,79 @@ function validateSecrets(value) {
 }
 
 // The legacy database/credential secrets stay in main. They are not purpose-keyring capabilities.
-async function loadDesktopSecrets({ userData, safeStorage }) {
+async function loadDesktopSecrets({ userData, safeStorage, windowsBoundary, electronApp, initializeEnrollment }) {
+  let storage;
   try {
-    requireSecureStorage(safeStorage);
-    const root = await userDataRoot(userData);
+    requireSecureStorage(safeStorage, electronApp);
+    if (initializeEnrollment !== undefined && typeof initializeEnrollment !== 'function') fail();
+    const root = await userDataRoot(userData, windowsBoundary);
+    const windows = process.platform === 'win32';
+    if (windows) storage = await windowsBoundary.openStorage(root);
+    const wrapper = windows ? createSafeStorageWrapper(safeStorage, { electronApp }) : null;
     const file = path.join(root, 'secrets.enc');
-    if (await statOrMissing(file)) {
-      const encrypted = await readPrivate(file, 16384);
-      try { return validateSecrets(JSON.parse(safeStorage.decryptString(encrypted))); }
-      finally { encrypted.fill(0); }
+    if (await statOrMissing(file, storage)) {
+      const encrypted = await readPrivate(file, 16384, storage); let plain;
+      try {
+        plain = wrapper ? wrapper.unwrap(encrypted) : Buffer.from(safeStorage.decryptString(encrypted));
+        return validateSecrets(JSON.parse(plain.toString('utf8')));
+      } finally { encrypted.fill(0); plain?.fill(0); }
     }
-    for (const evidence of [ENROLLMENT_FILE, 'safety', 'postgres', 'data', 'redis', 'recovery', 'backup-maintenance', 'authorized-paths.enc']) {
-      if (await statOrMissing(path.join(root, evidence))) fail('SAFETY_IDENTITY_UNAVAILABLE');
+    for (const evidence of [ENROLLMENT_FILE, 'safety', 'postgres', 'data', 'redis', 'recovery', 'backup-maintenance',
+      'authorized-paths.enc', 'authorized-paths.enc.0', 'authorized-paths.enc.1']) {
+      if (await statOrMissing(path.join(root, evidence), storage,
+        ['safety', 'postgres', 'data', 'redis', 'recovery', 'backup-maintenance'].includes(evidence))) fail('SAFETY_IDENTITY_UNAVAILABLE');
     }
     const secrets = { localIdentity: crypto.randomUUID(), databasePassword: crypto.randomBytes(36).toString('base64url'),
       tokenEncryptionKey: crypto.randomBytes(32).toString('base64') };
-    const encrypted = safeStorage.encryptString(JSON.stringify(secrets));
-    if (!Buffer.isBuffer(encrypted) || !encrypted.length || encrypted.length > 16384) fail('SAFETY_STORAGE_UNAVAILABLE');
-    try { await writeFresh(file, encrypted); }
-    finally { encrypted.fill(0); }
+    const plain = Buffer.from(JSON.stringify(secrets)); let encrypted;
+    try {
+      encrypted = wrapper ? wrapper.wrap(plain) : safeStorage.encryptString(plain.toString('utf8'));
+      if (!Buffer.isBuffer(encrypted) || !encrypted.length || encrypted.length > 16384) fail('SAFETY_STORAGE_UNAVAILABLE');
+      await writeFresh(file, encrypted, storage);
+      const readback = await readPrivate(file, 16384, storage); let verified;
+      try {
+        verified = wrapper ? wrapper.unwrap(readback) : Buffer.from(safeStorage.decryptString(readback));
+        if (!verified.equals(plain)) fail('SAFETY_IDENTITY_UNAVAILABLE');
+      } finally { readback.fill(0); verified?.fill(0); }
+    } finally { plain.fill(0); encrypted?.fill(0); }
+    // Invoked only during the immutable first publication. Interrupted dependent enrollment is
+    // never resumed as a new empty store merely because its mutable files are missing.
+    await initializeEnrollment?.(secrets);
     return secrets;
   } catch (error) { throw safeError(error, 'SAFETY_IDENTITY_UNAVAILABLE'); }
+  finally { await storage?.close(); }
 }
 
 async function openSafetyLifecycle({ userData, safeStorage, installationId, runningBuild, createGateway,
-  createBackupRuntime, recoveryMode = false, ownerLocks }) {
-  let keyring; let journal; let gateway; let backupRuntime;
+  createBackupRuntime, recoveryMode = false, ownerLocks, windowsBoundary, electronApp }) {
+  let keyring; let journal; let gateway; let backupRuntime; let storage;
   try {
     // Validate before creating userData, a marker, or any key material. No build-number fallback.
     requireBuildSequence(runningBuild); identity(installationId);
     if (typeof recoveryMode !== 'boolean' || (createBackupRuntime !== undefined && typeof createBackupRuntime !== 'function')
         || (recoveryMode && typeof createBackupRuntime !== 'function')) fail();
-    const wrapper = createSafeStorageWrapper(safeStorage);
-    const root = await userDataRoot(userData);
+    const wrapper = createSafeStorageWrapper(safeStorage, { electronApp });
+    const root = await userDataRoot(userData, windowsBoundary);
+    if (process.platform === 'win32') storage = await windowsBoundary.openStorage(root);
     const safetyRoot = path.join(root, 'safety');
     const marker = path.join(root, ENROLLMENT_FILE);
-    const markerPresent = await statOrMissing(marker);
-    const safetyPresent = await statOrMissing(safetyRoot);
-    const maintenancePresent = await statOrMissing(path.join(root, 'backup-maintenance'));
+    const markerPresent = await statOrMissing(marker, storage);
+    const safetyPresent = await statOrMissing(safetyRoot, storage, true);
+    const maintenancePresent = await statOrMissing(path.join(root, 'backup-maintenance'), storage, true);
     if (maintenancePresent && (!markerPresent || !safetyPresent)) fail();
     if (recoveryMode && (!markerPresent || !safetyPresent)) fail();
     let freshEnrollmentAllowed = !markerPresent && !safetyPresent
-      && !(await statOrMissing(path.join(root, 'postgres')))
-      && !(await statOrMissing(path.join(root, 'data')))
-      && !(await statOrMissing(path.join(root, 'recovery')))
-      && !(await statOrMissing(path.join(root, 'redis')))
-      && !(await statOrMissing(path.join(root, 'authorized-paths.enc')));
+      && !(await statOrMissing(path.join(root, 'postgres'), storage, true))
+      && !(await statOrMissing(path.join(root, 'data'), storage, true))
+      && !(await statOrMissing(path.join(root, 'recovery'), storage, true))
+      && !(await statOrMissing(path.join(root, 'redis'), storage, true))
+      && !(await statOrMissing(path.join(root, 'authorized-paths.enc'), storage));
     const enrollment = JSON.stringify({ format: 'code-intelligence-safety-enrollment', major: 1, installationId });
     if (markerPresent) {
-      const bytes = await readPrivate(marker, 16384);
+      const bytes = await readPrivate(marker, 16384, storage);
       try {
         const raw = bytes.toString('utf8');
-        if (raw === enrollment) freshEnrollmentAllowed = false;
+        if (raw === enrollment && !storage) freshEnrollmentAllowed = false;
         else {
           const value = JSON.parse(raw);
           if (JSON.stringify(value) !== raw || Object.keys(value).sort().join(',') !== 'format,installationId,major,originProof'
@@ -270,13 +307,15 @@ async function openSafetyLifecycle({ userData, safeStorage, installationId, runn
       try {
         encrypted = wrapper.wrap(origin);
         await writeFresh(marker, Buffer.from(JSON.stringify({ format: 'code-intelligence-safety-enrollment', major: 2,
-          installationId, originProof: encrypted.toString('base64') })));
+          installationId, originProof: encrypted.toString('base64') })), storage);
       } finally { origin.fill(0); encrypted?.fill(0); }
     }
+    await storage?.close(); storage = null;
     // Current product DB is postgres/ (PG_VERSION at that root); data/ contains repo staging.
     // Selected archive paths never become keyring or journal roots.
     const restoreRoots = ['postgres', 'data', 'recovery'].map(name => path.join(root, name));
-    const options = { safetyRoot, restoreRoots, installationId, wrapper, ...(ownerLocks ? { ownerLocks } : {}) };
+    const options = { safetyRoot, restoreRoots, installationId, wrapper, ...(ownerLocks ? { ownerLocks } : {}),
+      ...(windowsBoundary ? { windowsBoundary } : {}) };
     keyring = await (markerPresent ? openPurposeKeyring : initializePurposeKeyring)(options);
     const rejectVerification = async () => false;
     let journalOpened = false;
@@ -285,7 +324,7 @@ async function openSafetyLifecycle({ userData, safeStorage, installationId, runn
       journalOpened = true;
       journal = await (markerPresent ? openSafetyJournal : initializeSafetyJournal)({
         ...callbacks, safetyRoot, restoreRoots, installationId, runningBuild, recoveryMode, keyProvider: keyring,
-        ...(ownerLocks ? { ownerLocks } : {}),
+        ...(ownerLocks ? { ownerLocks } : {}), ...(windowsBoundary ? { windowsBoundary } : {}),
       });
       return journal;
     };
@@ -354,6 +393,7 @@ async function openSafetyLifecycle({ userData, safeStorage, installationId, runn
       },
     });
   } catch (error) {
+    await storage?.close().catch(() => {});
     // Journal may still need keys while draining queued writes. Always close it first.
     if (backupRuntime) {
       try { await backupRuntime.close(); } catch { throw safeError(error); }

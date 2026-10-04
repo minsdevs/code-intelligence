@@ -131,10 +131,8 @@ async function fixture(t, options = {}) {
   if (options.root && !resume) await fs.writeFile(stateFile, JSON.stringify({ nonce: options.nonce, password }), { mode: 0o600, flag: 'wx' });
   const tokenKey = Buffer.alloc(32, 47).toString('base64');
   const systemEnv = { PATH: '/usr/bin:/bin', HOME: root, TMPDIR: root, LANG: 'C', LC_ALL: 'C', TZ: 'UTC' };
-  const pgEnv = { PGPASSWORD: password, ...(pgLib ? { LD_LIBRARY_PATH: pgLib, DYLD_LIBRARY_PATH: pgLib } : {}) };
-  const serverEnv = { ...systemEnv, ...pgEnv };
-  const ports = { postgres: await freePort(), redis: await freePort(), backend: await freePort() };
-  assert.equal(new Set(Object.values(ports)).size, 3, 'Ephemeral port selection collided');
+  const ports = { postgres: await freePort(), redis: await freePort(), backend: await freePort(), analyzer: await freePort() };
+  assert.equal(new Set(Object.values(ports)).size, 4, 'Ephemeral port selection collided');
   const fixtureDirectory = async file => {
     if (!resume) return privateDir(file);
     const stat = await fs.lstat(file);
@@ -142,6 +140,9 @@ async function fixture(t, options = {}) {
     assert.equal(await fs.realpath(file), file); return file;
   };
   const userData = await fixtureDirectory(path.join(root, 'u')), pgData = path.join(root, 'pg');
+  const transport = await require('../src/service-transport.cjs').createServiceTransport({ userData, ports, getApiToken: () => apiToken });
+  const pgEnv = { PGPASSWORD: password, ...transport.postgresEnvironment, ...(pgLib ? { LD_LIBRARY_PATH: pgLib, DYLD_LIBRARY_PATH: pgLib } : {}) };
+  const serverEnv = { ...systemEnv, ...pgEnv };
   const dataRoot = await fixtureDirectory(path.join(userData, 'data'));
   const repos = await fixtureDirectory(path.join(dataRoot, 'repos')); await fixtureDirectory(path.join(dataRoot, 'sources'));
   const redisRoot = path.join(userData, 'redis'); await fixtureDirectory(redisRoot);
@@ -218,7 +219,7 @@ async function fixture(t, options = {}) {
     assert(database === 'postgres' || database === 'codeintel' || /^ci_backup_(?:stage|live|previous|failed)_[a-f0-9]{16,32}$/.test(database));
     return command('psql', psql, ['-X', '--no-password', '--quiet', '--tuples-only', '--no-align', '--set=ON_ERROR_STOP=1',
       '--pset=pager=off', '--host=127.0.0.1', `--port=${ports.postgres}`, '--username=codeintel', `--dbname=${database}`, '--file=-'],
-    { ...serverEnv, PGCLIENTENCODING: 'UTF8', PGSSLMODE: 'disable', PGCONNECT_TIMEOUT: '2' }, text);
+    { ...serverEnv, PGCLIENTENCODING: 'UTF8', PGCONNECT_TIMEOUT: '2' }, text);
   }
   async function sqlJson(text, database = 'codeintel') { return JSON.parse(await sql(database, text)); }
   async function wait(check, name, timeout = 90000, alive) {
@@ -232,12 +233,19 @@ async function fixture(t, options = {}) {
   }
   function redisRequest(parts) {
     return new Promise((resolve, reject) => {
-      const socket = net.createConnection({ host: '127.0.0.1', port: ports.redis }); let text = '';
+      const socket = require('node:tls').connect({ host: '127.0.0.1', port: ports.redis,
+        ca: transport.materials.redis.caPem, rejectUnauthorized: true }); let text = '', authenticated = false;
       socket.setTimeout(3000, () => socket.destroy(new Error('Synthetic Redis timeout')));
       socket.on('error', () => reject(new Error('Synthetic Redis unavailable')));
-      socket.once('connect', () => socket.write(`*${parts.length}\r\n` + parts.map(p => `$${Buffer.byteLength(p)}\r\n${p}\r\n`).join('')));
+      socket.once('secureConnect', () => socket.write(
+        `*2\r\n$4\r\nAUTH\r\n$64\r\n${transport.redisPassword}\r\n*${parts.length}\r\n` + parts.map(p => `$${Buffer.byteLength(p)}\r\n${p}\r\n`).join('')));
       socket.on('data', bytes => {
         text += bytes.toString('utf8');
+        if (!authenticated) {
+          if (!text.includes('\r\n')) return;
+          if (!text.startsWith('+OK\r\n')) { socket.destroy(); reject(new Error('Synthetic Redis authentication failed')); return; }
+          authenticated = true; text = text.slice(5);
+        }
         if (text.length > 4096) { socket.destroy(); reject(new Error('Synthetic Redis reply limit')); return; }
         // Fixture commands use only simple strings, integers, null bulk replies and one short value.
         if (/^[+:-].*\r\n$/.test(text) || text === '$-1\r\n' || /^\$[0-9]+\r\n[^\r\n]*\r\n$/.test(text)) {
@@ -248,13 +256,13 @@ async function fixture(t, options = {}) {
   }
   async function startRedis() {
     if (redis && !redis.stopped) return;
-    redis = await launchService('redis', redisBinary, ['--bind', '127.0.0.1', '--protected-mode', 'yes', '--port', String(ports.redis),
+    redis = await launchService('redis', redisBinary, [transport.redisConfig,
       '--dir', redisRoot, '--dbfilename', 'dump.rdb', '--appendonly', 'yes'], systemEnv);
     await wait(async () => await redisRequest(['PING']) === '+PONG\r\n', 'Redis', 15000, () => !redis.stopped);
   }
-  const base = `http://127.0.0.1:${ports.backend}`;
+  const base = transport.backend.origin;
   async function http(url, options = {}) {
-    return fetch(base + url, { redirect: 'error', signal: AbortSignal.timeout(5000), ...options });
+    return transport.backend.request(base + url, { signal: AbortSignal.timeout(5000), ...options });
   }
   async function startBackend(maintenanceId = '') {
     assert(!backend || backend.stopped, 'Backend fixture may not overlap prior process');
@@ -262,15 +270,16 @@ async function fixture(t, options = {}) {
     try {
       backend = await launchService('backend', java, ['-Xmx512m', '-jar', jar, '--spring.profiles.active=desktop'], {
         ...systemEnv, SERVER_ADDRESS: '127.0.0.1', SERVER_PORT: String(ports.backend),
-        DB_URL: `jdbc:postgresql://127.0.0.1:${ports.postgres}/codeintel`, DB_USERNAME: 'codeintel', DB_PASSWORD: password,
-        REDIS_HOST: '127.0.0.1', REDIS_PORT: String(ports.redis), TOKEN_ENC_KEY: tokenKey, DATA_DIR: dataRoot,
+        DB_URL: transport.jdbcUrl, DB_USERNAME: 'codeintel', DB_PASSWORD: password,
+        REDIS_HOST: '127.0.0.1', REDIS_PORT: String(ports.redis), REDIS_PASSWORD: transport.redisPassword,
+        SPRING_CONFIG_ADDITIONAL_LOCATION: transport.backendConfigUrl, TOKEN_ENC_KEY: tokenKey, DATA_DIR: dataRoot,
         DESKTOP_API_TOKEN: apiToken, DESKTOP_PATH_TOKEN: pathToken, DESKTOP_LOCAL_IDENTITY: INSTALLATION,
         DESKTOP_ALLOWED_ORIGIN: base, CORS_ALLOWED_ORIGINS: base, APP_DESKTOP_AI_BOOTSTRAP_STDIN: 'true',
         APP_DESKTOP_MAINTENANCE_STARTUP_ID: maintenanceId,
       }, bootstrap);
     } finally { bootstrap.fill(0); }
     await wait(async () => {
-      const response = await http('/actuator/health'); await response.arrayBuffer(); return response.ok;
+      const response = await http('/actuator/health'); return response.ok;
     }, 'Spring backend', 90000, () => !backend.stopped);
     trace.push('backend.healthy');
   }
@@ -287,7 +296,7 @@ async function fixture(t, options = {}) {
   }
   async function publicProjects() {
     const response = await http('/api/projects', { headers: { 'X-Code-Intelligence-Token': apiToken } });
-    await response.arrayBuffer(); return response.status;
+    return response.status;
   }
   async function shutdown() {
     controls.closed = true; let unsafe = false;
@@ -295,6 +304,7 @@ async function fixture(t, options = {}) {
     for (const resource of [runtime, gateway, adapter, keyring]) try { await resource?.close(); } catch { unsafe = true; }
     for (const record of children) try { await stop(record); } catch { unsafe = true; }
     try { await ownerLocks?.close(); } catch { unsafe = true; }
+    if (!unsafe) await transport.close();
     const events = { trace, plans, failures, controls, success, children: [...children].map(c => ({ name: c.name, code: c.code, signal: c.signal, stopped: c.stopped })) };
     await fs.writeFile(path.join(root, 'evidence.json'), JSON.stringify(events, null, 2), { mode: 0o600 });
     if (!success || unsafe || options.preserve) {
@@ -313,11 +323,13 @@ async function fixture(t, options = {}) {
   if (!resume) {
     const pwfile = path.join(root, 'initdb-password'); await fs.writeFile(pwfile, password, { mode: 0o600 });
     try { await command('initdb', initdb, ['-D', pgData, '-U', 'codeintel', '--encoding=UTF8', '--no-locale',
-      '--auth-local=trust', '--auth-host=scram-sha-256', `--pwfile=${pwfile}`], serverEnv, undefined, 60000); }
+      '--auth-local=reject', '--auth-host=scram-sha-256', `--pwfile=${pwfile}`], serverEnv, undefined, 60000); }
     finally { await fs.unlink(pwfile); }
   } else assert.match((await fs.readFile(path.join(pgData, 'PG_VERSION'), 'utf8')).trim(), /^[1-9][0-9]*(?:\.[0-9]+)?$/);
   postgres = await launchService('postgres', postgresBinary, ['-D', pgData, '-h', '127.0.0.1', '-p', String(ports.postgres),
-    '-k', root, '-c', 'listen_addresses=127.0.0.1', '-c', 'max_connections=40'], serverEnv);
+    '-c', 'unix_socket_directories=', '-c', 'listen_addresses=127.0.0.1', '-c', 'max_connections=40',
+    '-c', 'ssl=on', '-c', `ssl_cert_file=${transport.materials.postgres.cert}`,
+    '-c', `ssl_key_file=${transport.materials.postgres.key}`, '-c', `hba_file=${transport.hba}`], serverEnv);
   await wait(async () => await sql('postgres', 'select 1;') === '1', 'PostgreSQL', 30000, () => !postgres.stopped);
   if (!resume) {
     const initialDb = `ci_backup_stage_${crypto.randomBytes(16).toString('hex')}`;

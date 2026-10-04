@@ -23,11 +23,17 @@ const { createBackupPostgres } = require('./backup-postgres.cjs');
 const { createBackupDatabaseControl } = require('./backup-database.cjs');
 const { createBackupProductState } = require('./backup-product-state.cjs');
 const { createBackupSourceWorker } = require('./backup-source-worker.cjs');
-const { openSourceVault, openSourceVaultRestoreStage } = require('./source-vault.cjs');
+const { createSourceVault, openSourceVault, openSourceVaultRestoreStage } = require('./source-vault.cjs');
 const { createNativeOwnerLocks } = require('./native-owner-locks.cjs');
 const { spawnManagedProcess } = require('./managed-process.cjs');
 const { runtimeRelativePath, runtimeFile, inheritedEnvironment, libraryEnvironment } = require('./runtime-platform.cjs');
-const { parseIsolatedRunArguments, prepareIsolatedRun, assertIsolatedLaunchReady } = require('./isolated-run.cjs');
+const { parseIsolatedRunArguments, openIsolatedRun, assertIsolatedLaunchReady, isolatedChildEnvironment } = require('./isolated-run.cjs');
+const { createServiceTransport } = require('./service-transport.cjs');
+const { createSourceBroker } = require('./source-broker.cjs');
+const { createWindowsBoundary } = require('./windows-native-boundary.cjs');
+const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
+const { writeStorageFile } = require('./windows-storage-files.cjs');
+const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
 
 const children = new Map();
 const childStops = new Map();
@@ -39,6 +45,9 @@ let aiGateway;
 let aiPostgres;
 let backupRuntime;
 let ownerLocks;
+let sourceVault;
+let sourceBroker;
+let sourceEndpoint;
 let bootRecovery = false;
 let stopping = false;
 let quitting = false;
@@ -48,6 +57,12 @@ let quitContinuation = false;
 let restartTimer;
 let restartAttempts = 0;
 let runtimeOperation = Promise.resolve();
+let startupPhase = 'MANIFEST';
+let isolatedPlan;
+function noteStartup(phase) {
+  startupPhase = phase;
+  console.error('DESKTOP_STARTUP ' + phase);
+}
 
 // Dialogs, backup, restore and restart must never mutate the same runtime concurrently.
 function withRuntimeOperation(action) {
@@ -56,23 +71,20 @@ function withRuntimeOperation(action) {
   return result;
 }
 
-// Process-local paths must be selected before the singleton or Chromium session.
-// This preparation is not an OS credential-store or service-ownership boundary.
 try {
   const isolation = parseIsolatedRunArguments(process.argv ?? []);
   if (isolation) {
-    const plan = prepareIsolatedRun({ ...isolation, forbiddenRoots: [
-      app.getPath('userData'), app.getPath('sessionData'),
-      path.join(__dirname, '..', 'stage'), path.join(__dirname, '..', 'dist'),
-      ...(process.resourcesPath ? [process.resourcesPath] : []),
+    const plan = openIsolatedRun({ claimFile: isolation.claimFile, forbiddenRoots: [
+      app.getPath('userData'), app.getPath('sessionData'), path.join(__dirname, '..', 'dist'),
     ] });
+    assertIsolatedLaunchReady(plan);
+    app.setName(plan.appIdentity.name);
     for (const name of ['userData', 'sessionData', 'temp', 'crashDumps']) app.setPath(name, plan.paths[name]);
     app.setAppLogsPath(plan.paths.logs);
-    // No environment flag or prepared claim can bypass these unresolved boundaries.
-    assertIsolatedLaunchReady(plan);
+    isolatedPlan = plan;
   }
 } catch (error) {
-  const code = ['ISOLATED_RUN_INVALID', 'ISOLATED_RUN_UNSUPPORTED_PLATFORM', 'ISOLATED_LAUNCH_BLOCKED'].includes(error?.code)
+  const code = ['ISOLATED_RUN_INVALID', 'ISOLATED_RUN_UNSUPPORTED_PLATFORM'].includes(error?.code)
     ? error.code : 'ISOLATED_RUN_INVALID';
   console.error(`[desktop] isolated validation refused: ${code}`);
   app.exit(1);
@@ -92,10 +104,11 @@ if (!ownsInstance) {
 }
 
 function randomSecret(bytes = 32) {
-  return crypto.randomBytes(bytes).toString('base64url');
+  return crypto.randomBytes(bytes).toString('hex');
 }
 
 function runtimeRoot() {
+  if (isolatedPlan) return isolatedPlan.runtimeRoot;
   return app.isPackaged
     ? path.join(process.resourcesPath, 'runtime')
     : path.join(__dirname, '..', 'stage', 'runtime');
@@ -114,10 +127,92 @@ function encryptedJson(file, fallbackFactory) {
   return value;
 }
 
-function saveEncryptedJson(file, value) {
+async function saveEncryptedJson(file, value) {
+  if (runtime?.windowsBoundary) {
+    if (file !== runtime.pathsFile || !runtime.grantState) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
+    const bytes = Buffer.from(JSON.stringify(value));
+    try { await runtime.grantState.write(bytes); }
+    catch (error) { void loseRuntimeOwnership(); throw error; }
+    finally { bytes.fill(0); }
+    return;
+  }
   const temporary = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(temporary, safeStorage.encryptString(JSON.stringify(value)), { mode: 0o600 });
   fs.renameSync(temporary, file);
+}
+
+async function openAuthorizedRoots(secrets, fresh = false) {
+  const wrapper = createSafeStorageWrapper(safeStorage, { electronApp: app, maxPayloadBytes: 2 * 1024 * 1024 });
+  runtime.grantState = await openAuthenticatedState({ storage: runtime.storage, file: 'authorized-paths.enc',
+    installationId: secrets.localIdentity, purpose: 'authorized-roots', mode: 'slots',
+    seal: bytes => wrapper.wrap(bytes), unseal: bytes => wrapper.unwrap(bytes),
+    maxPayloadBytes: 1024 * 1024, maxEncodedBytes: 2 * 1024 * 1024 + 8236, fresh,
+    ...(fresh ? { initialValue: Buffer.from('[]') } : {}) });
+}
+
+async function readAuthorizedRoots() {
+  if (!runtime.windowsBoundary) return encryptedJson(runtime.pathsFile, () => []);
+  const bytes = await runtime.grantState.read();
+  try {
+    const value = JSON.parse(bytes.toString('utf8'));
+    if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || !path.isAbsolute(item)))
+      throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
+    return value;
+  } finally { bytes.fill(0); }
+}
+
+function loseRuntimeOwnership() {
+  stopping = true; runtime = runtime || {}; runtime.ready = false; runtime.recoveryRequired = true;
+  clearTimeout(restartTimer); restartTimer = null;
+  runtime.error = 'Desktop ownership was lost. Recovery is required before reopening.';
+  mainWindow?.webContents.send('runtime:changed', publicRuntimeStatus());
+  return Promise.allSettled([Promise.resolve().then(() => aiGateway?.latchOffline('USER_OFF')),
+    ...['backend', 'ts-analyzer', 'redis', 'postgres'].map(stopChild)]);
+}
+
+async function runtimeDirectory(name, inherit = false) {
+  const directory = path.join(runtime.userData, name);
+  if (runtime.windowsBoundary) {
+    if (!await runtime.storage.stat(name, { directory: true, missing: true })) await runtime.storage.mkdir(name, { inherit });
+  } else await fsp.mkdir(directory, { recursive: true, mode: 0o700 });
+  return directory;
+}
+
+function sourceVaultOptions(sourceRoot) {
+  return { sourceRoot, safetyRoot: path.join(runtime.userData, 'safety'), installationId: runtime.secrets.localIdentity,
+    wrapper: createSafeStorageWrapper(safeStorage, { electronApp: app }),
+    ...(ownerLocks ? { ownerLocks } : {}), ...(runtime.windowsBoundary ? { windowsBoundary: runtime.windowsBoundary } : {}) };
+}
+
+async function openProductionSources() {
+  if (sourceBroker || sourceVault) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
+  const data = await runtimeDirectory('data', true);
+  const keyDirectory = path.join(runtime.userData, 'safety', 'source-vault');
+  const existing = fs.existsSync(keyDirectory) || fs.existsSync(path.join(runtime.userData, 'safety', 'source-vault.enrollment'));
+  // Source enrollment is independent of the paid-AI fresh-install exemption.
+  // The vault requires its own absent marker, absent keys and empty source store.
+  if (!existing && bootRecovery) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
+  sourceVault = await (existing ? openSourceVault : createSourceVault)(sourceVaultOptions(path.join(data, 'sources')));
+  const capability = randomSecret(), socketPath = path.join(runtime.ipcRoot, 's');
+  try {
+    sourceBroker = await createSourceBroker({ socketPath, authToken: capability, vault: sourceVault,
+      ...(runtime.windowsBoundary ? { windowsBoundary: runtime.windowsBoundary } : {}), onLost: loseRuntimeOwnership });
+    sourceEndpoint = Object.freeze({ socketPath, capability });
+  } catch (error) { await sourceVault.close(); sourceVault = undefined; throw error; }
+}
+
+async function closeProductionSources() {
+  await sourceBroker?.close(); sourceBroker = undefined; sourceEndpoint = undefined;
+  await sourceVault?.close(); sourceVault = undefined;
+}
+
+function backendBootstrap() {
+  if (!sourceEndpoint) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
+  const bytes = aiGateway.bootstrap();
+  try {
+    const ai = JSON.parse(bytes.toString('utf8'));
+    return Buffer.from(JSON.stringify({ version: 2, ai: { socketPath: ai.socketPath, capability: ai.capability, epoch: ai.epoch }, source: sourceEndpoint }));
+  } finally { bytes.fill(0); }
 }
 
 async function freePort() {
@@ -149,13 +244,17 @@ function assertRuntimeRelativePath(raw, label) {
   return runtimeRelativePath(raw, label, process.platform);
 }
 
-function assertTrustedRenderer(event) {
-  if (!mainWindow
+function isTrustedRenderer(event) {
+  if (!mainWindow || !runtime || !event.senderFrame
       || event.sender !== mainWindow.webContents
-      || event.senderFrame !== mainWindow.webContents.mainFrame
-      || new URL(event.senderFrame.url).origin !== new URL(runtime.apiBaseUrl).origin) {
-    throw new Error('Untrusted renderer IPC request.');
-  }
+      || event.senderFrame !== mainWindow.webContents.mainFrame) return false;
+  try {
+    return new URL(event.senderFrame.url).origin === new URL(runtime.apiBaseUrl).origin;
+  } catch { return false; }
+}
+
+function assertTrustedRenderer(event) {
+  if (!isTrustedRenderer(event)) throw new Error('Untrusted renderer IPC request.');
 }
 
 async function verifyRuntimeIntegrity() {
@@ -181,31 +280,32 @@ async function verifyRuntimeIntegrity() {
       || !manifest.files || typeof manifest.files !== 'object') {
     throw new Error('Bundled runtime manifest has no PostgreSQL layout. Re-run `npm run stage`.');
   }
+  await validateRuntimeManifest(root, manifest);
   manifest.runtime = {
+    ...(manifest.runtime.cache ? { cache: manifest.runtime.cache } : {}),
     postgresBin: assertRuntimeRelativePath(manifest.runtime.postgresBin, 'PostgreSQL bin path'),
     postgresLib: assertRuntimeRelativePath(manifest.runtime.postgresLib, 'PostgreSQL library path'),
     postgresPkgLib: assertRuntimeRelativePath(manifest.runtime.postgresPkgLib, 'PostgreSQL extension path'),
     postgresShare: assertRuntimeRelativePath(manifest.runtime.postgresShare, 'PostgreSQL share path')
   };
-  for (const [relative, expected] of Object.entries(manifest.files)) {
-    const safeRelative = assertRuntimeRelativePath(relative, 'file path');
-    if (typeof expected !== 'string' || !/^[a-f0-9]{64}$/i.test(expected)) {
-      throw new Error(`Bundled runtime manifest has an invalid hash: ${safeRelative}`);
-    }
-    const actual = await hashFile(path.join(root, safeRelative));
-    if (actual !== expected) throw new Error(`Bundled runtime integrity check failed: ${relative}`);
-  }
   return manifest;
 }
 
 function childLogPath(name) {
+  if (runtime?.windowsBoundary) {
+    const logs = path.join(runtime.userData, 'logs');
+    if (!fs.existsSync(logs)) runtime.windowsBoundary.createDirectory(logs);
+    runtime.windowsBoundary.inspect(logs, { directory: true });
+    return path.join(logs, `${name}.log`);
+  }
   const logs = path.join(app.getPath('logs'), 'runtime');
   fs.mkdirSync(logs, { recursive: true, mode: 0o700 });
   return path.join(logs, `${name}.log`);
 }
 
 function bundledChildEnvironment(explicit = {}) {
-  return { ...inheritedEnvironment(process.env, process.platform), ...explicit };
+  return { ...inheritedEnvironment(process.env, process.platform),
+    ...(isolatedPlan ? isolatedChildEnvironment(isolatedPlan) : {}), ...explicit };
 }
 
 async function spawnManaged(name, command, args, options = {}) {
@@ -215,10 +315,10 @@ async function spawnManaged(name, command, args, options = {}) {
   let child;
   try { child = guarded ? await spawnManagedProcess({
     javaPath: binary('jre', 'bin', 'java'), jarPath: binary('backend', 'code-intelligence.jar'),
-    command, args, cwd: options.cwd || app.getPath('userData'), env: bundledChildEnvironment(options.env),
+    command, args, cwd: options.cwd || runtime.userData, env: bundledChildEnvironment(options.env),
     logPath, ...(options.bootstrap ? { bootstrap: options.bootstrap } : {})
   }) : spawn(command, args, {
-    cwd: options.cwd || app.getPath('userData'),
+    cwd: options.cwd || runtime.userData,
     env: bundledChildEnvironment(options.env),
     stdio: [options.bootstrap ? 'pipe' : 'ignore', log, log],
     windowsHide: true
@@ -303,16 +403,15 @@ async function waitUntil(check, label, timeoutMs = 60_000) {
 
 function postgresEnvironment() {
   return {
+    ...(process.platform === 'win32' ? {} : libraryEnvironment(runtimeRoot(), [runtime.postgresLibRoot], process.env, process.platform)),
     PGPASSWORD: runtime.secrets.databasePassword,
-    ...libraryEnvironment(runtimeRoot(), process.platform === 'win32'
-      ? [runtime.postgresBinRoot, runtime.postgresLibRoot] : [runtime.postgresLibRoot], process.env, process.platform)
+    ...runtime.transport.postgresEnvironment
   };
 }
 
 async function startPostgres({ recoveryOnly = false } = {}) {
-  const data = path.join(app.getPath('userData'), 'postgres');
+  const data = await runtimeDirectory('postgres', true);
   if (recoveryOnly && !fs.existsSync(path.join(data, 'PG_VERSION'))) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
-  await fsp.mkdir(data, { recursive: true, mode: 0o700 });
   const initdb = binary('postgres', 'bin', 'initdb');
   const postgres = binary('postgres', 'bin', 'postgres');
   const pgIsReady = binary('postgres', 'bin', 'pg_isready');
@@ -321,19 +420,22 @@ async function startPostgres({ recoveryOnly = false } = {}) {
   const env = postgresEnvironment();
 
   if (!fs.existsSync(path.join(data, 'PG_VERSION'))) {
-    const passwordFile = path.join(app.getPath('userData'), `.pg-password-${process.pid}`);
-    fs.writeFileSync(passwordFile, runtime.secrets.databasePassword, { mode: 0o600 });
+    const passwordFile = path.join(runtime.userData, `.pg-password-${crypto.randomUUID()}`);
+    const bytes = Buffer.from(runtime.secrets.databasePassword); let passwordState;
+    try { if (runtime.windowsBoundary) passwordState = await writeStorageFile(runtime.storage, passwordFile, bytes);
+      else fs.writeFileSync(passwordFile, bytes, { mode: 0o600, flag: 'wx' }); } finally { bytes.fill(0); }
     try {
       run(initdb, [
         '-D', data,
         '-U', 'codeintel',
         '--encoding=UTF8',
-        '--auth-local=trust',
+        '--auth-local=reject',
         '--auth-host=scram-sha-256',
         `--pwfile=${passwordFile}`
       ], { env });
     } finally {
-      fs.rmSync(passwordFile, { force: true });
+      if (runtime.windowsBoundary) await runtime.storage.remove(passwordFile, passwordState);
+      else fs.rmSync(passwordFile);
     }
   }
 
@@ -342,7 +444,13 @@ async function startPostgres({ recoveryOnly = false } = {}) {
     '-h', '127.0.0.1',
     '-p', String(runtime.ports.postgres),
     '-c', 'listen_addresses=127.0.0.1',
-    '-c', 'max_connections=40'
+    '-c', 'max_connections=40',
+    '-c', 'ssl=on',
+    '-c', 'ssl_min_protocol_version=TLSv1.2',
+    '-c', 'unix_socket_directories=',
+    '-c', `ssl_cert_file=${runtime.transport.materials.postgres.cert}`,
+    '-c', `ssl_key_file=${runtime.transport.materials.postgres.key}`,
+    '-c', `hba_file=${runtime.transport.hba}`
   ], { env });
   await waitUntil(() => {
     const result = spawnSync(pgIsReady, [
@@ -377,27 +485,16 @@ async function startPostgres({ recoveryOnly = false } = {}) {
 }
 
 async function startRedis() {
-  const data = path.join(app.getPath('userData'), 'redis');
-  await fsp.mkdir(data, { recursive: true, mode: 0o700 });
-  await spawnManaged('redis', binary('redis', 'bin', 'redis-server'), [
-    '--bind', '127.0.0.1',
-    '--protected-mode', 'yes',
-    '--port', String(runtime.ports.redis),
-    '--dir', data,
-    '--dbfilename', 'dump.rdb',
-    '--appendonly', 'yes'
-  ], {
+  const data = await runtimeDirectory('redis', true);
+  const args = runtime.windowsBoundary
+    ? ['--config-import-path', runtime.transport.redisConfig, '--config-import-format', 'Garnet']
+    : [runtime.transport.redisConfig, '--dir', data, '--dbfilename', 'dump.rdb', '--appendonly', 'yes'];
+  await spawnManaged('redis', binary('redis', 'bin', 'redis-server'), args, {
     env: {
-      ...libraryEnvironment(runtimeRoot(), process.platform === 'win32' ? ['redis/bin', 'redis/lib'] : ['redis/lib'], process.env, process.platform)
+      ...libraryEnvironment(runtimeRoot(), process.platform === 'win32' ? ['cache'] : ['redis/lib'], process.env, process.platform)
     }
   });
-  await waitUntil(async () => {
-    const socket = net.createConnection({ host: '127.0.0.1', port: runtime.ports.redis });
-    return new Promise((resolve) => {
-      socket.once('connect', () => { socket.end(); resolve(true); });
-      socket.once('error', () => resolve(false));
-    });
-  }, 'Redis');
+  await waitUntil(() => runtime.transport.redisReady(), 'Redis');
 }
 
 async function startAnalyzer() {
@@ -408,18 +505,21 @@ async function startAnalyzer() {
       ELECTRON_RUN_AS_NODE: '1',
       TS_ANALYZER_PORT: String(runtime.ports.analyzer),
       TS_ANALYZER_HOST: '127.0.0.1',
+      TS_ANALYZER_TLS_CERT_FILE: runtime.transport.materials.analyzer.cert,
+      TS_ANALYZER_TLS_KEY_FILE: runtime.transport.materials.analyzer.key,
+      TS_ANALYZER_AUTH_TOKEN: runtime.transport.analyzerToken,
       NODE_ENV: 'production'
     }
   });
   await waitUntil(async () => {
-    const response = await fetch(`http://127.0.0.1:${runtime.ports.analyzer}/health`).catch(() => null);
+    const response = await runtime.transport.analyzer.request(`${runtime.transport.analyzer.origin}/health`).catch(() => null);
     return response?.ok;
   }, 'TypeScript analyzer');
 }
 
 async function authorizePath(selected, persist = true) {
   const canonical = await fsp.realpath(assertAbsolutePath(selected));
-  const response = await fetch(`${runtime.apiBaseUrl}/api/desktop/paths`, {
+  const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/api/desktop/paths`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -432,7 +532,7 @@ async function authorizePath(selected, persist = true) {
   const result = await response.json();
   if (persist && !runtime.authorizedRoots.includes(result.path)) {
     runtime.authorizedRoots.push(result.path);
-    saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
+    await saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
   }
   return result.path;
 }
@@ -440,21 +540,27 @@ async function authorizePath(selected, persist = true) {
 async function startBackend({ maintenanceId = '' } = {}) {
   const java = binary('jre', 'bin', 'java');
   const jar = binary('backend', 'code-intelligence.jar');
-  const dataDir = path.join(app.getPath('userData'), 'data');
-  await fsp.mkdir(dataDir, { recursive: true, mode: 0o700 });
-  await spawnManaged('backend', java, ['-XX:MaxRAMPercentage=55', '-jar', jar, '--spring.profiles.active=desktop'], {
-    bootstrap: aiGateway.bootstrap(),
+  const dataDir = await runtimeDirectory('data', true);
+  await openProductionSources();
+  await spawnManaged('backend', java, ['-XX:MaxRAMPercentage=55',
+    ...(runtime.windowsBoundary ? [`-Dcodeintelligence.windows.runtimeRoot=${runtimeRoot()}`] : []),
+    '-jar', jar, '--spring.profiles.active=desktop'], {
+    bootstrap: backendBootstrap(),
     env: {
       SERVER_ADDRESS: '127.0.0.1',
       SERVER_PORT: String(runtime.ports.backend),
-      DB_URL: `jdbc:postgresql://127.0.0.1:${runtime.ports.postgres}/codeintel`,
+      DB_URL: runtime.transport.jdbcUrl,
       DB_USERNAME: 'codeintel',
       DB_PASSWORD: runtime.secrets.databasePassword,
       REDIS_HOST: '127.0.0.1',
       REDIS_PORT: String(runtime.ports.redis),
+      REDIS_PASSWORD: runtime.transport.redisPassword,
+      SPRING_CONFIG_ADDITIONAL_LOCATION: runtime.transport.backendConfigUrl,
       TOKEN_ENC_KEY: runtime.secrets.tokenEncryptionKey,
       DATA_DIR: dataDir,
-      TS_ANALYZER_BASE_URL: `http://127.0.0.1:${runtime.ports.analyzer}`,
+      TS_ANALYZER_BASE_URL: runtime.transport.analyzer.origin,
+      TS_ANALYZER_TLS_CERT_SHA256: runtime.transport.materials.analyzer.pin,
+      TS_ANALYZER_AUTH_TOKEN: runtime.transport.analyzerToken,
       DESKTOP_API_TOKEN: runtime.apiToken,
       DESKTOP_PATH_TOKEN: runtime.pathToken,
       DESKTOP_LOCAL_IDENTITY: runtime.secrets.localIdentity,
@@ -462,12 +568,11 @@ async function startBackend({ maintenanceId = '' } = {}) {
       APP_DESKTOP_AI_BOOTSTRAP_STDIN: 'true',
       APP_DESKTOP_MAINTENANCE_STARTUP_ID: maintenanceId,
       GITHUB_NATIVE_CLIENT_ID: process.env.GITHUB_NATIVE_CLIENT_ID || '',
-      GITHUB_NATIVE_REDIRECT_URI: `${runtime.apiBaseUrl}/api/auth/github/native/callback`,
       CORS_ALLOWED_ORIGINS: runtime.apiBaseUrl
     }
   });
   await waitUntil(async () => {
-    const response = await fetch(`${runtime.apiBaseUrl}/actuator/health`).catch(() => null);
+    const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/actuator/health`).catch(() => null);
     return response?.ok;
   }, 'Backend', 90_000);
   if (maintenanceId) return;
@@ -479,7 +584,7 @@ async function startBackend({ maintenanceId = '' } = {}) {
       runtime.authorizedRoots = runtime.authorizedRoots.filter((entry) => entry !== root);
     }
   }
-  saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
+  await saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
 }
 
 async function startRuntime() {
@@ -488,12 +593,15 @@ async function startRuntime() {
   stopping = false;
   runtime.ready = false;
   runtime.error = null;
+  noteStartup('POSTGRES');
   await startPostgres();
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
+  noteStartup('CACHE_AND_ANALYZER');
   await Promise.all([startRedis(), startAnalyzer()]);
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
+  noteStartup('BACKEND');
   await startBackend();
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
@@ -563,6 +671,9 @@ async function stopRuntime({ keepDatabase = false } = {}) {
   for (const name of ['backend', 'ts-analyzer', 'redis', ...(keepDatabase ? [] : ['postgres'])]) {
     try { await stopChild(name); } catch (error) { failure ||= error; }
   }
+  if (!children.has('backend') && !children.has('ts-analyzer')) {
+    try { await closeProductionSources(); } catch (error) { failure ||= error; }
+  }
   runtime.ready = false;
   if (failure) throw failure;
 }
@@ -621,11 +732,23 @@ function shutdownRuntime() {
   shutdownPromise = withRuntimeOperation(async () => {
     let failure;
     try { await stopRuntime(); } catch (error) { failure = error; }
-    // A child that refused to stop must not outlive main's safety ownership.
-    if (children.size === 0) {
+    // Unconfirmed children or source drain retain the same safety ownership.
+    if (children.size === 0 && !sourceBroker && !sourceVault) {
       try { await safetyLifecycle?.close(); } catch (error) { failure ||= error; }
       try { await aiPostgres?.close(); } catch (error) { failure ||= error; }
       try { await ownerLocks?.close(); } catch (error) { failure ||= error; }
+      try { await runtime?.transport?.close(); } catch (error) { failure ||= error; }
+      try { await runtime?.storage?.close(); } catch (error) { failure ||= error; }
+      if (runtime?.ipcRoot) {
+        try { if (runtime.windowsBoundary) {
+          await runtime.ipcStorage.close();
+          runtime.windowsBoundary.removeDirectory(runtime.ipcRoot, runtime.ipcIdentity);
+        } else {
+          const actual = await fsp.lstat(runtime.ipcRoot);
+          if (actual.dev !== runtime.ipcIdentity.dev || actual.ino !== runtime.ipcIdentity.ino) throw new Error('IPC root changed.');
+          await fsp.rmdir(runtime.ipcRoot);
+        } } catch (error) { failure ||= error; }
+      }
     }
     if (failure) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
   });
@@ -670,16 +793,16 @@ function backupConnection(database = 'codeintel') {
 }
 
 async function openBackupProductState() {
-  const userData = await fsp.realpath(app.getPath('userData'));
-  const dataRoot = path.join(userData, 'data');
-  await fsp.mkdir(dataRoot, { recursive: true, mode: 0o700 });
+  const userData = runtime.userData;
+  const dataRoot = await runtimeDirectory('data', true);
   return createBackupProductState({ psqlPath: binary('postgres', 'bin', 'psql'),
     connection: { host: '127.0.0.1', port: runtime.ports.postgres, user: 'codeintel' }, env: postgresEnvironment(),
-    expectedDataDirectory: path.join(userData, 'postgres'), ownedPostgres: children.get('postgres'), dataRoot });
+    expectedDataDirectory: path.join(userData, 'postgres'), ownedPostgres: children.get('postgres'), dataRoot,
+    ...(runtime.windowsBoundary ? { windowsBoundary: runtime.windowsBoundary } : {}) });
 }
 
 async function maintenanceControl(transactionId, operation) {
-  const response = await fetch(`${runtime.apiBaseUrl}/api/desktop/maintenance`, {
+  const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/api/desktop/maintenance`, {
     method: 'POST', signal: AbortSignal.timeout(10000),
     headers: { 'Content-Type': 'application/json', 'X-Code-Intelligence-Token': runtime.apiToken,
       'X-Code-Intelligence-Path-Token': runtime.pathToken }, body: JSON.stringify({ transactionId, operation })
@@ -712,6 +835,7 @@ async function pauseForBackup({ transactionId, waitForAiDrain, recovery = false 
   }
   await waitForAiDrain();
   await stopChild('backend'); await stopChild('ts-analyzer');
+  await closeProductionSources();
 }
 
 async function syncBackupDirectory(root) {
@@ -724,11 +848,19 @@ async function syncBackupDirectory(root) {
 }
 
 async function invalidateBackupAuthority({ transactionId, checkpointRoot, recovery = false }) {
-  const userData = await fsp.realpath(app.getPath('userData'));
+  const userData = runtime.userData;
   if (checkpointRoot !== path.join(userData, 'recovery', transactionId)) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
   // Both success and rollback must restart with fresh sessions and explicit local folder grants.
   await stopChild('redis');
   if (recovery && !bootRecovery) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
+  if (runtime.windowsBoundary) {
+    // Garnet storage/AOF/recovery are disabled; proved process exit revokes every server-side session.
+    await runtime.storage.stat(path.relative(userData, checkpointRoot), { directory: true });
+    await saveEncryptedJson(runtime.pathsFile, []); runtime.authorizedRoots = [];
+    runtime.apiToken = randomSecret(); runtime.pathToken = randomSecret();
+    if (mainWindow) { await mainWindow.webContents.session.clearStorageData({ origin: runtime.apiBaseUrl }); await mainWindow.webContents.session.clearCache(); }
+    return;
+  }
   const redis = path.join(userData, 'redis');
   const sessionRoot = recovery ? path.join(checkpointRoot, 'verification') : checkpointRoot;
   if (recovery) await syncBackupDirectory(sessionRoot);
@@ -772,6 +904,7 @@ async function resumeAfterBackup({ transactionId, restored, recovery = false }) 
     // Restricted startup checks never release the backend barrier. Reopen all B capabilities
     // in normal mode only after these health-check children have proved their exit.
     await stopChild('backend'); await stopChild('ts-analyzer'); await stopChild('redis');
+    await closeProductionSources();
     return;
   }
   assertSafetyReady();
@@ -784,7 +917,7 @@ async function resumeAfterBackup({ transactionId, restored, recovery = false }) 
       try { await authorizePath(root, false); }
       catch { runtime.authorizedRoots = runtime.authorizedRoots.filter(entry => entry !== root); }
     }
-    saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
+    await saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
   }
   stopping = false; runtime.ready = true; runtime.error = null;
   if (restored) await mainWindow?.loadURL(runtime.apiBaseUrl);
@@ -795,10 +928,9 @@ function backupPorts() {
   const userData = runtime.userData || app.getPath('userData');
   const pg = (database, mode) => createBackupPostgres({ psqlPath: binary('postgres', 'bin', 'psql'),
     migrationRoot: path.join(runtimeRoot(), 'backend', 'backup-migrations'), installationId: runtime.secrets.localIdentity,
-    connection: backupConnection(database), env: postgresEnvironment(), mode });
-  const vaultOptions = sourceRoot => ({ sourceRoot, safetyRoot: path.join(userData, 'safety'),
-    installationId: runtime.secrets.localIdentity, wrapper: createSafeStorageWrapper(safeStorage),
-    ...(ownerLocks ? { ownerLocks } : {}) });
+    connection: backupConnection(database), env: postgresEnvironment(), mode,
+    ...(runtime.windowsBoundary ? { windowsBoundary: runtime.windowsBoundary } : {}) });
+  const vaultOptions = sourceVaultOptions;
   return {
     capacityRoots: async () => ({ postgres: path.join(userData, 'postgres'), source: path.join(userData, 'data'),
       bundle: await fsp.realpath(runtimeRoot()) }),
@@ -810,6 +942,7 @@ function backupPorts() {
       // Stop every possible writer even if a different child fails to terminate. Keep PostgreSQL
       // owned for inspection; normal startup/AI remain blocked by the outstanding recovery state.
       const stopped = await Promise.allSettled(['backend', 'ts-analyzer', 'redis'].map(stopChild));
+      if (!children.has('backend') && !children.has('ts-analyzer')) await closeProductionSources();
       mainWindow?.webContents.send('runtime:changed', publicRuntimeStatus());
       if (stopped.some(result => result.status === 'rejected')) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
     },
@@ -817,17 +950,22 @@ function backupPorts() {
     productState: openBackupProductState,
     database: (options = {}) => createBackupDatabaseControl({ psqlPath: binary('postgres', 'bin', 'psql'),
       connection: { host: '127.0.0.1', port: runtime.ports.postgres, user: 'codeintel' }, env: postgresEnvironment(), liveDatabase: 'codeintel',
+      ...(runtime.windowsBoundary ? { windowsBoundary: runtime.windowsBoundary } : {}),
       ...(options.readRetentionAuthority ? { readRetentionAuthority: options.readRetentionAuthority } : {}) }),
-    sourceWorker: () => createBackupSourceWorker({ javaPath: binary('jre', 'bin', 'java'), jarPath: binary('backend', 'code-intelligence.jar') }),
+    sourceWorker: () => createBackupSourceWorker({ javaPath: binary('jre', 'bin', 'java'), jarPath: binary('backend', 'code-intelligence.jar'),
+      ...(runtime.windowsBoundary ? { windowsBoundary: runtime.windowsBoundary, runtimeRoot: runtimeRoot() } : {}) }),
     async sourceReader() {
+      if (sourceVault || sourceBroker) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
       const vault = await openSourceVault(vaultOptions(path.join(userData, 'data', 'sources')));
       return Object.freeze({ read: vault.read, close: vault.close });
     },
     async exportVault(refs, writePacket) {
+      if (sourceVault || sourceBroker) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
       const vault = await openSourceVault(vaultOptions(path.join(userData, 'data', 'sources')));
       try { for (const ref of refs) await writePacket(await vault.exportCiphertext(ref)); } finally { await vault.close(); }
     },
     async restoreVault(root, packets) {
+      if (sourceVault || sourceBroker) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
       const vault = await openSourceVaultRestoreStage(vaultOptions(root));
       try { for await (const packet of packets) await vault.importCiphertext(packet); } finally { await vault.close(); }
     }
@@ -856,7 +994,7 @@ async function restoreWithDialog() {
 
 function registerIpc() {
   ipcMain.on('runtime:config', (event) => {
-    assertTrustedRenderer(event);
+    if (!isTrustedRenderer(event)) { event.returnValue = null; return; }
     event.returnValue = { apiBaseUrl: runtime.apiBaseUrl, apiToken: runtime.apiToken, appVersion: app.getVersion() };
   });
   ipcMain.handle('runtime:status', (event) => {
@@ -916,14 +1054,20 @@ function createWindow() {
     }
   });
   const appOrigin = new URL(runtime.apiBaseUrl).origin;
+  mainWindow.webContents.session.setCertificateVerifyProc((request, callback) => {
+    if (request.hostname !== '127.0.0.1') return callback(-3);
+    callback(runtime.transport.verifyBackendCertificate(request.certificate.data, request.hostname) ? 0 : -2);
+  });
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: [`${appOrigin}/*`] },
     (details, callback) => {
       try {
         if (details.webContentsId === mainWindow.webContents.id
-            && details.resourceType === 'mainFrame'
             && new URL(details.url).origin === appOrigin) {
-          details.requestHeaders.Origin = appOrigin;
+          if (details.resourceType === 'mainFrame') details.requestHeaders.Origin = appOrigin;
+          for (const name of Object.keys(details.requestHeaders)) {
+            if (name.toLowerCase() === 'x-code-intelligence-token') delete details.requestHeaders[name];
+          }
           details.requestHeaders['X-Code-Intelligence-Token'] = runtime.apiToken;
         }
       } finally {
@@ -931,9 +1075,9 @@ function createWindow() {
       }
     }
   );
-  const allowAppNavigation = (event, url) => {
+  const allowAppNavigation = event => {
     try {
-      if (new URL(url).origin !== appOrigin) event.preventDefault();
+      if (new URL(event.url).origin !== appOrigin) event.preventDefault();
     } catch {
       event.preventDefault();
     }
@@ -949,9 +1093,7 @@ function createWindow() {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', allowAppNavigation);
-  mainWindow.webContents.on('will-frame-navigate', (event, details) => {
-    allowAppNavigation(event, details.url);
-  });
+  mainWindow.webContents.on('will-frame-navigate', allowAppNavigation);
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.loadURL(runtime.apiBaseUrl);
 }
@@ -959,17 +1101,25 @@ function createWindow() {
 async function startApplication() {
   if (!ownsInstance || quitting) return;
   try {
+    noteStartup('MANIFEST');
     runtimeManifest = await verifyRuntimeIntegrity();
     const runningBuild = requireBuildSequence(runtimeManifest.buildSequence);
-    const userData = app.getPath('userData');
+    noteStartup('PROFILE');
+    const profile = app.getPath('userData');
+    await fsp.mkdir(profile, { recursive: true, mode: 0o700 });
+    const windowsBoundary = process.platform === 'win32' ? createWindowsBoundary(runtimeRoot()) : undefined;
+    const userData = windowsBoundary ? path.join(await fsp.realpath(profile), 'private') : await fsp.realpath(profile);
+    if (windowsBoundary) {
+      for (const name of ['secrets.enc', '.safety-enrollment', 'safety', 'postgres', 'data', 'authorized-paths.enc', 'backup-maintenance', 'recovery'])
+        if (fs.existsSync(path.join(profile, name))) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
+      if (!fs.existsSync(userData)) windowsBoundary.createDirectory(userData, { inherit: true });
+    }
     if (fs.existsSync(path.join(userData, 'data', '.restore-recovery-required.json'))) {
       throw new Error('An interrupted restore requires offline recovery. Runtime was not started; keep the recovery backup and staging directories.');
     }
     const pathsFile = path.join(userData, 'authorized-paths.enc');
-    const secrets = await loadDesktopSecrets({ userData, safeStorage });
     runtime = {
-      userData: await fsp.realpath(userData),
-      secrets,
+      userData, windowsBoundary,
       postgresBinRoot: runtimeManifest.runtime.postgresBin,
       postgresLibRoot: runtimeManifest.runtime.postgresLib,
       pathsFile,
@@ -985,22 +1135,33 @@ async function startApplication() {
       ready: false,
       error: null
     };
-    runtime.apiBaseUrl = `http://127.0.0.1:${runtime.ports.backend}`;
+    if (windowsBoundary) runtime.storage = await windowsBoundary.openStorage(userData, { onLost: loseRuntimeOwnership });
+    noteStartup('CREDENTIALS');
+    const secrets = await loadDesktopSecrets({ userData, safeStorage, windowsBoundary, electronApp: app,
+      ...(windowsBoundary ? { initializeEnrollment: value => openAuthorizedRoots(value, true) } : {}) });
+    runtime.secrets = secrets;
+    if (windowsBoundary && !runtime.grantState) await openAuthorizedRoots(secrets);
+    noteStartup('PRIVATE_IPC');
+    const temporaryRoot = await fsp.realpath(app.getPath('temp'));
+    if (windowsBoundary) {
+      runtime.ipcRoot = path.join(temporaryRoot, 'ci-' + crypto.randomBytes(4).toString('hex'));
+      windowsBoundary.createDirectory(runtime.ipcRoot);
+      runtime.ipcStorage = await windowsBoundary.openStorage(runtime.ipcRoot, { onLost: loseRuntimeOwnership });
+      runtime.ipcIdentity = runtime.ipcStorage.rootState.identity;
+    } else {
+      runtime.ipcRoot = await fsp.realpath(await fsp.mkdtemp(path.join(temporaryRoot, 'ci-')));
+      await fsp.chmod(runtime.ipcRoot, 0o700); runtime.ipcIdentity = await fsp.lstat(runtime.ipcRoot);
+    }
+    noteStartup('TLS');
+    runtime.transport = await createServiceTransport({ userData, ports: runtime.ports, getApiToken: () => runtime.apiToken,
+      windowsBoundary, onLost: loseRuntimeOwnership });
+    runtime.apiBaseUrl = runtime.transport.backend.origin;
+    noteStartup('OWNER_LOCKS');
     if (runtimeManifest.ownershipProtocol === 1) ownerLocks = await createNativeOwnerLocks({
       javaPath: binary('jre', 'bin', 'java'), jarPath: binary('backend', 'code-intelligence.jar'),
       safetyRoot: path.join(runtime.userData, 'safety'), installationId: secrets.localIdentity,
       assertMainOwnership: () => ownsInstance && app.hasSingleInstanceLock(),
-      onLost() {
-        // This synchronous part closes admission before any asynchronous latch or child shutdown.
-        stopping = true; runtime.ready = false; runtime.recoveryRequired = true;
-        clearTimeout(restartTimer); restartTimer = null;
-        runtime.error = 'Desktop ownership was lost. Recovery is required before reopening.';
-        mainWindow?.webContents.send('runtime:changed', publicRuntimeStatus());
-        return Promise.allSettled([
-          Promise.resolve().then(() => aiGateway?.latchOffline('USER_OFF')),
-          ...['backend', 'ts-analyzer', 'redis', 'postgres'].map(stopChild)
-        ]);
-      }
+      onLost: loseRuntimeOwnership
     });
     async function openSafety(recoveryMode) {
       aiPostgres = await createAiEgressPostgres({ psqlPath: binary('postgres', 'bin', 'psql'),
@@ -1009,18 +1170,21 @@ async function startApplication() {
       env: postgresEnvironment() });
     const maintenanceVerifier = runtimeManifest.backupProtocol === 3
       ? createMaintenanceVerifier({ installationId: secrets.localIdentity, readProjection: aiPostgres.readProjection }) : undefined;
-      safetyLifecycle = await openSafetyLifecycle({ userData: runtime.userData, safeStorage,
+      noteStartup('SAFETY');
+      safetyLifecycle = await openSafetyLifecycle({ userData, safeStorage, windowsBoundary, electronApp: app,
       installationId: secrets.localIdentity, runningBuild, recoveryMode, ...(ownerLocks ? { ownerLocks } : {}),
       createGateway: async ({ openJournal, freshEnrollmentAllowed, recoveryMode: gatewayRecoveryMode }) => {
+        noteStartup('GATEWAY');
         aiGateway = await openDesktopAiGateway({ installationId: secrets.localIdentity, runningBuild,
-          temporaryRoot: app.getPath('temp'), tokenEncryptionKey: secrets.tokenEncryptionKey,
+          temporaryRoot: runtime.ipcRoot, tokenEncryptionKey: secrets.tokenEncryptionKey, windowsBoundary,
           openJournal, freshEnrollmentAllowed, adapter: aiPostgres, recoveryMode: gatewayRecoveryMode,
           verifyMaintenanceSeal: maintenanceVerifier, verifyMaintenanceCompletion: maintenanceVerifier });
         return aiGateway;
       },
       ...(runtimeManifest.backupProtocol === 3 ? { createBackupRuntime: async hooks => {
-        backupRuntime = await createDesktopBackupRuntime({ ...hooks, userData: await fsp.realpath(userData),
-          installationId: secrets.localIdentity, runningBuild, recoveryMode,
+        noteStartup('BACKUP');
+        backupRuntime = await createDesktopBackupRuntime({ ...hooks, userData,
+          installationId: secrets.localIdentity, runningBuild, recoveryMode, windowsBoundary,
           gateway: aiGateway, adapter: aiPostgres, ports: backupPorts() });
         return backupRuntime;
       } } : {}) });
@@ -1048,16 +1212,20 @@ async function startApplication() {
       await openSafety(false);
     }
     if (quitting) return;
-    runtime.authorizedRoots = encryptedJson(pathsFile, () => []);
+    noteStartup('AUTHORIZED_ROOTS');
+    runtime.authorizedRoots = await readAuthorizedRoots();
     registerIpc();
     await startRuntime();
-    if (!quitting) createWindow();
+    if (!quitting) { noteStartup('WINDOW'); createWindow(); noteStartup('READY'); }
   } catch (error) {
     // Requested quit cancels further startup; the serialized shutdown still latches and closes B.
     if (quitting) return;
     runtime = runtime || { ready: false };
     runtime.error = error.message;
     runtime.recoveryRequired = true;
+    const code = ['EACCES', 'ENOENT', 'SAFETY_RECOVERY_REQUIRED', 'SAFETY_STORAGE_UNAVAILABLE', 'SAFETY_OWNER_LOST'].includes(error.code)
+      ? error.code : 'MAIN_STARTUP_FAILED';
+    console.error('DESKTOP_STARTUP ' + startupPhase + ' FAILED ' + code);
     dialog.showErrorBox('Code Intelligence could not start', error.message);
     app.quit();
   }
@@ -1076,7 +1244,7 @@ app.on('before-quit', (event) => {
   }, () => {
     dialog.showErrorBox('Code Intelligence shutdown requires recovery',
       'Desktop safety state could not be closed cleanly. No safety state or lock was reset.');
-    if (children.size === 0) { shutdownComplete = true; app.quit(); }
+    if (children.size === 0 && !sourceBroker && !sourceVault) { shutdownComplete = true; app.quit(); }
   });
 });
 

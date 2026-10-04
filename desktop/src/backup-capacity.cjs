@@ -6,6 +6,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const { types: { isProxy } } = require('node:util');
+const native = require('./backup-windows-io.cjs');
 const WORKSPACE_BYTES = 10n * 1024n ** 3n;
 const MAX_BYTES = (1n << 63n) - 1n;
 const LIMITS = Object.freeze({ entries: 600000, depth: 64, inspectMs: 120000, workspaceBytes: String(WORKSPACE_BYTES) });
@@ -70,19 +71,41 @@ function safe(stat, directory, privateOnly = false) {
       || (stat.mode & 0o7022n) !== 0n || (privateOnly && (stat.mode & 0o077n) !== 0n)
       || (directory && (stat.mode & 0o700n) !== 0o700n) || (!directory && stat.nlink !== 1n)) fail('UNSAFE');
 }
-const identity = stat => `${stat.dev}:${stat.ino}`;
-const state = stat => `${identity(stat)}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+const identity = stat => stat.platform === 'win32' ? stat.identity : `${stat.dev}:${stat.ino}`;
+const state = stat => stat.platform === 'win32' ? stat.token : `${identity(stat)}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+const volume = stat => String(stat.platform === 'win32' ? stat.volume : stat.dev);
 async function directory(root) {
   const stat = await fs.lstat(root, { bigint: true }); safe(stat, true);
   if (await fs.realpath(root) !== root) fail('UNSAFE'); return stat;
 }
 async function measureBackupTree(options) {
   plain(options);
-  if (Object.keys(options).some(key => !['root', 'maxBytes', 'maxEntries', 'maxDepth', 'timeoutMs'].includes(key))) fail('INVALID');
+  if (Object.keys(options).some(key => !['root', 'maxBytes', 'maxEntries', 'maxDepth', 'timeoutMs', 'windowsBoundary'].includes(key))) fail('INVALID');
   const root = absolute(options.root), maxBytes = options.maxBytes === undefined ? MAX_BYTES : bytes(options.maxBytes);
   const maxEntries = options.maxEntries ?? LIMITS.entries, maxDepth = options.maxDepth ?? LIMITS.depth, timeoutMs = options.timeoutMs ?? LIMITS.inspectMs;
   for (const [value, cap] of [[maxEntries, LIMITS.entries], [maxDepth, LIMITS.depth], [timeoutMs, LIMITS.inspectMs]])
     if (!Number.isSafeInteger(value) || value < 1 || value > cap) fail('INVALID');
+  if (options.windowsBoundary) {
+    const storage = await options.windowsBoundary.openStorage(root, { mode: 'workspace' });
+    try {
+      const before = await storage.stat('', { directory: true }), started = performance.now();
+      const seen = new Set(); let entries = 0, logical = 0n, allocated = 0n;
+      async function visit(file, isDirectory, depth) {
+        if (depth > maxDepth || ++entries > maxEntries || performance.now() - started > timeoutMs) fail('LIMIT');
+        const stat = await storage.stat(file, { directory: isDirectory });
+        if (stat.volume !== before.volume || seen.has(stat.identity)) fail('UNSAFE'); seen.add(stat.identity);
+        if (typeof stat.allocationSize !== 'string' || !/^[0-9]+$/.test(stat.allocationSize)) fail('IO');
+        allocated += BigInt(stat.allocationSize);
+        if (isDirectory) { for (const entry of await native.entries(storage, file, maxEntries)) await visit(file ? file + '/' + entry.name : entry.name, entry.directory, depth + 1); }
+        else logical += BigInt(stat.size);
+        if (logical > maxBytes || allocated > maxBytes) fail('LIMIT');
+        if (!native.sameState(stat, await storage.stat(file, { directory: isDirectory }))) fail('CHANGED');
+      }
+      await visit('', true, 0);
+      if (!native.sameState(before, await storage.stat('', { directory: true }))) fail('CHANGED');
+      return freeze({ version: 1, root: native.identity(before), entries, logicalBytes: String(logical), allocatedBytes: String(allocated) });
+    } finally { await storage.close(); }
+  }
   try {
     const before = await directory(root), started = performance.now(); let entries = 0, logical = 0n, allocated = 0n;
     const seen = new Set();
@@ -105,16 +128,22 @@ async function measureBackupTree(options) {
   } catch (error) { if (error instanceof BackupCapacityError) throw error; fail('IO'); }
 }
 async function createBackupCapacity(options) {
-  plain(options); exact(options, ['roots', ...(Object.hasOwn(options, 'statfs') ? ['statfs'] : [])]); exact(options.roots, ROOTS);
+  plain(options); exact(options, ['roots', ...(Object.hasOwn(options, 'statfs') ? ['statfs'] : []), ...(Object.hasOwn(options, 'windowsBoundary') ? ['windowsBoundary'] : [])]); exact(options.roots, ROOTS);
   const statfs = options.statfs ?? fs.statfs; if (typeof statfs !== 'function') fail('INVALID');
+  const sessions = new Map();
+  const inspect = async root => {
+    if (!options.windowsBoundary) return directory(root);
+    if (!sessions.has(root)) sessions.set(root, await options.windowsBoundary.openStorage(root, { mode: 'workspace' }));
+    return sessions.get(root).stat('', { directory: true });
+  };
   const roots = {}, originals = {}; let closed = false, busy = false, current = null;
   try {
     for (const name of ROOTS) {
       const root = options.roots[name]; if (name === 'destination' && root === null) { roots[name] = null; continue; }
-      roots[name] = absolute(root); originals[name] = await directory(root);
-      if (name === 'recovery') safe(originals[name], true, true);
+      roots[name] = absolute(root); originals[name] = await inspect(root);
+      if (name === 'recovery' && !options.windowsBoundary) safe(originals[name], true, true);
     }
-  } catch (error) { if (error instanceof BackupCapacityError) throw error; fail('IO'); }
+  } catch (error) { for (const session of sessions.values()) await session.close().catch(() => {}); if (error instanceof BackupCapacityError) throw error; fail('IO'); }
   async function serial(operation) {
     if (closed) fail('CLOSED'); if (busy) fail('BUSY'); busy = true;
     try { return await operation(); } catch (error) { if (error instanceof BackupCapacityError) throw error; fail('IO'); }
@@ -124,28 +153,31 @@ async function createBackupCapacity(options) {
     const groups = new Map();
     for (const name of ROOTS) {
       if (roots[name] === null) continue;
-      const now = await directory(roots[name]); if (identity(now) !== identity(originals[name])) fail('CHANGED');
-      const dev = String(now.dev); if (!groups.has(dev)) groups.set(dev, { root: roots[name], total: 0n, used: 0n });
+      const now = await inspect(roots[name]); if (identity(now) !== identity(originals[name])) fail('CHANGED');
+      const dev = volume(now); if (!groups.has(dev)) groups.set(dev, { root: roots[name], total: 0n, used: 0n });
     }
     if (plan.kind === 'BACKUP' && roots.destination === null || plan.kind === 'RESTORE' && roots.destination !== null) fail('INVALID');
-    if (plan.kind === 'RESTORE' && originals.recovery.dev !== originals.source.dev) fail('FILESYSTEM');
-    for (const [root, value] of Object.entries(plan.baseline)) groups.get(String(originals[root].dev)).total += bytes(value);
+    if (plan.kind === 'RESTORE' && volume(originals.recovery) !== volume(originals.source)) fail('FILESYSTEM');
+    for (const [root, value] of Object.entries(plan.baseline)) groups.get(volume(originals[root])).total += bytes(value);
     for (const [name, part] of Object.entries(plan.components)) {
       if (roots[part.root] === null) { if (part.limitBytes !== '0') fail('INVALID'); continue; }
-      const group = groups.get(String(originals[part.root].dev)); group.total += bytes(part.limitBytes); group.used += consumed[name];
+      const group = groups.get(volume(originals[part.root])); group.total += bytes(part.limitBytes); group.used += consumed[name];
     }
     const volumes = [];
     for (const [dev, group] of groups) {
       if (!group.total) continue;
-      const stat = await statfs(group.root, { bigint: true });
-      if (typeof stat.bavail !== 'bigint' || typeof stat.bsize !== 'bigint' || stat.bavail < 0n || stat.bsize <= 0n) fail('INVALID');
-      const required = group.total - group.used + headroom(group.total), available = stat.bavail * stat.bsize;
+      let available;
+      if (options.windowsBoundary) available = (await sessions.get(group.root).capacity()).available;
+      else { const stat = await statfs(group.root, { bigint: true });
+        if (typeof stat.bavail !== 'bigint' || typeof stat.bsize !== 'bigint' || stat.bavail < 0n || stat.bsize <= 0n) fail('INVALID');
+        available = stat.bavail * stat.bsize; }
+      const required = group.total - group.used + headroom(group.total);
       if (available < required) fail('SPACE');
       volumes.push({ dev, remainingBytes: String(required), availableBytes: String(available) });
     }
     for (const name of ROOTS) if (roots[name] !== null) {
-      const now = await directory(roots[name]); if (identity(now) !== identity(originals[name])) fail('CHANGED');
-      if (name === 'recovery') safe(now, true, true);
+      const now = await inspect(roots[name]); if (identity(now) !== identity(originals[name])) fail('CHANGED');
+      if (name === 'recovery' && !options.windowsBoundary) safe(now, true, true);
     }
     return freeze({ version: 1, volumes });
   }
@@ -168,7 +200,7 @@ async function createBackupCapacity(options) {
         }); current = lease; return lease;
       });
     },
-    async close() { if (busy) fail('BUSY'); closed = true; current = null; }
+    async close() { if (busy) fail('BUSY'); closed = true; current = null; for (const session of sessions.values()) await session.close(); }
   });
 }
 module.exports = Object.freeze({ planBackupCapacity, measureBackupTree, createBackupCapacity, BackupCapacityError, LIMITS, COMPONENTS });

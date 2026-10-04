@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+[[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]]
+: "${JAVA_HOME:?}"
+helper="$(cd "$(dirname "$0")" && pwd)/native-acceptance.cjs"
+context_helper="$(dirname "$helper")/native-acceptance-context.cjs"
+temp_root="$(node - "$context_helper" <<'NODE'
+const helper = require(process.argv[2]);
+const context = helper.requireExecutionContext();
+if (context.kind === 'github-hosted' && !require('node:path').isAbsolute(process.env.GITHUB_ENV || '')) throw new Error('GITHUB_ENV_REQUIRED');
+helper.claimExecution(context, 'provision'); helper.prepareArtifacts(context);
+console.log(context.tempRoot);
+NODE
+)"
+artifacts="$temp_root/native-acceptance-artifacts"
+work="$(mktemp -d "$temp_root/native-compatible-runtime.XXXXXX")"
+work="$(node -e 'console.log(require("node:fs").realpathSync(process.argv[1]))' "$work")"
+step=source-metadata
+node - "$context_helper" "$artifacts/provisioning.json" <<'NODE'
+const helper = require(process.argv[2]);
+require('node:fs').writeFileSync(process.argv[3], JSON.stringify({ phase: 'native-runtime-provision',
+  status: 'RUNNING', executionContext: helper.requireExecutionContext().evidence }) + '\n', { mode: 0o600 });
+NODE
+on_exit() {
+  code=$?
+  if [[ "$code" != 0 ]]; then
+    node - "$helper" "$work" "$step" "$code" "$artifacts/provisioning.json" <<'NODE'
+const [helper, work, step, exitCode, artifact] = process.argv.slice(2);
+require(helper).recordProvisioningFailure({ work, step, exitCode, artifact });
+NODE
+  fi
+  # Raw compiler text is private and never uploaded, even after a failed build.
+  rm -f "$work/build-output"
+  exit "$code"
+}
+trap on_exit EXIT
+quiet() { "$@" > "$work/build-output" 2>&1; }
+# Do not install bottles, invoke brew services, or change system prefixes. Homebrew
+# verifies each upstream archive; independently bind its bytes to formula metadata.
+export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1
+brew info --json=v2 openssl@3 postgresql@16 redis pgvector > "$work/formulae.json" 2> "$work/build-output"
+for spec in 'openssl@3:openssl' 'postgresql@16:postgres' 'redis:redis' 'pgvector:pgvector'; do
+  formula="${spec%%:*}"; name="${spec##*:}"
+  step="fetch-$name"
+  quiet brew fetch --build-from-source "$formula"
+  archive="$(brew --cache --build-from-source "$formula")"
+  node - "$work/formulae.json" "$formula" "$archive" "$work/$name-source.json" 2> "$work/build-output" <<'NODE'
+const assert = require('node:assert/strict'), fs = require('node:fs'), crypto = require('node:crypto');
+const [metadata, name, archive, destination] = process.argv.slice(2);
+const formula = JSON.parse(fs.readFileSync(metadata, 'utf8')).formulae.find(item => item.name === name);
+assert.ok(formula); assert.match(formula.versions.stable, /^[0-9]+(?:\.[0-9]+){1,3}$/);
+const sha256 = formula.urls.stable.checksum;
+assert.match(sha256, /^[a-f0-9]{64}$/);
+assert.equal(crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex'), sha256);
+if (name === 'postgresql@16') assert.match(formula.versions.stable, /^16\./);
+const url = new URL(formula.urls.stable.url);
+assert.ok(url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash);
+fs.writeFileSync(destination, JSON.stringify({formula: name, version: formula.versions.stable, sourceUrl: url.href, sourceSha256: sha256}));
+NODE
+  mkdir "$work/$name-source"
+  quiet tar -xf "$archive" --strip-components=1 -C "$work/$name-source"
+done
+# Keep compiler/tool discovery away from Homebrew's optional dylibs. PostgreSQL
+# uses system zlib, no ICU/readline/LDAP/GSSAPI, and our private OpenSSL only.
+export MACOSX_DEPLOYMENT_TARGET=13.0
+export CC=/usr/bin/clang CXX=/usr/bin/clang++
+export CFLAGS='-O2 -mmacosx-version-min=13.0' CXXFLAGS='-O2 -mmacosx-version-min=13.0'
+export LDFLAGS='-mmacosx-version-min=13.0 -Wl,-headerpad_max_install_names'
+unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH PKG_CONFIG_PATH CPPFLAGS
+export PKG_CONFIG_LIBDIR="$work/empty-pkgconfig"
+mkdir "$PKG_CONFIG_LIBDIR"
+prefix="$work/prefix"
+mkdir "$prefix"
+step=openssl-configure
+cd "$work/openssl-source"
+quiet /usr/bin/perl ./Configure darwin64-arm64-cc --prefix="$prefix/openssl" --openssldir="$prefix/openssl/ssl" --libdir=lib shared no-tests no-module
+step=openssl-build
+quiet /usr/bin/make -j2
+quiet /usr/bin/make install_sw
+step=postgres-configure
+cd "$work/postgres-source"
+quiet ./configure --prefix="$prefix/postgres" --with-openssl --without-icu --without-readline --without-ldap --without-gssapi \
+  --with-includes="$prefix/openssl/include" --with-libraries="$prefix/openssl/lib"
+step=postgres-build
+quiet /usr/bin/make -j2
+quiet /usr/bin/make install
+quiet /usr/bin/make -C contrib/pg_trgm -j2
+quiet /usr/bin/make -C contrib/pg_trgm install
+pg_config="$prefix/postgres/bin/pg_config"
+step=pgvector-build
+quiet /usr/bin/make -C "$work/pgvector-source" PG_CONFIG="$pg_config" OPTFLAGS= -j2
+quiet /usr/bin/make -C "$work/pgvector-source" PG_CONFIG="$pg_config" install
+step=redis-build
+# Build the shipped target, not upstream all: all also links test modules using
+# raw Darwin ld, which cannot accept our compiler-driver deployment/header flags.
+quiet /usr/bin/make -C "$work/redis-source/src" -j2 redis-server BUILD_TLS=yes MALLOC=libc \
+  USE_SYSTEMD=no WITH_SYSTEMD=no OPENSSL_PREFIX="$prefix/openssl" \
+  REDIS_CFLAGS="$CFLAGS" REDIS_LDFLAGS="$LDFLAGS"
+# Only the Redis server is shipped; no system install or background service.
+mkdir -p "$prefix/redis/bin"
+cp "$work/redis-source/src/redis-server" "$prefix/redis/bin/redis-server"
+redis="$prefix/redis/bin/redis-server"
+step=native-dependency-closure
+node - "$helper" "$prefix" "$context_helper" > "$work/closure.json" 2> "$work/build-output" <<'NODE'
+const helper = require(process.argv[2]); require(process.argv[4]).requireExecutionContext();
+console.log(JSON.stringify(helper.relocateMacLibraries(process.argv[3])));
+NODE
+step=runtime-versions
+"$JAVA_HOME/bin/java" -version 2>&1 | tee "$artifacts/java-version.txt"
+"$pg_config" --version | tee "$artifacts/postgres-version.txt"
+"$redis" --version | tee "$artifacts/redis-version.txt"
+"$JAVA_HOME/bin/java" -version 2>&1 | grep -E 'version "21\.'
+"$pg_config" --version | grep -E '^PostgreSQL 16\.'
+"$redis" --version | grep -E 'v=(7|8|9)\.'
+cat "$("$pg_config" --sharedir)/extension/vector.control" > "$artifacts/pgvector-control.txt"
+node - "$context_helper" "$pg_config" "$redis" <<'NODE'
+const helper = require(process.argv[2]), context = helper.requireExecutionContext();
+helper.writeRuntimeEnvironment(context, { PG_CONFIG: process.argv[3], REDIS_SERVER: process.argv[4],
+  CODE_INTELLIGENCE_BUILD_SEQUENCE: context.buildSequence });
+NODE
+node - "$work" "$artifacts/provisioning.json" <<'NODE'
+const fs = require('node:fs'), path = require('node:path');
+const [work, artifact] = process.argv.slice(2);
+const read = name => JSON.parse(fs.readFileSync(path.join(work, name), 'utf8'));
+fs.writeFileSync(artifact, JSON.stringify({phase: 'native-runtime-provision', status: 'PASS',
+  executionContext: JSON.parse(fs.readFileSync(artifact, 'utf8')).executionContext,
+  minimumSystemVersion: '13.0', sourceBuilt: true,
+  sources: ['openssl', 'postgres', 'redis', 'pgvector'].map(name => read(name + '-source.json')),
+  closure: read('closure.json')}, null, 2) + '\n');
+NODE

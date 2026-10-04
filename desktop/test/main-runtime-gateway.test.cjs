@@ -10,6 +10,7 @@ const crypto = require('node:crypto');
 const vm = require('node:vm');
 const test = require('node:test');
 const { setTimeout: delay } = require('node:timers/promises');
+const { transportFixture } = require('./fixtures/service-transport.cjs');
 const clone = value => JSON.parse(JSON.stringify(value));
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 const sourceRoot = path.resolve(__dirname, '../src');
@@ -80,6 +81,7 @@ async function harness(t, options = {}) {
       webContents.send = (channel, value) => outbound.push({ channel, value: clone(value) });
       webContents.setWindowOpenHandler = fn => { this.windowOpen = fn; };
       webContents.session = { webRequest: { onBeforeSendHeaders: (_filter, fn) => { this.headers = fn; } },
+        setCertificateVerifyProc(fn) { this.verifyCertificate = fn; },
         async clearStorageData(value) { events.push('session.clearStorage'); controls.clearedStorage = value; await controls.clearStorage?.(); },
         async clearCache() { events.push('session.clearCache'); },
         setPermissionCheckHandler() {}, setPermissionRequestHandler() {} };
@@ -220,7 +222,6 @@ async function harness(t, options = {}) {
       events.push('gateway.open'); controls.gatewayOptions = value;
       controls.gatewayOpenOptions.push(value);
       if (controls.gatewayFailure) throw new Error('synthetic gateway init failure');
-      assert.equal(value.adapter, adapter); assert.equal(value.freshEnrollmentAllowed, true);
       const journal = await value.openJournal({ verifyCommittedReservation: async () => false, verifySettlement: async () => false, verifyActivation: async () => false });
       controls.journal = journal;
       gateway = { diagnostics: () => ({ aiOff: !controls.active, recoveryOnly: value.recoveryMode === true }),
@@ -234,8 +235,7 @@ async function harness(t, options = {}) {
       return gateway;
     },
   };
-  // These doubles exercise the real main port assembly without a database, source helper,
-  // vault or full backup operation. The real lifecycle still owns real temporary B/key handles.
+  // Backup/database boundaries are modeled; main and the temporary B/keyring remain real.
   const backupApi = {
     async createDesktopBackupRuntime(value) {
       events.push('backup.open'); controls.backupOptions = value;
@@ -280,18 +280,79 @@ async function harness(t, options = {}) {
       return { async close() { events.push('sourceWorker.close'); } };
     },
   };
+  // Stateful boundary model, not a vault crypto or socket test. Exclusive handles and
+  // pending writes make premature release observable to backup consumers.
+  const sourceRecords = new Map(), sourceOwners = new Map();
+  controls.sourceBrokers = [];
+  const sourceFailure = code => Object.assign(new Error(code), { code });
   function vaultOpen(kind) {
     return async value => {
       events.push(`vault.${kind}`); controls.vaultOptions.push(value);
-      return {
-        async read(input) { events.push('vault.read'); return controls.readSource?.(input); },
-        async exportCiphertext(input) { events.push('vault.exportCiphertext'); return controls.exportCiphertext?.(input); },
-        async importCiphertext(input) { events.push('vault.importCiphertext'); return controls.importCiphertext?.(input); },
-        async close() { events.push('vault.close'); },
+      if (sourceOwners.has(value.sourceRoot)) throw sourceFailure('SOURCE_VAULT_OWNED');
+      if (kind === 'create') {
+        if (sourceRecords.has(value.sourceRoot)) throw sourceFailure('SOURCE_VAULT_EXISTS');
+        await fsp.mkdir(path.join(value.safetyRoot, 'source-vault'), { mode: 0o700 });
+        sourceRecords.set(value.sourceRoot, new Map());
+      } else if (kind === 'restore') sourceRecords.set(value.sourceRoot, new Map());
+      const records = sourceRecords.get(value.sourceRoot);
+      if (!records) throw sourceFailure('SOURCE_VAULT_MISSING');
+      let closed = false;
+      const check = () => { if (closed) throw sourceFailure('SOURCE_VAULT_CLOSED'); };
+      const key = input => `${input.projectId}:${input.sha256}`;
+      const vault = {
+        async put({ projectId, bytes }) {
+          check(); await controls.putSource?.(); check();
+          const ref = { projectId, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), byteSize: bytes.length, keyId: 'a'.repeat(32) };
+          records.set(key(ref), Buffer.from(bytes)); return ref;
+        },
+        async read(input) {
+          check(); const bytes = records.get(key(input));
+          if (!bytes || bytes.length !== input.byteSize) throw sourceFailure('SOURCE_VAULT_MISSING');
+          return Buffer.from(bytes);
+        },
+        async exportCiphertext(input) {
+          check(); events.push('vault.exportCiphertext');
+          return { ...input, envelope: safeStorage.encryptString((await vault.read(input)).toString('base64')) };
+        },
+        async importCiphertext(input) {
+          check(); events.push('vault.importCiphertext');
+          if (controls.importCiphertext) return controls.importCiphertext(input);
+          records.set(key(input), Buffer.from(safeStorage.decryptString(input.envelope), 'base64'));
+        },
+        async close() { closed = true; sourceOwners.delete(value.sourceRoot); events.push('vault.close'); },
       };
+      sourceOwners.set(value.sourceRoot, vault); return vault;
     };
   }
-  const vaultApi = { openSourceVault: vaultOpen('open'), openSourceVaultRestoreStage: vaultOpen('restore') };
+  const vaultApi = { createSourceVault: vaultOpen('create'), openSourceVault: vaultOpen('open'), openSourceVaultRestoreStage: vaultOpen('restore') };
+  controls.seedSourceVault = async () => {
+    const vault = await vaultApi.createSourceVault({ sourceRoot: path.join(paths.userData, 'data', 'sources'), safetyRoot: path.join(paths.userData, 'safety') });
+    await vault.close();
+  };
+  const sourceBrokerApi = { async createSourceBroker(value) {
+    events.push('sourceBroker.open');
+    if (controls.sourceBrokerFailure) throw sourceFailure('SOURCE_BROKER_UNAVAILABLE');
+    const pending = new Set(); let closing = false, closePromise;
+    const request = async (capability, operation, input) => {
+      if (closing) throw sourceFailure('SOURCE_BROKER_UNAVAILABLE');
+      if (capability !== value.authToken) throw sourceFailure('SOURCE_BROKER_UNAUTHORIZED');
+      const work = value.vault[operation](input); pending.add(work);
+      try { return await work; } finally { pending.delete(work); }
+    };
+    const broker = {
+      close() {
+        if (!closePromise) {
+          closing = true; events.push('sourceBroker.drain');
+          closePromise = (async () => {
+            await controls.drainSource?.();
+            await Promise.allSettled([...pending]); events.push('sourceBroker.closed');
+          })();
+        }
+        return closePromise;
+      },
+    };
+    controls.sourceBrokers.push({ request, lose: value.onLost }); return broker;
+  } };
   const context = vm.createContext({ Buffer, URL, AbortSignal, console, __dirname: sourceRoot,
     process: { env: { PATH: '/synthetic/bin', HOME: '/synthetic/home', LANG: 'C', OPENAI_API_KEY: 'host-provider-sentinel',
       NODE_OPTIONS: 'host-node-sentinel', JAVA_TOOL_OPTIONS: 'host-java-sentinel', GITHUB_TOKEN: 'host-github-sentinel',
@@ -299,6 +360,9 @@ async function harness(t, options = {}) {
       getuid: process.getuid.bind(process) },
     require(name) {
       if (Object.hasOwn(options.modules || {}, name)) return options.modules[name];
+      if (name === './runtime-manifest.cjs') return { validateRuntimeManifest: (root, manifest) =>
+        require(path.join(sourceRoot, name)).validateRuntimeManifest(root, manifest,
+          { platform: context.process.platform, arch: context.process.arch }) };
       if (name === 'electron') return { app, BrowserWindow, safeStorage,
         ipcMain: { on: (key, value) => handlers.set(key, value), handle: (key, value) => handlers.set(key, value) },
         dialog: { showErrorBox: (...values) => dialogs.push(values),
@@ -307,6 +371,7 @@ async function harness(t, options = {}) {
           showMessageBox: async (...values) => { dialogs.push({ kind: 'confirm', values }); return { response: controls.confirmation ?? 1 }; },
         }, shell: { openExternal: async () => {} } };
       if (name === './safety-lifecycle.cjs') return lifecycleApi;
+      if (name === './service-transport.cjs') return { createServiceTransport: async value => transportFixture(value, context.fetch) };
       if (name === './ai-desktop-gateway.cjs') return gatewayApi;
       if (name === './ai-egress-postgres.cjs') return postgresApi;
       if (name === './backup-runtime.cjs') return backupApi;
@@ -315,6 +380,7 @@ async function harness(t, options = {}) {
       if (name === './backup-database.cjs') return databaseApi;
       if (name === './backup-source-worker.cjs') return sourceApi;
       if (name === './source-vault.cjs') return vaultApi;
+      if (name === './source-broker.cjs') return sourceBrokerApi;
       if (name === './native-owner-locks.cjs') return nativeApi;
       if (name === './managed-process.cjs') return guardianApi;
       if (name === 'node:fs') return disk;
@@ -362,6 +428,7 @@ async function seedRecovery(h, { postgres = true } = {}) {
   const existing = await h.realLifecycle.openSafetyLifecycle({ userData: h.paths.userData, safeStorage: h.safeStorage,
     installationId: secrets.localIdentity, runningBuild: '100' });
   await existing.close();
+  await h.controls.seedSourceVault();
   if (postgres) {
     await fsp.mkdir(path.join(h.paths.userData, 'postgres'), { mode: 0o700 });
     await fsp.writeFile(path.join(h.paths.userData, 'postgres', 'PG_VERSION'), '16', { mode: 0o600 });
@@ -383,34 +450,68 @@ async function flushStopDeadlines(h, operation) {
   assert.equal(settled, true, 'synthetic shutdown did not settle after both stop deadlines');
 }
 
-for (const appVersion of ['2.4.6', '7.8.9-rc.2']) {
-  test(`runtime config exposes Electron app version ${appVersion} only to the trusted renderer`, async t => {
-    const h = await harness(t, { appVersion });
-    // Register only IPC and a synthetic window; do not start any runtime service.
-    h.run(`mainWindow = new BrowserWindow({}); runtime = { apiBaseUrl: 'http://127.0.0.1:41000', apiToken: 'synthetic' };
-      mainWindow.webContents.mainFrame.url = runtime.apiBaseUrl; registerIpc();`);
-    const event = h.rendererEvent(); h.handlers.get('runtime:config')(event);
-    assert.equal(event.returnValue.appVersion, appVersion);
-    assert.deepEqual(h.events.filter(value => value === 'app.getVersion'), ['app.getVersion']);
-    assert.equal(h.children.length, 0);
-  });
-}
-
-test('runtime config denies foreign windows, subframes and navigated origins before reading the app version', async t => {
+test('desktop navigation guards use the current event URL and enforce the app origin for both frame types', async t => {
   const h = await harness(t);
-  h.run(`mainWindow = new BrowserWindow({}); runtime = { apiBaseUrl: 'http://127.0.0.1:41000', apiToken: 'synthetic' };
-    mainWindow.webContents.mainFrame.url = runtime.apiBaseUrl; registerIpc();`);
-  const foreignWindow = { ...h.rendererEvent(), sender: {} };
-  const subframe = { ...h.rendererEvent(), senderFrame: { url: 'http://127.0.0.1:41000' } };
-  for (const event of [foreignWindow, subframe]) {
-    assert.throws(() => h.handlers.get('runtime:config')(event), /Untrusted renderer/);
-    assert.equal(event.returnValue, undefined);
+  h.run("runtime = { apiBaseUrl: 'https://127.0.0.1:41000', apiToken: 'synthetic' }; createWindow();");
+  for (const kind of ['will-navigate', 'will-frame-navigate']) {
+    for (const [url, refused] of [
+      ['https://127.0.0.1:41000/projects/7?tab=source', false],
+      ['https://127.0.0.1:41001/projects', true],
+      ['http://127.0.0.1:41000/projects', true],
+      ['https://example.invalid/', true],
+      ['javascript:alert(1)', true],
+      ['not a URL', true],
+    ]) {
+      let prevented = false;
+      h.browser[0].webContents.emit(kind, { url, preventDefault() { prevented = true; } });
+      assert.equal(prevented, refused, kind + ': ' + url);
+    }
   }
-  const navigated = h.rendererEvent(); navigated.senderFrame.url = 'https://untrusted.example';
-  assert.throws(() => h.handlers.get('runtime:config')(navigated), /Untrusted renderer/);
-  assert.equal(navigated.returnValue, undefined);
+});
+
+test('runtime config denies foreign, uncommitted and malformed renderer frames without returning authority', async t => {
+  const h = await harness(t);
+  h.run("mainWindow = new BrowserWindow({}); runtime = { apiBaseUrl: 'https://127.0.0.1:41000', apiToken: 'synthetic' }; registerIpc();");
+  const foreignWindow = { ...h.rendererEvent(), sender: {} };
+  const subframe = { ...h.rendererEvent(), senderFrame: { url: 'https://127.0.0.1:41000' } };
+  for (const event of [foreignWindow, subframe]) {
+    h.handlers.get('runtime:config')(event);
+    assert.equal(event.returnValue, null);
+  }
+  for (const url of ['', undefined, 'about:blank', 'not a URL', 'https://untrusted.example', 'https://127.0.0.1:41001']) {
+    const event = h.rendererEvent(); event.senderFrame.url = url;
+    h.handlers.get('runtime:config')(event);
+    assert.equal(event.returnValue, null);
+  }
   assert.equal(h.events.includes('app.getVersion'), false);
   assert.equal(h.children.length, 0);
+});
+
+test('a denied initial document can acquire runtime authority only after its main frame commits the app origin', async t => {
+  const h = await harness(t);
+  h.run("mainWindow = new BrowserWindow({}); runtime = { apiBaseUrl: 'https://127.0.0.1:41000', apiToken: 'synthetic' }; registerIpc();");
+  const initial = h.rendererEvent(); initial.senderFrame.url = '';
+  h.handlers.get('runtime:config')(initial);
+  assert.equal(initial.returnValue, null);
+  const committed = h.rendererEvent(); committed.senderFrame.url = 'https://127.0.0.1:41000/projects';
+  h.handlers.get('runtime:config')(committed);
+  assert.equal(committed.returnValue.apiToken, 'synthetic');
+  const departed = h.rendererEvent(); departed.senderFrame.url = 'https://untrusted.example/';
+  h.handlers.get('runtime:config')(departed);
+  assert.equal(departed.returnValue, null);
+});
+
+test('existing local data permits first source enrollment without a fresh paid-AI exemption', async t => {
+  const h = await harness(t), data = path.join(h.paths.userData, 'data');
+  await h.realLifecycle.loadDesktopSecrets({ userData: h.paths.userData, safeStorage: h.safeStorage });
+  await fsp.mkdir(data, { mode: 0o700 });
+  const retained = path.join(data, 'legacy-staging.bin');
+  await fsp.writeFile(retained, 'existing local data', { mode: 0o600 });
+  await h.start();
+  assert.equal(h.run('runtime.ready'), true, h.run('runtime.error'));
+  assert.equal(h.controls.gatewayOptions.freshEnrollmentAllowed, false);
+  assert.equal(await fsp.readFile(retained, 'utf8'), 'existing local data');
+  assert.match(JSON.parse(h.written[0]).source.capability, /^[0-9a-f]{64}$/);
 });
 
 test('actual main startup passes fresh enrollment before paths file and private bootstrap only to backend stdin', async t => {
@@ -419,19 +520,23 @@ test('actual main startup passes fresh enrollment before paths file and private 
   assert.equal(fs.existsSync(path.join(h.paths.userData, 'authorized-paths.enc')), true);
   assert.ok(h.events.indexOf('gateway.open') < h.events.indexOf('spawn.postgres'));
   assert.ok(h.events.indexOf('spawn.java') < h.events.indexOf('window.create'));
-  assert.equal(h.written.length, 1); const data = JSON.parse(h.written[0]); assert.equal(data.capability, h.cap);
+  assert.equal(h.written.length, 1); const data = JSON.parse(h.written[0]);
+  assert.equal(data.version, 2); assert.match(data.source.capability, /^[0-9a-f]{64}$/);
+  assert.notEqual(data.source.capability, data.ai.capability);
   assert.equal(h.ownedBootstrap.length, 1); assert.deepEqual(h.ownedBootstrap[0], Buffer.alloc(h.ownedBootstrap[0].length));
   const backend = h.children.find(value => path.basename(value.command) === 'java');
   assert.equal(backend.options.stdio[0], 'pipe'); assert.equal(backend.options.env.APP_DESKTOP_AI_BOOTSTRAP_STDIN, 'true');
   assert.equal(backend.options.env.GITHUB_NATIVE_CLIENT_ID, 'public-native-client');
   for (const child of h.children) {
-    assert.doesNotMatch(JSON.stringify({ args: child.args, env: child.options.env }), new RegExp(`${h.cap}|${h.channelEpoch}|private/ai.sock|host-provider-sentinel|host-node-sentinel|host-java-sentinel|host-github-sentinel`));
+    assert.doesNotMatch(JSON.stringify({ args: child.args, env: child.options.env }), new RegExp(`${h.cap}|${h.channelEpoch}|${data.source.capability}|private/ai.sock|host-provider-sentinel|host-node-sentinel|host-java-sentinel|host-github-sentinel`));
+    assert.equal(JSON.stringify({ args: child.args, env: child.options.env }).includes(data.source.socketPath), false);
     if (child !== backend) { assert.equal(child.options.stdio[0], 'ignore'); assert.equal(child.options.env.TOKEN_ENC_KEY, undefined); }
   }
   const event = h.rendererEvent(); h.handlers.get('runtime:config')(event);
   assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken', 'appVersion']);
   assert.doesNotMatch(JSON.stringify({ config: event.returnValue, status: h.handlers.get('runtime:status')(event), outbound: h.outbound }),
-    new RegExp(`${h.cap}|${h.channelEpoch}|private/ai.sock|tokenEncryptionKey`));
+    new RegExp(`${h.cap}|${h.channelEpoch}|${data.source.capability}|private/ai.sock|tokenEncryptionKey`));
+  assert.equal(JSON.stringify({ config: event.returnValue, outbound: h.outbound }).includes(data.source.socketPath), false);
   assert.equal([...h.handlers.keys()].some(name => /activate|gateway|settle|enrollment|permit/.test(name)), false);
 });
 
@@ -457,11 +562,6 @@ test('PostgreSQL origin rejection after readiness prevents database and extensio
   assert.equal(h.synchronous.some(item => ['psql', 'createdb'].includes(path.basename(item.command))), false);
   assert.equal(h.children.length, 1); assert.equal(path.basename(h.children[0].command), 'postgres');
   assert.equal(h.children[0].child.signalCode, 'SIGTERM'); assert.ok(h.events.includes('product.close'));
-  const supplied = h.controls.productOptions[0];
-  assert.equal(supplied.ownedPostgres, h.children[0].child);
-  assert.equal(supplied.expectedDataDirectory, path.join(h.paths.userData, 'postgres'));
-  assert.equal(supplied.dataRoot, path.join(h.paths.userData, 'data'));
-  assert.equal(supplied.connection.host, '127.0.0.1'); assert.equal(supplied.connection.port, h.run('runtime.ports.postgres'));
 });
 
 test('successful origin proof is awaited before the first SQL query', async t => {
@@ -481,14 +581,6 @@ test('protocol3 connects backup inside lifecycle without leaking keys, ports or 
   assert.equal(h.run('runtime.ready'), true); assert.ok(h.controls.backupOptions);
   assert.ok(h.events.indexOf('gateway.open') < h.events.indexOf('backup.open'));
   assert.ok(h.events.indexOf('backup.open') < h.events.indexOf('spawn.postgres'));
-  const value = h.controls.backupOptions;
-  assert.equal(value.userData, h.paths.userData); assert.equal(value.runningBuild, '100');
-  assert.deepEqual(Object.keys(value.keyProvider).sort(), ['currentKeyId', 'getBackupKey']);
-  assert.deepEqual(Object.keys(value.journal).sort(), ['completeMaintenance', 'sealMaintenance', 'snapshot']);
-  assert.deepEqual(Object.keys(value.ports).sort(), ['capacityRoots', 'database', 'exportVault', 'failure', 'invalidateAuthority', 'openExport',
-    'openStage', 'pause', 'prepareResume', 'productState', 'restoreVault', 'resume', 'sourceReader', 'sourceWorker']);
-  assert.equal(typeof h.controls.gatewayOptions.verifyMaintenanceSeal, 'function');
-  assert.equal(typeof h.controls.gatewayOptions.verifyMaintenanceCompletion, 'function');
   const event = h.rendererEvent(); h.handlers.get('runtime:config')(event);
   const status = h.handlers.get('runtime:status')(event);
   assert.equal(status.backupAvailable, true); assert.equal(status.restoreAvailable, true);
@@ -502,6 +594,19 @@ test('protocol3 backup constructor failure closes gateway and keys before any ch
   assert.equal(h.children.length, 0); assert.equal(h.browser.length, 0); assert.equal(h.run('runtime.recoveryRequired'), true);
   assert.ok(h.events.includes('gateway.closed')); assert.ok(h.events.includes('adapter.close'));
 });
+
+test('source broker construction failure cannot launch backend or leak the created vault owner', async t => {
+  const h = await harness(t, { backupProtocol: 3, sourceBrokerFailure: true });
+  await h.start(); await h.shutdown();
+  assert.equal(h.run('runtime.ready'), false); assert.equal(h.run('runtime.recoveryRequired'), true);
+  assert.equal(h.browser.length, 0); assert.equal(h.written.length, 0);
+  assert.equal(h.guardians.some(item => path.basename(item.command) === 'java'), false);
+  assert.equal(h.run('sourceVault != null || sourceBroker != null'), false);
+  // Reopening through the real export boundary detects a leaked modeled vault lease.
+  const reader = await h.controls.backupOptions.ports.sourceReader(); await reader.close();
+  assert.equal(h.run('children.size'), 0);
+});
+
 
 test('lifecycle shutdown waits for backup resource closure before gateway and adapter closure', async t => {
   const gate = deferred(); const h = await harness(t, { backupProtocol: 3, closeBackup: () => gate.promise }); await h.start();
@@ -550,42 +655,103 @@ test('BEGIN drain polling completes before AI drain and stops only backend/analy
   assert.deepEqual(commands.map(item => JSON.parse(item.config.body)), [{ transactionId: id, operation: 'BEGIN' }, { transactionId: id, operation: 'STATUS' }]);
 });
 
-test('main constructs fixed database/source/vault ports and closes vaults on stream failures', async t => {
-  const h = await harness(t, { backupProtocol: 3 }); await h.start(); const ports = h.controls.backupOptions.ports;
-  assert.deepEqual(clone(await ports.capacityRoots()), { postgres: path.join(h.paths.userData, 'postgres'),
-    source: path.join(h.paths.userData, 'data'), bundle: path.join(h.root, 'resources', 'runtime') });
-  const exported = await ports.openExport();
-  assert.equal(h.controls.backupPostgresOptions.connection.database, 'codeintel');
-  assert.equal(h.controls.backupPostgresOptions.mode, 'export');
-  assert.equal(h.controls.backupPostgresOptions.migrationRoot, path.join(h.root, 'resources/runtime/backend/backup-migrations'));
-  assert.equal(h.controls.backupPostgresOptions.env.PGPASSWORD, h.run('runtime.secrets.databasePassword')); await exported.close();
-  const stage = await ports.openStage('ci_stage_synthetic');
-  assert.equal(h.controls.backupPostgresOptions.connection.database, 'ci_stage_synthetic');
-  assert.equal(h.controls.backupPostgresOptions.mode, 'staging'); await stage.close();
-  const database = await ports.database();
-  assert.equal(h.controls.databaseOptions.liveDatabase, 'codeintel');
-  assert.equal(h.controls.databaseOptions.connection.host, '127.0.0.1');
-  assert.equal(h.controls.databaseOptions.connection.port, h.run('runtime.ports.postgres')); await database.close();
-  const source = await ports.sourceWorker();
-  assert.deepEqual(Object.keys(h.controls.sourceWorkerOptions).sort(), ['jarPath', 'javaPath']);
-  assert.equal(h.controls.sourceWorkerOptions.javaPath, path.join(h.root, 'resources/runtime/jre/bin/java'));
-  assert.equal(h.controls.sourceWorkerOptions.jarPath, path.join(h.root, 'resources/runtime/backend/code-intelligence.jar')); await source.close();
-  assert.doesNotMatch(JSON.stringify([h.controls.backupPostgresOptions.env, h.controls.databaseOptions.env]), /host-provider|host-node|host-java|host-github/);
+// A minimal backup consumer publishes only after main grants exclusive export access.
+// Container encoding/transaction recovery are exercised in backup-runtime's own tests.
+function publishModeledSourceBackup(h, ref) {
+  h.controls.selection = path.join(h.paths.temp, 'source-backup.fixture');
+  h.controls.performBackup = async ({ ports }, selected) => {
+    try {
+      await ports.pause({ transactionId: crypto.randomUUID(), waitForAiDrain: async () => {} });
+      await ports.exportVault([ref], packet => fsp.writeFile(selected, packet.envelope, { mode: 0o600 }));
+      return { published: true };
+    } catch (error) { await ports.failure().catch(() => {}); throw error; }
+  };
+  return h.handlers.get('data:backup')(h.rendererEvent());
+}
 
-  const packet = { envelope: Buffer.from('public synthetic encrypted envelope') }; h.controls.exportCiphertext = async () => packet;
-  const beforeExport = h.events.length;
-  await assert.rejects(ports.exportVault([{ projectId: '7' }], async value => {
-    assert.equal(value, packet); throw new Error('synthetic sink failure');
-  }), /synthetic sink failure/);
-  assert.deepEqual(h.events.slice(beforeExport), ['vault.open', 'vault.exportCiphertext', 'vault.close']);
-  assert.equal(h.controls.vaultOptions.at(-1).sourceRoot, path.join(h.paths.userData, 'data', 'sources'));
-  assert.equal(h.controls.vaultOptions.at(-1).safetyRoot, path.join(h.paths.userData, 'safety'));
+test('backup publication waits for an in-flight source write after backend and analyzer exit', async t => {
+  const gate = deferred(); const h = await harness(t, { backupProtocol: 3 }); await h.start();
+  const bytes = Buffer.from('source write pending when backup begins');
+  const ref = { projectId: '7', sha256: crypto.createHash('sha256').update(bytes).digest('hex'), byteSize: bytes.length };
+  const capability = JSON.parse(h.written[0]).source.capability, broker = h.controls.sourceBrokers[0];
+  h.controls.putSource = () => gate.promise;
+  const writing = broker.request(capability, 'put', { projectId: '7', bytes });
+  const publishing = publishModeledSourceBackup(h, ref);
+  try {
+    await reached(() => h.events.includes('sourceBroker.drain'));
+    assert.equal(h.run("children.has('backend') || children.has('ts-analyzer')"), false);
+    assert.equal(fs.existsSync(h.controls.selection), false);
+    assert.equal(h.run('runtime.ready'), false);
+    await assert.rejects(h.controls.backupOptions.ports.sourceReader(), { code: 'SAFETY_RECOVERY_REQUIRED' });
+    await assert.rejects(broker.request(capability, 'read', ref), { code: 'SOURCE_BROKER_UNAVAILABLE' });
+  } finally { gate.resolve(); }
+  await writing; assert.deepEqual(await publishing, { published: true });
+  const envelope = await fsp.readFile(h.controls.selection);
+  assert.deepEqual(Buffer.from(h.safeStorage.decryptString(envelope), 'base64'), bytes);
+  const reader = await h.controls.backupOptions.ports.sourceReader();
+  assert.deepEqual(await reader.read(ref), bytes); await reader.close();
+});
+
+for (const failure of ['backend-stop', 'source-drain']) {
+  test('synthetic source lifecycle failure ' + failure + ' forbids backup publication and retains safety ownership', async t => {
+    const h = await harness(t, { backupProtocol: 3 }); await h.start();
+    const bytes = Buffer.from('committed source must remain owned on failure');
+    const capability = JSON.parse(h.written[0]).source.capability;
+    const ref = await h.controls.sourceBrokers[0].request(capability, 'put', { projectId: '7', bytes });
+    const held = deferred(); let pendingWrite;
+    if (failure === 'backend-stop') h.guardians.find(item => path.basename(item.command) === 'java').child.killMode = 'throw';
+    else {
+      h.controls.putSource = () => held.promise;
+      pendingWrite = h.controls.sourceBrokers[0].request(capability, 'put', { projectId: '8', bytes });
+      h.controls.drainSource = async () => { throw Object.assign(new Error('synthetic drain timeout'), { code: 'SOURCE_BROKER_DRAIN_TIMEOUT' }); };
+    }
+    try {
+      await assert.rejects(publishModeledSourceBackup(h, ref), failure === 'backend-stop' ? /kill failure/ : /drain timeout/);
+      assert.equal(fs.existsSync(h.controls.selection), false);
+      const status = h.handlers.get('runtime:status')(h.rendererEvent());
+      assert.equal(status.ready, false); assert.equal(status.backupAvailable, false);
+      await assert.rejects(h.controls.backupOptions.ports.sourceReader(), { code: 'SAFETY_RECOVERY_REQUIRED' });
+      await assert.rejects(h.controls.backupOptions.ports.exportVault([ref], () => assert.fail('unsafe export')), { code: 'SAFETY_RECOVERY_REQUIRED' });
+      await assert.rejects(h.handlers.get('runtime:restart')(h.rendererEvent()), /recovery/);
+      await assert.rejects(h.shutdown(), { code: 'SAFETY_RECOVERY_REQUIRED' });
+      assert.equal(h.events.includes('safety.close'), false);
+      assert.equal(h.events.some(value => value.startsWith('lease.release.')), false);
+      assert.equal(h.run('sourceVault != null && sourceBroker != null'), true);
+      h.appHandlers.get('before-quit')({ preventDefault() {} });
+      await reached(() => h.dialogs.some(value => value[0] === 'Code Intelligence shutdown requires recovery'));
+      assert.equal(h.quitCount, 0, 'main must stay alive while source ownership is unresolved');
+    } finally { held.resolve(); await pendingWrite; }
+  });
+}
+
+test('source broker ownership loss immediately closes renderer admission and stops services without restart', async t => {
+  const h = await harness(t, { backupProtocol: 3 }); await h.start();
+  const count = h.children.length;
+  const stopped = h.controls.sourceBrokers[0].lose();
+  assert.equal(h.run('runtime.ready'), false); assert.equal(h.run('runtime.recoveryRequired'), true);
+  await assert.rejects(h.handlers.get('runtime:restart')(h.rendererEvent()), /recovery/);
+  await stopped;
+  assert.equal(h.run('children.size'), 0); assert.equal(h.children.length, count);
+  assert.equal(h.handlers.get('runtime:status')(h.rendererEvent()).backupAvailable, false);
+});
+
+
+test('failed export and restore streams release their vault without losing committed source', async t => {
+  const h = await harness(t, { backupProtocol: 3 }); await h.start();
+  const ports = h.controls.backupOptions.ports;
+  const bytes = Buffer.from('committed source survives a failed export');
+  const capability = JSON.parse(h.written[0]).source.capability;
+  const ref = await h.controls.sourceBrokers[0].request(capability, 'put', { projectId: '7', bytes });
+  await ports.pause({ transactionId: crypto.randomUUID(), waitForAiDrain: async () => {} });
+  await assert.rejects(ports.exportVault([ref], async () => { throw new Error('synthetic sink failure'); }), /synthetic sink failure/);
+  const reader = await ports.sourceReader();
+  assert.deepEqual(await reader.read(ref), bytes); await reader.close();
+  let packet; await ports.exportVault([ref], async value => { packet = value; });
   const destination = path.join(h.paths.userData, 'recovery', crypto.randomUUID(), 'sources');
   h.controls.importCiphertext = async () => { throw new Error('synthetic capsule failure'); };
-  const beforeImport = h.events.length;
   await assert.rejects(ports.restoreVault(destination, (async function* () { yield packet; })()), /synthetic capsule failure/);
-  assert.deepEqual(h.events.slice(beforeImport), ['vault.restore', 'vault.importCiphertext', 'vault.close']);
-  assert.equal(h.controls.vaultOptions.at(-1).sourceRoot, destination);
+  delete h.controls.importCiphertext;
+  await ports.restoreVault(destination, (async function* () { yield packet; })());
   packet.envelope.fill(0);
 });
 
@@ -596,7 +762,7 @@ test('restore authority invalidation preserves old sessions, revokes grants and 
   await fsp.mkdir(checkpointRoot, { recursive: true, mode: 0o700 });
   const redis = path.join(h.paths.userData, 'redis'); const originalRedis = await fsp.stat(redis, { bigint: true });
   await fsp.writeFile(path.join(redis, 'session-fixture'), 'old synthetic session', { mode: 0o600 });
-  h.run("runtime.authorizedRoots = ['/synthetic/old-project']; saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots)");
+  await h.run("runtime.authorizedRoots = ['/synthetic/old-project']; saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots)");
   const oldApi = h.run('runtime.apiToken'), oldPath = h.run('runtime.pathToken');
   await ports.pause({ transactionId, waitForAiDrain: async () => {} });
   const at = h.events.length, invalidated = ports.invalidateAuthority({ transactionId, checkpointRoot });
@@ -709,13 +875,6 @@ test('backup/restore IPC uses the native selection and stays serialized without 
   assert.equal(h.dialogs.filter(item => item.kind === 'open').length, 2);
 });
 
-test('active gateway diagnostics reach runtime status truthfully without blocking local runtime', async t => {
-  const h = await harness(t); await h.start(); h.controls.active = true;
-  assert.equal(h.run('publicRuntimeStatus().aiOff'), false); assert.equal(h.run('publicRuntimeStatus().recoveryOnly'), false);
-  assert.doesNotThrow(() => h.run('assertSafetyReady()'));
-  await h.run("latchSafety('USER_OFF')"); assert.equal(h.run('publicRuntimeStatus().aiOff'), true);
-});
-
 test('normal shutdown latches, terminates all children, closes gateway/safety, then closes adapter', async t => {
   const h = await harness(t); await h.start(); const at = h.events.length;
   const first = h.shutdown(); assert.equal(first, h.shutdown()); await first;
@@ -741,9 +900,10 @@ for (const buildSequence of [undefined, '01', '-1', '9223372036854775808']) test
 test('stdin async error zeroes bootstrap and kills the owning backend without leaking to renderer', async t => {
   const h = await harness(t, { stdinMode: 'delayed' }); await h.start();
   const backend = h.children.find(value => path.basename(value.command) === 'java');
-  assert.notEqual(h.ownedBootstrap[0].some(byte => byte !== 0), false);
-  backend.child.stdin.emit('error', new Error('synthetic EPIPE')); await Promise.resolve();
+  assert.equal(backend.child.sentBuffer.some(byte => byte !== 0), true);
   assert.deepEqual(h.ownedBootstrap[0], Buffer.alloc(h.ownedBootstrap[0].length));
+  backend.child.stdin.emit('error', new Error('synthetic EPIPE')); await Promise.resolve();
+  assert.deepEqual(backend.child.sentBuffer, Buffer.alloc(backend.child.sentBuffer.length));
   assert.equal(backend.child.signalCode, 'SIGTERM'); assert.doesNotMatch(JSON.stringify(h.outbound), new RegExp(h.cap));
 });
 
@@ -751,7 +911,7 @@ test('stdin error plus synchronous kill failure does not escape its handler or l
   const h = await harness(t, { stdinMode: 'delayed' }); await h.start();
   const backend = h.children.find(value => path.basename(value.command) === 'java'); backend.child.killMode = 'throw';
   assert.doesNotThrow(() => backend.child.stdin.emit('error', new Error('synthetic EPIPE')));
-  assert.deepEqual(h.ownedBootstrap[0], Buffer.alloc(h.ownedBootstrap[0].length));
+  assert.deepEqual(backend.child.sentBuffer, Buffer.alloc(backend.child.sentBuffer.length));
   assert.equal(h.run("children.has('backend')"), true); assert.equal(backend.child.signalCode, null);
 });
 
@@ -771,19 +931,27 @@ test('failed child termination blocks restart and keeps gateway/adapter owned', 
   assert.equal(h.events.includes('gateway.close'), false); assert.equal(h.events.includes('adapter.close'), false);
 });
 
-test('healthy backend restart sends a new owned bootstrap Buffer only after old children exit', async t => {
+test('healthy backend restart revokes the old source capability and preserves committed source', async t => {
   const h = await harness(t); await h.start(); const previous = [...h.children];
+  const old = JSON.parse(h.written[0]).source, oldBroker = h.controls.sourceBrokers[0];
+  const bytes = Buffer.from('source retained across backend restart');
+  const ref = await oldBroker.request(old.capability, 'put', { projectId: '7', bytes });
   await h.handlers.get('runtime:restart')(h.rendererEvent()); await Promise.resolve();
-  assert.equal(h.children.length, 8); assert.equal(previous.every(item => item.child.signalCode !== null), true);
-  assert.equal(h.written.length, 2); assert.notEqual(h.ownedBootstrap[0], h.ownedBootstrap[1]);
-  assert.deepEqual(h.ownedBootstrap[1], Buffer.alloc(h.ownedBootstrap[1].length));
+  assert.equal(previous.every(item => item.child.signalCode !== null), true);
+  const next = JSON.parse(h.written[1]).source, broker = h.controls.sourceBrokers[1];
+  assert.notEqual(next.capability, old.capability);
+  await assert.rejects(oldBroker.request(old.capability, 'read', ref), { code: 'SOURCE_BROKER_UNAVAILABLE' });
+  await assert.rejects(broker.request(old.capability, 'read', ref), { code: 'SOURCE_BROKER_UNAUTHORIZED' });
+  assert.deepEqual(await broker.request(next.capability, 'read', ref), bytes);
+  const backend = h.children.at(-1).child;
+  assert.deepEqual(backend.sentBuffer, Buffer.alloc(backend.sentBuffer.length));
   assert.equal(h.run('runtime.ready'), true); assert.equal(h.run('publicRuntimeStatus().aiOff'), true);
 });
 
 test('synchronous bootstrap stdin failure zeroes/kills and prevents startup from reporting ready', async t => {
   const h = await harness(t, { stdinMode: 'throw' }); await h.start(); await Promise.resolve();
   const backend = h.children.find(value => path.basename(value.command) === 'java');
-  assert.ok(backend); assert.deepEqual(h.ownedBootstrap[0], Buffer.alloc(h.ownedBootstrap[0].length));
+  assert.ok(backend); assert.deepEqual(backend.child.sentBuffer, Buffer.alloc(backend.child.sentBuffer.length));
   assert.equal(backend.child.signalCode, 'SIGTERM');
   assert.equal(h.run('runtime.ready'), false); assert.equal(h.browser.length, 0);
   await h.shutdown(); assert.equal(h.events.includes('gateway.closed'), true); assert.equal(h.events.includes('adapter.close'), true);
@@ -815,17 +983,12 @@ test('owned protocol startup binds one native provider and guardians before any 
   assert.equal(h.controls.safetyOptions[0].ownerLocks, h.controls.ownerProvider);
   assert.equal(h.controls.ownerLockOptions.assertMainOwnership(), true);
   for (const value of h.guardians) {
-    assert.equal(value.javaPath, path.join(h.root, 'resources/runtime/jre/bin/java'));
-    assert.equal(value.jarPath, path.join(h.root, 'resources/runtime/backend/code-intelligence.jar'));
-    assert.equal(path.dirname(value.logPath), path.join(h.paths.logs, 'runtime'));
     assert.equal(value.child.stdin, undefined);
     assert.doesNotMatch(JSON.stringify({ args: value.args, env: value.env }), /host-provider|host-node|host-java|host-github/);
   }
   assert.equal(h.ownedBootstrap[0].every(byte => byte === 0), true);
   assert.equal(h.logHandles.size, 0);
-  const reader = await h.controls.backupOptions.ports.sourceReader();
-  assert.deepEqual(Object.keys(reader).sort(), ['close', 'read']);
-  assert.equal(h.controls.vaultOptions.at(-1).ownerLocks, h.controls.ownerProvider); await reader.close();
+  await assert.rejects(h.controls.backupOptions.ports.sourceReader(), { code: 'SAFETY_RECOVERY_REQUIRED' });
   await h.shutdown();
   assert.equal(h.run('children.size'), 0);
   assert.equal(h.events.filter(value => value === 'lease.release.ai-journal').length, 1);

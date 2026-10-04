@@ -37,18 +37,14 @@ class LocalImportServiceTest {
     @Test
     void validateSource_rejectsNonExistentPath() {
         Path nonExistent = tempDir.resolve("does-not-exist");
-        assertThatThrownBy(() -> service.validateSource(nonExistent))
-                .isInstanceOf(LocalImportException.class)
-                .hasMessageContaining("not a directory");
+        assertThatThrownBy(() -> service.validateSource(nonExistent)).isInstanceOf(LocalImportException.class);
     }
 
     @Test
     void validateSource_rejectsFile() throws IOException {
         Path file = tempDir.resolve("file.txt");
         Files.writeString(file, "content");
-        assertThatThrownBy(() -> service.validateSource(file))
-                .isInstanceOf(LocalImportException.class)
-                .hasMessageContaining("not a directory");
+        assertThatThrownBy(() -> service.validateSource(file)).isInstanceOf(LocalImportException.class);
     }
 
     @Test

@@ -26,5 +26,6 @@ Thumbs.db
 desktop/node_modules/
 desktop/stage/
 desktop/dist/
+desktop/dist-validation/
 frontend/test-results/
 frontend/playwright-report/

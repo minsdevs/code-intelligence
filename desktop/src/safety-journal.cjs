@@ -7,6 +7,8 @@ const constants = require('node:fs').constants;
 const path = require('node:path');
 const { TextDecoder } = require('node:util');
 const { acquireNativeOwnerLock } = require('./native-owner-locks.cjs');
+const { readStorageFile, writeStorageFile } = require('./windows-storage-files.cjs');
+const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 
 const MAJOR = 1;
 const ZERO = '0'.repeat(64);
@@ -243,7 +245,8 @@ class Journal {
     } finally { await handle.close(); }
   }
   async acquireLock() {
-    secureStat(await fs.lstat(this.directory), true);
+    if (this.storage) await this.storage.stat('ai-journal', { directory: true });
+    else secureStat(await fs.lstat(this.directory), true);
     if (this.ownerLocks !== undefined) {
       try {
         this.nativeLock = await acquireNativeOwnerLock(this.ownerLocks, {
@@ -283,7 +286,38 @@ class Journal {
     if (!this.nativeLock) fail('WRITER_LOCKED');
     try { await this.nativeLock.check(); } catch { fail('WRITER_LOCK_CHANGED'); }
   }
+  async openWindowsLatch(fresh) {
+    this.latchStore = await openAuthenticatedState({ storage: this.storage, file: 'ai-off',
+      installationId: this.options.installationId, purpose: 'ai-off', mode: 'slots', fresh,
+      initialValue: Buffer.from(canonical({ active: false, reason: 'INITIAL_OFF' })),
+      maxPayloadBytes: 1024, maxEncodedBytes: 4096,
+      seal: async bytes => Buffer.from(canonical(await this.signed({ value: bytes.toString('base64') }, 'WINDOWS_STATE'))),
+      unseal: async bytes => {
+        const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+        object(value, ['value', 'keyId', 'mac']);
+        if (typeof value.value !== 'string') fail('LATCH_INVALID');
+        await this.authenticate(value, 'WINDOWS_STATE');
+        const result = Buffer.from(value.value, 'base64');
+        if (result.toString('base64') !== value.value) { result.fill(0); fail('LATCH_INVALID'); }
+        return result;
+      },
+    });
+  }
+  async writeWindowsLatch(active, reason) {
+    await this.checkOwnership();
+    const bytes = Buffer.from(canonical({ active, reason }));
+    try { await this.latchStore.write(bytes); await this.checkOwnership(); }
+    finally { bytes.fill(0); }
+  }
   async readLatch() {
+    if (this.storage) {
+      const bytes = await this.latchStore.read();
+      try {
+        const value = JSON.parse(bytes.toString('utf8')); object(value, ['active', 'reason']);
+        if (typeof value.active !== 'boolean' || (value.active ? value.reason !== null : !REASONS.has(value.reason))) fail('LATCH_INVALID');
+        return !value.active;
+      } finally { bytes.fill(0); }
+    }
     try {
       const bytes = await regularRead(this.latchPath, 4096);
       const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
@@ -301,6 +335,7 @@ class Journal {
     // Never replace a symlink, hardlink, special file, malformed latch, or another installation's latch.
     await this.readLatch();
     const value = await this.signed({ major: MAJOR, installationId: this.options.installationId, reason }, 'LATCH');
+    if (this.storage) { await this.writeWindowsLatch(false, reason); return; }
     const temporary = path.join(this.root, `.ai-off-${crypto.randomBytes(16).toString('hex')}`);
     let handle;
     let renamed = false;
@@ -472,19 +507,34 @@ class Journal {
     const body = Buffer.from(canonical(record));
     if (body.length > this.limits.recordBytes || this.bytes + body.length + 4 > this.limits.logBytes) fail('CAPACITY');
     const frame = Buffer.alloc(body.length + 4); frame.writeUInt32BE(body.length); body.copy(frame, 4);
-    const descriptor = await this.log.stat(); secureStat(descriptor);
-    const actual = await fs.lstat(this.logPath); secureStat(actual);
-    if (actual.dev !== descriptor.dev || actual.ino !== descriptor.ino || descriptor.size !== this.bytes) fail('LOG_CHANGED');
+    if (!this.storage) {
+      const descriptor = await this.log.stat(); secureStat(descriptor);
+      const actual = await fs.lstat(this.logPath); secureStat(actual);
+      if (actual.dev !== descriptor.dev || actual.ino !== descriptor.ino || descriptor.size !== this.bytes) fail('LOG_CHANGED');
+    }
     this.pendingState = next;
     await this.fault('log.beforeWrite'); await this.checkOwnership();
-    await writeAll(this.log, frame); await this.fault('log.afterWrite');
-    await this.fault('log.beforeFsync'); await this.log.sync(); await this.fault('log.afterFsync');
+    if (this.storage) {
+      const writer = await this.storage.openWrite('ai-journal/events.log',
+        { mode: this.logState ? 'append' : 'create', expected: this.logState, maxBytes: this.limits.logBytes });
+      try {
+        await writer.write(frame); await this.fault('log.afterWrite'); await this.fault('log.beforeFsync');
+        this.logState = await writer.commit(); await this.fault('log.afterFsync');
+      } finally { await writer.close(); }
+    } else {
+      await writeAll(this.log, frame); await this.fault('log.afterWrite');
+      await this.fault('log.beforeFsync'); await this.log.sync(); await this.fault('log.afterFsync');
+    }
     await this.checkOwnership();
     this.state = next; this.pendingState = null;
     this.state.sequence = record.sequence; this.state.headHash = digest(frame); this.bytes += frame.length;
   }
   async replay() {
-    const bytes = await regularRead(this.logPath, this.limits.logBytes);
+    let bytes;
+    if (this.storage) {
+      const loaded = await readStorageFile(this.storage, 'ai-journal/events.log', this.limits.logBytes);
+      bytes = loaded.bytes; this.logState = loaded.state;
+    } else bytes = await regularRead(this.logPath, this.limits.logBytes);
     let offset = 0;
     while (offset < bytes.length) {
       if (bytes.length - offset < 4) fail('TORN_TAIL');
@@ -687,10 +737,20 @@ class Journal {
   completeMaintenance(input) { return this.maintenance(input, true); }
   async verifyMaintenanceHead() {
     await this.fault('maintenance.beforeReadback');
-    const descriptor = await this.log.stat(); secureStat(descriptor);
-    const bytes = await regularRead(this.logPath, this.limits.logBytes);
-    const actual = await fs.lstat(this.logPath); secureStat(actual);
-    if (actual.dev !== descriptor.dev || actual.ino !== descriptor.ino || bytes.length !== this.bytes) fail('LOG_CHANGED');
+    let bytes;
+    if (this.storage) {
+      // Re-flush the authenticated stable stream even for an idempotent maintenance ACK.
+      this.logState = await writeStorageFile(this.storage, 'ai-journal/events.log', Buffer.alloc(0),
+        { mode: 'append', expected: this.logState, maxBytes: this.limits.logBytes });
+      const loaded = await readStorageFile(this.storage, 'ai-journal/events.log', this.limits.logBytes, { expected: this.logState });
+      bytes = loaded.bytes;
+    } else {
+      const descriptor = await this.log.stat(); secureStat(descriptor);
+      bytes = await regularRead(this.logPath, this.limits.logBytes);
+      const actual = await fs.lstat(this.logPath); secureStat(actual);
+      if (actual.dev !== descriptor.dev || actual.ino !== descriptor.ino) fail('LOG_CHANGED');
+    }
+    if (bytes.length !== this.bytes) fail('LOG_CHANGED');
     // Validate the bounded chain against the trusted in-memory head. This also covers an
     // idempotent ACK after later latch/import records, rather than just rereading the last seal.
     let offset = 0; let previous = ZERO; let sequence = 0;
@@ -721,9 +781,13 @@ class Journal {
       if (!this.state.aiOff && !latchPresent) return this.snapshot();
       await this.append({ type: 'ACTIVATED', projectionDigest: this.projectionDigest() });
       this.state.aiOff = true;
-      await this.fault('activate.beforeUnlink'); await this.checkOwnership();
-      await fs.unlink(this.latchPath); await this.fault('activate.afterUnlink');
-      await this.syncDirectory(this.root, 'activate'); await this.checkOwnership(); this.state.aiOff = false;
+      if (this.storage) await this.writeWindowsLatch(true, null);
+      else {
+        await this.fault('activate.beforeUnlink'); await this.checkOwnership();
+        await fs.unlink(this.latchPath); await this.fault('activate.afterUnlink');
+        await this.syncDirectory(this.root, 'activate');
+      }
+      await this.checkOwnership(); this.state.aiOff = false;
       return this.snapshot();
     });
   }
@@ -732,7 +796,7 @@ class Journal {
     this.closing = true;
     this.closePromise = this.queue.then(async () => {
       this.closed = true; this.permits.clear();
-      try { try { await this.log?.close(); } finally { await this.releaseLock(); } }
+      try { try { await this.log?.close(); } finally { try { await this.storage?.close(); } finally { await this.releaseLock(); } } }
       catch { throw new SafetyJournalError('CLOSE_FAILED'); }
     });
     return this.closePromise;
@@ -749,35 +813,58 @@ async function prepare(options, initialize) {
     if (options.recoveryMode !== undefined && typeof options.recoveryMode !== 'boolean') fail('INVALID_INPUT');
     for (const name of ['verifyCommittedReservation', 'verifySettlement', 'verifyActivation']) if (typeof options[name] !== 'function') fail('INVALID_INPUT');
     if (!options.keyProvider || typeof options.keyProvider.currentKeyId !== 'function' || typeof options.keyProvider.getMacKey !== 'function') fail('INVALID_INPUT');
-    const root = path.resolve(options.safetyRoot); const real = await plannedRealPath(root);
+    const windows = process.platform === 'win32';
+    if (windows && (!options.windowsBoundary || options.ownerLocks === undefined)) fail('UNSUPPORTED_PLATFORM');
+    const root = path.resolve(options.safetyRoot); const real = windows ? root : await plannedRealPath(root);
     for (const input of options.restoreRoots) {
-      const restore = path.resolve(input); const resolved = await plannedRealPath(restore);
+      const restore = path.resolve(input); const resolved = windows ? restore : await plannedRealPath(restore);
       if (within(root, restore) || within(restore, root) || within(real, resolved) || within(resolved, real)) fail('RESTORE_OVERLAP');
+      if (windows) {
+        const parent = await options.windowsBoundary.openStorage(path.dirname(restore), { mode: 'source' });
+        try { await parent.stat(path.basename(restore), { directory: true, missing: true }); }
+        finally { await parent.close(); }
+      }
     }
-    if (initialize) await fs.mkdir(root, { mode: 0o700 }).catch((error) => { if (error.code !== 'EEXIST') throw error; });
-    secureStat(await fs.lstat(root), true);
+    if (!windows) {
+      if (initialize) await fs.mkdir(root, { mode: 0o700 }).catch((error) => { if (error.code !== 'EEXIST') throw error; });
+      secureStat(await fs.lstat(root), true);
+    }
     journal = new Journal(options, root);
-    if (initialize) {
-      try { await fs.lstat(journal.latchPath); fail('ALREADY_INITIALIZED'); }
-      catch (error) { if (error.code !== 'ENOENT') throw error; }
-      try { await fs.mkdir(journal.directory, { mode: 0o700 }); }
-      catch (error) { if (error.code === 'EEXIST') fail('ALREADY_INITIALIZED'); throw error; }
-      await journal.syncDirectory(root, 'initialize');
-    }
-    await journal.acquireLock();
-    if (initialize) {
-      await journal.writeLatch('INITIAL_OFF');
-      await journal.checkOwnership();
-      journal.log = await fs.open(journal.logPath, constants.O_CREAT | constants.O_EXCL | constants.O_APPEND | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
-      await journal.log.sync(); await journal.syncDirectory(journal.directory, 'initializeLog');
-      await journal.append({ type: 'GENESIS', installationId: options.installationId });
+    if (windows) {
+      journal.storage = await options.windowsBoundary.openStorage(root, { onLost: () => {
+        journal.poisoned = true; journal.state.aiOff = true; journal.permits.clear(); journal.activeRequests.clear();
+      } });
+      if (initialize) await journal.storage.mkdir('ai-journal');
+      await journal.acquireLock();
+      await journal.openWindowsLatch(initialize);
+      if (initialize) await journal.append({ type: 'GENESIS', installationId: options.installationId });
+      else {
+        await journal.readLatch(); await journal.replay();
+        await journal.writeLatch('RESTART_RECONCILIATION');
+        await journal.append({ type: 'LATCH', reason: 'RESTART_RECONCILIATION' });
+      }
     } else {
-      await journal.readLatch();
-      try { await journal.replay(); }
-      catch (error) { if (error.code === 'ENOENT') fail('JOURNAL_MISSING'); throw error; }
-      journal.log = await fs.open(journal.logPath, constants.O_APPEND | constants.O_WRONLY | constants.O_NOFOLLOW);
-      await journal.writeLatch('RESTART_RECONCILIATION');
-      await journal.append({ type: 'LATCH', reason: 'RESTART_RECONCILIATION' });
+      if (initialize) {
+        try { await fs.lstat(journal.latchPath); fail('ALREADY_INITIALIZED'); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+        try { await fs.mkdir(journal.directory, { mode: 0o700 }); }
+        catch (error) { if (error.code === 'EEXIST') fail('ALREADY_INITIALIZED'); throw error; }
+        await journal.syncDirectory(root, 'initialize');
+      }
+      await journal.acquireLock();
+      if (initialize) {
+        await journal.writeLatch('INITIAL_OFF'); await journal.checkOwnership();
+        journal.log = await fs.open(journal.logPath, constants.O_CREAT | constants.O_EXCL | constants.O_APPEND | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+        await journal.log.sync(); await journal.syncDirectory(journal.directory, 'initializeLog');
+        await journal.append({ type: 'GENESIS', installationId: options.installationId });
+      } else {
+        await journal.readLatch();
+        try { await journal.replay(); }
+        catch (error) { if (error.code === 'ENOENT') fail('JOURNAL_MISSING'); throw error; }
+        journal.log = await fs.open(journal.logPath, constants.O_APPEND | constants.O_WRONLY | constants.O_NOFOLLOW);
+        await journal.writeLatch('RESTART_RECONCILIATION');
+        await journal.append({ type: 'LATCH', reason: 'RESTART_RECONCILIATION' });
+      }
     }
     // Expose capabilities, never mutable internal state, file descriptors, options, or key ports.
     return Object.freeze(Object.fromEntries(['snapshot', 'reserveAndPermit', 'consumePermit', 'settle', 'holdUnknown',
@@ -790,6 +877,7 @@ async function prepare(options, initialize) {
       journal.poisoned = true;
       await journal.writeLatch('CORRUPT').catch(() => {});
     }
+    await journal?.storage?.close().catch(() => {});
     throw new SafetyJournalError(code, journal?.snapshot());
   }
 }

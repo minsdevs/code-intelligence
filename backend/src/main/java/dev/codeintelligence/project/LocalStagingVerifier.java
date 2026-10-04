@@ -1,16 +1,13 @@
 package dev.codeintelligence.project;
 
+import dev.codeintelligence.common.SourceAccess;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -28,7 +25,7 @@ final class LocalStagingVerifier {
     private final LongSupplier clock;
     private final long started;
     private final Object rootKey;
-    private final long device;
+    private final String device;
     private final Scan original;
     private Object generatedGitKey;
     private long bytesRead;
@@ -41,10 +38,10 @@ final class LocalStagingVerifier {
         this.clock = policy.clock();
         this.started = clock.getAsLong();
         this.rootKey = directory(root).key();
-        this.device = device(root);
+        this.device = device(root, true);
         for (String name : expected.keySet()) {
             for (Path parent = Path.of(name).getParent(); parent != null; parent = parent.getParent()) {
-                expectedDirectories.add(parent.toString());
+                expectedDirectories.add(parent.toString().replace('\\', '/'));
             }
         }
         // Before generated metadata exists, every staged entry must belong to the selected tree.
@@ -54,7 +51,7 @@ final class LocalStagingVerifier {
     void allowGeneratedGitDirectory() throws IOException {
         if (generatedGitKey != null) throw new IllegalStateException("Git staging was already initialized.");
         Path git = root.resolve(".git");
-        if (device(git) != device) throw changed();
+        if (!device(git, true).equals(device)) throw changed();
         generatedGitKey = directory(git).key();
     }
 
@@ -83,12 +80,12 @@ final class LocalStagingVerifier {
         Map<String, Stamp> files = new TreeMap<>(LocalSourcePolicy::comparePaths);
         Map<String, Stamp> directories = new HashMap<>();
         int[] entries = {0};
-        Files.walkFileTree(root, Set.of(), limits.depth() + 1, new SimpleFileVisitor<>() {
-            private String visit(Path path) throws IOException {
+        SourceAccess.walk(root, limits.depth() + 1, new SimpleFileVisitor<>() {
+            private String visit(Path path, boolean directory) throws IOException {
                 check();
-                if (++entries[0] > limits.entries() || device(path) != device) throw changed();
+                if (++entries[0] > limits.entries() || !device(path, directory).equals(device)) throw changed();
                 Path relative = root.relativize(path);
-                String name = relative.toString();
+                String name = relative.toString().replace('\\', '/');
                 if (relative.getNameCount() > limits.depth()
                         || !root.resolve(name).equals(path)) throw changed();
                 return name;
@@ -98,11 +95,12 @@ final class LocalStagingVerifier {
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                 if (dir.equals(root.resolve(".git")) && generatedGitKey != null) {
                     check();
-                    if (!generatedGitKey.equals(directory(dir).key()) || device(dir) != device) throw changed();
+                    if (!generatedGitKey.equals(directory(dir).key())
+                            || !device(dir, true).equals(device)) throw changed();
                     // Created only after the first strict scan. The importer alone builds this metadata.
                     return FileVisitResult.SKIP_SUBTREE;
                 }
-                String name = visit(dir);
+                String name = visit(dir, true);
                 Stamp stamp = directory(dir);
                 if (dir.equals(root)) {
                     if (!rootKey.equals(stamp.key())) throw changed();
@@ -114,7 +112,7 @@ final class LocalStagingVerifier {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                String name = visit(file);
+                String name = visit(file, false);
                 LocalSourcePolicy.SelectedFile selected = expected.get(name);
                 if (selected == null
                         || !attrs.isRegularFile()
@@ -136,7 +134,7 @@ final class LocalStagingVerifier {
         check();
         requireSame(file, expectedStamp);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream((int) Math.min(BUFFER, expectedStamp.size()));
-        try (InputStream input = Files.newInputStream(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+        try (InputStream input = SourceAccess.input(file, expectedStamp.size())) {
             byte[] buffer = new byte[BUFFER];
             int count;
             while ((count = input.read(buffer, 0, (int) Math.min(
@@ -156,10 +154,10 @@ final class LocalStagingVerifier {
     }
 
     private void requireSame(Path path, Stamp expectedStamp) throws IOException {
-        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        BasicFileAttributes attrs = SourceAccess.attributes(path, false);
         if (!attrs.isRegularFile()
                 || attrs.isSymbolicLink()
-                || device(path) != device
+                || !device(path, false).equals(device)
                 || !expectedStamp.equals(stamp(attrs))) throw changed();
         requireSingleLink(path);
     }
@@ -169,30 +167,34 @@ final class LocalStagingVerifier {
     }
 
     private static Stamp directory(Path path) throws IOException {
-        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        BasicFileAttributes attrs = SourceAccess.attributes(path, true);
         if (!attrs.isDirectory() || attrs.isSymbolicLink()) throw changed();
         return stamp(attrs);
     }
 
     private static Stamp stamp(BasicFileAttributes attrs) {
         if (attrs.fileKey() == null) throw changed();
-        return new Stamp(attrs.fileKey(), attrs.size(), attrs.lastModifiedTime());
+        return new Stamp(
+                attrs.fileKey(),
+                attrs.size(),
+                attrs instanceof dev.codeintelligence.common.WindowsStorage.State state
+                        ? state.token()
+                        : attrs.lastModifiedTime());
     }
 
     private static void requireSingleLink(Path file) throws IOException {
-        if (((Number) Files.getAttribute(file, "unix:nlink", LinkOption.NOFOLLOW_LINKS)).longValue() != 1)
-            throw changed();
+        if (SourceAccess.links(file) != 1) throw changed();
     }
 
-    private static long device(Path path) throws IOException {
-        return ((Number) Files.getAttribute(path, "unix:dev", LinkOption.NOFOLLOW_LINKS)).longValue();
+    private static String device(Path path, boolean directory) throws IOException {
+        return SourceAccess.volume(path, directory);
     }
 
     private static LocalSourceApprovalException changed() {
         return LocalSourceApprovalException.sourceChanged();
     }
 
-    private record Stamp(Object key, long size, FileTime modified) {}
+    private record Stamp(Object key, long size, Object changed) {}
 
     private record Scan(Map<String, Stamp> files, Map<String, Stamp> directories) {}
 }

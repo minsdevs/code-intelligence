@@ -1,6 +1,7 @@
 package dev.codeintelligence.project;
 
 import dev.codeintelligence.common.AnalysisProperties;
+import dev.codeintelligence.common.SourceAccess;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,13 +10,9 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
 import java.text.Normalizer;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -209,16 +206,15 @@ final class LocalSourcePolicy {
         }
         State state = new State(root);
         state.rootStamp = directory(root);
-        long rootDevice = ((Number) Files.getAttribute(root, "unix:dev", LinkOption.NOFOLLOW_LINKS)).longValue();
-        long rootInode = ((Number) Files.getAttribute(root, "unix:ino", LinkOption.NOFOLLOW_LINKS)).longValue();
+        SourceAccess.Identity rootIdentity = SourceAccess.identity(root);
         String limitsHash = limitsSha256();
         LocalSourceManifest manifest = new LocalSourceManifest(VERSION, limitsHash);
         String branch = readBranch(state);
-        Boolean dirty = Files.exists(root.resolve(".git"), LinkOption.NOFOLLOW_LINKS) ? null : Boolean.FALSE;
-        Files.walkFileTree(root, Set.of(), limits.depth() + 1, new SimpleFileVisitor<>() {
+        Boolean dirty = SourceAccess.exists(root.resolve(".git"), true) ? null : Boolean.FALSE;
+        SourceAccess.walk(root, limits.depth() + 1, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                state.visit(dir);
+                state.visit(dir, true);
                 if (!dir.equals(root)) {
                     Reason excluded = pathReason(dir.getFileName().toString(), true);
                     if (excluded != null) return state.skip(excluded);
@@ -231,7 +227,7 @@ final class LocalSourcePolicy {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                String relative = state.visit(file);
+                String relative = state.visit(file, false);
                 if (++state.discovered > limits.discoveredFiles())
                     throw rejected("Local source exceeds the file safety limit.");
                 if (attrs.isDirectory()) throw rejected("Local source exceeds the path depth limit.");
@@ -310,10 +306,7 @@ final class LocalSourcePolicy {
             if (!dir.getValue().equals(directory(dir.getKey())))
                 throw rejected("Local source changed while it was inspected.");
         }
-        if (!state.rootStamp.equals(directory(root))) throw rejected("Local source changed while it was inspected.");
-        if (rootDevice != ((Number) Files.getAttribute(root, "unix:dev", LinkOption.NOFOLLOW_LINKS)).longValue()
-                || rootInode
-                        != ((Number) Files.getAttribute(root, "unix:ino", LinkOption.NOFOLLOW_LINKS)).longValue()) {
+        if (!state.rootStamp.equals(directory(root)) || !rootIdentity.equals(SourceAccess.identity(root))) {
             throw rejected("Local source identity changed while it was inspected.");
         }
         Map<String, Integer> excluded = new TreeMap<>();
@@ -327,8 +320,9 @@ final class LocalSourcePolicy {
                 new LocalSourceBinding(
                         1,
                         root.toString(),
-                        rootDevice,
-                        rootInode,
+                        rootIdentity.platform(),
+                        rootIdentity.identity(),
+                        rootIdentity.owner(),
                         VERSION,
                         limitsHash,
                         manifest.finish(),
@@ -338,9 +332,9 @@ final class LocalSourcePolicy {
 
     private String readBranch(State state) throws IOException {
         Path git = state.root.resolve(".git");
-        if (!Files.isDirectory(git, LinkOption.NOFOLLOW_LINKS)) return null;
+        if (!SourceAccess.exists(git, true)) return null;
         Path head = git.resolve("HEAD");
-        if (!Files.isRegularFile(head, LinkOption.NOFOLLOW_LINKS)) return null;
+        if (!SourceAccess.exists(head, false)) return null;
         Stamp before = regular(head);
         if (links(head) != 1 || before.size() > HEAD_BYTES) return null;
         String headText = text(read(head, before, HEAD_BYTES, state));
@@ -351,10 +345,8 @@ final class LocalSourcePolicy {
 
     private void readIgnore(Path dir, State state) throws IOException {
         Path file = dir.resolve(".gitignore");
-        if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return;
-        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || links(file) != 1) {
-            throw rejected("A local ignore file cannot be safely read.");
-        }
+        if (!SourceAccess.exists(file, false)) return;
+        if (links(file) != 1) throw rejected("A local ignore file cannot be safely read.");
         Stamp before = regular(file);
         if (before.size() > Math.min(limits.fileBytes(), IGNORE_FILE_BYTES)) {
             throw rejected("A local ignore file exceeds its safety limit.");
@@ -381,10 +373,10 @@ final class LocalSourcePolicy {
     private byte[] read(Path file, Stamp expected, long maxBytes, State state) throws IOException {
         state.check();
         observer.beforeOpen(file);
-        state.checkDevice(file);
+        state.checkDevice(file, false);
         requireSame(file, expected);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream((int) Math.min(expected.size(), BUFFER));
-        try (InputStream input = Files.newInputStream(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+        try (InputStream input = SourceAccess.input(file, maxBytes)) {
             byte[] buffer = new byte[BUFFER];
             int count;
             while ((count = input.read(buffer, 0, (int) Math.min(
@@ -474,25 +466,30 @@ final class LocalSourcePolicy {
     }
 
     private static Stamp directory(Path path) throws IOException {
-        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        BasicFileAttributes attrs = SourceAccess.attributes(path, true);
         if (!attrs.isDirectory() || attrs.isSymbolicLink()) throw rejected("Local source directory is unavailable.");
         return stamp(attrs);
     }
 
     private static Stamp regular(Path path) throws IOException {
-        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        BasicFileAttributes attrs = SourceAccess.attributes(path, false);
         if (!attrs.isRegularFile() || attrs.isSymbolicLink())
             throw rejected("Local source entry is no longer a regular file.");
         return stamp(attrs);
     }
 
     private static long links(Path path) throws IOException {
-        return ((Number) Files.getAttribute(path, "unix:nlink", LinkOption.NOFOLLOW_LINKS)).longValue();
+        return SourceAccess.links(path);
     }
 
     private static Stamp stamp(BasicFileAttributes attrs) throws IOException {
         if (attrs.fileKey() == null) throw rejected("Local source identity cannot be verified.");
-        return new Stamp(attrs.fileKey(), attrs.size(), attrs.lastModifiedTime());
+        return new Stamp(
+                attrs.fileKey(),
+                attrs.size(),
+                attrs instanceof dev.codeintelligence.common.WindowsStorage.State state
+                        ? state.token()
+                        : attrs.lastModifiedTime());
     }
 
     private static void requireSame(Path file, Stamp expected) throws IOException {
@@ -504,7 +501,7 @@ final class LocalSourcePolicy {
         return new IOException(message);
     }
 
-    private record Stamp(Object key, long size, FileTime modified) {}
+    private record Stamp(Object key, long size, Object changed) {}
 
     private record Candidate(Path path, Stamp stamp) {}
 
@@ -529,7 +526,7 @@ final class LocalSourcePolicy {
 
         State(Path root) throws IOException {
             this.root = root;
-            this.device = Files.getAttribute(root, "unix:dev", LinkOption.NOFOLLOW_LINKS);
+            this.device = SourceAccess.volume(root, true);
         }
 
         void check() throws IOException {
@@ -538,9 +535,9 @@ final class LocalSourcePolicy {
             }
         }
 
-        String visit(Path path) throws IOException {
+        String visit(Path path, boolean directory) throws IOException {
             check();
-            checkDevice(path);
+            checkDevice(path, directory);
             Path relative = root.relativize(path);
             String name = relative.toString().replace('\\', '/');
             if (++visited > limits.entries() || relative.getNameCount() > limits.depth()) {
@@ -558,8 +555,8 @@ final class LocalSourcePolicy {
             return name;
         }
 
-        void checkDevice(Path path) throws IOException {
-            if (!device.equals(Files.getAttribute(path, "unix:dev", LinkOption.NOFOLLOW_LINKS))) {
+        void checkDevice(Path path, boolean directory) throws IOException {
+            if (!device.equals(SourceAccess.volume(path, directory))) {
                 throw rejected("Local source crosses a filesystem boundary.");
             }
         }

@@ -7,6 +7,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 public class GithubNativeOAuthUnavailableException extends RuntimeException {
 
     public GithubNativeOAuthUnavailableException() {
-        super("GitHub native OAuth is not configured. Set GITHUB_NATIVE_CLIENT_ID.");
+        this("GitHub native OAuth is not configured. Set GITHUB_NATIVE_CLIENT_ID.");
+    }
+
+    public GithubNativeOAuthUnavailableException(String message) {
+        super(message);
     }
 }

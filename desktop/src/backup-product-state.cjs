@@ -8,7 +8,9 @@ const { constants } = require('node:fs');
 const path = require('node:path');
 const { spawn: realSpawn } = require('node:child_process');
 const { TextDecoder, types: { isProxy } } = require('node:util');
-
+const native = require('./backup-windows-io.cjs');
+const { readStorageFile } = require('./windows-storage-files.cjs');
+const { inheritedEnvironment } = require('./runtime-platform.cjs');
 const LIMITS = Object.freeze({ timeoutMs: 30000, inputBytes: 2 * 1024 * 1024,
   outputBytes: 1024 * 1024, stderrBytes: 65536, projectIds: 10000 });
 const MAX = 9223372036854775807n;
@@ -51,20 +53,33 @@ function jsonSql(value) {
   return `convert_from(decode('${Buffer.from(JSON.stringify(value)).toString('base64')}','base64'),'UTF8')::jsonb`;
 }
 function identity(stat) { return `${stat.dev}:${stat.ino}`; }
-async function directory(value) {
+async function directory(value, windowsBoundary) {
+  if (windowsBoundary) { const storage = await windowsBoundary.openStorage(value, { mode: 'workspace' }); try { return (await storage.stat('', { directory: true })).identity; } finally { await storage.close(); } }
   const stat = await fs.lstat(value, { bigint: true });
   if (!stat.isDirectory() || stat.isSymbolicLink() || typeof process.getuid !== 'function'
       || stat.uid !== BigInt(process.getuid()) || (stat.mode & 0o7022n) !== 0n
       || await fs.realpath(value) !== value) fail('UNSAFE');
   return identity(stat);
 }
-async function binaryIdentity(value) {
+async function binaryIdentity(value, windowsBoundary) {
+  if (windowsBoundary) { const storage = await windowsBoundary.openStorage(path.dirname(value), { mode: 'source' }); try { return (await storage.stat(path.basename(value))).token; } finally { await storage.close(); } }
   const stat = await fs.lstat(value, { bigint: true });
   if (!stat.isFile() || stat.isSymbolicLink() || !(stat.mode & 0o111n)
       || (stat.mode & 0o7022n) !== 0n || await fs.realpath(value) !== value) fail('UNSAFE');
   return `${identity(stat)}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
 }
-async function postmaster(value) {
+async function postmaster(value, windowsBoundary) {
+  if (windowsBoundary) {
+    const storage = await windowsBoundary.openStorage(value, { mode: 'workspace' }); let bytes;
+    try {
+      const file = await readStorageFile(storage, 'postmaster.pid', 4096); bytes = file.bytes;
+      const fields = new TextDecoder('utf-8', { fatal: true }).decode(bytes).split(/\r?\n/);
+      if (fields.length < 5 || !matches(fields[0], /^[1-9][0-9]{0,9}$/) || path.resolve(fields[1]) !== value
+          || !matches(fields[2], /^[1-9][0-9]{0,12}$/) || !matches(fields[3], /^[1-9][0-9]{0,4}$/)
+          || !native.sameState(file.state, await storage.stat('postmaster.pid'))) fail('ORIGIN');
+      return { identity: file.state.identity, pid: Number(fields[0]), dataDirectory: value, startEpochSeconds: fields[2], port: Number(fields[3]) };
+    } finally { bytes?.fill(0); await storage.close(); }
+  }
   const filename = path.join(value, 'postmaster.pid');
   const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   const bytes = Buffer.alloc(4097);
@@ -163,7 +178,7 @@ function rebindSql(value) {
 async function createBackupProductState(options) {
   plain(options);
   const required = ['psqlPath', 'connection', 'env', 'expectedDataDirectory', 'ownedPostgres', 'dataRoot'];
-  exact(options, [...required, ...['spawn', 'timeoutMs'].filter(key => Object.hasOwn(options || {}, key))]);
+  exact(options, [...required, ...['spawn', 'timeoutMs', 'windowsBoundary'].filter(key => Object.hasOwn(options || {}, key))]);
   const psqlPath = absolute(options.psqlPath), expectedDataDirectory = absolute(options.expectedDataDirectory);
   const dataRoot = absolute(options.dataRoot), child = options.ownedPostgres;
   const connection = options.connection; exact(connection, ['host', 'port', 'user']);
@@ -177,10 +192,12 @@ async function createBackupProductState(options) {
   if (typeof spawn !== 'function' || !Number.isInteger(timeoutMs) || timeoutMs < 20 || timeoutMs > LIMITS.timeoutMs) fail('INVALID');
   if (!options.env || typeof options.env !== 'object' || isProxy(options.env) || Array.isArray(options.env)) fail('INVALID');
   const envKeys = Object.keys(options.env);
-  if (!envKeys.includes('PGPASSWORD') || envKeys.some(key => !['PGPASSWORD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key))) fail('INVALID');
+  if (!envKeys.includes('PGPASSWORD') || envKeys.some(key => !['PGPASSWORD', 'PGSSLMODE', 'PGSSLROOTCERT', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'].includes(key))) fail('INVALID');
   exact(options.env, envKeys);
-  const environment = { LANG: 'C', LC_ALL: 'C', TZ: 'UTC', PGCLIENTENCODING: 'UTF8',
-    PGCONNECT_TIMEOUT: '5', PGAPPNAME: 'code-intelligence-backup-product', PGSSLMODE: 'disable' };
+  if (options.env.PGSSLMODE !== undefined && options.env.PGSSLMODE !== 'verify-full') fail('INVALID');
+  if (options.env.PGSSLROOTCERT !== undefined) absolute(options.env.PGSSLROOTCERT);
+  const environment = { ...(options.windowsBoundary ? inheritedEnvironment(process.env) : {}), LANG: 'C', LC_ALL: 'C', TZ: 'UTC', PGCLIENTENCODING: 'UTF8',
+    PGCONNECT_TIMEOUT: '5', PGAPPNAME: 'code-intelligence-backup-product', PGSSLMODE: 'verify-full' };
   for (const key of envKeys) {
     const value = options.env[key];
     if (typeof value !== 'string' || !value.length || Buffer.byteLength(value) > 16384 || value.includes('\0')) fail('INVALID');
@@ -198,8 +215,8 @@ async function createBackupProductState(options) {
   async function inspectLocal() {
     assertAlive();
     try {
-      const dataIdentity = await directory(expectedDataDirectory), rootIdentity = await directory(dataRoot);
-      const binary = await binaryIdentity(psqlPath), lock = await postmaster(expectedDataDirectory);
+      const dataIdentity = await directory(expectedDataDirectory, options.windowsBoundary), rootIdentity = await directory(dataRoot, options.windowsBoundary);
+      const binary = await binaryIdentity(psqlPath, options.windowsBoundary), lock = await postmaster(expectedDataDirectory, options.windowsBoundary);
       assertAlive();
       if (lock.pid !== ownedPid || lock.port !== port) fail('ORIGIN');
       const local = { dataIdentity, rootIdentity, binary, lock };
@@ -214,7 +231,7 @@ async function createBackupProductState(options) {
   function checkOrigin(value, db) {
     exact(value, ['kind', 'systemIdentifier', 'dataDirectory', 'startEpochSeconds', 'port', 'database', 'user', 'sessionUser']);
     decimal(value.systemIdentifier, 18446744073709551615n);
-    if (value.kind !== 'origin' || value.dataDirectory !== expectedDataDirectory
+    if (value.kind !== 'origin' || (options.windowsBoundary ? typeof value.dataDirectory !== 'string' || path.resolve(value.dataDirectory) !== expectedDataDirectory : value.dataDirectory !== expectedDataDirectory)
         || value.startEpochSeconds !== initialLocal.lock.startEpochSeconds || value.port !== port
         || value.database !== db || value.user !== user || value.sessionUser !== user
         || (origin && value.systemIdentifier !== origin.systemIdentifier)) { invalidated = true; fail('ORIGIN'); }
@@ -370,7 +387,7 @@ async function createBackupProductState(options) {
     }
     if (new Set(projectIds).size !== projectIds.length) fail('INVALID');
     projectIds.sort((a, b) => BigInt(a) < BigInt(b) ? -1 : 1);
-    return operation(db, rebindSql({ reposRoot: path.join(dataRoot, 'repos'), projectIds }), result => {
+    return operation(db, rebindSql({ reposRoot: path.join(dataRoot, 'repos').split(path.sep).join('/'), projectIds }), result => {
       exact(result, ['kind', 'invalidPaths', 'projectIds']);
       if (result.kind !== 'result' || result.invalidPaths !== '0'
           || JSON.stringify(result.projectIds) !== JSON.stringify(projectIds)) fail('INVALID_RESULT');

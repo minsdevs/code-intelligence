@@ -10,6 +10,7 @@ const POLICY = Object.freeze({ minimumSystemVersion: '13.0', javaMajor: 21, arch
 const LIMITS = Object.freeze({ files: 100000, natives: 4096, fileBytes: 256 * 1024 * 1024,
   outputBytes: 1024 * 1024, depth: 64, findings: 1000 });
 const MACHO = new Set(['feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca']);
+function isMachOHeader(bytes) { return bytes.length === 4 && MACHO.has(bytes.toString('hex')); }
 const LOADS = new Set(['LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB', 'LC_REEXPORT_DYLIB', 'LC_LOAD_UPWARD_DYLIB', 'LC_LAZY_LOAD_DYLIB', 'LC_PREBOUND_DYLIB']);
 const PG_EXECUTABLES = Object.freeze(['postgres', 'initdb', 'pg_isready', 'psql', 'createdb', 'pg_dump', 'pg_restore']);
 const JRE_MODULES = Object.freeze(['jre/lib/libjli.dylib', 'jre/lib/libjava.dylib', 'jre/lib/server/libjvm.dylib']);
@@ -49,7 +50,7 @@ function parseLoadCommands(value) {
   if (typeof value !== 'string' || Buffer.byteLength(value) > LIMITS.outputBytes || value.includes('\0')) invalid('INVALID_LOAD_COMMANDS');
   const blocks = value.split(/^Load command [0-9]+\s*$/m).slice(1);
   if (!blocks.length || blocks.length > 4096) invalid('INVALID_LOAD_COMMANDS');
-  let minimum = null, platform = null, deploymentCommands = 0;
+  let minimum = null, platform = null, deploymentCommands = 0, installName = null;
   const dependencies = [], rpaths = [];
   const field = (block, expression) => {
     const values = [...block.matchAll(expression)];
@@ -72,11 +73,15 @@ function parseLoadCommands(value) {
     } else if (command === 'LC_RPATH') {
       const name = field(block, /^[ \t]*path (.+) \(offset [0-9]+\)[ \t]*\r?$/gm);
       if (!safeText(name) || !name) invalid('INVALID_LOAD_COMMANDS'); rpaths.push(name);
+    } else if (command === 'LC_ID_DYLIB') {
+      const name = field(block, /^[ \t]*name (.+) \(offset [0-9]+\)[ \t]*\r?$/gm);
+      if (installName !== null || !safeText(name) || !name) invalid('INVALID_LOAD_COMMANDS');
+      // Identity may bind a staged rewrite target, but is never a load/copy edge.
+      installName = name;
     } else if (command === 'LC_DYLD_ENVIRONMENT') invalid('EMBEDDED_DYLD_ENVIRONMENT');
-    // LC_ID_DYLIB is an identity, not a dependency; never treat its name as a file to copy.
   }
   if (deploymentCommands !== 1 || platform !== 'macos' || minimum === null) invalid('MISSING_OR_AMBIGUOUS_DEPLOYMENT_TARGET');
-  return Object.freeze({ minimum, version: Object.freeze(version(minimum)), dependencies: Object.freeze(dependencies), rpaths: Object.freeze(rpaths) });
+  return Object.freeze({ minimum, version: Object.freeze(version(minimum)), dependencies: Object.freeze(dependencies), rpaths: Object.freeze(rpaths), installName });
 }
 
 function executablePaths(values) {
@@ -321,7 +326,8 @@ function verifyPostgresExtensions(root, postgresShare) {
   }
 }
 
-function verifyNativeRuntime({ root, minimumSystemVersion, requiredExecutables, requiredModules, postgresShare, inspect = inspectNative }) {
+function verifyNativeRuntime({ root, minimumSystemVersion, requiredExecutables, requiredModules, postgresShare, inspect = inspectNative, platform = 'darwin', manifest, provenance }) {
+  if (platform === 'win32') return require('./windows-pe-policy.cjs').verifyWindowsRuntime({ root, manifest, provenance, supplies: require('./windows-runtime-supply.json') });
   const required = executablePaths(requiredExecutables);
   const modules = modulePaths(requiredModules);
   const share = relative(postgresShare);
@@ -348,7 +354,7 @@ function verifyNativeRuntime({ root, minimumSystemVersion, requiredExecutables, 
         fs.readSync(fd, magic, 0, 4, 0);
         if (stamp(fs.fstatSync(fd, { bigint: true })) !== stamp(stat)) invalid('NATIVE_CHANGED', rel);
       } finally { fs.closeSync(fd); }
-      if (!MACHO.has(magic.toString('hex'))) {
+      if (!isMachOHeader(magic)) {
         if (LIBRARY_NAME.test(rel)) invalid('UNSUPPORTED_LIBRARY_FORMAT', rel);
         if (magic.toString('hex') === '7f454c46' && !required.includes(rel)) invalid('FOREIGN_NATIVE_FORMAT', rel);
         continue;
@@ -384,4 +390,4 @@ function verifyNativeRuntime({ root, minimumSystemVersion, requiredExecutables, 
   return validateNativeInventory({ minimumSystemVersion, release, native, requiredExecutables: required, requiredModules: modules });
 }
 
-module.exports = Object.freeze({ POLICY, NativeRuntimePolicyError, parseLoadCommands, validateNativeInventory, verifyDependencyCopy, verifyNativeRuntime });
+module.exports = Object.freeze({ POLICY, NativeRuntimePolicyError, isMachOHeader, parseLoadCommands, validateNativeInventory, verifyDependencyCopy, verifyNativeRuntime, verifyPostgresExtensions });
