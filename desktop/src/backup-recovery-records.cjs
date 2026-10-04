@@ -7,6 +7,8 @@ const fs = require('node:fs/promises');
 const { constants } = require('node:fs');
 const path = require('node:path');
 const { types } = require('node:util');
+const { readStorageFile, writeStorageFile } = require('./windows-storage-files.cjs');
+const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 
 const VERSION = 1;
 const MAGIC = Buffer.from('CIBREC01');
@@ -69,9 +71,9 @@ function ownData(value, names, code = 'BACKUP_RECOVERY_ARGUMENT') {
 function scratchInput(argument, code = 'BACKUP_RECOVERY_ARGUMENT') {
   const value = ownData(argument, SCRATCH_FIELDS, code);
   const directory = value.relativeDirectory;
-  const validIdentity = input => typeof input === 'string' && input.length <= 41
-    && input.match(/^(?:0|[1-9][0-9]{0,19}):(?:0|[1-9][0-9]{0,19})$/)?.[0] === input
-    && input.split(':').every(part => BigInt(part) <= 18446744073709551615n);
+  const validIdentity = input => typeof input === 'string' && (/^WI1:(?:0|[1-9][0-9]{0,19}):(?:0|[1-9][0-9]{0,19}):(?:0|[1-9][0-9]{0,19})$/.test(input)
+    || input.length <= 41 && input.match(/^(?:0|[1-9][0-9]{0,19}):(?:0|[1-9][0-9]{0,19})$/)?.[0] === input
+    && input.split(':').every(part => BigInt(part) <= 18446744073709551615n));
   if (!validUuid(value.transactionId) || typeof directory !== 'string'
       || directory.match(/^verification\/verify-(?:checkpoint|incoming|product)-[a-f0-9-]{36}$/)?.[0] !== directory
       || !validUuid(directory.slice(-36)) || !validIdentity(value.directoryIdentity)
@@ -139,8 +141,8 @@ function parseCanonical(bytes) {
   try { const value = JSON.parse(bytes.toString('utf8')); if (!Buffer.from(canonical(value)).equals(bytes)) fail('BACKUP_RECOVERY_INVALID'); return value; }
   catch (error) { if (error instanceof BackupRecoveryRecordsError && error.code === 'BACKUP_RECOVERY_CAPACITY') throw error; fail('BACKUP_RECOVERY_INVALID'); }
 }
-function sameIdentity(a, b) { return a.dev === b.dev && a.ino === b.ino; }
-function sameState(a, b) { return sameIdentity(a, b) && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs; }
+function sameIdentity(a, b) { return a.platform === 'win32' || b.platform === 'win32' ? a.platform === b.platform && a.identity === b.identity : a.dev === b.dev && a.ino === b.ino; }
+function sameState(a, b) { return a.platform === 'win32' || b.platform === 'win32' ? sameIdentity(a, b) && a.token === b.token : sameIdentity(a, b) && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs; }
 function checkPrivate(stat, directory) {
   if ((directory ? !stat.isDirectory() : !stat.isFile()) || stat.isSymbolicLink()
       || stat.uid !== BigInt(process.getuid()) || (stat.mode & 0o7777n) !== (directory ? 0o700n : 0o600n)
@@ -204,12 +206,12 @@ function wrapAAD(core) { return Buffer.from(`CI-RECOVERY-DEK-1\0${canonical(core
 function dataAAD(core, wrappedDek) { return Buffer.from(`CI-RECOVERY-DATA-1\0${canonical({ core, wrappedDek })}`); }
 
 async function createBackupRecoveryRecords(options) {
-  let root; let owns = false;
+  let root; let owns = false; let storage;
   try {
-    if (process.platform === 'win32' || !constants.O_NOFOLLOW || !constants.O_DIRECTORY || typeof process.getuid !== 'function') fail('BACKUP_RECOVERY_UNSUPPORTED');
+    if (process.platform === 'win32' ? !options?.windowsBoundary : !constants.O_NOFOLLOW || !constants.O_DIRECTORY || typeof process.getuid !== 'function') fail('BACKUP_RECOVERY_UNSUPPORTED');
     if (!options || typeof options !== 'object' || types.isProxy(options) || Array.isArray(options)
         || ![Object.prototype, null].includes(Object.getPrototypeOf(options))) fail('BACKUP_RECOVERY_ARGUMENT');
-    const allowed = ['root', 'installationId', 'runningBuild', 'keyProvider', 'verifyCompletion', 'verifyCollection', 'initialize'];
+    const allowed = ['root', 'installationId', 'runningBuild', 'keyProvider', 'verifyCompletion', 'verifyCollection', 'initialize', 'windowsBoundary'];
     const descriptors = Object.getOwnPropertyDescriptors(options);
     if (Reflect.ownKeys(descriptors).some(name => !allowed.includes(name) || !Object.hasOwn(descriptors[name], 'value')
         || !descriptors[name].enumerable)) fail('BACKUP_RECOVERY_ARGUMENT');
@@ -230,16 +232,23 @@ async function createBackupRecoveryRecords(options) {
     const verifyCollection = config.verifyCollection;
     const identityHash = hash(`CI-RECOVERY-INSTALLATION-1\0${config.installationId}`);
     if (owners.has(root)) fail('BACKUP_RECOVERY_BUSY'); owners.add(root); owns = true;
-    if (config.initialize === true) {
+    if (config.windowsBoundary) {
+      if (config.initialize === true) await config.windowsBoundary.createDirectory(root);
+      storage = await config.windowsBoundary.openStorage(root, { mode: 'private' });
+    } else if (config.initialize === true) {
       const parent = await privateDirectory(path.dirname(root));
       try { await fs.mkdir(root, { mode: 0o700 }); } catch (error) { if (error.code === 'EEXIST') fail('BACKUP_RECOVERY_EXISTS'); throw error; }
       await syncDirectory(path.dirname(root), parent);
     }
-    const rootStat = await privateDirectory(root);
+    const rootStat = storage ? await storage.stat('', { directory: true }) : await privateDirectory(root);
+    let activeState;
+    const checkRoot = async () => { if (storage) { if (!sameIdentity(rootStat, await storage.stat('', { directory: true }))) fail('BACKUP_RECOVERY_UNSAFE_PATH'); } else await privateDirectory(root, rootStat); };
+    const namesAtRoot = async () => { if (!storage) return fs.readdir(root); const names = []; for await (const entry of storage.entries()) { if (entry.directory) fail('BACKUP_RECOVERY_INVALID'); names.push(entry.name); } return names; };
     let rootId; let knownFiles = new Map(); let serial = Promise.resolve(); let pending = 0;
     let closing = false; let poisoned = false; let closePromise;
 
     async function readFile(name) {
+      if (storage) { const file = await readStorageFile(storage, name, MAX_PLAIN + MAX_HEADER + 12); return { bytes: file.bytes, stat: file.state, hash: hash(file.bytes) }; }
       await privateDirectory(root, rootStat); const file = path.join(root, name);
       const before = await statOrMissing(file); if (!before) fail('BACKUP_RECOVERY_MISSING'); checkPrivate(before, false);
       if (before.size < 13n || before.size > BigInt(MAX_PLAIN + MAX_HEADER + 12)) fail('BACKUP_RECOVERY_CAPACITY');
@@ -303,6 +312,13 @@ async function createBackupRecoveryRecords(options) {
       if ((state?.plainBytes || 0) + encoded.plainBytes > MAX_PLAIN) { encoded.bytes.fill(0); fail('BACKUP_RECOVERY_CAPACITY'); }
       let handle;
       try {
+        if (storage) {
+          const created = await writeStorageFile(storage, name, encoded.bytes);
+          const readback = await readFile(name);
+          try { if (!sameState(created, readback.stat) || !readback.bytes.equals(encoded.bytes)) fail('BACKUP_RECOVERY_INVALID'); await decode(name, readback.bytes); }
+          finally { readback.bytes.fill(0); }
+          return;
+        }
         await privateDirectory(root, rootStat);
         // Exclusive final name, no replacement. A failed/torn write remains recovery evidence.
         // Acknowledgement requires file+directory fsync and exact authenticated readback.
@@ -323,12 +339,16 @@ async function createBackupRecoveryRecords(options) {
       finally { encoded.bytes.fill(0); if (handle) await handle.close(); }
     }
     async function load(checkKnown = true) {
-      await privateDirectory(root, rootStat);
-      const names = (await fs.readdir(root)).sort();
-      if (names.length > 2 * MAX_RECORDS + 2) fail('BACKUP_RECOVERY_CAPACITY');
+      await checkRoot();
+      const names = (await namesAtRoot()).sort();
+      if (names.length > 2 * MAX_RECORDS + 3) fail('BACKUP_RECOVERY_CAPACITY');
       if (!names.includes('enrollment.enc')) fail('BACKUP_RECOVERY_MISSING');
       const recordNames = []; const receiptNames = [];
-      for (const name of names) { const role = fileRole(name); if (role === 'RECORD') recordNames.push(name); if (role === 'RECEIPT') receiptNames.push(name); }
+      for (const name of names) {
+        if (storage && ['active.0', 'active.1'].includes(name)) continue;
+        if (storage && name === 'active.enc') fail('BACKUP_RECOVERY_INVALID');
+        const role = fileRole(name); if (role === 'RECORD') recordNames.push(name); if (role === 'RECEIPT') receiptNames.push(name);
+      }
       if (recordNames.length > MAX_RECORDS || recordNames.some((name, i) => name !== recordName(i + 1))) fail('BACKUP_RECOVERY_INVALID');
       const files = new Map(); let plainBytes = 0; let minimumBuild = '0';
       const read = async name => {
@@ -414,8 +434,10 @@ async function createBackupRecoveryRecords(options) {
       }
       if (receipts.size) fail('BACKUP_RECOVERY_INVALID');
       let markerPresent = false;
-      if (names.includes('active.enc')) {
-        const marker = ownData((await read('active.enc')).value, ['version', 'transactionId', 'kind', 'sequence', 'recordHash'], 'BACKUP_RECOVERY_INVALID');
+      let nativeMarker;
+      if (storage) { const bytes = await activeState.read(); try { nativeMarker = ownData(parseCanonical(bytes), ['active', 'marker'], 'BACKUP_RECOVERY_INVALID'); if (typeof nativeMarker.active !== 'boolean' || !nativeMarker.active && nativeMarker.marker !== null) fail('BACKUP_RECOVERY_INVALID'); } finally { bytes.fill(0); } }
+      if (storage ? nativeMarker.active : names.includes('active.enc')) {
+        const marker = ownData(storage ? nativeMarker.marker : (await read('active.enc')).value, ['version', 'transactionId', 'kind', 'sequence', 'recordHash'], 'BACKUP_RECOVERY_INVALID');
         if (!current || marker.version !== VERSION || marker.transactionId !== current.transactionId || marker.kind !== current.kind
             || marker.sequence !== current.preparedSequence || marker.recordHash !== current.preparedHash
             || lastCollectionSequence > current.preparedSequence) fail('BACKUP_RECOVERY_INVALID');
@@ -423,13 +445,13 @@ async function createBackupRecoveryRecords(options) {
       }
       if (checkKnown) for (const [name] of knownFiles) if (!files.has(name)) fail('BACKUP_RECOVERY_INVALID');
       // Detect replacement/removal of previously read files and directory changes during asynchronous key calls.
-      if (JSON.stringify((await fs.readdir(root)).sort()) !== JSON.stringify(names)) fail('BACKUP_RECOVERY_INVALID');
+      if (JSON.stringify((await namesAtRoot()).sort()) !== JSON.stringify(names)) fail('BACKUP_RECOVERY_INVALID');
       for (const [name, file] of files) {
-        const latest = await statOrMissing(path.join(root, name));
-        if (!latest) fail('BACKUP_RECOVERY_INVALID'); checkPrivate(latest, false);
+        const latest = storage ? await storage.stat(name, { missing: true }) : await statOrMissing(path.join(root, name));
+        if (!latest) fail('BACKUP_RECOVERY_INVALID'); if (!storage) checkPrivate(latest, false);
         if (!sameState(latest, file.stat)) fail('BACKUP_RECOVERY_UNSAFE_PATH');
       }
-      await privateDirectory(root, rootStat);
+      await checkRoot();
       const active = current && (!current.completed || !current.proof || markerPresent) ? current : null;
       const snapshot = frozen({ version: VERSION, minimumBuild, head: { sequence: recordNames.length, hash: previousHash },
         active: active ? { transactionId: active.transactionId, kind: active.kind, input: active.input,
@@ -458,8 +480,10 @@ async function createBackupRecoveryRecords(options) {
     async function ensureActive(state) {
       if (state.snapshot.active.markerPresent) return state;
       const transaction = state.current;
-      await publish('active.enc', { version: VERSION, transactionId: transaction.transactionId, kind: transaction.kind,
-        sequence: transaction.preparedSequence, recordHash: transaction.preparedHash }, state);
+      const marker = { version: VERSION, transactionId: transaction.transactionId, kind: transaction.kind,
+        sequence: transaction.preparedSequence, recordHash: transaction.preparedHash };
+      if (storage) await activeState.write(Buffer.from(canonical({ active: true, marker })));
+      else await publish('active.enc', marker, state);
       return load();
     }
     async function appendRecord(state, transactionId, kind, phase, data) {
@@ -475,10 +499,11 @@ async function createBackupRecoveryRecords(options) {
       })) fail('BACKUP_RECOVERY_INVALID');
       return state;
     }
-    async function acknowledgeExisting(state, sequence) {
+    async function acknowledgeExisting(state, sequence, name = recordName(sequence)) {
       // Reading a valid file after an uncertain ACK is not a durability acknowledgement.
       // Exact retries explicitly sync the original inode and directory; they never rewrite history.
-      const name = recordName(sequence); const expected = state.files.get(name);
+      const expected = state.files.get(name);
+      if (storage) { const writer = await storage.openWrite(name, { mode: 'append', expected: expected.stat, maxBytes: Number(expected.stat.size) }); try { await writer.commit(); } finally { await writer.close(); } return revalidate(state); }
       const handle = await fs.open(path.join(root, name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       try {
         const opened = await handle.stat({ bigint: true }); checkPrivate(opened, false);
@@ -527,8 +552,16 @@ async function createBackupRecoveryRecords(options) {
       });
     }
     if (config.initialize === true) {
-      if ((await fs.readdir(root)).length) fail('BACKUP_RECOVERY_EXISTS'); rootId = crypto.randomBytes(16).toString('hex');
+      if ((await namesAtRoot()).length) fail('BACKUP_RECOVERY_EXISTS'); rootId = crypto.randomBytes(16).toString('hex');
       await publish('enrollment.enc', { version: VERSION, rootId });
+    }
+    if (storage) {
+      if (!rootId) { const file = await readFile('enrollment.enc'); try { rootId = (await decode('enrollment.enc', file.bytes)).core.rootId; } finally { file.bytes.fill(0); } }
+      activeState = await openAuthenticatedState({ storage, file: 'active', installationId: config.installationId,
+        purpose: 'backup-recovery-active', mode: 'slots', fresh: config.initialize === true,
+        initialValue: Buffer.from(canonical({ active: false, marker: null })), maxPayloadBytes: 4096, maxEncodedBytes: 16384,
+        seal: async bytes => (await encode('active.enc', { envelope: bytes.toString('base64') })).bytes,
+        unseal: async bytes => Buffer.from((await decode('active.enc', bytes)).value.envelope, 'base64') });
     }
     remember(await load());
     return Object.freeze({
@@ -621,6 +654,12 @@ async function createBackupRecoveryRecords(options) {
             await publish(receiptName(last.sequence), { version: VERSION, transactionId: value.transactionId, kind: active.kind,
               sequence: last.sequence, recordHash: last.hash, receipt: value.receipt }, state); state = await load();
           }
+          if (storage) {
+            const sequence = state.current.records.at(-1).sequence;
+            state = await acknowledgeExisting(state, sequence);
+            state = await acknowledgeExisting(state, sequence, receiptName(sequence));
+            await activeState.write(Buffer.from(canonical({ active: false, marker: null }))); return remember(await load());
+          }
           const marker = state.files.get('active.enc'); await privateDirectory(root, rootStat);
           const current = await fs.lstat(path.join(root, 'active.enc'), { bigint: true }); checkPrivate(current, false);
           if (!sameState(current, marker.stat)) fail('BACKUP_RECOVERY_UNSAFE_PATH');
@@ -631,10 +670,10 @@ async function createBackupRecoveryRecords(options) {
       },
       close() {
         if (closePromise) return closePromise; closing = true;
-        closePromise = serial.then(() => { knownFiles.clear(); owners.delete(root); owns = false; }); return closePromise;
+        closePromise = serial.then(async () => { knownFiles.clear(); await storage?.close(); owners.delete(root); owns = false; }); return closePromise;
       },
     });
-  } catch (error) { if (owns) owners.delete(root); throw safeError(error); }
+  } catch (error) { await storage?.close().catch(() => {}); if (owns) owners.delete(root); throw safeError(error); }
 }
 
 module.exports = { createBackupRecoveryRecords, BackupRecoveryRecordsError };

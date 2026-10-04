@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const { constants } = require('node:fs');
 const path = require('node:path');
-
+const native = require('./backup-windows-io.cjs');
 const FORMAT = 'code-intelligence-backup-container';
 const VERSION = 3;
 const MAGIC = Buffer.from('CIBAK003');
@@ -159,6 +159,10 @@ async function digestFile(handle, length, code) {
   } finally { buffer.fill(0); }
 }
 async function inputFile(options, maximum) {
+  if (options.sourceStorage) {
+    const handle = await native.readHandle(options.sourceStorage, options.sourcePath, maximum);
+    return { handle, stat: { ...handle.state, size: BigInt(handle.state.size) }, verify: () => handle.stat() };
+  }
   const before = await statOrMissing(options.sourcePath);
   if (!before) fail('BACKUP_ARCHIVE_MISSING'); checkPrivate(before, false);
   if (before.size > BigInt(maximum)) fail('BACKUP_ARCHIVE_LIMIT');
@@ -175,6 +179,7 @@ async function inputFile(options, maximum) {
   } catch (error) { await handle.close(); throw error; }
 }
 async function outputFile(options) {
+  if (options.destinationStorage) return nativeOutput(options);
   const { beforeWrite } = options;
   await privateDirectory(options.destinationRoot, options.destinationStat);
   if (await statOrMissing(options.destinationPath)) fail('BACKUP_ARCHIVE_EXISTS');
@@ -326,12 +331,33 @@ async function decrypt(input, options) {
     await output.publish(() => input.verify()); return publicMetadata(metadata);
   } finally { dek?.fill(0); if (output) await output.close(); }
 }
+async function nativeOutput(options) {
+  const storage = options.destinationStorage;
+  const maximum = options.maximum + 12 + MAX_HEADER + chunkCount(options.maximum) * FRAME_BYTES;
+  // Fresh final name: failed writes remain evidence; rename/unlink is never the commit.
+  const writer = await storage.openWrite(options.destinationPath, { mode: 'create', maxBytes: maximum });
+  const digest = crypto.createHash('sha256'); let length = 0, closed = false;
+  return {
+    async write(bytes) { if (options.beforeWrite) await options.beforeWrite(String(bytes.length)); await writer.write(bytes); digest.update(bytes); length += bytes.length; },
+    async publish(verifyInput) {
+      await verifyInput(); await options.fault?.('output:verified');
+      const written = await writer.commit(); closed = true;
+      await options.fault?.('output:file-synced');
+      const reader = await native.readHandle(storage, options.destinationPath, maximum, written);
+      try { if (Number(written.size) !== length || await digestFile(reader, length, 'BACKUP_ARCHIVE_INTEGRITY') !== digest.digest('hex')) fail('BACKUP_ARCHIVE_INTEGRITY'); await reader.stat(); }
+      finally { await reader.close(); }
+      await verifyInput(); await options.fault?.('output:published');
+    },
+    async close() { if (!closed) { closed = true; await writer.close(); } },
+    async checkCreated() { await options.fault?.('output:created'); },
+  };
+}
 async function run(value, decrypting) {
-  let input;
+  let input, sourceStorage, destinationStorage;
   if (activeOperations >= 2) throw new BackupArchiveError('BACKUP_ARCHIVE_BUSY');
   activeOperations += 1;
   try {
-    if (typeof process.getuid !== 'function' || !constants.O_NOFOLLOW || !constants.O_DIRECTORY) fail('BACKUP_ARCHIVE_UNSUPPORTED');
+    if (!value?.windowsBoundary && (typeof process.getuid !== 'function' || !constants.O_NOFOLLOW || !constants.O_DIRECTORY)) fail('BACKUP_ARCHIVE_UNSUPPORTED');
     if (!value || typeof value !== 'object') fail('BACKUP_ARCHIVE_ARGUMENT');
     const options = { sourcePath: canonicalPath(value.sourcePath), destinationPath: canonicalPath(value.destinationPath),
       sourceRoot: canonicalPath(value.sourceRoot), destinationRoot: canonicalPath(value.destinationRoot),
@@ -347,9 +373,15 @@ async function run(value, decrypting) {
     options.keyProvider = { getBackupKey: value.keyProvider.getBackupKey.bind(value.keyProvider),
       currentKeyId: value.keyProvider.currentKeyId?.bind(value.keyProvider) };
     options.identityHash = hash(Buffer.from(`CI-BACKUP-INSTALLATION-3\0${value.installationId}`, 'utf8'));
-    options.sourceStat = await privateDirectory(options.sourceRoot);
-    options.destinationStat = await privateDirectory(options.destinationRoot);
-    if (await statOrMissing(options.destinationPath)) fail('BACKUP_ARCHIVE_EXISTS');
+    if (value.windowsBoundary) {
+      sourceStorage = options.sourceStorage = await value.windowsBoundary.openStorage(options.sourceRoot, { mode: 'private' });
+      destinationStorage = options.destinationStorage = await value.windowsBoundary.openStorage(options.destinationRoot, { mode: 'private' });
+      if (await destinationStorage.stat(options.destinationPath, { missing: true })) fail('BACKUP_ARCHIVE_EXISTS');
+    } else {
+      options.sourceStat = await privateDirectory(options.sourceRoot);
+      options.destinationStat = await privateDirectory(options.destinationRoot);
+      if (await statOrMissing(options.destinationPath)) fail('BACKUP_ARCHIVE_EXISTS');
+    }
     const maximum = decrypting ? options.maximum + 12 + MAX_HEADER + chunkCount(options.maximum) * FRAME_BYTES : options.maximum;
     input = await inputFile(options, maximum);
     return await (decrypting ? decrypt(input, options) : encrypt(input, options));
@@ -357,7 +389,7 @@ async function run(value, decrypting) {
   finally {
     try { if (input) await input.handle.close(); }
     catch (error) { throw safeError(error); }
-    finally { activeOperations -= 1; }
+    finally { try { await sourceStorage?.close(); } finally { try { await destinationStorage?.close(); } finally { activeOperations -= 1; } } }
   }
 }
 

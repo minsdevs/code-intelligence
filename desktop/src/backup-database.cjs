@@ -7,6 +7,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawn: realSpawn } = require('node:child_process');
 const { retentionCandidate } = require('./backup-retention.cjs');
+const { inheritedEnvironment } = require('./runtime-platform.cjs');
 class BackupDatabaseError extends Error {
   constructor(code = 'FAILED') { super(`Backup database control: ${code}`); this.code = `BACKUP_DATABASE_${code}`; }
 }
@@ -24,11 +25,17 @@ function oid(value) { if (typeof value !== 'string' || !/^[1-9][0-9]{0,9}$/.test
 function jsonSql(value) { return `convert_from(decode('${Buffer.from(JSON.stringify(value)).toString('base64')}','base64'),'UTF8')::jsonb`; }
 async function createBackupDatabaseControl(options) {
   exact(options, ['psqlPath', 'connection', 'env', 'liveDatabase', ...(options.spawn ? ['spawn'] : []),
-    ...(Object.hasOwn(options, 'readRetentionAuthority') ? ['readRetentionAuthority'] : [])]);
+    ...(Object.hasOwn(options, 'readRetentionAuthority') ? ['readRetentionAuthority'] : []),
+    ...(Object.hasOwn(options, 'windowsBoundary') ? ['windowsBoundary'] : [])]);
   const { psqlPath, connection, liveDatabase, env } = options;
   if (typeof psqlPath !== 'string' || !path.isAbsolute(psqlPath) || path.resolve(psqlPath) !== psqlPath) fail('INVALID');
-  let binary; try { binary = await fs.lstat(psqlPath); } catch { fail('INVALID'); }
-  if (!binary.isFile() || binary.isSymbolicLink() || !(binary.mode & 0o111)) fail('INVALID');
+  if (options.windowsBoundary) {
+    const storage = await options.windowsBoundary.openStorage(path.dirname(psqlPath), { mode: 'source' });
+    try { await storage.stat(path.basename(psqlPath)); } finally { await storage.close(); }
+  } else {
+    let binary; try { binary = await fs.lstat(psqlPath); } catch { fail('INVALID'); }
+    if (!binary.isFile() || binary.isSymbolicLink() || !(binary.mode & 0o111)) fail('INVALID');
+  }
   exact(connection, ['host', 'port', 'user']);
   if (connection.host !== '127.0.0.1' || !Number.isInteger(connection.port) || connection.port < 1 || connection.port > 65535
       || typeof connection.user !== 'string' || !/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(connection.user)
@@ -38,7 +45,7 @@ async function createBackupDatabaseControl(options) {
   if (env.PGSSLMODE !== undefined && env.PGSSLMODE !== 'verify-full') fail('INVALID');
   if (env.PGSSLROOTCERT !== undefined && (typeof env.PGSSLROOTCERT !== 'string'
       || !path.isAbsolute(env.PGSSLROOTCERT) || path.normalize(env.PGSSLROOTCERT) !== env.PGSSLROOTCERT)) fail('INVALID');
-  const environment = { LANG: 'C', LC_ALL: 'C', TZ: 'UTC', PGCLIENTENCODING: 'UTF8', PGCONNECT_TIMEOUT: '5',
+  const environment = { ...(options.windowsBoundary ? inheritedEnvironment(process.env) : {}), LANG: 'C', LC_ALL: 'C', TZ: 'UTC', PGCLIENTENCODING: 'UTF8', PGCONNECT_TIMEOUT: '5',
     PGAPPNAME: 'code-intelligence-backup-control', PGSSLMODE: 'verify-full' };
   for (const [key, value] of Object.entries(env)) {
     if (typeof value !== 'string' || !value.length || value.length > 16384 || value.includes('\0')) fail('INVALID'); environment[key] = value;

@@ -63,7 +63,21 @@ function flywayChecksum(text) {
   }
   return (crc ^ -1) | 0;
 }
-async function migrationsAt(root) {
+async function migrationsAt(root, windowsBoundary) {
+  if (windowsBoundary) {
+    const storage = await windowsBoundary.openStorage(root, { mode: 'source' });
+    try {
+      const files = []; for await (const entry of storage.entries()) if (entry.name.endsWith('.sql')) files.push(entry.name);
+      if (canonical(files.sort()) !== canonical(REVIEWED_SCHEMA.migrations.map(m => m.filename).sort())) fail('MIGRATIONS');
+      const result = [];
+      for (const migration of REVIEWED_SCHEMA.migrations) {
+        const { bytes } = await require('./windows-storage-files.cjs').readStorageFile(storage, migration.filename, 2 * 1024 * 1024);
+        try { if (digest(bytes) !== migration.sha256) fail('MIGRATIONS'); const sql = new TextDecoder('utf-8', { fatal: true }).decode(bytes); result.push({ ...migration, sql, checksum: flywayChecksum(sql) }); }
+        finally { bytes.fill(0); }
+      }
+      return result;
+    } finally { await storage.close(); }
+  }
   if (typeof root !== 'string' || !path.isAbsolute(root) || path.resolve(root) !== root) fail('MIGRATIONS');
   try {
     if ((await fs.realpath(root)) !== root || !(await fs.lstat(root)).isDirectory()) fail('MIGRATIONS');
@@ -316,20 +330,25 @@ function insertRowSql(projected, ownerUserId, installationId, revision = '0') {
 
 async function createBackupPostgres(options) {
   if (!options || typeof options !== 'object') fail();
-  const allowed = ['psqlPath', 'migrationRoot', 'installationId', 'connection', 'env', 'mode', 'spawn', 'timeoutMs'];
+  const allowed = ['psqlPath', 'migrationRoot', 'installationId', 'connection', 'env', 'mode', 'spawn', 'timeoutMs', 'windowsBoundary'];
   if (Object.keys(options).some(k => !allowed.includes(k))) fail();
   const { psqlPath, migrationRoot, installationId, connection, mode } = options;
   if (!['export', 'staging'].includes(mode) || typeof installationId !== 'string' || installationId.length !== 36
       || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(installationId)) fail();
   if (typeof psqlPath !== 'string' || !path.isAbsolute(psqlPath) || path.resolve(psqlPath) !== psqlPath) fail();
-  try { const info = await fs.lstat(psqlPath); if (!info.isFile() || info.isSymbolicLink() || !(info.mode & 0o111)
-      || await fs.realpath(psqlPath) !== psqlPath) fail(); } catch { fail(); }
-  const migrations = await migrationsAt(migrationRoot);
+  if (options.windowsBoundary) {
+    const storage = await options.windowsBoundary.openStorage(path.dirname(psqlPath), { mode: 'source' });
+    try { await storage.stat(path.basename(psqlPath)); } finally { await storage.close(); }
+  } else {
+    try { const info = await fs.lstat(psqlPath); if (!info.isFile() || info.isSymbolicLink() || !(info.mode & 0o111)
+        || await fs.realpath(psqlPath) !== psqlPath) fail(); } catch { fail(); }
+  }
+  const migrations = await migrationsAt(migrationRoot, options.windowsBoundary);
   exact(connection, ['host', 'port', 'user', 'database']);
   if (connection.host !== '127.0.0.1' || !Number.isInteger(connection.port) || connection.port < 1025 || connection.port > 65535
       || ![connection.user, connection.database].every(s => typeof s === 'string' && /^[a-z][a-z0-9_]{0,62}$/.test(s))) fail();
   if (mode === 'staging' && !/^ci_backup_stage_[0-9a-f]{16,32}$/.test(connection.database)) fail('STAGING');
-  const environment = { PGCONNECT_TIMEOUT: '5', PGCLIENTENCODING: 'UTF8', PGTZ: 'UTC', LC_ALL: 'C', PGSSLMODE: 'verify-full' };
+  const environment = { ...(options.windowsBoundary ? require('./runtime-platform.cjs').inheritedEnvironment(process.env) : {}), PGCONNECT_TIMEOUT: '5', PGCLIENTENCODING: 'UTF8', PGTZ: 'UTC', LC_ALL: 'C', PGSSLMODE: 'verify-full' };
   if (!options.env || typeof options.env !== 'object') fail();
   if (options.env.PGSSLMODE !== undefined && options.env.PGSSLMODE !== 'verify-full') fail();
   if (options.env.PGSSLROOTCERT !== undefined && (typeof options.env.PGSSLROOTCERT !== 'string'

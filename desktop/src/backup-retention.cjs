@@ -3,7 +3,9 @@
 // Only completed, authenticated recovery checkpoints are collectible. The installation
 // mutex excludes cooperating writers; Node path checks cannot exclude a hostile same-UID
 // rename between the final lstat and unlink/rmdir (no openat/unlinkat capability here).
-const fs = require('node:fs/promises');
+const posixFs = require('node:fs/promises');
+const { createBackupPlatformIO } = require('./backup-platform-io.cjs');
+const native = require('./backup-windows-io.cjs');
 const { constants } = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -46,6 +48,8 @@ function freeze(value) {
   if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value;
 }
 function checkedIdentity(value) {
+  plain(value);
+  if (value?.platform === 'win32') { try { return native.checkedIdentity(value); } catch { fail('INVALID'); } }
   exact(value, ['dev', 'ino']); if (!decimal(value.dev) || !decimal(value.ino)) fail('INVALID'); return { dev: value.dev, ino: value.ino };
 }
 function validateRetentionManifest(value) {
@@ -61,12 +65,14 @@ function validateRetentionManifest(value) {
   });
   if (new Set(databases.map(row => row.slot)).size !== databases.length || new Set(databases.map(row => row.oid)).size !== databases.length) fail('INVALID');
   const topLevel = value.topLevel.map(row => {
-    exact(row, ['name', 'type', 'dev', 'ino']); const id = checkedIdentity({ dev: row.dev, ino: row.ino });
-    if (!isRetentionTopLevelName(row.name) || row.type !== (row.name === 'checkpoint.cibackup' ? 'file' : 'directory') || row.dev !== root.dev) fail('INVALID');
+    plain(row);
+    const keys = row.platform === 'win32' ? ['version', 'platform', 'identity'] : ['dev', 'ino'];
+    exact(row, ['name', 'type', ...keys]); const id = checkedIdentity(Object.fromEntries(keys.map(key => [key, row[key]])));
+    if (!isRetentionTopLevelName(row.name) || row.type !== (row.name === 'checkpoint.cibackup' ? 'file' : 'directory') || volume(id) !== volume(root) || id.platform !== root.platform) fail('INVALID');
     return { name: row.name, type: row.type, ...id };
   });
   if (!topLevel.some(row => row.name === 'checkpoint.cibackup') || new Set(topLevel.map(row => row.name)).size !== topLevel.length
-      || new Set([root, ...topLevel].map(row => `${row.dev}:${row.ino}`)).size !== topLevel.length + 1) fail('INVALID');
+      || new Set([root, ...topLevel].map(key)).size !== topLevel.length + 1) fail('INVALID');
   return freeze({ root, checkpoint: { ...value.checkpoint }, databases, topLevel });
 }
 function retentionManifestSha256(value) {
@@ -103,14 +109,27 @@ function retentionCandidate(authority, transactionId, requireBegun = true) {
   if (requireBegun && !tombstone) fail('AUTHORITY');
   return freeze({ ...candidate, manifestSha256: retentionManifestSha256(candidate.manifest), tombstone: tombstone || null });
 }
-const identity = stat => ({ dev: String(stat.dev), ino: String(stat.ino) });
-const same = (a, b) => a.dev === b.dev && a.ino === b.ino;
-const state = stat => `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+const identity = stat => stat.platform === 'win32' ? native.identity(stat) : ({ dev: String(stat.dev), ino: String(stat.ino) });
+const same = (a, b) => a.platform === 'win32' || b.platform === 'win32' ? a.platform === b.platform && a.identity === b.identity : a.dev === b.dev && a.ino === b.ino;
+const state = stat => stat.platform === 'win32' ? stat.token : `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+const key = value => value.platform === 'win32' ? value.identity : `${value.dev}:${value.ino}`;
+const volume = value => value.platform === 'win32' ? value.identity.split(':')[1] : value.dev;
 function safe(stat, directory, privateMode = false) {
+  if (stat.platform === 'win32') { if (stat.kind !== (directory ? 'directory' : 'file')) fail('UNSAFE'); return; }
   if (stat.isSymbolicLink() || !(directory ? stat.isDirectory() : stat.isFile()) || stat.uid !== BigInt(process.getuid())
       || (stat.mode & 0o7022n) !== 0n || privateMode && (stat.mode & 0o077n) !== 0n
       || directory && (stat.mode & 0o700n) !== 0o700n || !directory && stat.nlink !== 1n) fail('UNSAFE');
 }
+
+async function createBackupRetention(options) {
+  plain(options); const required = ['recoveryRoot', 'readAuthority', 'beginCollection', 'finishCollection'];
+  if (Object.keys(options).some(key => ![...required, 'dropDatabase', 'fault', 'windowsBoundary'].includes(key)) || required.some(key => !Object.hasOwn(options, key))) fail('INVALID');
+  const { recoveryRoot, readAuthority, beginCollection, finishCollection, dropDatabase, fault, windowsBoundary } = options;
+  if (typeof recoveryRoot !== 'string' || recoveryRoot.length > 4096 || recoveryRoot.includes('\0') || !path.isAbsolute(recoveryRoot)
+      || path.resolve(recoveryRoot) !== recoveryRoot || recoveryRoot === path.parse(recoveryRoot).root) fail('INVALID');
+  if ([readAuthority, beginCollection, finishCollection].some(fn => typeof fn !== 'function')
+      || dropDatabase !== undefined && typeof dropDatabase !== 'function' || fault !== undefined && typeof fault !== 'function') fail('INVALID');
+  const fs = windowsBoundary ? await createBackupPlatformIO(windowsBoundary, recoveryRoot) : posixFs;
 async function maybeStat(file) { try { return await fs.lstat(file, { bigint: true }); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } }
 async function directory(root, expected, privateMode = false) {
   const stat = await fs.lstat(root, { bigint: true }); safe(stat, true, privateMode);
@@ -118,6 +137,7 @@ async function directory(root, expected, privateMode = false) {
 }
 async function sync(root, expected, privateMode = false) {
   const before = await directory(root, expected, privateMode);
+  if (windowsBoundary) { if (!same(identity(before), identity(await fs.syncNamespace(root)))) fail('CHANGED'); return; }
   const handle = await fs.open(root, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
   try { if (!same(identity(before), identity(await handle.stat({ bigint: true })))) fail('CHANGED'); await handle.sync(); }
   finally { await handle.close(); }
@@ -138,18 +158,10 @@ async function checkpoint(root, manifest, optional, started) {
         || state(before) !== state(await handle.stat({ bigint: true })) || state(before) !== state(await fs.lstat(file, { bigint: true }))) fail('CHANGED');
   } finally { await handle.close(); }
 }
-async function createBackupRetention(options) {
-  plain(options); const required = ['recoveryRoot', 'readAuthority', 'beginCollection', 'finishCollection'];
-  if (Object.keys(options).some(key => ![...required, 'dropDatabase', 'fault'].includes(key)) || required.some(key => !Object.hasOwn(options, key))) fail('INVALID');
-  const { recoveryRoot, readAuthority, beginCollection, finishCollection, dropDatabase, fault } = options;
-  if (typeof recoveryRoot !== 'string' || recoveryRoot.length > 4096 || recoveryRoot.includes('\0') || !path.isAbsolute(recoveryRoot)
-      || path.resolve(recoveryRoot) !== recoveryRoot || recoveryRoot === path.parse(recoveryRoot).root) fail('INVALID');
-  if ([readAuthority, beginCollection, finishCollection].some(fn => typeof fn !== 'function')
-      || dropDatabase !== undefined && typeof dropDatabase !== 'function' || fault !== undefined && typeof fault !== 'function') fail('INVALID');
   let parent;
-  try { parent = identity(await directory(recoveryRoot, null, true)); } catch (error) { if (error instanceof BackupRetentionError) throw error; fail('IO'); }
-  const ownership = `${parent.dev}:${parent.ino}`;
-  if (OWNERS.has(ownership)) fail('BUSY'); OWNERS.add(ownership);
+  try { parent = identity(await directory(recoveryRoot, null, true)); } catch (error) { if (windowsBoundary) await fs.close().catch(() => {}); if (error instanceof BackupRetentionError) throw error; fail('IO'); }
+  const ownership = key(parent);
+  if (OWNERS.has(ownership)) { if (windowsBoundary) await fs.close(); fail('BUSY'); } OWNERS.add(ownership);
   let busy = false, closed = false;
   async function authority() { return validateRetentionAuthority(await readAuthority()); }
   async function unchanged(candidate, requireBegun, expectedState = requireBegun ? 'BEGUN' : null) {
@@ -165,11 +177,11 @@ async function createBackupRetention(options) {
     await directory(root, manifest.root, true); await checkpoint(root, manifest, partial, started);
     const actual = await fs.readdir(root); const tops = new Map(manifest.topLevel.map(row => [row.name, row]));
     if (actual.some(name => !tops.has(name)) || !partial && actual.length !== tops.size) fail('CHANGED');
-    const entries = [], seen = new Set([`${manifest.root.dev}:${manifest.root.ino}`]);
+    const entries = [], seen = new Set([key(manifest.root)]);
     async function walk(file, parentIdentity, depth) {
       if (depth > LIMITS.depth || entries.length >= LIMITS.entries || performance.now() - started > LIMITS.inspectMs) fail('LIMIT');
       const stat = await fs.lstat(file, { bigint: true }), id = identity(stat); safe(stat, stat.isDirectory());
-      if (id.dev !== manifest.root.dev || seen.has(`${id.dev}:${id.ino}`)) fail('UNSAFE'); seen.add(`${id.dev}:${id.ino}`);
+      if (volume(id) !== volume(manifest.root) || seen.has(key(id))) fail('UNSAFE'); seen.add(key(id));
       const entry = { file, parentIdentity, identity: id, directory: stat.isDirectory(), state: state(stat) }; entries.push(entry);
       if (entry.directory) {
         await directory(file, id); const dir = await fs.opendir(file);
@@ -241,7 +253,7 @@ async function createBackupRetention(options) {
       } catch (error) { if (error instanceof BackupRetentionError) throw error; fail('IO'); }
       finally { busy = false; }
     },
-    async close() { if (busy) fail('BUSY'); if (closed) return; closed = true; OWNERS.delete(ownership); }
+    async close() { if (busy) fail('BUSY'); if (closed) return; closed = true; OWNERS.delete(ownership); if (windowsBoundary) await fs.close(); }
   });
 }
 module.exports = Object.freeze({ createBackupRetention, validateRetentionManifest, validateRetentionAuthority,
