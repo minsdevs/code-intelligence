@@ -571,7 +571,7 @@ test('actual dependency-copy loop fails before skipping a conflicting basename',
   const guardStageDestination = vm.runInNewContext(`(${guardFactory})`, { fs, path })(root);
   const copyDynamicLibraries = vm.runInNewContext(`${part}\ncopyDynamicLibraries`, {
     fs, path, process: { platform: 'darwin' }, nativePolicy: policy, guardStageDestination,
-    output: () => `native:\n\t${dependency} (compatibility version 1.0.0, current version 1.0.0)\n`,
+    output: () => commands({ deps: [dependency] }),
     resolveMachODependency: value => value, copy: () => { copies++; },
   });
   rejects(() => copyDynamicLibraries([executable], destination), 'COPY_BASENAME_COLLISION'); assert.equal(copies, 0);

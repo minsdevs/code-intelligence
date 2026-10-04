@@ -109,10 +109,11 @@ function copyDynamicLibraries(executables, destination) {
     const executable = pending.pop();
     if (!fs.existsSync(executable) || visited.has(executable)) continue;
     visited.add(executable);
-    const lines = output('otool', ['-L', executable]).split('\n').slice(1);
-    for (const line of lines) {
-      const reference = line.trim().split(' ')[0];
-      if (!reference) continue;
+    // otool -L also prints LC_ID_DYLIB: a relocated library can retain its
+    // original install ID without loading it. Copy only real load-command edges;
+    // comparing that ID with the relocated bytes creates a false collision.
+    const { dependencies } = nativePolicy.parseLoadCommands(output('otool', ['-l', executable]));
+    for (const reference of dependencies) {
       const dependency = resolveMachODependency(reference, executable);
       const target = nativePolicy.verifyDependencyCopy({ reference, dependency, destination });
       if (target === null) continue;
