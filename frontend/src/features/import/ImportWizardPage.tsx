@@ -65,6 +65,8 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
   const handleConnected = async () => {
     const profile = await getMe()
     setMe(profile)
+    await queryClient.invalidateQueries({ queryKey: ['github-connection'] })
+    await queryClient.invalidateQueries({ queryKey: ['account-profile'] })
     if (
       profile.authenticated &&
       !localPath &&

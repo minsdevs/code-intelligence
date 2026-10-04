@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getMe } from '../../api/auth'
+import GithubConnectControl from './GithubConnectControl'
 import { getAiStatus } from '../../api/ai'
 import { AI_BUDGET_MUTATION_KEY, AI_BUDGET_QUERY_KEY, budgetAllowsRequests, getAiBudget } from '../../api/aiBudget'
 import { clearAiSettings, getAiModels, getAiSettings, saveAiSettings } from '../../api/aiSettings'
@@ -25,6 +27,7 @@ export default function SettingsPage() {
   const [modelOverride, setModelOverride] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [disconnectConfirm, setDisconnectConfirm] = useState(false)
+  const [switchAccount, setSwitchAccount] = useState(false)
   const [restoreConfirm, setRestoreConfirm] = useState(false)
   const [backupPath, setBackupPath] = useState<string | null>(null)
   const [recoveryBackupPath, setRecoveryBackupPath] = useState<string | null>(null)
@@ -118,6 +121,16 @@ export default function SettingsPage() {
     queryFn: getGithubConnection,
     retry: false,
   })
+  const accountQuery = useQuery({
+    queryKey: ['account-profile'], queryFn: getMe, retry: false,
+    enabled: githubQuery.data?.connected === true,
+  })
+  const refreshGithub = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['github-connection'] }),
+      queryClient.invalidateQueries({ queryKey: ['account-profile'] }),
+    ])
+  }
   const runtimeQuery = useQuery({
     queryKey: ['desktop-runtime'],
     queryFn: () => desktop!.runtimeStatus(),
@@ -156,9 +169,11 @@ export default function SettingsPage() {
     : 0
   const disconnectMutation = useMutation({
     mutationFn: disconnectGithub,
-    onSuccess: async () => {
+    onSuccess: async (connection) => {
       setDisconnectConfirm(false)
-      await queryClient.invalidateQueries({ queryKey: ['github-connection'] })
+      queryClient.setQueryData(['github-connection'], connection)
+      queryClient.removeQueries({ queryKey: ['account-profile'] })
+      await refreshGithub()
     },
   })
   const restartMutation = useMutation({
@@ -217,7 +232,7 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-xl px-6 py-10">
       <h1 className="text-[16px] font-semibold text-ink">{t('settings.title')}</h1>
 
-      <section className="mt-6 rounded-md border border-line bg-surface-1 px-4 py-3" aria-label={t('settings.github')}>
+      <section id="github-account" className="mt-6 rounded-md border border-line bg-surface-1 px-4 py-3" aria-label={t('settings.github')}>
         <h2 className="text-[13px] font-semibold text-ink">{t('settings.github')}</h2>
         <p className="mt-1 text-[12px] text-ink-muted">{t('settings.githubDesc')}</p>
         {githubError && <p className="mt-2 text-[12px] text-danger" role="alert">{githubError}</p>}
@@ -228,21 +243,34 @@ export default function SettingsPage() {
               <dt className="text-ink-muted">{t('settings.identity')}</dt>
               <dd className="font-mono text-ink">{githubQuery.data.identityType}</dd>
               <dt className="text-ink-muted">{t('settings.githubStatus')}</dt>
-              <dd className="text-ink">{githubQuery.data.connected ? t('settings.githubConnected') : t('settings.githubNotConnected')}</dd>
+              <dd className="text-ink">{githubQuery.data.connected ? t('settings.githubConnected') : '로컬 모드 · GitHub 미연결'}</dd>
+              {githubQuery.data.connected && <>
+                <dt className="text-ink-muted">GitHub 계정</dt>
+                <dd className="break-all text-ink">{accountQuery.data?.login && accountQuery.data.credentialKind !== 'LOCAL' ? `@${accountQuery.data.login}` : `GitHub ID ${githubQuery.data.githubId ?? '확인 중'}`}</dd>
+              </>}
             </dl>
+            {!githubQuery.data.connected && (
+              <div className="mt-4">
+                {switchAccount && <p role="status" className="mb-3 text-[12px] text-ink-muted">이전 연결을 해제했습니다. 브라우저에서 원하는 GitHub 계정인지 확인한 뒤 다시 로그인하세요.</p>}
+                <GithubConnectControl oauthAvailable={githubQuery.data.oauthAvailable} onConnected={async () => { setSwitchAccount(false); await refreshGithub() }} />
+              </div>
+            )}
             {githubQuery.data.connected && (
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 {!disconnectConfirm ? (
+                  <>
+                  <button type="button" onClick={() => { setSwitchAccount(true); setDisconnectConfirm(true) }} className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink hover:bg-surface-2">계정 전환</button>
                   <button
                     type="button"
-                    onClick={() => setDisconnectConfirm(true)}
+                    onClick={() => { setSwitchAccount(false); setDisconnectConfirm(true) }}
                     className="rounded-md border border-line px-3 py-1.5 text-[13px] text-danger hover:bg-surface-2"
                   >
                     {t('settings.unlinkGithub')}
                   </button>
+                  </>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2" role="alert">
-                    <span className="text-[12px] text-danger">{t('settings.unlinkConfirm')}</span>
+                    <span className="text-[12px] text-danger">{switchAccount ? '계정을 전환하려면 현재 GitHub 연결을 먼저 해제합니다. 로컬 프로젝트와 분석 기록은 유지됩니다.' : t('settings.unlinkConfirm')}</span>
                     <button
                       type="button"
                       onClick={() => disconnectMutation.mutate()}
@@ -253,7 +281,7 @@ export default function SettingsPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setDisconnectConfirm(false)}
+                      onClick={() => { setDisconnectConfirm(false); setSwitchAccount(false) }}
                       className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink-muted hover:bg-surface-2"
                     >
                       {t('settings.cancel')}
@@ -276,7 +304,7 @@ export default function SettingsPage() {
                 )}
               </div>
             )}
-            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">{t('settings.unlinkHint')}</p>
+            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">로컬 폴더 분석에는 로그인이 필요하지 않습니다. 연결 해제는 이 앱의 GitHub 접근만 해제하며 로컬 프로젝트와 분석 기록은 유지됩니다. {t('settings.unlinkHint')}</p>
           </>
         )}
       </section>
