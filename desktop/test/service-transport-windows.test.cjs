@@ -68,7 +68,7 @@ async function fixture(t) {
     allowCloseFailure() { allowCloseFailure = true; } };
 }
 
-test('native private TLS material serves pinned HTTPS, current tokens, callback, Redis AUTH, and exact cleanup', { skip: !enabled, timeout: 60000 }, async t => {
+test('native private TLS material serves pinned HTTPS, current tokens, Redis AUTH, and exact cleanup', { skip: !enabled, timeout: 60000 }, async t => {
   const f = await fixture(t), transport = f.transport;
   const wrong = createPinnedClient(transport.materials.analyzer, Number(new URL(transport.backend.origin).port));
   try { await assert.rejects(wrong.request(transport.backend.origin + '/never')); }
@@ -79,8 +79,6 @@ test('native private TLS material serves pinned HTTPS, current tokens, callback,
   assert.equal((await transport.backend.request(transport.backend.origin + '/health')).status, 204);
   assert.equal((await transport.analyzer.request(transport.analyzer.origin + '/health')).status, 204);
   assert.equal(await transport.redisReady(), true);
-  const invalid = await fetch(transport.callbackUrl + '?code=x&state=s&extra=x'); await invalid.text(); assert.equal(invalid.status, 400);
-  const callback = await fetch(transport.callbackUrl + '?code=x&state=s'); await callback.text(); assert.equal(callback.status, 200);
   assert.match(transport.jdbcUrl, /sslmode=verify-full&sslrootcert=/);
   assert.equal(transport.postgresEnvironment.PGSSLMODE, 'verify-full');
   const storage = await f.native.openStorage(f.root, { mode: 'private' });
@@ -108,7 +106,7 @@ test('native teardown refuses an unrecorded entry without deleting any owned mat
   assert.ok(f.children.every(child => child.exitCode !== null || child.signalCode !== null));
 });
 
-test('native storage-helper loss revokes clients, closes callback, and leaves material for diagnosis', { skip: !enabled, timeout: 60000 }, async t => {
+test('native storage-helper loss revokes clients and leaves material for diagnosis', { skip: !enabled, timeout: 60000 }, async t => {
   const f = await fixture(t); f.allowCloseFailure();
   const child = f.children.find(child => child.exitCode === null && child.signalCode === null);
   assert.ok(child); child.kill();
@@ -116,7 +114,6 @@ test('native storage-helper loss revokes clients, closes callback, and leaves ma
   assert.throws(() => f.transport.backend.request(f.transport.backend.origin + '/lost'));
   assert.throws(() => f.transport.redisReady());
   await assert.rejects(f.transport.close());
-  await assert.rejects(fetch(f.transport.callbackUrl + '?code=x&state=s'));
   assert.ok(fs.existsSync(f.transport.materials.backend.key));
 });
 

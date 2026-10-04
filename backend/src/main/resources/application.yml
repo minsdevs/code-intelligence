@@ -75,11 +75,11 @@ app:
       client-id: ${GITHUB_CLIENT_ID:}
       client-secret: ${GITHUB_CLIENT_SECRET:}
     native-oauth:
-      # Public GitHub App/OAuth client ID only. Never package a client secret in the desktop app.
+      # Public OAuth app with device flow enabled. Never package a client secret.
       client-id: ${GITHUB_NATIVE_CLIENT_ID:}
-      authorization-uri: ${GITHUB_AUTHORIZATION_URI:https://github.com/login/oauth/authorize}
+      device-code-uri: ${GITHUB_DEVICE_CODE_URI:https://github.com/login/device/code}
       token-uri: ${GITHUB_TOKEN_URI:https://github.com/login/oauth/access_token}
-      redirect-uri: ${GITHUB_NATIVE_REDIRECT_URI:http://127.0.0.1:8080/api/auth/github/native/callback}
+      scope: ${GITHUB_NATIVE_SCOPE:read:user user:email repo}
       attempt-ttl-seconds: ${GITHUB_OAUTH_ATTEMPT_TTL_SECONDS:300}
   ts-analyzer:
     base-url: ${TS_ANALYZER_BASE_URL:}

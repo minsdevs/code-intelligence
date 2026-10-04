@@ -8,14 +8,13 @@ import org.springframework.util.StringUtils;
 public record GithubNativeOAuthProperties(
         String clientId,
 
-        @DefaultValue("https://github.com/login/oauth/authorize")
-        String authorizationUri,
+        @DefaultValue("https://github.com/login/device/code")
+        String deviceCodeUri,
 
         @DefaultValue("https://github.com/login/oauth/access_token")
         String tokenUri,
 
-        @DefaultValue("http://127.0.0.1:8080/api/auth/github/native/callback")
-        String redirectUri,
+        @DefaultValue("read:user user:email repo") String scope,
 
         @DefaultValue("300") int attemptTtlSeconds) {
 

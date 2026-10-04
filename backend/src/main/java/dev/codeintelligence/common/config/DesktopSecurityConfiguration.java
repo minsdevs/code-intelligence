@@ -116,19 +116,14 @@ public class DesktopSecurityConfiguration {
                 "spring.datasource.hikari.data-source-properties");
         validateJdbc(value(env, "spring.datasource.url"));
         if (StringUtils.hasText(value(env, "app.github.native-oauth.client-id"))) {
-            URI callback =
-                    uri(value(env, "app.github.native-oauth.redirect-uri"), "app.github.native-oauth.redirect-uri");
             require(
-                    "http".equals(callback.getScheme())
-                            && "127.0.0.1".equals(callback.getHost())
-                            && callback.getPort() > 0
-                            && callback.getPort() <= 65535
-                            && callback.getPort() != port
-                            && "/api/auth/github/native/callback".equals(callback.getRawPath())
-                            && callback.getRawUserInfo() == null
-                            && callback.getRawQuery() == null
-                            && callback.getRawFragment() == null,
-                    "app.github.native-oauth.redirect-uri");
+                    "https://github.com/login/device/code"
+                            .equals(value(env, "app.github.native-oauth.device-code-uri")),
+                    "app.github.native-oauth.device-code-uri");
+            require(
+                    "https://github.com/login/oauth/access_token"
+                            .equals(value(env, "app.github.native-oauth.token-uri")),
+                    "app.github.native-oauth.token-uri");
         }
     }
 

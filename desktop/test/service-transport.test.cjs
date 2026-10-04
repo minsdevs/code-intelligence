@@ -49,17 +49,6 @@ test('pinned TLS rejects a different service before sending HTTP and uses the cu
   assert.deepEqual(f.requests, ['/health', '/health', '/redirect']);
 });
 
-test('OAuth bridge forwards only one bounded callback and never turns into an HTTP API proxy', { skip: process.platform === 'win32' }, async t => {
-  const f = await fixture(t), callback = f.transport.callbackUrl;
-  for (const suffix of ['?code=x&state=s&state=t', '?code=x&state=s&extra=x', '?code=x', '?code=x&error=e&state=s']) {
-    const response = await fetch(callback + suffix); await response.text(); assert.equal(response.status, 400);
-  }
-  const api = await fetch(new URL('/api/projects', callback)); await api.text(); assert.equal(api.status, 400);
-  assert.deepEqual(f.requests, []);
-  const valid = await fetch(callback + '?code=x&state=s'); await valid.text(); assert.equal(valid.status, 200);
-  assert.deepEqual(f.requests, ['/api/auth/github/native/callback?code=x&state=s']);
-});
-
 test('launch secrets stay in owned private files and shared roots are refused', { skip: process.platform === 'win32' }, async t => {
   const f = await fixture(t);
   for (const file of [f.transport.redisConfig, ...Object.values(f.transport.materials).map(m => m.key)]) {
@@ -70,22 +59,20 @@ test('launch secrets stay in owned private files and shared roots are refused', 
   await assert.rejects(createServiceTransport({ userData: shared, ports: {}, getApiToken: () => 'a'.repeat(64) }));
 });
 
-test('close drains in-flight pinned and callback requests and refuses reuse', { skip: process.platform === 'win32' }, async t => {
+test('close drains every in-flight pinned request and refuses reuse', { skip: process.platform === 'win32' }, async t => {
   const f = await fixture(t);
   let reached, count = 0; const received = new Promise(resolve => { reached = resolve; });
   f.server.removeAllListeners('request');
   f.server.on('request', () => { if (++count === 2) reached(); });
-  const request = f.transport.backend.request(f.transport.backend.origin + '/pending');
-  const rejected = assert.rejects(request);
-  const callbackRejected = assert.rejects(fetch(f.transport.callbackUrl + '?code=x&state=s'));
+  const firstRejected = assert.rejects(f.transport.backend.request(f.transport.backend.origin + '/pending-a'));
+  const secondRejected = assert.rejects(f.transport.backend.request(f.transport.backend.origin + '/pending-b'));
   await received;
   const first = f.transport.close();
   assert.equal(f.transport.close(), first);
-  await first; await rejected; await callbackRejected;
+  await first; await firstRejected; await secondRejected;
   assert.equal(fs.existsSync(f.transport.directory), false);
   assert.throws(() => f.transport.backend.request(f.transport.backend.origin + '/again'));
   assert.throws(() => f.transport.redisReady());
-  await assert.rejects(fetch(f.transport.callbackUrl + '?code=x&state=s'));
 });
 
 test('close never recursively removes an unrelated entry', { skip: process.platform === 'win32' }, async t => {

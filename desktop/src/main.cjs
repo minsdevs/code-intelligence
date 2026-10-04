@@ -564,7 +564,6 @@ async function startBackend({ maintenanceId = '' } = {}) {
       APP_DESKTOP_AI_BOOTSTRAP_STDIN: 'true',
       APP_DESKTOP_MAINTENANCE_STARTUP_ID: maintenanceId,
       GITHUB_NATIVE_CLIENT_ID: process.env.GITHUB_NATIVE_CLIENT_ID || '',
-      GITHUB_NATIVE_REDIRECT_URI: runtime.transport.callbackUrl,
       CORS_ALLOWED_ORIGINS: runtime.apiBaseUrl
     }
   });

@@ -120,8 +120,6 @@ public class SecurityConfig {
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/auth/pat")
                                 .permitAll()
-                                .requestMatchers(HttpMethod.GET, "/api/auth/github/native/callback")
-                                .permitAll()
                                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                                 .permitAll()
                                 .requestMatchers("/oauth2/**", "/login/oauth2/**")

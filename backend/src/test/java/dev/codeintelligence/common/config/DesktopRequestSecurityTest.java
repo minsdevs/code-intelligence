@@ -77,7 +77,7 @@ class DesktopRequestSecurityTest {
     }
 
     @Test
-    void requiresCurrentCapabilityForStaticHealthCsrfCallbackAndExistingSession() throws Exception {
+    void requiresCurrentCapabilityForStaticHealthCsrfAuthenticationAndExistingSession() throws Exception {
         MockHttpSession previousSession = new MockHttpSession();
         var oldContext = SecurityContextHolder.createEmptyContext();
         oldContext.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
@@ -91,14 +91,16 @@ class DesktopRequestSecurityTest {
                 "/api/csrf",
                 "/api/auth/me",
                 "/api/projects",
-                "/api/auth/github/native/callback")) {
+                "/api/auth/github/connection")) {
             mvc.perform(get(path).secure(true).session(previousSession)).andExpect(status().isUnauthorized());
             mvc.perform(get(path).secure(true).session(previousSession).header(HEADER, "previous-launch-token"))
                     .andExpect(status().isUnauthorized());
             mvc.perform(get(path).secure(true).header(HEADER, "b".repeat(64))).andExpect(status().isUnauthorized());
         }
         // Capability denial precedes even CSRF denial, and never creates a CSRF cookie or session.
-        var denied = mvc.perform(post("/api/projects").secure(true).session(previousSession))
+        var denied = mvc.perform(post("/api/auth/github/native/poll/00000000-0000-0000-0000-000000000001")
+                        .secure(true)
+                        .session(previousSession))
                 .andExpect(status().isUnauthorized())
                 .andReturn();
         assertThat(denied.getResponse().getCookies()).isEmpty();

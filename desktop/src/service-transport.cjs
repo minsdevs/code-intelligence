@@ -4,12 +4,10 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const https = require('node:https');
-const http = require('node:http');
 const tls = require('node:tls');
 const { pathToFileURL } = require('node:url');
 const { readStorageFile, writeStorageFile } = require('./windows-storage-files.cjs');
 const HOST = '127.0.0.1';
-const CALLBACK_PATH = '/api/auth/github/native/callback';
 const fail = () => { throw new Error('DESKTOP_TRANSPORT_REFUSED'); };
 
 function privateDirectory(directory) {
@@ -195,51 +193,14 @@ async function redisPing(material, port, password, signal) {
     });
   });
 }
-async function openCallback(client) {
-  const active = new Set(); let closing;
-  const handle = async (request, response) => {
-    response.setHeader('Cache-Control', 'no-store');
-    response.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    response.setHeader('X-Content-Type-Options', 'nosniff');
-    const reject = () => { response.writeHead(400); response.end('Invalid sign-in callback.'); };
-    try {
-      if (request.method !== 'GET' || request.url.length > 8192
-          || request.headers.host !== `${HOST}:${server.address().port}`
-          || request.headers['content-length'] || request.headers['transfer-encoding']) return reject();
-      const url = new URL(request.url, `http://${HOST}`);
-      const allowed = new Set(['code', 'state', 'error', 'error_description', 'error_uri']);
-      if (url.pathname !== CALLBACK_PATH || url.hash || !url.searchParams.get('state')
-          || [...url.searchParams.keys()].some(key => !allowed.has(key) || url.searchParams.getAll(key).length !== 1)
-          || Boolean(url.searchParams.get('code')) === Boolean(url.searchParams.get('error'))) return reject();
-      const result = await client.request(`${client.origin}${CALLBACK_PATH}${url.search}`);
-      // Never relay credentials, redirect headers or arbitrary backend HTML to the external browser.
-      response.writeHead(result.ok ? 200 : 400);
-      response.end(result.ok ? 'Sign-in completed. Return to Code Intelligence.' : 'Sign-in failed. Return to Code Intelligence and try again.');
-    } catch { response.writeHead(502); response.end('Sign-in callback unavailable.'); }
-  };
-  const server = http.createServer((request, response) => {
-    const pending = handle(request, response); active.add(pending);
-    pending.then(() => active.delete(pending), () => { active.delete(pending); response.destroy(); });
-  });
-  server.requestTimeout = 10000; server.headersTimeout = 10000; server.maxHeadersCount = 32;
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, HOST, resolve); });
-  return { url: `http://${HOST}:${server.address().port}${CALLBACK_PATH}`,
-    close() {
-      if (!closing) closing = (async () => {
-        await new Promise((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); });
-        await Promise.allSettled([...active]);
-      })();
-      return closing;
-    } };
-}
 
 async function createServiceTransport({ userData, ports, getApiToken, windowsBoundary, onLost }) {
   if (onLost !== undefined && typeof onLost !== 'function') fail();
-  let backend, analyzer, callback, store, closing, lost = false;
+  let backend, analyzer, store, closing, lost = false;
   const redisAbort = new AbortController(), redisPending = new Set(), keyBytes = new Set();
   async function drain() {
     redisAbort.abort();
-    const results = await Promise.allSettled([backend?.close(), analyzer?.close(), callback?.close(), ...redisPending]);
+    const results = await Promise.allSettled([backend?.close(), analyzer?.close(), ...redisPending]);
     const failure = results.find(result => result.status === 'rejected');
     if (failure) throw failure.reason;
   }
@@ -317,9 +278,8 @@ async function createServiceTransport({ userData, ports, getApiToken, windowsBou
     'server.servlet.session.cookie.secure': 'true'
   };
   const backendConfig = await write('backend.properties', Object.entries(values).map(([key, value]) => key + '=' + value).join('\n') + '\n');
-  callback = await openCallback(backend); check();
   return Object.freeze({ directory, materials, hba, redisConfig, redisPassword, backendConfig,
-    backendConfigUrl: pathToFileURL(backendConfig).href, analyzerToken, callbackUrl: callback.url, backend, analyzer,
+    backendConfigUrl: pathToFileURL(backendConfig).href, analyzerToken, backend, analyzer,
     jdbcUrl: `jdbc:postgresql://${HOST}:${ports.postgres}/codeintel?sslmode=verify-full&sslrootcert=${encodeURIComponent(materials.postgres.cert)}`,
     postgresEnvironment: Object.freeze({ PGSSLMODE: 'verify-full', PGSSLROOTCERT: materials.postgres.cert }),
     redisReady() {

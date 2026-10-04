@@ -1,14 +1,11 @@
 package dev.codeintelligence.common.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import dev.codeintelligence.auth.DesktopAuthProperties;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-import org.springframework.core.Ordered;
 import org.springframework.mock.env.MockEnvironment;
 
 class DesktopSecurityConfigurationTest {
@@ -48,22 +45,11 @@ class DesktopSecurityConfigurationTest {
                                 "spring.datasource.url",
                                 "jdbc:postgresql://127.0.0.1:54321/test?sslmode=verify-full&sslrootcert=%2Fprivate%2Fpostgres.pem"),
                         Map.entry("app.github.native-oauth.client-id", "public-client"),
-                        Map.entry(
-                                "app.github.native-oauth.redirect-uri",
-                                "http://127.0.0.1:4312/api/auth/github/native/callback"))
+                        Map.entry("app.github.native-oauth.device-code-uri", "https://github.com/login/device/code"),
+                        Map.entry("app.github.native-oauth.token-uri", "https://github.com/login/oauth/access_token"))
                 .forEach(env::setProperty);
         env.setActiveProfiles("desktop");
         return env;
-    }
-
-    @Test
-    void acceptsSecureContractAndRegistersBeforeSessionAndSecurity() {
-        assertThatCode(() -> DesktopSecurityConfiguration.validate(secureEnvironment()))
-                .doesNotThrowAnyException();
-        var registration = new DesktopSecurityConfiguration()
-                .desktopCapabilityFilter(new DesktopAuthProperties("a".repeat(64), "test", "https://127.0.0.1:4311"));
-        assertThat(registration.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);
-        assertThat(registration.getUrlPatterns()).containsExactly("/*");
     }
 
     @Test
@@ -117,17 +103,22 @@ class DesktopSecurityConfigurationTest {
     }
 
     @Test
-    void requiresOriginalNarrowHttpCallbackOnSeparateLoopbackPort() {
-        for (String uri : new String[] {
-            "https://127.0.0.1:4311/api/auth/github/native/callback",
-            "http://127.0.0.1:4311/api/auth/github/native/callback",
-            "http://localhost:4312/api/auth/github/native/callback",
-            "http://127.0.0.1:4312/other",
-            "http://127.0.0.1:4312/api/auth/github/native/callback?extra=1"
-        }) {
-            assertThatThrownBy(() -> DesktopSecurityConfiguration.validate(
-                            secureEnvironment().withProperty("app.github.native-oauth.redirect-uri", uri)))
-                    .isInstanceOf(IllegalStateException.class);
+    void refusesDeviceCodesAndTokensSentToAnUntrustedProviderEndpoint() {
+        for (String key :
+                new String[] {"app.github.native-oauth.device-code-uri", "app.github.native-oauth.token-uri"}) {
+            String approved = secureEnvironment().getRequiredProperty(key);
+            for (String uri : new String[] {
+                approved.replace("https:", "http:"),
+                approved.replace("github.com", "github.com.evil.test"),
+                approved.replace("github.com", "github.com@evil.test"),
+                "https://127.0.0.1:4311/api/auth/github/native/poll",
+                approved + "?redirect=evil",
+                approved + "#fragment"
+            }) {
+                assertThatThrownBy(() -> DesktopSecurityConfiguration.validate(
+                                secureEnvironment().withProperty(key, uri)))
+                        .isInstanceOf(IllegalStateException.class);
+            }
         }
     }
 

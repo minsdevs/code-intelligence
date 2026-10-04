@@ -16,27 +16,35 @@ export type NativeOAuthStatus =
   | 'EXPIRED'
   | 'CONFLICT'
   | 'FAILED'
-  | 'INVALID'
+
+export type NativeOAuthStart = {
+  attemptId: string
+  verificationUri: string
+  userCode: string
+  expiresAt: string
+  pollAfterSeconds: number
+}
 
 export type NativeOAuthAttempt = {
   attemptId: string
-  authorizationUrl?: string
-  status?: NativeOAuthStatus
-  message?: string
+  status: NativeOAuthStatus
+  message: string
   expiresAt: string
+  pollAfterSeconds: number
 }
 
 export function getGithubConnection(): Promise<GithubConnection> {
   return apiGet<GithubConnection>('/api/auth/github/connection')
 }
 
-export function startNativeGithubOAuth(): Promise<NativeOAuthAttempt> {
-  return apiSend<NativeOAuthAttempt>('/api/auth/github/native/start', { method: 'POST' })
+export function startNativeGithubOAuth(): Promise<NativeOAuthStart> {
+  return apiSend<NativeOAuthStart>('/api/auth/github/native/start', { method: 'POST' })
 }
 
-export function getNativeGithubOAuthStatus(attemptId: string): Promise<NativeOAuthAttempt> {
-  return apiGet<NativeOAuthAttempt>(
-    `/api/auth/github/native/status/${encodeURIComponent(attemptId)}`,
+export function pollNativeGithubOAuth(attemptId: string): Promise<NativeOAuthAttempt> {
+  return apiSend<NativeOAuthAttempt>(
+    `/api/auth/github/native/poll/${encodeURIComponent(attemptId)}`,
+    { method: 'POST' },
   )
 }
 
