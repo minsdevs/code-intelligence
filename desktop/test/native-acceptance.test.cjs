@@ -223,7 +223,7 @@ test('private native closure preserves transitive dylibs and runs without the bu
   assert.deepEqual(read('postgres'), read('redis'), 'Closure copies remain byte-identical for the publication collision gate');
 });
 
-test('direct native Electron runner refuses local use before importing or launching Electron', async () => {
+test('direct native Electron runner refuses unauthenticated local use before importing or launching Electron', async () => {
   const { runProduct } = require('../scripts/native-acceptance-electron.cjs');
   await assert.rejects(runProduct({ env: { ...hosted(), GITHUB_ACTIONS: 'false' } }), /Hosted workflow required/);
 });

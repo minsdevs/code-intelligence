@@ -197,7 +197,7 @@ function npm(args, cwd, env) {
   }
   return run('npm', args, cwd, env);
 }
-// Only newly source-built hosted prefixes may be relocated. Never touch system bottles.
+// Only newly source-built disposable prefixes may be relocated. Never touch system bottles.
 function relocateMacLibraries(prefix) {
   assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64');
   assert.ok(path.isAbsolute(prefix) && fs.realpathSync(prefix) === prefix);
@@ -294,12 +294,14 @@ function recordFailure(report, error) {
   return report.failure;
 }
 async function main(target) {
-  requireHosted();
+  const { requireExecutionContext, claimExecution, prepareArtifacts } = require('./native-acceptance-context.cjs');
+  const context = requireExecutionContext();
   assert.equal(target, process.platform === 'darwin' ? 'macos' : 'windows');
-  const artifacts = path.join(process.env.RUNNER_TEMP, 'native-acceptance-artifacts');
-  fs.mkdirSync(artifacts, { recursive: true, mode: 0o700 });
-  const report = { format: 1, revision: process.env.GITHUB_SHA, platform: process.platform, arch: process.arch,
-    buildSequence: process.env.CODE_INTELLIGENCE_BUILD_SEQUENCE, mode: 'unsigned-development-native',
+  claimExecution(context, 'acceptance');
+  const artifacts = prepareArtifacts(context);
+  const report = { format: 1, revision: context.revision, platform: process.platform, arch: process.arch,
+    executionContext: context.evidence,
+    buildSequence: context.buildSequence, mode: 'unsigned-development-native',
     nodeVersion: process.versions.node, osRelease: require('node:os').release(),
     signedInstallation: false, notarizedInstallation: false, isolatedRunGateChanged: false,
     scope: target === 'windows' ? 'windows-native-development-app' : 'macos-native-development-app',
@@ -308,17 +310,18 @@ async function main(target) {
   const save = () => fs.writeFileSync(path.join(artifacts, 'acceptance.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   save();
   try {
-    const owned = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, 'native-acceptance-private-'));
+    const owned = fs.mkdtempSync(path.join(context.tempRoot, 'native-acceptance-private-'));
     fs.chmodSync(owned, 0o700);
     const source = path.join(owned, 'source');
-    report.source = copySource(process.env.GITHUB_WORKSPACE, source);
-    const env = { ...process.env, GRADLE_USER_HOME: path.join(owned, 'gradle'), npm_config_cache: path.join(owned, 'npm-cache'),
+    report.source = copySource(context.sourceRoot, source);
+    const env = { ...process.env, CODE_INTELLIGENCE_BUILD_SEQUENCE: context.buildSequence,
+      GRADLE_USER_HOME: path.join(owned, 'gradle'), npm_config_cache: path.join(owned, 'npm-cache'),
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' };
     // No dependency reuse, global npm installs, database URLs or provider credentials.
     for (const key of Object.keys(env)) if (/^(?:GITHUB_TOKEN|GH_TOKEN|OPENAI_|ANTHROPIC_|DATABASE_URL|SPRING_DATASOURCE_|TOKEN_ENC_KEY|PGPASSWORD|REDIS_PASSWORD|AWS_|AZURE_|GOOGLE_APPLICATION_CREDENTIALS)/.test(key)) delete env[key];
     report.phase = 'fresh-dependencies'; save();
     const packages = target === 'macos' ? ['frontend', 'analyzers/ts-analyzer', 'desktop'] : ['desktop'];
-    for (const directory of packages) npm(['ci', '--no-audit', '--no-fund'], path.join(source, directory), env);
+    for (const directory of packages) npm(['ci', '--install-links', '--no-audit', '--no-fund'], path.join(source, directory), env);
     report.checks.push('fresh-source-dependencies');
     if (target === 'windows') {
       report.phase = 'standard-user-native-boundaries'; save();

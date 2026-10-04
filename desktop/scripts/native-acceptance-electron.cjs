@@ -76,9 +76,13 @@ function observeStartup(child, report, save) {
 }
 
 async function runProduct({ source, owned, artifacts, report, env, phase }) {
-  // Keep direct callers subject to the same hosted-only safety boundary as main.
-  const { requireHosted, recordFailure } = require('./native-acceptance.cjs');
-  requireHosted(env);
+  // Direct callers must prove the same execution boundary before loading Electron.
+  const { recordFailure } = require('./native-acceptance.cjs');
+  const { requireExecutionContext, productPaths, claimExecution } = require('./native-acceptance-context.cjs');
+  const context = requireExecutionContext(env);
+  productPaths(context, { source, owned, artifacts });
+  claimExecution(context, 'product');
+  report.executionContext = context.evidence;
   const deadline = createDeadline();
   const perform = (action, timeoutMs, code) => deadline.run(action, timeoutMs, code);
   report.executionLimitMs = 600000;
@@ -93,7 +97,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   if (process.platform === 'win32') assert.ok(path.isAbsolute(env.APPDATA || ''), 'Fresh Windows application profile required');
   const expectedUserData = process.platform === 'win32' ? path.join(env.APPDATA, packageName)
     : path.join(os.homedir(), 'Library', 'Application Support', packageName);
-  assert.equal(fs.existsSync(expectedUserData), false, 'A fresh hosted application profile is required');
+  assert.equal(fs.existsSync(expectedUserData), false, 'A fresh disposable application profile is required');
   const synthetic = path.join(owned, 'native-synthetic-project');
   fs.mkdirSync(synthetic, { mode: 0o700 });
   const sourceFile = path.join(synthetic, 'acceptance.ts');

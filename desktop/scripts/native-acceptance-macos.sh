@@ -1,17 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
-[[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_ENVIRONMENT:-}" == github-hosted && "${NATIVE_ACCEPTANCE_CONSENT:-}" == disposable-hosted-os ]]
 [[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]]
-: "${RUNNER_TEMP:?}" "${GITHUB_ENV:?}" "${JAVA_HOME:?}"
+: "${JAVA_HOME:?}"
 helper="$(cd "$(dirname "$0")" && pwd)/native-acceptance.cjs"
-node -e 'require(process.argv[1]).requireHosted()' "$helper"
-artifacts="$RUNNER_TEMP/native-acceptance-artifacts"
-mkdir -p "$artifacts"
-work="$(mktemp -d "$RUNNER_TEMP/native-compatible-runtime.XXXXXX")"
+context_helper="$(dirname "$helper")/native-acceptance-context.cjs"
+temp_root="$(node - "$context_helper" <<'NODE'
+const helper = require(process.argv[2]);
+const context = helper.requireExecutionContext();
+if (context.kind === 'github-hosted' && !require('node:path').isAbsolute(process.env.GITHUB_ENV || '')) throw new Error('GITHUB_ENV_REQUIRED');
+helper.claimExecution(context, 'provision'); helper.prepareArtifacts(context);
+console.log(context.tempRoot);
+NODE
+)"
+artifacts="$temp_root/native-acceptance-artifacts"
+work="$(mktemp -d "$temp_root/native-compatible-runtime.XXXXXX")"
 work="$(node -e 'console.log(require("node:fs").realpathSync(process.argv[1]))' "$work")"
 step=source-metadata
-printf '{"phase":"native-runtime-provision","status":"RUNNING"}\n' > "$artifacts/provisioning.json"
+node - "$context_helper" "$artifacts/provisioning.json" <<'NODE'
+const helper = require(process.argv[2]);
+require('node:fs').writeFileSync(process.argv[3], JSON.stringify({ phase: 'native-runtime-provision',
+  status: 'RUNNING', executionContext: helper.requireExecutionContext().evidence }) + '\n', { mode: 0o600 });
+NODE
 on_exit() {
   code=$?
   if [[ "$code" != 0 ]]; then
@@ -38,6 +48,7 @@ for (const name of ['openssl', 'postgres', 'pgvector', 'redis']) {
     sources[name] = { version: source.version, sha256: source.sourceSha256 };
 }
 fs.writeFileSync(artifact, JSON.stringify({phase: 'native-runtime-provision', status: 'FAIL', step,
+  executionContext: JSON.parse(fs.readFileSync(artifact, 'utf8')).executionContext,
   exitCode: Number(code), logBytes, diagnosticsTruncated: logBytes > 256 * 1024, sources,
   diagnostics: require(helper).buildDiagnostics('', text)}, null, 2) + '\n');
 NODE
@@ -114,8 +125,8 @@ mkdir -p "$prefix/redis/bin"
 cp "$work/redis-source/src/redis-server" "$prefix/redis/bin/redis-server"
 redis="$prefix/redis/bin/redis-server"
 step=native-dependency-closure
-node - "$helper" "$prefix" > "$work/closure.json" 2> "$work/build-output" <<'NODE'
-const helper = require(process.argv[2]); helper.requireHosted();
+node - "$helper" "$prefix" "$context_helper" > "$work/closure.json" 2> "$work/build-output" <<'NODE'
+const helper = require(process.argv[2]); require(process.argv[4]).requireExecutionContext();
 console.log(JSON.stringify(helper.relocateMacLibraries(process.argv[3])));
 NODE
 step=runtime-versions
@@ -126,12 +137,17 @@ step=runtime-versions
 "$pg_config" --version | grep -E '^PostgreSQL 16\.'
 "$redis" --version | grep -E 'v=(7|8|9)\.'
 cat "$("$pg_config" --sharedir)/extension/vector.control" > "$artifacts/pgvector-control.txt"
-printf 'PG_CONFIG=%s\nREDIS_SERVER=%s\n' "$pg_config" "$redis" >> "$GITHUB_ENV"
+node - "$context_helper" "$pg_config" "$redis" <<'NODE'
+const helper = require(process.argv[2]), context = helper.requireExecutionContext();
+helper.writeRuntimeEnvironment(context, { PG_CONFIG: process.argv[3], REDIS_SERVER: process.argv[4],
+  CODE_INTELLIGENCE_BUILD_SEQUENCE: context.buildSequence });
+NODE
 node - "$work" "$artifacts/provisioning.json" <<'NODE'
 const fs = require('node:fs'), path = require('node:path');
 const [work, artifact] = process.argv.slice(2);
 const read = name => JSON.parse(fs.readFileSync(path.join(work, name), 'utf8'));
 fs.writeFileSync(artifact, JSON.stringify({phase: 'native-runtime-provision', status: 'PASS',
+  executionContext: JSON.parse(fs.readFileSync(artifact, 'utf8')).executionContext,
   minimumSystemVersion: '13.0', sourceBuilt: true,
   sources: ['openssl', 'postgres', 'redis', 'pgvector'].map(name => read(name + '-source.json')),
   closure: read('closure.json')}, null, 2) + '\n');

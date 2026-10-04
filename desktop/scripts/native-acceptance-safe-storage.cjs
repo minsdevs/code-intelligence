@@ -4,15 +4,17 @@ const { app, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { requireExecutionContext, privateDescendant } = require('./native-acceptance-context.cjs');
+const context = requireExecutionContext();
 const mode = process.argv[2], directory = process.argv[3];
-if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_ENVIRONMENT !== 'github-hosted'
-    || process.env.NATIVE_ACCEPTANCE_CONSENT !== 'disposable-hosted-os' || process.platform !== 'win32'
-    || !['write', 'read'].includes(mode) || !path.isAbsolute(directory || '')) throw new Error('NATIVE_PROBE_REFUSED');
-const relative = path.relative(process.env.RUNNER_TEMP || '', directory);
+if (!['write', 'read'].includes(mode) || !path.isAbsolute(directory || '')) throw new Error('NATIVE_PROBE_REFUSED');
+const relative = path.relative(context.tempRoot, directory);
 if (!relative || relative.startsWith('..') || path.isAbsolute(relative) || fs.realpathSync(directory) !== directory) throw new Error('NATIVE_PROBE_DIRECTORY_REFUSED');
+if (context.kind !== 'github-hosted') privateDescendant(context.tempRoot, directory);
 const profile = path.join(directory, 'electron-profile');
-if (mode === 'write') fs.mkdirSync(profile);
+if (mode === 'write') fs.mkdirSync(profile, { mode: 0o700 });
 else if (!fs.statSync(profile).isDirectory()) throw new Error('NATIVE_PROBE_PROFILE_MISSING');
+if (context.kind !== 'github-hosted') privateDescendant(directory, profile);
 app.setPath('userData', profile);
 const recordPhase = value => fs.writeFileSync(path.join(directory, mode + '.phase'), value, { mode: 0o600 });
 recordPhase('APP_READY');
@@ -26,9 +28,9 @@ app.whenReady().then(() => {
     const encrypted = safeStorage.encryptString(secret);
     if (encrypted.includes(Buffer.from(secret))) throw new Error('PLAINTEXT_STORAGE_REFUSED');
     recordPhase('WRITE_CIPHERTEXT');
-    fs.writeFileSync(cipher, encrypted, { flag: 'wx' });
+    fs.writeFileSync(cipher, encrypted, { flag: 'wx', mode: 0o600 });
     recordPhase('WRITE_DIGEST');
-    fs.writeFileSync(digest, crypto.createHash('sha256').update(secret).digest('hex'), { flag: 'wx' });
+    fs.writeFileSync(digest, crypto.createHash('sha256').update(secret).digest('hex'), { flag: 'wx', mode: 0o600 });
   } else {
     recordPhase('READ_CIPHERTEXT');
     const encrypted = fs.readFileSync(cipher);
