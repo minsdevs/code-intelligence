@@ -2,6 +2,7 @@ package dev.codeintelligence.job;
 
 import dev.codeintelligence.common.AnalysisProperties;
 import dev.codeintelligence.common.AppProperties;
+import dev.codeintelligence.common.SourceAccess;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,13 +10,9 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -150,31 +147,30 @@ public class RetrySourceGuard {
         if (commit == null || !ObjectId.isId(commit)) throw conflict();
         Budget budget = new Budget();
         try {
-            if (Files.isSymbolicLink(app.reposRoot())) throw conflict();
-            Path repos = app.reposRoot().toRealPath();
-            Path clone = repos.resolve(Long.toString(projectId));
-            Stamp root = directory(clone);
-            Path git = clone.resolve(Constants.DOT_GIT);
-            Map<Path, Stamp> metadata = inspectGitDirectory(git, budget);
-            validateConfig(git, budget);
-            ObjectId expected = ObjectId.fromString(commit);
-            try (Repository repository = new FileRepositoryBuilder()
-                            .setGitDir(git.toFile())
-                            .setWorkTree(clone.toFile())
-                            .setMustExist(true)
-                            .build();
-                    ObjectReader reader = repository.newObjectReader()) {
-                reader.setStreamFileThreshold(0);
-                if (!expected.equals(repository.resolve(Constants.HEAD))) throw conflict();
-                SourceTree source = readTree(reader, expected, budget);
-                // Resumed analysis consumes HEAD and raw files, not the index. Do not use Git
-                // status/stat-cache flags or parse an index to decide which bytes are safe.
-                verifyWorkingTree(clone, git, reader, source, budget);
-                if (!expected.equals(repository.resolve(Constants.HEAD))) throw conflict();
-                if (!root.equals(directory(clone)) || !metadata.equals(inspectGitDirectory(git, budget))) {
-                    throw conflict();
+            Path repos = app.reposRoot().toAbsolutePath().normalize();
+            if (!SourceAccess.windows()) repos = repos.toRealPath();
+            try (SourceAccess.Scope ignored = SourceAccess.open(repos, "workspace")) {
+                Path clone = repos.resolve(Long.toString(projectId));
+                Stamp root = directory(clone);
+                Path git = clone.resolve(Constants.DOT_GIT);
+                Map<Path, Stamp> metadata = inspectGitDirectory(git, budget);
+                validateConfig(git, budget);
+                ObjectId expected = ObjectId.fromString(commit);
+                try (Repository repository = new FileRepositoryBuilder()
+                                .setGitDir(git.toFile())
+                                .setWorkTree(clone.toFile())
+                                .setMustExist(true)
+                                .build();
+                        ObjectReader reader = repository.newObjectReader()) {
+                    reader.setStreamFileThreshold(0);
+                    if (!expected.equals(repository.resolve(Constants.HEAD))) throw conflict();
+                    SourceTree source = readTree(reader, expected, budget);
+                    verifyWorkingTree(clone, git, reader, source, budget);
+                    if (!expected.equals(repository.resolve(Constants.HEAD))) throw conflict();
+                    if (!root.equals(directory(clone)) || !metadata.equals(inspectGitDirectory(git, budget)))
+                        throw conflict();
+                    budget.check();
                 }
-                budget.check();
             }
         } catch (JobConflictException e) {
             throw e;
@@ -187,11 +183,11 @@ public class RetrySourceGuard {
     private Map<Path, Stamp> inspectGitDirectory(Path git, Budget budget) throws IOException {
         directory(git);
         for (String forbidden : List.of("commondir", "objects/info/alternates", "worktrees")) {
-            if (Files.exists(git.resolve(forbidden), LinkOption.NOFOLLOW_LINKS)) throw conflict();
+            if (SourceAccess.exists(git.resolve(forbidden), false)) throw conflict();
         }
         Map<Path, Stamp> stamps = new HashMap<>();
         long[] bytes = {0};
-        Files.walkFileTree(git, Set.of(), limits.depth() + 1, new SimpleFileVisitor<>() {
+        SourceAccess.walk(git, limits.depth() + 1, new SimpleFileVisitor<>() {
             private void record(Path path, BasicFileAttributes attrs) throws IOException {
                 budget.check();
                 if (git.relativize(path).getNameCount() > limits.depth()
@@ -235,7 +231,7 @@ public class RetrySourceGuard {
         BasicFileAttributes attrs = regularFile(path);
         if (attrs.size() > limits.metadataBytes()) throw conflict();
         byte[] bytes;
-        try (InputStream input = Files.newInputStream(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+        try (InputStream input = SourceAccess.input(path, attrs.size())) {
             bytes = readMetadata(input, attrs.size(), budget);
         }
         Config config = new Config();
@@ -337,7 +333,7 @@ public class RetrySourceGuard {
         Set<String> remaining = new HashSet<>(entries.keySet());
         Map<Path, Stamp> directories = new HashMap<>();
         int[] visited = {0};
-        Files.walkFileTree(clone, Set.of(), limits.depth() + 1, new SimpleFileVisitor<>() {
+        SourceAccess.walk(clone, limits.depth() + 1, new SimpleFileVisitor<>() {
             private void visit(Path path) {
                 budget.check();
                 if (++visited[0] > maxEntries() || clone.relativize(path).getNameCount() > limits.depth()) {
@@ -373,8 +369,7 @@ public class RetrySourceGuard {
                 try (InputStream input = loader.openStream()) {
                     verifyBlob(input, size, expected.oid(), budget);
                 }
-                try (InputStream input =
-                        Files.newInputStream(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+                try (InputStream input = SourceAccess.input(file, size)) {
                     verifyBlob(input, size, expected.oid(), budget);
                 }
                 if (!stamp(before).equals(stamp(regularFile(file)))) throw conflict();
@@ -408,27 +403,31 @@ public class RetrySourceGuard {
     }
 
     private BasicFileAttributes regularFile(Path path) throws IOException {
-        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        BasicFileAttributes attrs = SourceAccess.attributes(path, false);
         if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw conflict();
         requireSingleLink(path);
         return attrs;
     }
 
     private void requireSingleLink(Path path) throws IOException {
-        if (((Number) Files.getAttribute(path, "unix:nlink", LinkOption.NOFOLLOW_LINKS)).longValue() != 1) {
-            throw conflict();
-        }
+        if (SourceAccess.links(path) != 1) throw conflict();
     }
 
     private Stamp directory(Path path) throws IOException {
-        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        BasicFileAttributes attrs = SourceAccess.attributes(path, true);
         if (!attrs.isDirectory() || attrs.isSymbolicLink()) throw conflict();
         return stamp(attrs);
     }
 
     private Stamp stamp(BasicFileAttributes attrs) {
         if (attrs.fileKey() == null) throw conflict();
-        return new Stamp(attrs.fileKey(), attrs.size(), attrs.lastModifiedTime(), attrs.isDirectory());
+        return new Stamp(
+                attrs.fileKey(),
+                attrs.size(),
+                attrs instanceof dev.codeintelligence.common.WindowsStorage.State state
+                        ? state.token()
+                        : attrs.lastModifiedTime(),
+                attrs.isDirectory());
     }
 
     private int maxEntries() {
@@ -449,7 +448,7 @@ public class RetrySourceGuard {
         return exception;
     }
 
-    private record Stamp(Object key, long size, FileTime modified, boolean directory) {}
+    private record Stamp(Object key, long size, Object changed, boolean directory) {}
 
     private record Tree(String prefix, ObjectId oid, int depth) {}
 

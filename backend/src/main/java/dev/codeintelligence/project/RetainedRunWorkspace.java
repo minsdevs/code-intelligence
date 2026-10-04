@@ -1,6 +1,8 @@
 package dev.codeintelligence.project;
 
 import dev.codeintelligence.common.AppProperties;
+import dev.codeintelligence.common.SourceAccess;
+import dev.codeintelligence.common.WindowsStorage;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -77,7 +79,7 @@ public final class RetainedRunWorkspace implements AutoCloseable {
     // POSIX record locks can be released when this JVM closes ANY descriptor for the same inode,
     // even if another FileLock object still reports valid. Reserve before opening a contender's
     // channel; the registry supplements the OS lock and never substitutes for cross-process locking.
-    private record RootIdentity(long device, Object fileKey) {}
+    private record RootIdentity(String device, Object fileKey) {}
 
     private static final Map<RootIdentity, RetainedRunWorkspace> JVM_OWNERS = new HashMap<>();
 
@@ -87,13 +89,15 @@ public final class RetainedRunWorkspace implements AutoCloseable {
     private Path root;
     private Object rootKey;
     private Object lockKey;
-    private long device;
+    private String device;
     private UserPrincipal owner;
     private FileChannel lockChannel;
     private FileLock lock;
     private Path reservedRoot;
     private RootIdentity reservedIdentity;
     private boolean closed;
+    private WindowsStorage nativeStorage;
+    private WindowsStorage.Lock nativeLock;
     private boolean cleanupBlocked;
 
     @Autowired
@@ -143,11 +147,11 @@ public final class RetainedRunWorkspace implements AutoCloseable {
             if (leases.size() >= MAX_RUNS || leases.values().stream().anyMatch(lease -> lease.jobId == jobId))
                 throw failure("WORKSPACE_BUSY");
             Path run = root.resolve("run-" + UUID.randomUUID());
-            Files.createDirectory(run, PosixFilePermissions.asFileAttribute(DIRECTORY_MODE));
+            workspaceMkdir(run);
             Object key = directory(run, true).fileKey();
             try {
                 writeFresh(run.resolve("owner.meta"), marker(run, projectId, jobId), true);
-                Files.createDirectory(run.resolve("repo"), PosixFilePermissions.asFileAttribute(DIRECTORY_MODE));
+                workspaceMkdir(run.resolve("repo"));
                 Lease lease = new Lease(projectId, jobId, run, key);
                 leases.put(run, lease);
                 return lease;
@@ -189,9 +193,7 @@ public final class RetainedRunWorkspace implements AutoCloseable {
                 if (reader == null) throw failure("WORKSPACE_INVALID_MANIFEST");
                 Path repo = lease.run.resolve("repo");
                 directory(repo, true);
-                try (var contents = Files.newDirectoryStream(repo)) {
-                    if (contents.iterator().hasNext()) throw failure("WORKSPACE_LEASE_INVALID");
-                }
+                if (!workspaceEntries(repo).isEmpty()) throw failure("WORKSPACE_LEASE_INVALID");
                 String sha = materialize(repo, manifest, reader, budget);
                 requireOwnership();
                 lease.requireIdentity();
@@ -309,6 +311,10 @@ public final class RetainedRunWorkspace implements AutoCloseable {
 
     private void initialize(Budget budget) throws IOException {
         budget.check();
+        if (SourceAccess.windows()) {
+            initializeWindows(budget);
+            return;
+        }
         if (lock != null) return;
         Path configuredData = properties.reposRoot().getParent();
         Path anchor = configuredData.getParent();
@@ -335,7 +341,7 @@ public final class RetainedRunWorkspace implements AutoCloseable {
         rootKey = directory(root, true).fileKey();
         root = root.toRealPath();
         if (!rootKey.equals(directory(root, true).fileKey())) throw failure("WORKSPACE_UNAVAILABLE");
-        device = device(root);
+        device = device(root, true);
         Path ownerLock = root.resolve("owner.lock");
         reserveRoot();
         try {
@@ -376,28 +382,50 @@ public final class RetainedRunWorkspace implements AutoCloseable {
         }
     }
 
+    private void initializeWindows(Budget budget) throws IOException {
+        if (nativeLock != null) return;
+        Path repos = properties.reposRoot().toAbsolutePath().normalize();
+        nativeStorage = new WindowsStorage(repos, "workspace");
+        try {
+            root = repos.resolve(".analysis-runs");
+            if (nativeStorage.stat(root, true, true) == null) nativeStorage.mkdir(root);
+            WindowsStorage.State rootState = nativeStorage.stat(root, true, false);
+            rootKey = rootState.identity();
+            device = rootState.volume();
+            nativeLock = nativeStorage.lock(
+                    root.resolve("owner.lock"),
+                    "code-intelligence-retained-workspace-lock-v1\n".getBytes(StandardCharsets.US_ASCII));
+            requireOwnership();
+            cleanOrphans(budget);
+        } catch (IOException | RuntimeException error) {
+            try {
+                releaseLock();
+            } catch (IOException ignored) {
+                cleanupBlocked = true;
+            }
+            throw error;
+        }
+    }
+
     private void cleanOrphans(Budget budget) throws IOException {
         Map<Path, List<TreeEntry>> verified = new LinkedHashMap<>();
-        try (var entries = Files.newDirectoryStream(root)) {
-            for (Path run : entries) {
-                budget.check();
-                if (run.getFileName().toString().equals("owner.lock")) continue;
-                if (verified.size() >= MAX_RUNS
-                        || !RUN_NAME.matcher(run.getFileName().toString()).matches())
-                    throw failure("WORKSPACE_UNAVAILABLE");
-                directory(run, true);
-                String marker = new String(readMarker(run), StandardCharsets.US_ASCII);
-                String[] lines = marker.split("\n", -1);
-                if (lines.length != 5
-                        || !lines[0].equals(MARKER_PREFIX.stripTrailing())
-                        || !lines[1].equals(run.getFileName().toString())
-                        || !positiveDecimal(lines[2])
-                        || !positiveDecimal(lines[3])
-                        || !lines[4].isEmpty()) throw failure("WORKSPACE_UNAVAILABLE");
-                verified.put(run, scan(run, budget));
-            }
+        for (Path run : workspaceEntries(root)) {
+            budget.check();
+            if (run.getFileName().toString().equals("owner.lock")) continue;
+            if (verified.size() >= MAX_RUNS
+                    || !RUN_NAME.matcher(run.getFileName().toString()).matches())
+                throw failure("WORKSPACE_UNAVAILABLE");
+            directory(run, true);
+            String marker = new String(readMarker(run), StandardCharsets.US_ASCII);
+            String[] lines = marker.split("\n", -1);
+            if (lines.length != 5
+                    || !lines[0].equals(MARKER_PREFIX.stripTrailing())
+                    || !lines[1].equals(run.getFileName().toString())
+                    || !positiveDecimal(lines[2])
+                    || !positiveDecimal(lines[3])
+                    || !lines[4].isEmpty()) throw failure("WORKSPACE_UNAVAILABLE");
+            verified.put(run, scan(run, budget));
         }
-        // Validate every orphan before deleting anything: an unknown sibling is not ours to remove.
         for (var entry : verified.entrySet()) {
             budget.check();
             deleteVerified(entry.getKey(), entry.getValue().getFirst().key(), entry.getValue());
@@ -405,6 +433,16 @@ public final class RetainedRunWorkspace implements AutoCloseable {
     }
 
     private synchronized void requireOwnership() throws IOException {
+        if (SourceAccess.windows()) {
+            if (closed || nativeStorage == null || nativeLock == null) throw failure("WORKSPACE_UNAVAILABLE");
+            WindowsStorage.State current = nativeLock.check();
+            WindowsStorage.State rootState = nativeStorage.stat(root, true, false);
+            if (!rootKey.equals(rootState.identity())
+                    || !device.equals(rootState.volume())
+                    || current.size() != "code-intelligence-retained-workspace-lock-v1\n".length())
+                throw failure("WORKSPACE_UNAVAILABLE");
+            return;
+        }
         if (closed || lock == null || !lock.isValid() || lockChannel == null || !lockChannel.isOpen())
             throw failure("WORKSPACE_UNAVAILABLE");
         synchronized (JVM_OWNERS) {
@@ -415,12 +453,32 @@ public final class RetainedRunWorkspace implements AutoCloseable {
         }
         BasicFileAttributes currentLock = regular(root.resolve("owner.lock"), true);
         if (!rootKey.equals(directory(root, true).fileKey())
-                || device(root) != device
+                || !device(root, true).equals(device)
                 || !lockKey.equals(currentLock.fileKey())
                 || currentLock.size() != 0) throw failure("WORKSPACE_UNAVAILABLE");
     }
 
     private void releaseLock() throws IOException {
+        if (SourceAccess.windows()) {
+            IOException failure = null;
+            try {
+                if (nativeLock != null) nativeLock.close();
+            } catch (IOException error) {
+                failure = error;
+            }
+            try {
+                if (nativeStorage != null) nativeStorage.close();
+            } catch (IOException error) {
+                if (failure == null) failure = error;
+            }
+            if (failure != null) {
+                cleanupBlocked = true;
+                throw failure;
+            }
+            nativeLock = null;
+            nativeStorage = null;
+            return;
+        }
         IOException failure = null;
         try {
             if (lock != null && lock.isValid()) lock.release();
@@ -628,9 +686,11 @@ public final class RetainedRunWorkspace implements AutoCloseable {
         }
         // JGit's fresh object directories/files can use broader defaults. The containing run has
         // always been private; narrow the generated entries before returning a usable clone path.
-        for (TreeEntry entry : scan(repo, budget)) {
-            Files.setPosixFilePermissions(entry.path(), entry.directory() ? DIRECTORY_MODE : FILE_MODE);
-        }
+        List<TreeEntry> completed = scan(repo, budget);
+        if (!SourceAccess.windows())
+            for (TreeEntry entry : completed) {
+                Files.setPosixFilePermissions(entry.path(), entry.directory() ? DIRECTORY_MODE : FILE_MODE);
+            }
         return manifest.snapshotSha();
     }
 
@@ -654,25 +714,46 @@ public final class RetainedRunWorkspace implements AutoCloseable {
             if (part.toString().isEmpty()) continue;
             current = current.resolve(part);
             if (!created.containsKey(current)) {
-                Files.createDirectory(current, PosixFilePermissions.asFileAttribute(DIRECTORY_MODE));
+                workspaceMkdir(current);
                 created.put(current, directory(current, true).fileKey());
-            } else if (!created.get(current).equals(directory(current, true).fileKey())) {
+            } else if (!created.get(current).equals(directory(current, true).fileKey()))
                 throw failure("WORKSPACE_UNAVAILABLE");
-            }
+        }
+    }
+
+    private void workspaceMkdir(Path path) throws IOException {
+        if (SourceAccess.windows()) nativeStorage.mkdir(path);
+        else Files.createDirectory(path, PosixFilePermissions.asFileAttribute(DIRECTORY_MODE));
+    }
+
+    private List<Path> workspaceEntries(Path path) throws IOException {
+        if (SourceAccess.windows())
+            return nativeStorage.entries(path).stream()
+                    .map(WindowsStorage.Entry::path)
+                    .toList();
+        try (var children = Files.newDirectoryStream(path)) {
+            List<Path> result = new ArrayList<>();
+            children.forEach(result::add);
+            return result;
         }
     }
 
     private void createDirectoryIfAbsent(Path path, boolean privateMode) throws IOException {
-        try {
-            Files.createDirectory(path, PosixFilePermissions.asFileAttribute(DIRECTORY_MODE));
-        } catch (FileAlreadyExistsException existing) {
-            // Validate rather than chmod a directory that may belong to a different process.
+        if (SourceAccess.windows()) {
+            if (nativeStorage.stat(path, true, true) == null) nativeStorage.mkdir(path);
+        } else {
+            try {
+                Files.createDirectory(path, PosixFilePermissions.asFileAttribute(DIRECTORY_MODE));
+            } catch (FileAlreadyExistsException existing) {
+                /* Validate rather than adopting. */
+            }
         }
         directory(path, privateMode);
     }
 
     private BasicFileAttributes directory(Path path, boolean privateMode) throws IOException {
-        BasicFileAttributes attributes = attributes(path);
+        BasicFileAttributes attributes = attributes(path, true);
+        if (SourceAccess.windows()) return attributes;
         Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS);
         if (!attributes.isDirectory()
                 || permissions.contains(PosixFilePermission.GROUP_WRITE)
@@ -682,7 +763,8 @@ public final class RetainedRunWorkspace implements AutoCloseable {
     }
 
     private BasicFileAttributes regular(Path path, boolean privateMode) throws IOException {
-        BasicFileAttributes attributes = attributes(path);
+        BasicFileAttributes attributes = attributes(path, false);
+        if (SourceAccess.windows()) return attributes;
         if (!attributes.isRegularFile()
                 || ((Number) Files.getAttribute(path, "unix:nlink", LinkOption.NOFOLLOW_LINKS)).longValue() != 1
                 || privateMode
@@ -691,12 +773,14 @@ public final class RetainedRunWorkspace implements AutoCloseable {
         return attributes;
     }
 
-    private BasicFileAttributes attributes(Path path) throws IOException {
-        BasicFileAttributes attributes =
-                Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+    private BasicFileAttributes attributes(Path path, boolean directory) throws IOException {
+        BasicFileAttributes attributes = SourceAccess.windows()
+                ? nativeStorage.stat(path, directory, false)
+                : Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         if (attributes.isSymbolicLink()
                 || attributes.fileKey() == null
-                || !Files.getOwner(path, LinkOption.NOFOLLOW_LINKS).equals(owner))
+                || !SourceAccess.windows()
+                        && !Files.getOwner(path, LinkOption.NOFOLLOW_LINKS).equals(owner))
             throw failure("WORKSPACE_UNAVAILABLE");
         return attributes;
     }
@@ -705,6 +789,7 @@ public final class RetainedRunWorkspace implements AutoCloseable {
         Path marker = run.resolve("owner.meta");
         BasicFileAttributes before = regular(marker, true);
         if (before.size() > 160 || before.size() < MARKER_PREFIX.length()) throw failure("WORKSPACE_UNAVAILABLE");
+        if (SourceAccess.windows()) return nativeStorage.read(marker, (WindowsStorage.State) before, 160);
         byte[] bytes = new byte[(int) before.size()];
         try (FileChannel channel = FileChannel.open(marker, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
             ByteBuffer target = ByteBuffer.wrap(bytes);
@@ -724,14 +809,16 @@ public final class RetainedRunWorkspace implements AutoCloseable {
     }
 
     private void writeFresh(Path file, byte[] bytes, boolean durable) throws IOException {
-        try (FileChannel channel = FileChannel.open(
-                file,
-                Set.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS),
-                PosixFilePermissions.asFileAttribute(FILE_MODE))) {
-            ByteBuffer source = ByteBuffer.wrap(bytes);
-            while (source.hasRemaining()) channel.write(source);
-            if (durable) channel.force(true);
-        }
+        if (SourceAccess.windows()) nativeStorage.fresh(file, bytes);
+        else
+            try (FileChannel channel = FileChannel.open(
+                    file,
+                    Set.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS),
+                    PosixFilePermissions.asFileAttribute(FILE_MODE))) {
+                ByteBuffer source = ByteBuffer.wrap(bytes);
+                while (source.hasRemaining()) channel.write(source);
+                if (durable) channel.force(true);
+            }
         regular(file, true);
     }
 
@@ -739,27 +826,29 @@ public final class RetainedRunWorkspace implements AutoCloseable {
 
     private List<TreeEntry> scan(Path subtree, Budget budget) throws IOException {
         List<TreeEntry> entries = new ArrayList<>();
-        Files.walkFileTree(subtree, Set.of(), 70, new SimpleFileVisitor<>() {
-            private void record(Path path, boolean directory) throws IOException {
-                budget.check();
-                BasicFileAttributes attributes = directory ? directory(path, false) : regular(path, false);
-                if (entries.size() >= MAX_TREE_ENTRIES || device(path) != device)
-                    throw failure("WORKSPACE_UNAVAILABLE");
-                entries.add(new TreeEntry(path, attributes.fileKey(), directory));
-            }
+        try (SourceAccess.Scope ignored = SourceAccess.windows() ? SourceAccess.attach(root, nativeStorage) : null) {
+            SourceAccess.walk(subtree, 70, new SimpleFileVisitor<>() {
+                private void record(Path path, boolean isDirectory) throws IOException {
+                    budget.check();
+                    BasicFileAttributes attributes = isDirectory ? directory(path, false) : regular(path, false);
+                    if (entries.size() >= MAX_TREE_ENTRIES
+                            || !device(path, isDirectory).equals(device)) throw failure("WORKSPACE_UNAVAILABLE");
+                    entries.add(new TreeEntry(path, SourceAccess.proof(attributes), isDirectory));
+                }
 
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                record(dir, true);
-                return FileVisitResult.CONTINUE;
-            }
+                @Override
+                public FileVisitResult preVisitDirectory(Path path, BasicFileAttributes attrs) throws IOException {
+                    record(path, true);
+                    return FileVisitResult.CONTINUE;
+                }
 
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                record(file, false);
-                return FileVisitResult.CONTINUE;
-            }
-        });
+                @Override
+                public FileVisitResult visitFile(Path path, BasicFileAttributes attrs) throws IOException {
+                    record(path, false);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        }
         return entries;
     }
 
@@ -778,20 +867,25 @@ public final class RetainedRunWorkspace implements AutoCloseable {
             budget.check();
             deleteEntry(entry);
         }
-        // Retain the ownership marker until every source/object entry has been removed successfully.
         if (marker != null) deleteEntry(marker);
         deleteEntry(entries.getFirst());
     }
 
     private void deleteEntry(TreeEntry entry) throws IOException {
         BasicFileAttributes current = entry.directory() ? directory(entry.path(), false) : regular(entry.path(), false);
-        if (!entry.key().equals(current.fileKey()) || device(entry.path()) != device)
-            throw failure("WORKSPACE_UNAVAILABLE");
-        Files.delete(entry.path());
+        if (!entry.key().equals(SourceAccess.proof(current))
+                || !device(entry.path(), entry.directory()).equals(device)) throw failure("WORKSPACE_UNAVAILABLE");
+        if (SourceAccess.windows())
+            nativeStorage.removeExpected(
+                    entry.path(), entry.directory(), entry.key().toString());
+        else Files.delete(entry.path());
     }
 
-    private static long device(Path path) throws IOException {
-        return ((Number) Files.getAttribute(path, "unix:dev", LinkOption.NOFOLLOW_LINKS)).longValue();
+    private String device(Path path, boolean directory) throws IOException {
+        return SourceAccess.windows()
+                ? nativeStorage.stat(path, directory, false).volume()
+                : Files.getAttribute(path, "unix:dev", LinkOption.NOFOLLOW_LINKS)
+                        .toString();
     }
 
     private static boolean positiveDecimal(String value) {

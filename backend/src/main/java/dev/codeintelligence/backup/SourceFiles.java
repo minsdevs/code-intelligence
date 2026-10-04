@@ -2,6 +2,8 @@ package dev.codeintelligence.backup;
 
 import static dev.codeintelligence.backup.SourceProtocol.*;
 
+import dev.codeintelligence.common.SourceAccess;
+import dev.codeintelligence.common.WindowsStorage;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -12,7 +14,6 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.HashMap;
@@ -24,7 +25,7 @@ final class SourceFiles {
     static final Set<PosixFilePermission> DIRECTORY_MODE = PosixFilePermissions.fromString("rwx------");
     static final Set<PosixFilePermission> FILE_MODE = PosixFilePermissions.fromString("rw-------");
 
-    record Stamp(Object key, long size, FileTime modified, boolean directory) {}
+    record Stamp(Object key, long size, Object changed, boolean directory) {}
 
     private SourceFiles() {}
 
@@ -35,17 +36,19 @@ final class SourceFiles {
         } catch (RuntimeException error) {
             throw failure("SOURCE_UNSAFE_PATH");
         }
-        if (!path.isAbsolute() || !path.normalize().equals(path) || !path.equals(path.toRealPath()))
-            throw failure("SOURCE_UNSAFE_PATH");
+        if (!path.isAbsolute()
+                || !path.normalize().equals(path)
+                || !SourceAccess.windows() && !path.equals(path.toRealPath())) throw failure("SOURCE_UNSAFE_PATH");
         directory(path);
-        if (privateRoot
+        if (!SourceAccess.windows()
+                && privateRoot
                 && !Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS)
                         .equals(DIRECTORY_MODE)) throw failure("SOURCE_UNSAFE_PATH");
         return path;
     }
 
     static BasicFileAttributes directory(Path path) throws IOException {
-        BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        BasicFileAttributes attrs = SourceAccess.attributes(path, true);
         if (!attrs.isDirectory() || attrs.isSymbolicLink() || attrs.fileKey() == null)
             throw failure("SOURCE_UNSAFE_PATH");
         return attrs;
@@ -57,11 +60,11 @@ final class SourceFiles {
         for (String forbidden : new String[] {
             "objects/info/alternates", "objects/info/http-alternates", "commondir", "gitdir", "shallow", "info/grafts"
         }) {
-            if (Files.exists(git.resolve(forbidden), LinkOption.NOFOLLOW_LINKS)) throw failure("SOURCE_UNSAFE_PATH");
+            if (SourceAccess.exists(git.resolve(forbidden), false)) throw failure("SOURCE_UNSAFE_PATH");
         }
         Map<Path, Stamp> stamps = new HashMap<>();
         long[] bytes = {0};
-        Files.walkFileTree(git, Set.of(), 65, new SimpleFileVisitor<>() {
+        SourceAccess.walk(git, 65, new SimpleFileVisitor<>() {
             private void check(Path path, BasicFileAttributes attrs) throws IOException {
                 budget.check();
                 if (stamps.size() >= MAX_OBJECTS * 3
@@ -76,7 +79,11 @@ final class SourceFiles {
                 }
                 stamps.put(
                         git.relativize(path),
-                        new Stamp(attrs.fileKey(), attrs.size(), attrs.lastModifiedTime(), attrs.isDirectory()));
+                        new Stamp(
+                                attrs.fileKey(),
+                                attrs.size(),
+                                attrs instanceof WindowsStorage.State state ? state.token() : attrs.lastModifiedTime(),
+                                attrs.isDirectory()));
             }
 
             @Override
@@ -96,40 +103,42 @@ final class SourceFiles {
     }
 
     static void singleLink(Path path) throws IOException {
-        Object links = Files.getAttribute(path, "unix:nlink", LinkOption.NOFOLLOW_LINKS);
-        if (!(links instanceof Number number) || number.longValue() != 1) throw failure("SOURCE_UNSAFE_PATH");
+        if (SourceAccess.links(path) != 1) throw failure("SOURCE_UNSAFE_PATH");
     }
 
     static void mkdir(Path path) throws IOException {
-        Files.createDirectory(path, PosixFilePermissions.asFileAttribute(DIRECTORY_MODE));
+        SourceAccess.mkdir(path);
     }
 
     static void fresh(Path path, byte[] bytes) throws IOException {
-        try (FileChannel channel = FileChannel.open(
-                path,
-                Set.of(StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW, LinkOption.NOFOLLOW_LINKS),
-                PosixFilePermissions.asFileAttribute(FILE_MODE))) {
-            ByteBuffer buffer = ByteBuffer.wrap(bytes);
-            while (buffer.hasRemaining()) channel.write(buffer);
-            channel.force(true);
-        }
+        if (SourceAccess.windows()) SourceAccess.fresh(path, bytes);
+        else
+            try (FileChannel channel = FileChannel.open(
+                    path,
+                    Set.of(StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW, LinkOption.NOFOLLOW_LINKS),
+                    PosixFilePermissions.asFileAttribute(FILE_MODE))) {
+                ByteBuffer buffer = ByteBuffer.wrap(bytes);
+                while (buffer.hasRemaining()) channel.write(buffer);
+                channel.force(true);
+            }
     }
 
     static void syncDirectory(Path path) throws IOException {
         directory(path);
-        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
-            channel.force(true);
-        }
+        if (!SourceAccess.windows())
+            try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+                channel.force(true);
+            }
     }
 
     static void finish(Path root, Object rootKey, Budget budget) throws IOException {
         if (!rootKey.equals(directory(root).fileKey())) throw failure("SOURCE_UNSAFE_PATH");
-        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+        SourceAccess.walk(root, 65, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path path, BasicFileAttributes attrs) throws IOException {
                 budget.check();
                 directory(path);
-                Files.setPosixFilePermissions(path, DIRECTORY_MODE);
+                if (!SourceAccess.windows()) Files.setPosixFilePermissions(path, DIRECTORY_MODE);
                 return FileVisitResult.CONTINUE;
             }
 
@@ -138,10 +147,15 @@ final class SourceFiles {
                 budget.check();
                 if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw failure("SOURCE_UNSAFE_PATH");
                 singleLink(path);
-                Files.setPosixFilePermissions(path, FILE_MODE);
-                try (FileChannel channel =
-                        FileChannel.open(path, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-                    channel.force(true);
+                if (SourceAccess.windows()) {
+                    WindowsStorage storage = SourceAccess.storage(path);
+                    storage.sync(path, storage.stat(path, false, false));
+                } else {
+                    Files.setPosixFilePermissions(path, FILE_MODE);
+                    try (FileChannel channel =
+                            FileChannel.open(path, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+                        channel.force(true);
+                    }
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -159,17 +173,24 @@ final class SourceFiles {
 
     static void removeOwned(Path root, Object rootKey) throws IOException {
         if (!rootKey.equals(directory(root).fileKey())) throw failure("SOURCE_UNSAFE_PATH");
-        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+        Map<Path, Object> directoryProofs = new HashMap<>();
+        SourceAccess.walk(root, 65, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path path, BasicFileAttributes attrs) {
+                directoryProofs.put(path, SourceAccess.proof(attrs));
+                return FileVisitResult.CONTINUE;
+            }
+
             @Override
             public FileVisitResult visitFile(Path path, BasicFileAttributes attrs) throws IOException {
-                Files.delete(path);
+                SourceAccess.remove(path, false, SourceAccess.proof(attrs));
                 return FileVisitResult.CONTINUE;
             }
 
             @Override
             public FileVisitResult postVisitDirectory(Path path, IOException error) throws IOException {
                 if (error != null) throw error;
-                Files.delete(path);
+                SourceAccess.remove(path, true, directoryProofs.get(path));
                 return FileVisitResult.CONTINUE;
             }
         });

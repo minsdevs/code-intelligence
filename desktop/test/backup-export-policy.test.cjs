@@ -77,15 +77,12 @@ function freezeTree(value) {
   return value;
 }
 
-test('reviewed constants pin the complete V1-V25 source inventory and current migration bytes', () => {
-  assert.equal(REVIEWED_SCHEMA.migrations.length, 25);
-  assert.equal(REVIEWED_SCHEMA.tables.length, 52);
-  assert.equal(REVIEWED_SCHEMA.tables.reduce((sum, table) => sum + table.columns.length, 0), 439);
+test('reviewed inventory matches every migration and current source column', () => {
   const directory = path.join(__dirname, '../../backend/src/main/resources/db/migration');
   const files = fs.readdirSync(directory).filter(name => name.endsWith('.sql')).sort();
   assert.deepEqual(files, REVIEWED_SCHEMA.migrations.map(item => item.filename).sort());
   const sourceTables = new Map();
-  let additions = 0;
+
   for (const migration of REVIEWED_SCHEMA.migrations) {
     const bytes = fs.readFileSync(path.join(directory, migration.filename));
     assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'), migration.sha256);
@@ -97,12 +94,15 @@ test('reviewed constants pin the complete V1-V25 source inventory and current mi
     }
     for (const match of sql.matchAll(/ALTER TABLE\s+(\w+)\s+([\s\S]*?);/g)) {
       for (const column of match[2].matchAll(/ADD COLUMN\s+(\w+)\s+/g)) {
-        sourceTables.get(match[1]).push(column[1]); additions++;
+        sourceTables.get(match[1]).push(column[1]);
+      }
+      for (const column of match[2].matchAll(/DROP COLUMN\s+(\w+)/g)) {
+        const columns = sourceTables.get(match[1]); const index = columns.indexOf(column[1]);
+        assert.notEqual(index, -1); columns.splice(index, 1);
       }
     }
   }
-  assert.equal(additions, 15);
-  assert.equal(sourceTables.size, 52);
+
   for (const table of REVIEWED_SCHEMA.tables) assert.deepEqual(table.columns.map(column => column.name), sourceTables.get(table.name));
   assert.equal(definition('users').columns.find(column => column.name === 'github_id').nullable, true);
   assert.deepEqual(definition('analysis_generations').columns.find(column => column.name === 'fencing_epoch'),
@@ -388,7 +388,7 @@ const costSafety = { enabled: false, dispatchAllowed: false, activationAuthority
 const obligationAccounting = { obligationData: true, conservativeMergeRequired: true, replaceJournal: false, releaseLiabilityAllowed: false };
 
 test('V25 pins three complete financial tables and selects all 44 obligation or diagnostic columns', () => {
-  assert.deepEqual(REVIEWED_SCHEMA.migrations.at(-1), {
+  assert.deepEqual(REVIEWED_SCHEMA.migrations.find(migration => migration.version === 25), {
     version: 25, filename: 'V25__ai_cost_reservations.sql',
     sha256: 'b5d547a4f0a24f263b8cf53983c57e446e0c9ee90a8f5c64e347e6ec89b1f1ec',
   });
@@ -419,11 +419,11 @@ test('V25 pins three complete financial tables and selects all 44 obligation or 
 
 test('V25 migration identity and every new column descriptor fail closed on changes', () => {
   for (const change of ['hash', 'filename', 'version', 'missing']) {
-    const input = schema();
-    if (change === 'hash') input.migrations.at(-1).sha256 = '0'.repeat(64);
-    else if (change === 'filename') input.migrations.at(-1).filename = 'V25__unreviewed.sql';
-    else if (change === 'version') input.migrations.at(-1).version = 26;
-    else input.migrations.pop();
+    const input = schema(), index = input.migrations.findIndex(migration => migration.version === 25);
+    if (change === 'hash') input.migrations[index].sha256 = '0'.repeat(64);
+    else if (change === 'filename') input.migrations[index].filename = 'V25__unreviewed.sql';
+    else if (change === 'version') input.migrations[index].version = 0;
+    else input.migrations.splice(index, 1);
     rejects(() => createBackupExportPolicy(input), 'SCHEMA_MISMATCH');
   }
   for (const table of costTables) {

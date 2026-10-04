@@ -1,7 +1,7 @@
 'use strict';
 
-// Development-only, pure row policy. This module performs no I/O and grants no DB/read/restore authority.
-// Reviewed V1-V25 source inventory; migration hashes are pinned literals, never approved from input.
+// Pure row policy. This module performs no I/O and grants no DB/read/restore authority.
+// Reviewed source inventory; migration hashes are pinned literals, never approved from input.
 const { types: { isProxy } } = require('node:util');
 
 const MIGRATIONS = [
@@ -129,6 +129,11 @@ const MIGRATIONS = [
     "version": 25,
     "filename": "V25__ai_cost_reservations.sql",
     "sha256": "b5d547a4f0a24f263b8cf53983c57e446e0c9ee90a8f5c64e347e6ec89b1f1ec"
+  },
+  {
+    "version": 26,
+    "filename": "V26__platform_source_identities.sql",
+    "sha256": "c371145fd690b2418e2a79996e9842d1b3d5707324248a264c132eb81507d20b"
   }
 ];
 
@@ -541,8 +546,6 @@ const TABLE_DEFINITIONS = [
     ["project_name", "varchar(255)", true, "none", "omit"],
     ["schema_version", "integer", false, "none", "omit"],
     ["canonical_root", "text", false, "none", "omit"],
-    ["root_device", "bigint", false, "none", "omit"],
-    ["root_inode", "bigint", false, "none", "omit"],
     ["policy_version", "varchar(64)", false, "none", "omit"],
     ["limits_sha256", "char(64)", false, "none", "omit"],
     ["manifest_sha256", "char(64)", false, "none", "omit"],
@@ -553,6 +556,9 @@ const TABLE_DEFINITIONS = [
     ["consumed_at", "timestamptz", true, "none", "omit"],
     ["consumed_job_id", "bigint", true, "none", "omit"],
     ["revoked_at", "timestamptz", true, "none", "omit"],
+    ["root_platform", "varchar(16)", false, "none", "omit"],
+    ["root_identity", "text", false, "none", "omit"],
+    ["root_owner", "text", true, "none", "omit"],
   ]],
   ["job_local_source_inputs", "excluded", [
     ["job_id", "bigint", false, "none", "omit"],
@@ -562,14 +568,15 @@ const TABLE_DEFINITIONS = [
     ["base_snapshot_id", "bigint", true, "none", "omit"],
     ["schema_version", "integer", false, "none", "omit"],
     ["canonical_root", "text", false, "none", "omit"],
-    ["root_device", "bigint", false, "none", "omit"],
-    ["root_inode", "bigint", false, "none", "omit"],
     ["policy_version", "varchar(64)", false, "none", "omit"],
     ["limits_sha256", "char(64)", false, "none", "omit"],
     ["manifest_sha256", "char(64)", false, "none", "omit"],
     ["selected_files", "integer", false, "none", "omit"],
     ["selected_bytes", "bigint", false, "none", "omit"],
     ["approved_at", "timestamptz", false, "none", "omit"],
+    ["root_platform", "varchar(16)", false, "none", "omit"],
+    ["root_identity", "text", false, "none", "omit"],
+    ["root_owner", "text", true, "none", "omit"],
   ]],
   ["source_blobs", "data", [
     ["project_id", "bigint", false, "none", "keep"],
