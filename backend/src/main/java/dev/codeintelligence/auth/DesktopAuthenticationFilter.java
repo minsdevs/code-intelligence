@@ -33,7 +33,7 @@ public final class DesktopAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         if (properties.configured() && tokenMatches(request.getHeader(TOKEN_HEADER))) {
-            if (!requestOriginAllowed(request)) {
+            if (!requestOriginAllowed(request, properties.allowedOrigin())) {
                 response.sendError(HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
@@ -54,22 +54,27 @@ public final class DesktopAuthenticationFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    private boolean requestOriginAllowed(HttpServletRequest request) {
+    static boolean requestOriginAllowed(HttpServletRequest request, String allowedOrigin) {
         String origin = request.getHeader("Origin");
         if (origin != null) {
-            return sameOrigin(origin, properties.allowedOrigin(), true);
+            return sameOrigin(origin, allowedOrigin, true);
         }
 
         String referer = request.getHeader("Referer");
         if (referer != null) {
-            return sameOrigin(referer, properties.allowedOrigin(), false);
+            return sameOrigin(referer, allowedOrigin, false);
         }
 
         String fetchSite = request.getHeader("Sec-Fetch-Site");
-        return fetchSite == null || "same-origin".equals(fetchSite.trim().toLowerCase(Locale.ROOT));
+        return fetchSite == null
+                || "same-origin".equals(fetchSite.trim().toLowerCase(Locale.ROOT))
+                || ("none".equals(fetchSite)
+                        && "navigate".equals(request.getHeader("Sec-Fetch-Mode"))
+                        && "document".equals(request.getHeader("Sec-Fetch-Dest"))
+                        && "GET".equals(request.getMethod()));
     }
 
-    private boolean sameOrigin(String candidate, String expected, boolean originHeader) {
+    private static boolean sameOrigin(String candidate, String expected, boolean originHeader) {
         try {
             URI candidateUri = URI.create(candidate.trim());
             URI expectedUri = URI.create(expected.trim());
@@ -100,7 +105,7 @@ public final class DesktopAuthenticationFilter extends OncePerRequestFilter {
         }
     }
 
-    private int effectivePort(URI uri) {
+    private static int effectivePort(URI uri) {
         if (uri.getPort() >= 0) {
             return uri.getPort();
         }

@@ -142,6 +142,33 @@ class DesktopAuthenticationFilterTest {
         verifyNoInteractions(accounts);
     }
 
+    @Test
+    void acceptsHttpsOriginAndCapabilityBackedFirstDocument() throws Exception {
+        DesktopAuthenticationFilter https = new DesktopAuthenticationFilter(
+                new DesktopAuthProperties(TOKEN, "local-key", "https://127.0.0.1:4311"), accounts);
+        when(localAccount.getId()).thenReturn(7L);
+        when(localAccount.getLogin()).thenReturn("local");
+        when(accounts.getOrCreateLocal("local-key")).thenReturn(localAccount);
+        MockHttpServletRequest first = requestWithToken();
+        first.setMethod("GET");
+        first.addHeader("Sec-Fetch-Site", "none");
+        first.addHeader("Sec-Fetch-Mode", "navigate");
+        first.addHeader("Sec-Fetch-Dest", "document");
+        AtomicBoolean continued = new AtomicBoolean();
+        https.doFilter(first, new MockHttpServletResponse(), (req, res) -> continued.set(true));
+        assertThat(continued).isTrue();
+        MockHttpServletRequest sameOrigin = requestWithToken();
+        sameOrigin.addHeader("Origin", "https://127.0.0.1:4311");
+        https.doFilter(sameOrigin, new MockHttpServletResponse(), (req, res) -> {});
+        MockHttpServletRequest downgrade = requestWithToken();
+        downgrade.addHeader("Origin", ORIGIN);
+        MockHttpServletResponse rejected = new MockHttpServletResponse();
+        https.doFilter(downgrade, rejected, (req, res) -> {
+            throw new AssertionError("HTTP origin accepted");
+        });
+        assertThat(rejected.getStatus()).isEqualTo(403);
+    }
+
     private MockHttpServletRequest requestWithToken() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(DesktopAuthenticationFilter.TOKEN_HEADER, TOKEN);

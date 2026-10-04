@@ -51,6 +51,11 @@ class GithubNativeOAuthServiceTest {
                 .build()
                 .getQueryParams()
                 .getFirst("state");
+        assertThat(UriComponentsBuilder.fromUriString(start.authorizationUrl())
+                        .build()
+                        .getQueryParams()
+                        .getFirst("redirect_uri"))
+                .isEqualTo(PROPERTIES.redirectUri());
         assertThat(start.authorizationUrl())
                 .contains("code_challenge_method=S256")
                 .doesNotContain("client_secret");
@@ -59,6 +64,7 @@ class GithubNativeOAuthServiceTest {
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("Accept", MediaType.APPLICATION_JSON_VALUE))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("code_verifier=")))
+                .andExpect(content().formDataContains(java.util.Map.of("redirect_uri", PROPERTIES.redirectUri())))
                 .andRespond(withSuccess(
                         "{\"access_token\":\"github-token\",\"token_type\":\"bearer\"}", MediaType.APPLICATION_JSON));
         GithubUserInfo profile = new GithubUserInfo(42L, "octocat", "Octo Cat", null, "read:user");

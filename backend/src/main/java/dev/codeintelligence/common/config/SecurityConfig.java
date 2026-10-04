@@ -21,6 +21,8 @@ import org.springframework.boot.health.actuate.endpoint.HealthEndpoint;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -74,10 +76,15 @@ public class SecurityConfig {
             AccountService accountService,
             SecurityContextRepository securityContextRepository,
             GithubOAuth2UserService githubOAuth2UserService,
-            ObjectProvider<ClientRegistrationRepository> clientRegistrations)
+            ObjectProvider<ClientRegistrationRepository> clientRegistrations,
+            Environment environment)
             throws Exception {
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        csrfTokenRepository.setCookieCustomizer(cookie -> cookie.sameSite("Lax"));
+        boolean desktop = environment.acceptsProfiles(Profiles.of("desktop"));
+        csrfTokenRepository.setCookieCustomizer(cookie -> {
+            cookie.sameSite("Lax");
+            if (desktop) cookie.secure(true);
+        });
 
         http.cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository)
@@ -107,8 +114,8 @@ public class SecurityConfig {
                                 .permitAll()
                                 .requestMatchers(HttpMethod.GET, "/api/csrf", "/api/auth/me")
                                 .permitAll()
-                                // Bundled scripts, styles and workers carry no project data. They
-                                // must load before the preload-authenticated API client can run.
+                                // Web mode bootstraps publicly; desktop capability protection wraps
+                                // the entire servlet chain, including these static resources.
                                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/vite.svg")
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/auth/pat")
