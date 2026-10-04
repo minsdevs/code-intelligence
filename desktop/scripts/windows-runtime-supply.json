@@ -1,0 +1,38 @@
+{
+  "postgres": {
+    "version": "16.10-1",
+    "url": "https://get.enterprisedb.com/postgresql/postgresql-16.10-1-windows-x64-binaries.zip",
+    "sha256": "ebb3b6af4fa69dea9951b66855bc4d42dc04e56ccb9aa7024ce3c58bd89d6b0c",
+    "license": "PostgreSQL and bundled dependency licenses"
+  },
+  "pgvector": {
+    "version": "0.8.1",
+    "url": "https://codeload.github.com/pgvector/pgvector/zip/refs/tags/v0.8.1",
+    "sha256": "61182a6afd6fb94c0e7740c037a7d3c36a8cab1cc581ae5bd9b7b2cfd789bdfc",
+    "license": "PostgreSQL"
+  },
+  "jdk": {
+    "version": "21.0.8+9",
+    "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jdk_x64_windows_hotspot_21.0.8_9.zip",
+    "sha256": "5dbb74a4edda94c2aae97a1e30f448db0ad9023a9466fe31a8c68377d9dfbac4",
+    "license": "GPL-2.0-with-classpath-exception and bundled dependency licenses"
+  },
+  "garnet": {
+    "version": "2.2.0",
+    "url": "https://codeload.github.com/microsoft/garnet/zip/0d585906eeb5dd77e130a8de6351683336cb168a",
+    "sha256": "e14fbdf81ffa43fd13279ecfaeef5492fe735bcd6b2c814be5c531f42a839847",
+    "license": "MIT"
+  },
+  "garnetNative": {
+    "version": "2.2.0",
+    "url": "https://github.com/microsoft/garnet/releases/download/v2.2.0/win-x64-based-readytorun.zip",
+    "sha256": "8812ae916dd2386db6ebfaeeee3fb6508024f82ee4c66284532a1a5baa6afea2",
+    "license": "MIT; Lua MIT"
+  },
+  "dotnet": {
+    "version": "10.0.401",
+    "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-win-x64.zip",
+    "sha256": "c1b96dea223e1ab2af8a51187e0cc96338d14c68834be1656136be18953cea09",
+    "license": "MIT and THIRD-PARTY-NOTICES.TXT"
+  }
+}

@@ -11,7 +11,7 @@ test('Windows executable resolution handles spaces and Unicode without changing 
   for (const name of ['postgres','initdb','pg_isready','psql','createdb','pg_dump','pg_restore']) {
     assert.equal(runtimeFile(root, ['postgres','bin',name], 'postgres/version/bin', 'win32'), root+'\\postgres\\version\\bin\\'+name+'.exe');
   }
-  assert.equal(runtimeFile(root, ['redis','bin','redis-server'], null, 'win32'), root+'\\redis\\bin\\redis-server.exe');
+  assert.equal(runtimeFile(root, ['redis','bin','redis-server'], null, 'win32'), root+'\\cache\\GarnetServer.exe');
   assert.equal(runtimeFile(root, ['backend','code-intelligence.jar'], null, 'win32'), root+'\\backend\\code-intelligence.jar');
   assert.equal(runtimeFile(root, ['ts-analyzer','dist','main.js'], null, 'win32'), root+'\\ts-analyzer\\dist\\main.js');
 });
@@ -51,7 +51,7 @@ test('Windows child environment retains OS prerequisites but excludes keys and i
     {DYLD_LIBRARY_PATH:'/runtime/postgres/lib',LD_LIBRARY_PATH:'/runtime/postgres/lib'});
 });
 
-test('Windows remains blocked until its native safety implementation exists, including direct builds', async () => {
+test('Windows release gate remains independent of unsigned native product acceptance', async () => {
   assert.equal(windowsReadiness('win32','x64').status,'BLOCKED');
   assert.equal(windowsReadiness('darwin','arm64').nativeWindowsValidation,false);
   assert.throws(requireWindowsReadiness,/Windows packaging is blocked/);

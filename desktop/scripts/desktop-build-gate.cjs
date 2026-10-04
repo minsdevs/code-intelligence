@@ -1,7 +1,11 @@
 'use strict';
-const { requireWindowsReadiness } = require('./windows-readiness.cjs');
+const path = require('node:path');
+const { requireWindowsReadiness, verifyWindowsStage } = require('./windows-readiness.cjs');
 
 module.exports = async function beforePack(context) {
   // Also protect direct electron-builder invocation, which bypasses npm scripts.
-  if (context.electronPlatformName === 'win32') requireWindowsReadiness();
+  if (context.electronPlatformName === 'win32') {
+    if (context.packager?.projectDir) verifyWindowsStage(path.join(context.packager.projectDir, 'stage', 'runtime'));
+    requireWindowsReadiness();
+  }
 };

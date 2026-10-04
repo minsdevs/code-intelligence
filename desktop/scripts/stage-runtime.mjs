@@ -150,6 +150,11 @@ function hash(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
+if (process.platform === 'win32' && process.arch === 'x64') {
+  const { stageWindowsRuntime } = await import('./stage-windows-runtime.cjs');
+  stageWindowsRuntime({ desktop, buildSequence });
+  process.exit(0);
+}
 if (process.platform !== 'darwin' || process.arch !== 'arm64') {
   throw new Error('The verified desktop package target is currently macOS arm64 only.');
 }

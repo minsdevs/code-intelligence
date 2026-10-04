@@ -25,7 +25,8 @@ function runtimeFile(root, parts, postgresBinRoot, platform = process.platform) 
   const logical = runtimeRelativePath(parts.join('/'), 'file path', platform);
   const relative = parts[0] === 'postgres' && parts[1] === 'bin' && postgresBinRoot
     ? `${runtimeRelativePath(postgresBinRoot, 'PostgreSQL bin path', platform)}/${parts.slice(2).join('/')}` : logical;
-  const executable = platform === 'win32' && EXECUTABLES.has(logical) ? `${relative}.exe` : relative;
+  const executable = platform === 'win32' && logical === 'redis/bin/redis-server' ? 'cache/GarnetServer.exe'
+    : platform === 'win32' && EXECUTABLES.has(logical) ? relative + '.exe' : relative;
   return paths.join(root, ...runtimeRelativePath(executable, 'file path', platform).split('/'));
 }
 

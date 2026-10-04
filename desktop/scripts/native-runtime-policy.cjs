@@ -321,7 +321,8 @@ function verifyPostgresExtensions(root, postgresShare) {
   }
 }
 
-function verifyNativeRuntime({ root, minimumSystemVersion, requiredExecutables, requiredModules, postgresShare, inspect = inspectNative }) {
+function verifyNativeRuntime({ root, minimumSystemVersion, requiredExecutables, requiredModules, postgresShare, inspect = inspectNative, platform = 'darwin', manifest, provenance }) {
+  if (platform === 'win32') return require('./windows-pe-policy.cjs').verifyWindowsRuntime({ root, manifest, provenance, supplies: require('./windows-runtime-supply.json') });
   const required = executablePaths(requiredExecutables);
   const modules = modulePaths(requiredModules);
   const share = relative(postgresShare);
@@ -384,4 +385,4 @@ function verifyNativeRuntime({ root, minimumSystemVersion, requiredExecutables, 
   return validateNativeInventory({ minimumSystemVersion, release, native, requiredExecutables: required, requiredModules: modules });
 }
 
-module.exports = Object.freeze({ POLICY, NativeRuntimePolicyError, parseLoadCommands, validateNativeInventory, verifyDependencyCopy, verifyNativeRuntime });
+module.exports = Object.freeze({ POLICY, NativeRuntimePolicyError, parseLoadCommands, validateNativeInventory, verifyDependencyCopy, verifyNativeRuntime, verifyPostgresExtensions });
