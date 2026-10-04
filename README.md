@@ -2,6 +2,8 @@
 
 # Code Intelligence
 
+Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, and V26 backup compatibility limit. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
+
 Current audit: [2026-10-02 release assessment](docs/release-audit-2026-10-02.md).
 Follow-up implementation and verification: [integrated results](docs/audit/execution-results-2026-10-02.md),
 [current execution status](docs/audit/execution-status-2026-10-02.md), and

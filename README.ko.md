@@ -2,6 +2,8 @@
 
 # Code Intelligence
 
+2026-10-05 제품 개편: 레포 개요·분석 시점별 검색 표·선택 주변 관계·보관 소스 탐색을 구현했습니다. 학습 관리는 제거하고 기존 데이터는 보존했습니다. [현재 구현과 실제 앱 검증 범위](docs/multilanguage-plan-2026-10-02/11-first-implementation.md)에 최초 native FAIL/후속 PASS와 V26 백업 호환성 제한을 구분했습니다. Developer ID 서명·공증·정식 배포는 아직 완료하지 않았습니다. 아래 날짜별 감사 기록은 과거 범위를 유지합니다.
+
 현재 감사: [2026-10-02 출시 점검 보고서](docs/release-audit-2026-10-02.md).
 후속 구현과 검증은 [통합 결과](docs/audit/execution-results-2026-10-02.md),
 [현재 실행 상태](docs/audit/execution-status-2026-10-02.md)와
