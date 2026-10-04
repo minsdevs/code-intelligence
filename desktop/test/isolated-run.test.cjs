@@ -10,7 +10,8 @@ const api = require('../src/isolated-run.cjs');
 const invalid = { code: 'ISOLATED_RUN_INVALID' };
 
 function fixture(t) {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-isolation-unit-')));
+  const base = process.platform === 'darwin' ? '/private/tmp' : os.tmpdir();
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(base, 'ciur-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const parentDirectory = path.join(root, 'runs');
   const runtimeDirectory = path.join(root, 'runtime');
@@ -30,11 +31,15 @@ function modeledApi(processOverrides = {}, disk = fs) {
   return context.module.exports;
 }
 
-test('argument opt-in is explicit and accepts both supported value forms', () => {
+test('argument opt-in separates claim launches from claim preparation', () => {
   assert.equal(api.parseIsolatedRunArguments(['electron', '.', '--other=value']), null);
-  const config = api.parseIsolatedRunArguments(['--isolated-run-parent', '/private/runs', '--isolated-runtime-root=/private/runtime']);
-  assert.deepEqual(config, { parentDirectory: '/private/runs', runtimeDirectory: '/private/runtime' });
-  assert.equal(Object.isFrozen(config), true);
+  assert.deepEqual(api.parseIsolatedRunArguments([
+    '--isolated-run-parent', '/private/runs', '--isolated-runtime-root=/private/runtime',
+    '--isolated-run-purpose', 'automation',
+  ]), { parentDirectory: '/private/runs', runtimeDirectory: '/private/runtime', purpose: 'automation' });
+  assert.deepEqual(api.parseIsolatedRunArguments(['--isolated-run-claim=/private/run/.isolated-run.json']), {
+    claimFile: '/private/run/.isolated-run.json'
+  });
 });
 
 for (const args of [
@@ -42,8 +47,10 @@ for (const args of [
   ['--isolated-run-parent=/runs'], ['--isolated-runtime-root=/runtime'],
   ['--isolated-run-parent', '--isolated-runtime-root=/runtime'],
   ['--isolated-run-parent=/runs', '--isolated-runtime-root=/runtime', '--isolated-run-parent', '/other'],
-  ['--isolated-run-parent=/runs', '--isolated-runtime-root=/runtime', '--isolated-runtime-root=/other'],
-  ['--isolated-run-parent=/runs', '--isolated-runtime-root=/runtime', '--isolated-verified=true'],
+  ['--isolated-run-parent=/runs', '--isolated-runtime-root=/runtime', '--isolated-run-claim=/claim'],
+  ['--isolated-run-claim=/claim', '--isolated-run-purpose=validation'],
+  ['--isolated-run-parent=/runs', '--isolated-runtime-root=/runtime', '--isolated-run-purpose=production'],
+  ['--isolated-run-claim=/claim', '--isolated-verified=true'],
   [42], Array(1),
 ]) {
   test(`argument parser refuses malformed or ambiguous options ${JSON.stringify(args)}`, () => {
@@ -60,12 +67,13 @@ test('accessor and proxy inputs are rejected without invoking user code or files
   const args = Object.defineProperty([], '0', { get: getter });
   for (const config of [accessor, new Proxy({}, { get: getter }),
     { parentDirectory: '/runs', runtimeDirectory: '/runtime', extra: true },
-    Object.create({ parentDirectory: '/runs', runtimeDirectory: '/runtime' }),
-    { parentDirectory: '/runs', runtimeDirectory: '/runtime', forbiddenRoots: new Proxy([], { get: getter }) }]) {
+    Object.create({ parentDirectory: '/runs', runtimeDirectory: '/runtime' })]) {
     assert.throws(() => modeled.prepareIsolatedRun(config), invalid);
   }
+  assert.throws(() => api.prepareIsolatedRun({ parentDirectory: '/runs', runtimeDirectory: '/runtime',
+    forbiddenRoots: new Proxy([], { get: getter }) }), invalid);
   assert.throws(() => modeled.parseIsolatedRunArguments(args), invalid);
-  assert.throws(() => modeled.parseIsolatedRunArguments(new Proxy([], { get: getter })), invalid);
+  assert.throws(() => api.parseIsolatedRunArguments(new Proxy([], { get: getter })), invalid);
   assert.equal(invoked, 0);
 });
 
@@ -80,13 +88,16 @@ test('unsupported platforms refuse before any filesystem access', () => {
   assert.equal(touched, 0);
 });
 
-test('fresh plans create private paths and a non-launchable exclusive claim without modifying runtime', t => {
+test('fresh plans create private paths and an exclusive fixed-identity claim without modifying runtime', t => {
   const f = fixture(t);
   const before = fs.statSync(f.sentinel);
   const plan = api.prepareIsolatedRun(f.options);
   assert.equal(Object.isFrozen(plan), true); assert.equal(Object.isFrozen(plan.paths), true);
   assert.equal(path.dirname(plan.root), f.parentDirectory);
   assert.equal(plan.runtimeRoot, f.runtimeDirectory);
+  assert.equal(plan.purpose, 'validation');
+  assert.deepEqual(plan.appIdentity, api.VALIDATION_IDENTITIES.validation);
+  assert.equal(plan.claimFile, path.join(plan.root, api.CLAIM_FILE));
   assert.deepEqual(Object.keys(plan.paths).sort(), ['crashDumps', 'home', 'logs', 'output', 'sessionData', 'temp', 'userData']);
   for (const directory of [plan.root, ...Object.values(plan.paths)]) {
     assert.equal(fs.statSync(directory).mode & 0o777, 0o700);
@@ -95,9 +106,9 @@ test('fresh plans create private paths and a non-launchable exclusive claim with
   const claim = path.join(plan.root, api.CLAIM_FILE);
   assert.equal(fs.statSync(claim).mode & 0o777, 0o600);
   const record = JSON.parse(fs.readFileSync(claim, 'utf8'));
-  assert.equal(record.launchAllowed, false); assert.equal(record.root, plan.root);
+  assert.equal(record.version, 2); assert.equal(record.launchAllowed, true);
+  assert.equal(record.root, plan.root); assert.deepEqual(record.appIdentity, api.VALIDATION_IDENTITIES.validation);
   assert.doesNotThrow(plan.assertIdentity);
-  assert.equal(fs.readFileSync(f.sentinel, 'utf8'), 'unchanged synthetic runtime');
   assert.equal(fs.statSync(f.sentinel).mtimeMs, before.mtimeMs);
   const second = api.prepareIsolatedRun(f.options);
   assert.notEqual(second.root, plan.root);
@@ -105,6 +116,17 @@ test('fresh plans create private paths and a non-launchable exclusive claim with
   assert.throws(() => api.prepareIsolatedRun({ ...f.options, parentDirectory: plan.paths.output }), invalid);
   assert.throws(() => api.prepareIsolatedRun({ ...f.options, runtimeDirectory: plan.root }), invalid);
   assert.throws(() => api.prepareIsolatedRun({ ...f.options, runtimeDirectory: plan.paths.output }), invalid);
+});
+
+test('macOS validation claims refuse a private temp root that cannot fit the real gateway socket', {
+  skip: process.platform !== 'darwin',
+}, t => {
+  const root = fs.realpathSync(fs.mkdtempSync('/private/tmp/cisb-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const parentDirectory = path.join(root, 'p'.repeat(72)), runtimeDirectory = path.join(root, 'runtime');
+  fs.mkdirSync(parentDirectory, { mode: 0o700 }); fs.mkdirSync(runtimeDirectory, { mode: 0o700 });
+  assert.throws(() => api.prepareIsolatedRun({ parentDirectory, runtimeDirectory }), invalid);
+  assert.deepEqual(fs.readdirSync(parentDirectory), []);
 });
 
 test('claim creation is exclusive and claim reads cannot block on a replaced special file', t => {
@@ -130,18 +152,19 @@ test('claim creation is exclusive and claim reads cannot block on a replaced spe
   assert.equal(fs.readFileSync(racedClaim, 'utf8'), 'synthetic concurrent claim');
 });
 
-test('unverified OS credentials and endpoint ownership always block prepared and forged plans', t => {
-  const plan = api.prepareIsolatedRun(fixture(t).options);
-  assert.throws(() => api.assertIsolatedLaunchReady(plan), error => {
-    assert.equal(error.code, 'ISOLATED_LAUNCH_BLOCKED');
-    assert.deepEqual(error.blockers, ['CREDENTIAL_STORE_UNVERIFIED', 'SERVICE_ENDPOINT_OWNERSHIP_UNPROVEN']);
-    return true;
-  });
-  for (const forged of [{ ...plan }, { ...plan, verified: true }, new Proxy(plan, {})]) {
+test('prepared and reopened claims authorize only fixed validation identities', t => {
+  const plan = api.prepareIsolatedRun({ ...fixture(t).options, purpose: 'automation' });
+  assert.doesNotThrow(() => api.assertIsolatedLaunchReady(plan));
+  const reopened = api.openIsolatedRun({ claimFile: plan.claimFile });
+  assert.equal(reopened.root, plan.root);
+  assert.equal(reopened.runtimeRoot, plan.runtimeRoot);
+  assert.deepEqual(reopened.appIdentity, api.VALIDATION_IDENTITIES.automation);
+  assert.doesNotThrow(() => api.assertIsolatedLaunchReady(reopened));
+  for (const forged of [{ ...plan }, { ...plan, purpose: 'validation' }, new Proxy(plan, {})]) {
     assert.throws(() => api.assertIsolatedLaunchReady(forged), invalid);
     assert.throws(() => api.isolatedChildEnvironment(forged), invalid);
   }
-  assert.deepEqual(api.isolatedChildEnvironment(plan), {
+  assert.deepEqual(api.isolatedChildEnvironment(reopened), {
     HOME: plan.paths.home, TMPDIR: plan.paths.temp, TMP: plan.paths.temp, TEMP: plan.paths.temp
   });
 });

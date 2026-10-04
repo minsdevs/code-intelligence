@@ -27,7 +27,7 @@ const { createSourceVault, openSourceVault, openSourceVaultRestoreStage } = requ
 const { createNativeOwnerLocks } = require('./native-owner-locks.cjs');
 const { spawnManagedProcess } = require('./managed-process.cjs');
 const { runtimeRelativePath, runtimeFile, inheritedEnvironment, libraryEnvironment } = require('./runtime-platform.cjs');
-const { parseIsolatedRunArguments, prepareIsolatedRun, assertIsolatedLaunchReady } = require('./isolated-run.cjs');
+const { parseIsolatedRunArguments, openIsolatedRun, assertIsolatedLaunchReady, isolatedChildEnvironment } = require('./isolated-run.cjs');
 const { createServiceTransport } = require('./service-transport.cjs');
 const { createSourceBroker } = require('./source-broker.cjs');
 const { createWindowsBoundary } = require('./windows-native-boundary.cjs');
@@ -58,6 +58,7 @@ let restartTimer;
 let restartAttempts = 0;
 let runtimeOperation = Promise.resolve();
 let startupPhase = 'MANIFEST';
+let isolatedPlan;
 function noteStartup(phase) {
   startupPhase = phase;
   console.error('DESKTOP_STARTUP ' + phase);
@@ -70,23 +71,20 @@ function withRuntimeOperation(action) {
   return result;
 }
 
-// Process-local paths must be selected before the singleton or Chromium session.
-// This preparation is not an OS credential-store or service-ownership boundary.
 try {
   const isolation = parseIsolatedRunArguments(process.argv ?? []);
   if (isolation) {
-    const plan = prepareIsolatedRun({ ...isolation, forbiddenRoots: [
-      app.getPath('userData'), app.getPath('sessionData'),
-      path.join(__dirname, '..', 'stage'), path.join(__dirname, '..', 'dist'),
-      ...(process.resourcesPath ? [process.resourcesPath] : []),
+    const plan = openIsolatedRun({ claimFile: isolation.claimFile, forbiddenRoots: [
+      app.getPath('userData'), app.getPath('sessionData'), path.join(__dirname, '..', 'dist'),
     ] });
+    assertIsolatedLaunchReady(plan);
+    app.setName(plan.appIdentity.name);
     for (const name of ['userData', 'sessionData', 'temp', 'crashDumps']) app.setPath(name, plan.paths[name]);
     app.setAppLogsPath(plan.paths.logs);
-    // No environment flag or prepared claim can bypass these unresolved boundaries.
-    assertIsolatedLaunchReady(plan);
+    isolatedPlan = plan;
   }
 } catch (error) {
-  const code = ['ISOLATED_RUN_INVALID', 'ISOLATED_RUN_UNSUPPORTED_PLATFORM', 'ISOLATED_LAUNCH_BLOCKED'].includes(error?.code)
+  const code = ['ISOLATED_RUN_INVALID', 'ISOLATED_RUN_UNSUPPORTED_PLATFORM'].includes(error?.code)
     ? error.code : 'ISOLATED_RUN_INVALID';
   console.error(`[desktop] isolated validation refused: ${code}`);
   app.exit(1);
@@ -110,6 +108,7 @@ function randomSecret(bytes = 32) {
 }
 
 function runtimeRoot() {
+  if (isolatedPlan) return isolatedPlan.runtimeRoot;
   return app.isPackaged
     ? path.join(process.resourcesPath, 'runtime')
     : path.join(__dirname, '..', 'stage', 'runtime');
@@ -245,13 +244,17 @@ function assertRuntimeRelativePath(raw, label) {
   return runtimeRelativePath(raw, label, process.platform);
 }
 
-function assertTrustedRenderer(event) {
-  if (!mainWindow
+function isTrustedRenderer(event) {
+  if (!mainWindow || !runtime || !event.senderFrame
       || event.sender !== mainWindow.webContents
-      || event.senderFrame !== mainWindow.webContents.mainFrame
-      || new URL(event.senderFrame.url).origin !== new URL(runtime.apiBaseUrl).origin) {
-    throw new Error('Untrusted renderer IPC request.');
-  }
+      || event.senderFrame !== mainWindow.webContents.mainFrame) return false;
+  try {
+    return new URL(event.senderFrame.url).origin === new URL(runtime.apiBaseUrl).origin;
+  } catch { return false; }
+}
+
+function assertTrustedRenderer(event) {
+  if (!isTrustedRenderer(event)) throw new Error('Untrusted renderer IPC request.');
 }
 
 async function verifyRuntimeIntegrity() {
@@ -301,7 +304,8 @@ function childLogPath(name) {
 }
 
 function bundledChildEnvironment(explicit = {}) {
-  return { ...inheritedEnvironment(process.env, process.platform), ...explicit };
+  return { ...inheritedEnvironment(process.env, process.platform),
+    ...(isolatedPlan ? isolatedChildEnvironment(isolatedPlan) : {}), ...explicit };
 }
 
 async function spawnManaged(name, command, args, options = {}) {
@@ -990,7 +994,7 @@ async function restoreWithDialog() {
 
 function registerIpc() {
   ipcMain.on('runtime:config', (event) => {
-    assertTrustedRenderer(event);
+    if (!isTrustedRenderer(event)) { event.returnValue = null; return; }
     event.returnValue = { apiBaseUrl: runtime.apiBaseUrl, apiToken: runtime.apiToken, appVersion: app.getVersion() };
   });
   ipcMain.handle('runtime:status', (event) => {
@@ -1071,9 +1075,9 @@ function createWindow() {
       }
     }
   );
-  const allowAppNavigation = (event, url) => {
+  const allowAppNavigation = event => {
     try {
-      if (new URL(url).origin !== appOrigin) event.preventDefault();
+      if (new URL(event.url).origin !== appOrigin) event.preventDefault();
     } catch {
       event.preventDefault();
     }
@@ -1089,9 +1093,7 @@ function createWindow() {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', allowAppNavigation);
-  mainWindow.webContents.on('will-frame-navigate', (event, details) => {
-    allowAppNavigation(event, details.url);
-  });
+  mainWindow.webContents.on('will-frame-navigate', allowAppNavigation);
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.loadURL(runtime.apiBaseUrl);
 }

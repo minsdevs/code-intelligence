@@ -450,34 +450,55 @@ async function flushStopDeadlines(h, operation) {
   assert.equal(settled, true, 'synthetic shutdown did not settle after both stop deadlines');
 }
 
-for (const appVersion of ['2.4.6', '7.8.9-rc.2']) {
-  test(`runtime config exposes Electron app version ${appVersion} only to the trusted renderer`, async t => {
-    const h = await harness(t, { appVersion });
-    // Register only IPC and a synthetic window; do not start any runtime service.
-    h.run(`mainWindow = new BrowserWindow({}); runtime = { apiBaseUrl: 'http://127.0.0.1:41000', apiToken: 'synthetic' };
-      mainWindow.webContents.mainFrame.url = runtime.apiBaseUrl; registerIpc();`);
-    const event = h.rendererEvent(); h.handlers.get('runtime:config')(event);
-    assert.equal(event.returnValue.appVersion, appVersion);
-    assert.deepEqual(h.events.filter(value => value === 'app.getVersion'), ['app.getVersion']);
-    assert.equal(h.children.length, 0);
-  });
-}
-
-test('runtime config denies foreign windows, subframes and navigated origins before reading the app version', async t => {
+test('desktop navigation guards use the current event URL and enforce the app origin for both frame types', async t => {
   const h = await harness(t);
-  h.run(`mainWindow = new BrowserWindow({}); runtime = { apiBaseUrl: 'http://127.0.0.1:41000', apiToken: 'synthetic' };
-    mainWindow.webContents.mainFrame.url = runtime.apiBaseUrl; registerIpc();`);
-  const foreignWindow = { ...h.rendererEvent(), sender: {} };
-  const subframe = { ...h.rendererEvent(), senderFrame: { url: 'http://127.0.0.1:41000' } };
-  for (const event of [foreignWindow, subframe]) {
-    assert.throws(() => h.handlers.get('runtime:config')(event), /Untrusted renderer/);
-    assert.equal(event.returnValue, undefined);
+  h.run("runtime = { apiBaseUrl: 'https://127.0.0.1:41000', apiToken: 'synthetic' }; createWindow();");
+  for (const kind of ['will-navigate', 'will-frame-navigate']) {
+    for (const [url, refused] of [
+      ['https://127.0.0.1:41000/projects/7?tab=source', false],
+      ['https://127.0.0.1:41001/projects', true],
+      ['http://127.0.0.1:41000/projects', true],
+      ['https://example.invalid/', true],
+      ['javascript:alert(1)', true],
+      ['not a URL', true],
+    ]) {
+      let prevented = false;
+      h.browser[0].webContents.emit(kind, { url, preventDefault() { prevented = true; } });
+      assert.equal(prevented, refused, kind + ': ' + url);
+    }
   }
-  const navigated = h.rendererEvent(); navigated.senderFrame.url = 'https://untrusted.example';
-  assert.throws(() => h.handlers.get('runtime:config')(navigated), /Untrusted renderer/);
-  assert.equal(navigated.returnValue, undefined);
+});
+
+test('runtime config denies foreign, uncommitted and malformed renderer frames without returning authority', async t => {
+  const h = await harness(t);
+  h.run("mainWindow = new BrowserWindow({}); runtime = { apiBaseUrl: 'https://127.0.0.1:41000', apiToken: 'synthetic' }; registerIpc();");
+  const foreignWindow = { ...h.rendererEvent(), sender: {} };
+  const subframe = { ...h.rendererEvent(), senderFrame: { url: 'https://127.0.0.1:41000' } };
+  for (const event of [foreignWindow, subframe]) {
+    h.handlers.get('runtime:config')(event);
+    assert.equal(event.returnValue, null);
+  }
+  for (const url of ['', undefined, 'about:blank', 'not a URL', 'https://untrusted.example', 'https://127.0.0.1:41001']) {
+    const event = h.rendererEvent(); event.senderFrame.url = url;
+    h.handlers.get('runtime:config')(event);
+    assert.equal(event.returnValue, null);
+  }
   assert.equal(h.events.includes('app.getVersion'), false);
   assert.equal(h.children.length, 0);
+});
+
+test('a denied initial document can acquire runtime authority only after its main frame commits the app origin', async t => {
+  const h = await harness(t);
+  h.run("mainWindow = new BrowserWindow({}); runtime = { apiBaseUrl: 'https://127.0.0.1:41000', apiToken: 'synthetic' }; registerIpc();");
+  const initial = h.rendererEvent(); initial.senderFrame.url = '';
+  h.handlers.get('runtime:config')(initial);
+  assert.equal(initial.returnValue, null);
+  const committed = h.rendererEvent(); committed.senderFrame.url = 'https://127.0.0.1:41000/projects';
+  h.handlers.get('runtime:config')(committed);
+  assert.equal(committed.returnValue.apiToken, 'synthetic');
+  const departed = h.rendererEvent(); departed.senderFrame.url = 'https://untrusted.example/';
+  h.handlers.get('runtime:config')(departed);
+  assert.equal(departed.returnValue, null);
 });
 
 test('existing local data permits first source enrollment without a fresh paid-AI exemption', async t => {

@@ -16,7 +16,7 @@ function requireExternalUrl(url) {
   return url;
 }
 
-contextBridge.exposeInMainWorld('codeIntelligenceDesktop', Object.freeze({
+if (config) contextBridge.exposeInMainWorld('codeIntelligenceDesktop', Object.freeze({
   platform: process.platform,
   appVersion: config.appVersion,
   apiBaseUrl: config.apiBaseUrl,

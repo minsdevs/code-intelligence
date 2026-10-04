@@ -51,6 +51,7 @@ function harness(options = {}) {
       isPackaged: options.isPackaged === true,
       getVersion: () => '0.1.0',
       requestSingleInstanceLock: () => { effects.push(['singleton', { ...appPaths }]); return options.ownsInstance !== false; },
+      setName(value) { effects.push(['setName', value]); },
       on: (name, callback) => appEvents.set(name, callback),
       whenReady: () => { effects.push(['whenReady']); return new Promise(() => {}); },
       getPath: name => appPaths[name] || '/test',
@@ -645,42 +646,30 @@ for (const argv of [
   });
 }
 
-test('actual main prepares isolated paths then blocks before singleton, readiness, credentials and runtime effects', t => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-isolation-main-')));
+test('actual main accepts a reusable validation claim before singleton, readiness or credentials', t => {
+  const base = process.platform === 'darwin' ? '/private/tmp' : os.tmpdir();
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(base, 'cirm-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const parentDirectory = path.join(root, 'runs'); const runtimeDirectory = path.join(root, 'runtime');
   fs.mkdirSync(parentDirectory, { mode: 0o700 }); fs.mkdirSync(runtimeDirectory, { mode: 0o700 });
-  const touched = [];
-  const noAccess = operation => () => { touched.push(operation); assert.fail(`Blocked startup reached ${operation}`); };
-  const h = harness({
-    argv: ['electron', '.', '--isolated-run-parent', parentDirectory, '--isolated-runtime-root', runtimeDirectory],
-    env: { CODE_INTELLIGENCE_ISOLATION_VERIFIED: '1', CODE_INTELLIGENCE_CREDENTIAL_STORE_VERIFIED: 'true',
-      ISOLATED_RUN_VERIFIED: '1', HOME: '/synthetic/production-home' },
-    captureBootstrapError: true,
-    disk: { existsSync: noAccess('main filesystem'), mkdirSync: noAccess('main mkdir') },
-    modules: {
-      './safety-lifecycle.cjs': { loadDesktopSecrets: noAccess('secrets'), openSafetyLifecycle: noAccess('safety') },
-      './native-owner-locks.cjs': { createNativeOwnerLocks: noAccess('owner locks') },
-      './managed-process.cjs': { spawnManagedProcess: noAccess('guardian') },
-      './ai-desktop-gateway.cjs': { openDesktopAiGateway: noAccess('gateway') },
-      './ai-egress-postgres.cjs': { createAiEgressPostgres: noAccess('postgres adapter') },
-    },
-  });
-  assertBlockedBootstrap(h, 'ISOLATED_LAUNCH_BLOCKED');
-  assert.deepEqual(touched, []);
-  const [runName] = fs.readdirSync(parentDirectory); assert.ok(runName);
-  const runRoot = path.join(parentDirectory, runName);
-  assert.deepEqual(h.effects.filter(item => ['setPath', 'setAppLogsPath'].includes(item[0])), [
-    ['setPath', 'userData', path.join(runRoot, 'userData')],
-    ['setPath', 'sessionData', path.join(runRoot, 'sessionData')],
-    ['setPath', 'temp', path.join(runRoot, 'temp')],
-    ['setPath', 'crashDumps', path.join(runRoot, 'crashDumps')],
-    ['setAppLogsPath', path.join(runRoot, 'logs')],
+  const plan = require('../src/isolated-run.cjs').prepareIsolatedRun({ parentDirectory, runtimeDirectory, purpose: 'automation' });
+  const h = harness({ argv: ['electron', '.', '--isolated-run-claim', plan.claimFile], captureBootstrapError: true });
+  assert.equal(h.bootstrapError, undefined);
+  assert.deepEqual(h.effects.filter(item => ['setName', 'setPath', 'setAppLogsPath'].includes(item[0])), [
+    ['setName', 'Code Intelligence Acceptance'],
+    ['setPath', 'userData', plan.paths.userData],
+    ['setPath', 'sessionData', plan.paths.sessionData],
+    ['setPath', 'temp', plan.paths.temp],
+    ['setPath', 'crashDumps', plan.paths.crashDumps],
+    ['setAppLogsPath', plan.paths.logs],
   ]);
-  assert.ok(h.effects.findIndex(item => item[0] === 'setAppLogsPath') < h.effects.findIndex(item => item[0] === 'exit'));
-  const claim = JSON.parse(fs.readFileSync(path.join(runRoot, '.isolated-run.json'), 'utf8'));
-  assert.equal(claim.launchAllowed, false);
-  assert.equal(JSON.stringify(h.effects.filter(item => item[0] === 'console.error')).includes(root), false);
+  assert.deepEqual(h.effects.filter(item => item[0] === 'singleton'), [[
+    'singleton', { userData: plan.paths.userData, sessionData: plan.paths.sessionData,
+      temp: plan.paths.temp, crashDumps: plan.paths.crashDumps, logs: plan.paths.logs }
+  ]]);
+  assert.equal(h.effects.some(item => ['safeStorage', 'network', 'exit'].includes(item[0])), false);
+  const claim = JSON.parse(fs.readFileSync(plan.claimFile, 'utf8'));
+  assert.equal(claim.launchAllowed, true); assert.deepEqual(claim.appIdentity, plan.appIdentity);
 });
 
 test('ordinary startup ignores isolation-like environment values and preserves default Electron paths', async () => {
