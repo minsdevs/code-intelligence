@@ -1,4 +1,4 @@
-package dev.codeintelligence.source;
+package dev.codeintelligence.common;
 
 /** Main-owned local bridge capability, supplied only by the inherited private bootstrap. */
 public record SourceStoreProperties(String socketPath, String brokerToken) {
@@ -12,7 +12,7 @@ public record SourceStoreProperties(String socketPath, String brokerToken) {
         } else {
             if (noSocket || noToken || !brokerToken.matches("[0-9a-f]{64}")) throw invalid();
             try {
-                dev.codeintelligence.common.DesktopPrivateBootstrap.validatePath(socketPath);
+                DesktopPrivateBootstrap.validatePath(socketPath);
             } catch (RuntimeException ex) {
                 throw invalid();
             }

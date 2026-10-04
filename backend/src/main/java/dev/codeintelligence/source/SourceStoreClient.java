@@ -1,6 +1,7 @@
 package dev.codeintelligence.source;
 
 import dev.codeintelligence.common.DesktopPrivateBootstrap;
+import dev.codeintelligence.common.SourceStoreProperties;
 import java.io.IOException;
 import java.net.StandardProtocolFamily;
 import java.net.UnixDomainSocketAddress;
