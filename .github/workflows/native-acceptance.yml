@@ -92,7 +92,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-windows-2025-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/native-acceptance-artifacts/
+          path: |
+            ${{ runner.temp }}/native-acceptance-artifacts/provisioning.json
+            ${{ runner.temp }}/native-acceptance-artifacts/acceptance.json
+            ${{ runner.temp }}/native-acceptance-artifacts/token.json
+            ${{ runner.temp }}/native-acceptance-artifacts/windows-native.json
+            ${{ runner.temp }}/native-acceptance-artifacts/windows-native-build.log
+            ${{ runner.temp }}/native-acceptance-artifacts/windows-safe-storage.json
           if-no-files-found: error
           retention-days: 7
           include-hidden-files: false

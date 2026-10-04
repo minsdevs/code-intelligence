@@ -15,6 +15,51 @@ function tapCounts(output) {
   }
   return counts;
 }
+
+function tapDiagnostics(output) {
+  // Never export TAP names, assertion values/messages, paths, or raw stacks.
+  // Ordinals and source line numbers locate failures in the checked-in test file.
+  const results = [];
+  const entries = [...output.matchAll(/^(not )?ok (\d+) - [^\r\n]*(?:\r?\n|$)/gm)];
+  for (let index = 0; index < entries.length && index < 128; index++) {
+    const entry = entries[index];
+    const detail = output.slice(entry.index + entry[0].length, entries[index + 1]?.index ?? output.length);
+    const lines = [...detail.matchAll(/windows-native-boundary\.test\.cjs:(\d{1,6}):(\d{1,6})/g)];
+    results.push({ ordinal: Number(entry[2]), status: entry[1] ? 'FAIL' : 'PASS',
+      sourceLocations: lines.slice(0, 8).map(match => ({ line: Number(match[1]), column: Number(match[2]) })) });
+  }
+  return results;
+}
+
+function requireNativePass(result, counts) {
+  assert.equal(result.status, 0); assert.equal(result.error, undefined); assert.equal(result.signal, null);
+  assert.ok(counts.tests >= 9, 'Real Windows tests did not run');
+  assert.equal(counts.pass, counts.tests);
+  for (const field of ['fail', 'cancelled', 'skipped', 'todo']) assert.equal(counts[field], 0, 'Skipped or failed native checks cannot pass');
+}
+
+function buildNative(cmake, native, build, owned, artifacts, env) {
+  // Only public repository C++/CMake and OS toolchain output goes into this log.
+  // Do not reuse this for npm, Electron, helper invocations, or test/runtime output.
+  const buildEnv = Object.fromEntries(Object.entries(env).filter(([key]) => /^(?:SystemRoot|windir|PATH|TEMP|TMP|USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|ProgramFiles(?:\(x86\))?|ProgramW6432|COMSPEC|PATHEXT|VSINSTALLDIR|VCINSTALLDIR|VCToolsInstallDir|WindowsSdkDir|WindowsSDKVersion|INCLUDE|LIB|LIBPATH)$/i.test(key)));
+  const fd = fs.openSync(path.join(artifacts, 'windows-native-build.log'), 'wx', 0o600);
+  try {
+    for (const [phase, args] of [
+      ['cmake-configure', ['-S', native, '-B', build, '-A', 'x64']],
+      ['msvc-build', ['--build', build, '--config', 'Release']],
+    ]) {
+      fs.writeSync(fd, '[' + phase + ']\n');
+      const result = spawnSync(cmake, args, { cwd: owned, env: buildEnv, stdio: ['ignore', fd, fd], timeout: 15 * 60 * 1000, windowsHide: true });
+      if (result.status !== 0 || result.error || result.signal) {
+        const error = new Error('WINDOWS_NATIVE_BUILD_FAILED');
+        error.exitStatus = Number.isInteger(result.status) ? result.status : null;
+        error.commandEvidence = { executable: 'cmake.exe', phase, diagnostics: 'windows-native-build.log',
+          launchFailure: !!result.error, timedOut: result.error?.code === 'ETIMEDOUT' };
+        throw error;
+      }
+    }
+  } finally { fs.closeSync(fd); }
+}
 async function runWindows({ source, owned, artifacts, report, run, env }) {
   assert.equal(process.platform, 'win32'); assert.equal(process.arch, 'x64');
   // The launcher attests its actual WindowsPrincipal token before this process is created.
@@ -23,8 +68,7 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
   const build = path.join(owned, 'native-build');
   const native = path.join(source, 'desktop', 'native', 'windows');
   assert.ok(path.isAbsolute(env.NATIVE_ACCEPTANCE_CMAKE || ''));
-  run(env.NATIVE_ACCEPTANCE_CMAKE, ['-S', native, '-B', build, '-A', 'x64'], owned, env);
-  run(env.NATIVE_ACCEPTANCE_CMAKE, ['--build', build, '--config', 'Release'], owned, env);
+  buildNative(env.NATIVE_ACCEPTANCE_CMAKE, native, build, owned, artifacts, env);
   const runtime = path.join(owned, 'native-runtime');
   const helper = path.join(runtime, 'native', 'windows', 'codeintel-boundary.exe');
   fs.mkdirSync(path.dirname(helper), { recursive: true });
@@ -39,17 +83,14 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
   fs.writeFileSync(path.join(owned, 'native-tests-private.stderr.log'), result.stderr || '');
   const nativeReport = { format: 1, standardUser: true, productAcceptance: false,
     helperSha256: crypto.createHash('sha256').update(fs.readFileSync(helper)).digest('hex'),
-    exitStatus: Number.isInteger(result.status) ? result.status : null, status: 'FAIL', counts: null };
+    exitStatus: Number.isInteger(result.status) ? result.status : null, status: 'FAIL', counts: null,
+    launchFailure: !!result.error, timedOut: result.error?.code === 'ETIMEDOUT', tests: tapDiagnostics(result.stdout || '') };
   try {
     nativeReport.counts = tapCounts(result.stdout || '');
-    const counts = nativeReport.counts;
-    assert.equal(result.status, 0); assert.equal(result.error, undefined);
-    assert.ok(counts.tests >= 9, 'Real Windows tests did not run');
-    assert.equal(counts.pass, counts.tests);
-    for (const field of ['fail', 'cancelled', 'skipped', 'todo']) assert.equal(counts[field], 0, 'Skipped or failed native checks cannot pass');
+    requireNativePass(result, nativeReport.counts);
     nativeReport.status = 'PASS';
   } finally {
-    // TAP diagnostics may contain paths/source from failed assertions; export numeric summary only.
+    // Raw TAP/stderr remain private; only numeric summaries/source locations cross the boundary.
     fs.writeFileSync(path.join(artifacts, 'windows-native.json'), JSON.stringify(nativeReport, null, 2) + '\n');
   }
   report.checks.push('real-standard-user-ntfs-leases-job-object-security');
@@ -65,4 +106,4 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
   report.checks.push('real-standard-user-electron-DPAPI-process-restart');
   report.nativeBoundaryStatus = 'PASS'; report.productAcceptance = 'BLOCKED';
 }
-module.exports = { runWindows, tapCounts };
+module.exports = { runWindows, tapCounts, tapDiagnostics, requireNativePass };
