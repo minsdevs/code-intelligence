@@ -9,6 +9,7 @@ import type { RuntimeStatus } from '../../desktop'
 import { I18nProvider } from '../../lib/i18n'
 import SettingsPage from './SettingsPage'
 
+let reauthenticationReason: string | null = null
 let oauthAvailable = true
 let initiallyConnected = true
 let modelRequests = 0
@@ -90,6 +91,7 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 beforeEach(() => {
   window.localStorage.clear()
+  reauthenticationReason = null
   oauthAvailable = true
   initiallyConnected = true
   modelRequests = 0
@@ -155,7 +157,8 @@ beforeEach(() => {
         const disconnected = !initiallyConnected || requests.some((request) => request.path === path && request.method === 'DELETE')
         return jsonResponse({
           identityType: disconnected ? 'LOCAL' : 'LOCAL_LINKED',
-          connected: !disconnected,
+          connected: !disconnected && !reauthenticationReason,
+          reauthenticationReason: disconnected ? null : reauthenticationReason,
           githubId: disconnected ? null : 42,
           oauthAvailable,
           githubRevocationUrl: 'https://github.com/settings/applications',
@@ -191,6 +194,15 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '연결 해제 확인' }))
 
     await waitFor(() => expect(requests.some((request) => request.method === 'DELETE')).toBe(true))
+  })
+
+  it('offers reauthentication and disconnect for an expired linked account', async () => {
+    reauthenticationReason = 'TOKEN_EXPIRED'
+    renderSettings()
+    expect(await screen.findByText(/GitHub 연결이 만료되었습니다/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /GitHub로 계속/ })).toHaveAttribute('href', '/oauth2/authorization/github')
+    expect(screen.getByRole('button', { name: '로컬 GitHub credential 연결 해제' })).toBeEnabled()
+    expect(screen.getByRole('link', { name: '계정 설정' })).toHaveTextContent('재인증 필요')
   })
 
   it('offers login after a confirmed account switch and preserves local data', async () => {

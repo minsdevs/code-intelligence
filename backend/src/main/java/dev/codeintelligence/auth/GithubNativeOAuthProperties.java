@@ -14,7 +14,7 @@ public record GithubNativeOAuthProperties(
         @DefaultValue("https://github.com/login/oauth/access_token")
         String tokenUri,
 
-        @DefaultValue("read:user user:email repo") String scope,
+        @DefaultValue("") String scope,
 
         @DefaultValue("300") int attemptTtlSeconds) {
 

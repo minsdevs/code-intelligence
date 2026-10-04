@@ -1,6 +1,7 @@
 package dev.codeintelligence.auth;
 
 import dev.codeintelligence.common.security.AuthenticatedUser;
+import dev.codeintelligence.common.security.CredentialKind;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.constraints.NotBlank;
@@ -21,27 +22,38 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final PatAuthService patAuthService;
+    private final GithubNativeOAuthService nativeOAuth;
+    private final AccountService accounts;
     private final ObjectProvider<ClientRegistrationRepository> clientRegistrations;
 
     public AuthController(
-            PatAuthService patAuthService, ObjectProvider<ClientRegistrationRepository> clientRegistrations) {
+            PatAuthService patAuthService,
+            ObjectProvider<ClientRegistrationRepository> clientRegistrations,
+            GithubNativeOAuthService nativeOAuth,
+            AccountService accounts) {
         this.patAuthService = patAuthService;
+        this.nativeOAuth = nativeOAuth;
+        this.accounts = accounts;
         this.clientRegistrations = clientRegistrations;
     }
 
     /** permitAll: anonymous callers get 200 {authenticated:false}, never 401. */
     @GetMapping("/me")
     public MeResponse me(@AuthenticationPrincipal AuthenticatedUser user) {
-        boolean oauthAvailable = clientRegistrations.getIfAvailable() != null;
+        boolean oauthAvailable = clientRegistrations.getIfAvailable() != null
+                || (user != null && user.credentialKind() == CredentialKind.LOCAL && nativeOAuth.configured());
         if (user == null) {
             return new MeResponse(false, null, null, null, null, oauthAvailable);
         }
+        AccountService.AccountStatus status = accounts.status(user.userId());
         return new MeResponse(
                 true,
                 user.login(),
                 user.name(),
                 user.avatarUrl(),
-                user.credentialKind().name(),
+                status.credentialKind() == null
+                        ? "LOCAL"
+                        : status.credentialKind().name(),
                 oauthAvailable);
     }
 

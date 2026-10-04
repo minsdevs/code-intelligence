@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -50,7 +51,7 @@ class GithubNativeOAuthServiceTest {
              "verification_uri":"https://github.com/login/device","expires_in":900,"interval":5}
             """;
     private static final String TOKEN_JSON = """
-            {"access_token":"backend-only-github-token","token_type":"bearer"}
+            {"access_token":"backend-only-github-token","token_type":"bearer","expires_in":28800}
             """;
     private static final GithubNativeOAuthProperties PROPERTIES =
             new GithubNativeOAuthProperties("client-id", DEVICE_URL, TOKEN_URL, "read:user user:email repo", 300);
@@ -66,6 +67,21 @@ class GithubNativeOAuthServiceTest {
     private final GithubNativeOAuthService service =
             new GithubNativeOAuthService(PROPERTIES, github, accounts, builder.build(), clock);
 
+    @ParameterizedTest
+    @ValueSource(strings = {"null", "0", "-1", "28801", "9223372036854775807"})
+    void rejectsMissingOrUnsafeTokenExpiry(String expiresIn) {
+        expectDevice(DEVICE_JSON);
+        expectToken()
+                .andRespond(withSuccess(
+                        "{\"access_token\":\"synthetic\",\"token_type\":\"bearer\",\"expires_in\":" + expiresIn + "}",
+                        MediaType.APPLICATION_JSON));
+        var start = service.start(17L);
+        clock.advance(Duration.ofSeconds(5));
+        assertThat(service.poll(17L, start.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.FAILED);
+        verifyNoInteractions(accounts, github);
+        server.verify();
+    }
+
     @Test
     void completesDeviceAuthorizationOnceWithoutExposingProviderCredentials() throws Exception {
         expectDevice(DEVICE_JSON);
@@ -80,7 +96,13 @@ class GithubNativeOAuthServiceTest {
         var connected = service.poll(17L, start.attemptId());
         assertThat(connected.status()).isEqualTo(GithubNativeOAuthService.Status.CONNECTED);
         assertThat(service.poll(17L, start.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.CONNECTED);
-        verify(accounts, times(1)).linkGithub(17L, PROFILE, CredentialKind.OAUTH, TOKEN);
+        verify(accounts, times(1))
+                .linkGithub(
+                        17L,
+                        PROFILE,
+                        CredentialKind.OAUTH,
+                        TOKEN,
+                        clock.instant().plusSeconds(28800));
         JsonMapper mapper = JsonMapper.builder().build();
         assertThat(mapper.writeValueAsString(start)).doesNotContain(DEVICE_CODE, TOKEN, "client_secret");
         assertThat(mapper.writeValueAsString(connected)).doesNotContain(DEVICE_CODE, TOKEN, "client_secret");
@@ -386,19 +408,30 @@ class GithubNativeOAuthServiceTest {
         when(github.getUser(TOKEN)).thenReturn(PROFILE);
         doThrow(new GithubAccountConflictException())
                 .when(accounts)
-                .linkGithub(1L, PROFILE, CredentialKind.OAUTH, TOKEN);
+                .linkGithub(
+                        1L,
+                        PROFILE,
+                        CredentialKind.OAUTH,
+                        TOKEN,
+                        clock.instant().plusSeconds(28805));
         var start = service.start(1L);
         clock.advance(Duration.ofSeconds(5));
         assertThat(service.poll(1L, start.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.CONFLICT);
         assertThat(service.poll(1L, start.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.CONFLICT);
-        verify(accounts, times(1)).linkGithub(1L, PROFILE, CredentialKind.OAUTH, TOKEN);
+        verify(accounts, times(1))
+                .linkGithub(
+                        1L,
+                        PROFILE,
+                        CredentialKind.OAUTH,
+                        TOKEN,
+                        clock.instant().plusSeconds(28800));
         server.verify();
     }
 
     private void expectDevice(String body) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("client_id", PROPERTIES.clientId());
-        form.add("scope", PROPERTIES.scope());
+
         server.expect(requestTo(DEVICE_URL))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("Accept", MediaType.APPLICATION_JSON_VALUE))

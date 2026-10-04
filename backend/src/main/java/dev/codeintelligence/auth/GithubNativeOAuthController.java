@@ -47,7 +47,8 @@ public class GithubNativeOAuthController {
                 status.githubConnected(),
                 status.githubId(),
                 oauth.configured(),
-                oauth.revocationUrl());
+                oauth.revocationUrl(),
+                status.reauthenticationReason());
     }
 
     /** Removes local credentials only. GitHub-side authorization is a separate user action. */
@@ -62,5 +63,6 @@ public class GithubNativeOAuthController {
             boolean connected,
             Long githubId,
             boolean oauthAvailable,
-            String githubRevocationUrl) {}
+            String githubRevocationUrl,
+            String reauthenticationReason) {}
 }

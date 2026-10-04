@@ -37,8 +37,8 @@ public class GithubOAuth2UserService extends DefaultOAuth2UserService {
                         : String.join(",", accessToken.getScopes());
 
         GithubUserInfo profile = new GithubUserInfo(githubId, login, name, avatarUrl, scopes);
-        UserAccount user =
-                accountService.upsertUserWithCredential(profile, CredentialKind.OAUTH, accessToken.getTokenValue());
+        UserAccount user = accountService.upsertUserWithCredential(
+                profile, CredentialKind.OAUTH, accessToken.getTokenValue(), accessToken.getExpiresAt());
 
         return new AuthenticatedUser(user.getId(), githubId, login, name, avatarUrl, CredentialKind.OAUTH);
     }

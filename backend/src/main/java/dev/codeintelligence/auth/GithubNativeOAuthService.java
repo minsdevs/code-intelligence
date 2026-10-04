@@ -73,7 +73,7 @@ public class GithubNativeOAuthService {
         }
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("client_id", properties.clientId());
-        form.add("scope", properties.scope());
+        // GitHub App permissions come from its installation; never request OAuth App repo scopes.
         DeviceResponse response;
         Instant requestedAt = clock.instant();
         try {
@@ -89,7 +89,7 @@ public class GithubNativeOAuthService {
             throw new GithubNativeOAuthUnavailableException("GitHub device authorization is temporarily unavailable.");
         }
         if (response != null && "device_flow_disabled".equals(response.error())) {
-            throw new GithubNativeOAuthUnavailableException("Enable device flow for the configured GitHub OAuth app.");
+            throw new GithubNativeOAuthUnavailableException("Enable device flow for the configured GitHub App.");
         }
         if (response == null
                 || StringUtils.hasText(response.error())
@@ -137,13 +137,28 @@ public class GithubNativeOAuthService {
         }
         // Provider I/O must not hold the cancellation lock. Recheck before publishing credentials.
         try {
+            Instant exchangeStartedAt = clock.instant();
             TokenResponse response = exchange(deviceCode);
+            Instant tokenExpiresAt = null;
             GithubUserInfo profile = null;
             boolean authorized = response != null
                     && !StringUtils.hasText(response.error())
                     && StringUtils.hasText(response.accessToken())
                     && "bearer".equalsIgnoreCase(response.tokenType());
             if (authorized) {
+                if (response.expiresIn() == null || response.expiresIn() <= 0 || response.expiresIn() > 28800) {
+                    synchronized (attempt) {
+                        if (attempt.status == Status.WAITING)
+                            finish(
+                                    attempt,
+                                    Status.FAILED,
+                                    "GitHub App token expiration must be enabled. Reconnect after checking the app settings.");
+                    }
+                    return statusResult(attempt);
+                }
+                tokenExpiresAt = exchangeStartedAt.plusSeconds(response.expiresIn());
+                if (!clock.instant().isBefore(tokenExpiresAt))
+                    throw new IllegalStateException("Expired GitHub token response");
                 synchronized (attempt) {
                     expireIfNeeded(attempt);
                     if (attempt.status != Status.WAITING) {
@@ -161,8 +176,14 @@ public class GithubNativeOAuthService {
                         synchronized (connection(attempt.userId)) {
                             expireIfNeeded(attempt);
                             if (attempt.status == Status.WAITING) {
+                                if (!clock.instant().isBefore(tokenExpiresAt))
+                                    throw new IllegalStateException("Expired GitHub token response");
                                 accountService.linkGithub(
-                                        attempt.userId, profile, CredentialKind.OAUTH, response.accessToken());
+                                        attempt.userId,
+                                        profile,
+                                        CredentialKind.OAUTH,
+                                        response.accessToken(),
+                                        tokenExpiresAt);
                                 finish(attempt, Status.CONNECTED, "GitHub account connected.");
                             }
                         }
@@ -271,7 +292,7 @@ public class GithubNativeOAuthService {
                 finish(attempt, Status.EXPIRED, "GitHub login expired. Start a new login.");
             case "access_denied" -> finish(attempt, Status.DENIED, "GitHub authorization was denied.");
             case "device_flow_disabled" ->
-                finish(attempt, Status.FAILED, "Enable device flow for the configured GitHub OAuth app.");
+                finish(attempt, Status.FAILED, "Enable device flow for the configured GitHub App.");
             case "incorrect_client_credentials" ->
                 finish(attempt, Status.FAILED, "The configured GitHub OAuth client ID is invalid.");
             default -> finish(attempt, Status.FAILED, FAILED_MESSAGE);
@@ -348,6 +369,7 @@ public class GithubNativeOAuthService {
     private record TokenResponse(
             @JsonProperty("access_token") String accessToken,
             @JsonProperty("token_type") String tokenType,
+            @JsonProperty("expires_in") Long expiresIn,
             String error,
             Integer interval) {}
 
