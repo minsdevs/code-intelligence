@@ -2,6 +2,8 @@ package dev.codeintelligence.github;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -26,6 +28,7 @@ public class GithubApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(GithubApiClient.class);
     private static final String SCOPES_HEADER = "X-OAuth-Scopes";
+    private static final ObjectMapper ERROR_JSON = new ObjectMapper();
 
     private final RestClient restClient;
 
@@ -235,10 +238,17 @@ public class GithubApiClient {
                     .onStatus(status -> status.value() == 304, (request, res) -> {
                         throw new NotModified(etagOf(res));
                     })
+                    .onStatus(status -> status.value() == 401, (request, res) -> {
+                        throw new InvalidGithubTokenException();
+                    })
                     .onStatus(status -> status.value() == 403 || status.value() == 429, (request, res) -> {
                         HttpHeaders headers = res.getHeaders();
-                        if (isRateLimited(res.getStatusCode().value(), headers)) {
+                        if (res.getStatusCode().value() == 429
+                                || isRateLimited(res.getStatusCode().value(), headers)) {
                             throw new GithubRateLimitException(parseRetryAfter(headers));
+                        }
+                        if (isExplicitPullPermissionDenial(res)) {
+                            throw new GithubPullRequestsPermissionException();
                         }
                         throw new RestClientException("GitHub pulls request failed");
                     })
@@ -267,6 +277,20 @@ public class GithubApiClient {
                 throw rateLimit;
             }
             throw ex;
+        }
+    }
+
+    private static boolean isExplicitPullPermissionDenial(ClientHttpResponse response) throws IOException {
+        // Only the /pulls 403 handler calls this. Generic/SSO/secondary-rate-limit 403s stay fatal.
+        byte[] body = response.getBody().readNBytes(8193);
+        if (body.length > 8192) return false;
+        try {
+            var json = ERROR_JSON.readTree(body);
+            String message = json == null ? "" : json.path("message").asText("");
+            return message.equals("Resource not accessible by integration")
+                    || message.equals("Resource not accessible by personal access token");
+        } catch (JsonProcessingException malformed) {
+            return false;
         }
     }
 
