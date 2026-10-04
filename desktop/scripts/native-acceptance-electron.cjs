@@ -74,6 +74,25 @@ function observeStartup(child, report, save) {
   child.stderr.on('data', data);
   return () => child.stderr.off('data', data);
 }
+async function verifyRevokedAuthority({ dataRoot, apiBaseUrl, apiToken, oldToken, cookie }) {
+  assert.ok(apiToken !== oldToken, 'Restore must rotate API authority');
+  const directories = fs.readdirSync(dataRoot).filter(name => /^transport-[A-Za-z0-9]+$/.test(name));
+  assert.equal(directories.length, 1, 'Exactly one owned transport is required');
+  const directory = path.join(dataRoot, directories[0]);
+  const pem = fs.readFileSync(path.join(directory, 'backend.crt'));
+  const caPem = fs.readFileSync(path.join(directory, 'backend.ca.crt'));
+  const pin = crypto.createHash('sha256').update(new crypto.X509Certificate(pem).raw).digest('hex');
+  const { createPinnedClient } = require('../src/service-transport.cjs');
+  const client = createPinnedClient({ caPem, pin }, Number(new URL(apiBaseUrl).port));
+  try {
+    const request = token => client.request(apiBaseUrl + '/api/projects', {
+      headers: { Origin: apiBaseUrl, Cookie: cookie, 'X-Code-Intelligence-Token': token },
+    });
+    assert.equal((await request(apiToken)).status, 200, 'Current API authority must succeed');
+    const rejected = await request(oldToken);
+    assert.ok([401, 403].includes(rejected.status), 'Pre-restore API authority must be refused');
+  } finally { await client.close(); }
+}
 
 async function runProduct({ source, owned, artifacts, report, env, phase }) {
   // Direct callers must prove the same execution boundary before loading Electron.
@@ -94,10 +113,24 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   const executablePath = createRequire(path.join(desktop, 'package.json'))('electron');
   const desktopPackage = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8'));
   const packageName = desktopPackage.name;
+  let validationPlan;
+  if (context.kind === 'isolated-macos-host') {
+    const runs = context.isolatedRunParent;
+    const applicationSupport = path.join(os.homedir(), 'Library', 'Application Support');
+    validationPlan = require(path.join(desktop, 'src', 'isolated-run.cjs')).prepareIsolatedRun({
+      parentDirectory: runs, runtimeDirectory: path.join(desktop, 'stage', 'runtime'), purpose: 'automation',
+      forbiddenRoots: [path.join(applicationSupport, packageName), path.join(applicationSupport, desktopPackage.build.productName)],
+    });
+    report.validationIdentity = validationPlan.appIdentity;
+    report.validationProfile = validationPlan.paths.userData;
+  }
   if (process.platform === 'win32') assert.ok(path.isAbsolute(env.APPDATA || ''), 'Fresh Windows application profile required');
-  const expectedUserData = process.platform === 'win32' ? path.join(env.APPDATA, packageName)
-    : path.join(os.homedir(), 'Library', 'Application Support', packageName);
-  assert.equal(fs.existsSync(expectedUserData), false, 'A fresh disposable application profile is required');
+  const expectedUserData = validationPlan ? validationPlan.paths.userData
+    : process.platform === 'win32' ? path.join(env.APPDATA, packageName)
+      : path.join(os.homedir(), 'Library', 'Application Support', packageName);
+  if (validationPlan) assert.deepEqual(fs.readdirSync(expectedUserData), [], 'Fresh validation profile required');
+  else assert.equal(fs.existsSync(expectedUserData), false, 'A fresh disposable application profile is required');
+  const launchArguments = validationPlan ? [desktop, '--isolated-run-claim=' + validationPlan.claimFile] : [desktop];
   const synthetic = path.join(owned, 'native-synthetic-project');
   fs.mkdirSync(synthetic, { mode: 0o700 });
   const sourceFile = path.join(synthetic, 'acceptance.ts');
@@ -116,7 +149,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     // Playwright enables its process-local inspector; no shipping flags or startup hooks change.
     const startupEnds = performance.now() + 90000;
     phase('electron-launch');
-    app = await electron.launch({ executablePath, args: [desktop], cwd: desktop, env, timeout: deadline.limit(90000) });
+    app = await electron.launch({ executablePath, args: launchArguments, cwd: desktop, env, timeout: deadline.limit(90000) });
     delete report.startup;
     stopObserving = observeStartup(app.process(), report, () => phase(report.phase));
     phase('electron-first-window');
@@ -264,25 +297,26 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await navigate('/settings');
     await withArchivePicker('restore', file, async () => {
       await perform(() => page.getByRole('button', { name: /^(Restore backup|백업 복원)$/ }).click());
-      await perform(() => expect(page.getByRole('alert')).toContainText(/Restore replaces|현재 로컬 DB와 저장소가 교체/));
+      const confirm = page.getByRole('alert').getByRole('button', { name: /^(Confirm restore|복원 확인)$/ });
       // Production resume rotates credentials and reloads the renderer before
       // replying to the old IPC caller. Observe that real navigation, not a
       // substituted restore return value or the now-destroyed JS context.
       await perform(() => Promise.all([
         page.waitForEvent('domcontentloaded', { timeout: deadline.limit(120000) }),
-        page.getByRole('button', { name: /^(Confirm restore|복원 확인)$/ }).click(),
+        confirm.click(),
       ]), 120000, 'NATIVE_RESTORE_TIMEOUT');
       await perform(() => expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible());
       await readyAfterMaintenance();
     });
-    const revoked = await perform(() => page.evaluate(async oldToken => {
-      const desktop = window.codeIntelligenceDesktop;
-      const response = await fetch(desktop.apiBaseUrl + '/api/projects', {
-        credentials: 'include', headers: { 'X-Code-Intelligence-Token': oldToken },
-      });
-      return { changed: desktop.apiToken !== oldToken, status: response.status };
-    }, oldToken));
-    assert.equal(revoked.changed, true); assert.ok([401, 403].includes(revoked.status), 'Pre-restore API authority must be refused');
+    // Renderer requests are re-authorized by main's onBeforeSendHeaders hook.
+    // Probe stale authority outside Chromium, using the real per-service CA and leaf pin.
+    const config = await perform(() => page.evaluate(() => {
+      const { apiBaseUrl, apiToken } = window.codeIntelligenceDesktop;
+      return { apiBaseUrl, apiToken };
+    }));
+    const cookies = await perform(() => page.context().cookies(config.apiBaseUrl));
+    await perform(() => verifyRevokedAuthority({ dataRoot: report.productDataRoot, ...config, oldToken,
+      cookie: cookies.map(value => value.name + '=' + value.value).join('; ') }));
     assert.equal((await api('/api/projects/' + projectId)).currentSnapshot.id, expectedSnapshot);
     await sourceContent(expectedSource, expectedSnapshot);
     const created = fs.readdirSync(recovery).filter(name => !before.has(name));
@@ -298,7 +332,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     }, secret), 60000);
     assert.ok(Buffer.from(cipher, 'base64').length > 32);
     fs.writeFileSync(cipherPath, Buffer.from(cipher, 'base64'), { flag: 'wx', mode: 0o600 });
-    report.checks.push('native-safeStorage-encrypt');
+    report.checks.push('electron-safeStorage-api-encrypt-under-automation');
     await captureSizes('first-start');
     phase('synthetic-local-import');
     assert.deepEqual(await api('/api/projects'), []);
@@ -344,7 +378,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.equal(decryptedMatches, true);
     assert.equal((await api(`/api/projects/${projectId}`)).currentSnapshot.id, snapshotId);
     await sourceContent(first, snapshotId);
-    report.checks.push('native-safeStorage-decrypt-after-process-restart', 'real-database-and-encrypted-source-persistence');
+    report.checks.push('electron-safeStorage-api-decrypt-after-automation-restart', 'real-database-and-encrypted-source-persistence');
     phase('real-main-backup');
     report.backupRestore = { status: 'RUNNING', filePicker: 'controlled-single-use-selection', nativePickerInteraction: false };
     const destination = path.join(owned, 'native-backup-destination'); fs.mkdirSync(destination, { mode: 0o700 });
@@ -413,4 +447,4 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   }
   if (failure) throw failure;
 }
-module.exports = { runProduct, closeOwnedApplication, createDeadline, observeStartup };
+module.exports = { runProduct, closeOwnedApplication, createDeadline, observeStartup, verifyRevokedAuthority };

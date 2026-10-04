@@ -64,6 +64,23 @@ function validateVmIdentity(descriptor, observed, now = Date.now()) {
     && created >= observed.bootTime && created <= now && expires > now && expires > created
     && expires - created <= 86400000, 'Stale or invalid disposable VM authorization');
 }
+function validateHostIdentity(descriptor, observed, now = Date.now()) {
+  assert.equal(descriptor.format, 1);
+  assert.equal(descriptor.kind, 'isolated-macos-host');
+  assert.equal(descriptor.provider, 'local-macos');
+  assert.equal(observed.platform, 'darwin'); assert.equal(observed.arch, 'arm64');
+  assert.ok(Number.isSafeInteger(observed.uid) && observed.uid > 0 && descriptor.uid === observed.uid);
+  assert.match(observed.model, /^(?!VirtualMac)[A-Za-z]+[0-9]+,[0-9]+$/);
+  assert.match(descriptor.revision || '', /^[a-f0-9]{40,64}$/);
+  assert.match(descriptor.buildSequence || '', /^[1-9][0-9]{0,18}$/);
+  assert.ok(BigInt(descriptor.buildSequence) <= 9223372036854775807n);
+  for (const value of [descriptor.createdAt, descriptor.expiresAt]) {
+    assert.ok(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value), 'UTC authorization timestamps required');
+  }
+  const created = Date.parse(descriptor.createdAt), expires = Date.parse(descriptor.expiresAt);
+  assert.ok(Number.isFinite(created) && Number.isFinite(expires) && created <= now && expires > now
+    && expires > created && expires - created <= 86400000, 'Stale or invalid host authorization');
+}
 function validateLocalEnvironment(env, execArgv = []) {
   for (const [key, value] of Object.entries(env)) {
     if (/^(?:GITHUB_|RUNNER_|DYLD_|CODE_INTELLIGENCE_ISOLATED_)/.test(key)
@@ -76,7 +93,7 @@ function validateLocalEnvironment(env, execArgv = []) {
 function localContext(env) {
   assert.equal(process.platform, 'darwin', 'Local acceptance requires native macOS');
   assert.equal(process.arch, 'arm64', 'Local acceptance requires native Apple Silicon');
-  assert.ok(process.getuid() > 0, 'Run as the disposable guest user, not root');
+  assert.ok(process.getuid() > 0, 'Local acceptance must not run as root');
   validateLocalEnvironment(process.env, process.execArgv);
   validateLocalEnvironment(env);
   const file = env.NATIVE_ACCEPTANCE_CONTEXT;
@@ -87,11 +104,32 @@ function localContext(env) {
     encoding: 'utf8', timeout: 5000, maxBuffer: 1024 * 1024,
     env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C' }, stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
+  const model = output('/usr/sbin/sysctl', ['-n', 'hw.model']);
+  if (descriptor.kind === 'isolated-macos-host') {
+    validateHostIdentity(descriptor, { platform: process.platform, arch: process.arch, uid: process.getuid(), model });
+    privatePath(descriptor.tempRoot); privatePath(descriptor.isolatedRunParent);
+    privatePath(path.dirname(file));
+    assert.equal(fs.realpathSync(descriptor.sourceRoot), descriptor.sourceRoot, 'Canonical source root required');
+    const source = fs.lstatSync(descriptor.sourceRoot);
+    assert.ok(source.isDirectory() && !source.isSymbolicLink() && source.uid === process.getuid()
+      && !(source.mode & 0o022), 'Owned non-writable-by-others source root required');
+    for (const [left, right] of [[descriptor.sourceRoot, descriptor.tempRoot],
+      [descriptor.sourceRoot, descriptor.isolatedRunParent], [descriptor.tempRoot, descriptor.isolatedRunParent]]) {
+      assert.ok(!within(left, right) && !within(right, left) && left !== right, 'Host roots must be disjoint');
+    }
+    assert.ok(!within(descriptor.sourceRoot, file) && !within(descriptor.tempRoot, file)
+      && !within(descriptor.isolatedRunParent, file), 'Descriptor must be outside mutable work/source roots');
+    if (env.CODE_INTELLIGENCE_BUILD_SEQUENCE) assert.equal(env.CODE_INTELLIGENCE_BUILD_SEQUENCE, descriptor.buildSequence);
+    return Object.freeze({ kind: descriptor.kind, sourceRoot: descriptor.sourceRoot, tempRoot: descriptor.tempRoot,
+      isolatedRunParent: descriptor.isolatedRunParent, revision: descriptor.revision, buildSequence: descriptor.buildSequence,
+      evidence: { kind: descriptor.kind, provider: descriptor.provider, hardwareModel: model,
+        descriptorCreatedAt: descriptor.createdAt } });
+  }
   const registry = output('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice']);
   const uuid = /"IOPlatformUUID"\s*=\s*"([A-Fa-f0-9-]+)"/.exec(registry)?.[1] || '';
   const boot = /\bsec\s*=\s*([0-9]+)/.exec(output('/usr/sbin/sysctl', ['-n', 'kern.boottime']));
-  const observed = { platform: process.platform, arch: process.arch,
-    model: output('/usr/sbin/sysctl', ['-n', 'hw.model']), uuid, bootTime: boot ? Number(boot[1]) * 1000 : NaN };
+  const observed = { platform: process.platform, arch: process.arch, model, uuid,
+    bootTime: boot ? Number(boot[1]) * 1000 : NaN };
   validateVmIdentity(descriptor, observed);
   privatePath(descriptor.homeRoot);
   assert.equal(os.homedir(), descriptor.homeRoot, 'Guest home mismatch');
@@ -130,7 +168,13 @@ function productPaths(context, { source, owned, artifacts }) {
   privateDescendant(context.tempRoot, owned);
   privateDescendant(owned, source);
   privateDescendant(context.tempRoot, artifacts);
-  assert.equal(freshProfile(source, os.homedir()), context.profile, 'Copied product identity mismatch');
+  if (context.kind === 'isolated-macos-host') {
+    privatePath(context.isolatedRunParent);
+    assert.deepEqual(fs.readdirSync(context.isolatedRunParent), [], 'Fresh short isolated-run parent required');
+  }
+  if (context.kind === 'disposable-macos-vm') {
+    assert.equal(freshProfile(source, os.homedir()), context.profile, 'Copied product identity mismatch');
+  }
 }
 function prepareArtifacts(context) {
   const directory = path.join(context.tempRoot, 'native-acceptance-artifacts');
@@ -151,5 +195,5 @@ function writeRuntimeEnvironment(context, values, env = process.env) {
       .map(([key, value]) => `export ${key}=${quote(value)}\n`).join(''), { flag: 'wx', mode: 0o600 });
   }
 }
-module.exports = { requireExecutionContext, validateVmIdentity, validateLocalEnvironment, privatePath, privateDescendant,
+module.exports = { requireExecutionContext, validateVmIdentity, validateHostIdentity, validateLocalEnvironment, privatePath, privateDescendant,
   freshProfile, claimExecution, productPaths, prepareArtifacts, writeRuntimeEnvironment };

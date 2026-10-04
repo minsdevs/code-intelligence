@@ -266,6 +266,26 @@ pgvector. CMake uses explicit NMake/compiler/SDK paths; the runner's PATH and de
 environment are not inherited.
 Native checks may not pass by skipping. Artifacts separate unsigned product results from
 signed release acceptance; raw runtime logs and credential stores are never exported.
+Windows physical-device acceptance remains operator-owned and was not run on the macOS host.
+`npm run check:windows` reports outstanding gates; `pack:win` and `dist:win` remain
+fail-closed until native evidence and signed installer/update/recovery review are complete.
+For CI-independent macOS functional validation, run
+`npm run accept:mac:local` from `desktop/` only after explicitly approving creation of
+the validation-only macOS Keychain item `Code Intelligence Validation Safe Storage`
+(account `Code Intelligence Validation Key`). The command accepts no path or identity
+overrides. It copies current source into a fresh mode-0700 host work root, removes provider
+credentials from the child environment, and uses a short-lived mode-0600 context descriptor.
+The ordinary safeStorage restart probe uses app name `Code Intelligence Validation`;
+the Playwright whole-product flow uses the separate `Code Intelligence Acceptance`
+identity and a private reusable claim for userData, sessionData, temp, logs and crash data.
+Those identities map to bundle IDs `dev.codeintelligence.desktop.validation` and
+`dev.codeintelligence.desktop.acceptance` and do not reuse the production app profile
+or Keychain namespace. Installed JDK21 is used only when its reported major is exactly21;
+otherwise the command downloads the current official macOS AArch64 Temurin21 archive into
+the private run, verifies the API-provided SHA-256, and never changes the shared JDK.
+Tart/Apple Virtualization remains the clean-OS installation/update gate, not a prerequisite
+for host functional verification. Each provision/acceptance/product phase claims its work
+root once; a retry never erases an existing profile or claim receipt.
 The macOS runner builds PostgreSQL 16, OpenSSL, Redis TLS and pgvector from
 Homebrew-checksummed sources in private prefixes with a macOS 13.0 deployment target,
 instead of repackaging newer-OS bottles or relaxing the native publication policy.
@@ -288,9 +308,23 @@ directories. Windows test failures retain fixed error/phase enums and public sou
 not assertion values or messages. Raw build/runtime logs and credentials remain private.
 Source copying excludes build outputs only at package roots, preserving real source packages
 such as analysis/coverage.
+Each loopback service has a distinct ephemeral CA and a CA-signed `127.0.0.1` server
+certificate. CA private keys remain in the main process; clients receive only that service’s
+public trust anchor. HTTPS additionally pins the exact server leaf. This trust chain is
+checked with real Electron, not inferred from the system Node/OpenSSL implementation.
 Current local transport proof covers real PostgreSQL 16 and Redis TLS/authentication,
-wrong-peer/plaintext rejection, HTTPS pinning, token rotation and callback refusal. Hosted
-whole-app results, signed installation, real OAuth and provider approval remain separate gates.
+wrong-peer/plaintext rejection, HTTPS pinning, token rotation and callback refusal.
+A disposable macOS VM also displayed the actual project-list window, app version and
+normal process exit. Host-local functional proof now covers real Keychain encryption and
+restart decryption, project import/analysis/source navigation, native 980×700/1280×800/
+1440×900 windows, encrypted backup and recovery-checkpoint restore, stale API-token
+refusal over pinned TLS, restart persistence, project deletion and clean shutdown.
+The original run and successful restore/restart continuation retain separate reports;
+previously passed builds and checks were not repeated. Restore confirmation targets its
+button rather than Monaco's global alerts. Token revocation is probed outside Chromium,
+whose main-process request hook deliberately replaces renderer-supplied API tokens.
+Hosted whole-app results, signed installation/update, real OAuth and provider approval
+remain separate acceptance gates.
 
 The real native backup fixture now covers pinned Spring HTTPS, authenticated Redis,
 PostgreSQL verify-full TLS, encrypted backup/restore, and an injected post-health failure
@@ -335,16 +369,35 @@ protected inheritable DACLs on product workspaces and private child logs. TLS fi
 source state and short private IPC directories are main-owned; cleanup is authorized
 by retained identity and occurs only after proven service/source termination.
 
-To create and directly run the local unsigned directory package:
+To create and directly run the local unsigned production-name directory package:
 
 ```bash
-(cd desktop && npm run stage && npm run pack:mac)
+(cd desktop && npm run pack:mac)
 open "desktop/dist/mac-arm64/Code Intelligence.app"
 ```
 
-This produces a local `electron-builder --mac dir` package. The package was
-directly launched for macOS acceptance, but it was not copied to
-`/Applications`; no release, publishing, or deployment was performed.
+For local installation checks without sharing the production bundle, profile or Keychain
+identity, build the separately branded validation target:
+
+```bash
+(cd desktop && npm run pack:mac:validation)
+open "desktop/dist-validation/mac-arm64/Code Intelligence Validation.app"
+```
+
+`pack:mac` and `pack:mac:validation` each stage once and create an arm64
+ad-hoc-signed directory package without publishing or notarization. The validation target
+uses bundle ID `dev.codeintelligence.desktop.validation`.
+Stable `electron-builder` 26.15.3 uses the owned
+`desktop/scripts/builder-downloader` adapter for `@electron/get` 5.1 and Undici 7.30.0;
+keep the file dependency installed as a copy (`npm ci --install-links`). This removes the
+legacy vulnerable downloader while retaining real download/cache/proxy/TLS behavior.
+The copied runtime’s native Mach-O files are signed first, their manifest hashes refreshed,
+and the outer app signed last. Non-native hashes stay unchanged; the source stage is not
+modified. The directory-package smoke verified its 5,120-file runtime manifest and
+`codesign --verify --deep --strict`; this is not Developer ID/notarization acceptance.
+Release DMG/ZIP builds require a real Developer ID Application identity, hardened runtime
+and notarization credentials before packaging; an ad-hoc release or skipped signing hook
+fails closed. No installation into `/Applications` or publishing was performed.
 
 `./start-local` is a development helper, not a production supervisor. It starts
 the analyzer containers only when `TS_ANALYZER_BASE_URL` or
@@ -361,13 +414,14 @@ docker compose up -d
 (cd frontend && npm ci && npm run dev)
 ```
 
-AI is optional. Native GitHub OAuth requires `GITHUB_NATIVE_CLIENT_ID` at
-desktop/backend launch, but a client ID alone does not make the current native
-OAuth flow production-ready. The authorization-code exchange currently omits the
-client secret required by GitHub; select a supported device flow or a hosted
-secret-bearing exchange before release. Never package a client secret in the
-desktop binary. PAT login is supported as a secondary path. `TOKEN_ENC_KEY` is always
-required by the backend. Set
+AI is optional. Native GitHub OAuth requires the public `GITHUB_NATIVE_CLIENT_ID` at
+desktop/backend launch and device flow enabled on that registered GitHub OAuth App.
+The app displays a device code and opens GitHub’s verification page only on explicit user
+action. Polling is attempt/owner-bound, obeys GitHub’s interval and `slow_down`, and stops
+on cancellation or expiry. No client secret is bundled and no local HTTP OAuth callback
+server is used. PAT login remains a secondary path. Real-account consent and live AI
+provider calls are separate, explicitly approved checks; device-flow regressions do not
+prove either. `TOKEN_ENC_KEY` is always required by the backend. Set
 `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040` and
 `TREE_ANALYZER_BASE_URL=http://127.0.0.1:3041` to enable the sidecars.
 
@@ -393,7 +447,7 @@ Run these commands from the repository root:
 
 # Desktop syntax and local macOS staging/package checks
 (cd desktop && npm test && node --check src/main.cjs && node --check src/preload.cjs)
-(cd desktop && npm run stage && npm run pack:mac)
+(cd desktop && npm run pack:mac)
 ```
 
 CI runs the backend, frontend, TypeScript analyzer, and tree-sitter analyzer
@@ -578,8 +632,8 @@ and blockers in [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md).
 |---|---|
 | Local browser + Spring Boot backend | Supported development path |
 | Docker Compose PostgreSQL/Redis/sidecars | Supported local infrastructure |
-| macOS arm64 Electron runtime | Local staged/package RC; unsigned/notarized acceptance pending |
-| Windows native installer | x64 NSIS configuration prepared; packaging blocked pending native safety/runtime work; not verified |
+| macOS arm64 Electron runtime | Host-local product/Keychain/backup/recovery/restart and native window sizes verified; ad-hoc package integrity and VM startup verified; signed release acceptance pending |
+| Windows native installer | x64 NSIS/native acceptance path configured; physical-device build and acceptance not verified |
 | Linux native package | Not verified |
 | Production hosted deployment | Deployment-specific; no release workflow is included |
 

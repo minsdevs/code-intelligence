@@ -9,6 +9,8 @@
     "stage": "node scripts/stage-runtime.mjs",
     "start": "electron .",
     "pack:mac": "npm run stage && electron-builder --mac dir --arm64 --publish never --config.mac.identity=- --config.mac.notarize=false",
+    "accept:mac:local": "node scripts/native-acceptance-host.cjs",
+    "pack:mac:validation": "npm run stage && electron-builder --mac dir --arm64 --publish never --config.mac.identity=- --config.mac.notarize=false --config.productName=\"Code Intelligence Validation\" --config.appId=dev.codeintelligence.desktop.validation --config.extraMetadata.name=code-intelligence-validation --config.extraMetadata.productName=\"Code Intelligence Validation\" --config.directories.output=dist-validation",
     "dist:mac": "npm run stage && electron-builder --mac dmg zip --arm64 --publish never",
     "check:windows": "node scripts/windows-readiness.cjs",
     "pack:win": "npm run check:windows && electron-builder --win dir --x64 --publish never",

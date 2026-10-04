@@ -12,10 +12,18 @@ const relative = path.relative(context.tempRoot, directory);
 if (!relative || relative.startsWith('..') || path.isAbsolute(relative) || fs.realpathSync(directory) !== directory) throw new Error('NATIVE_PROBE_DIRECTORY_REFUSED');
 if (context.kind !== 'github-hosted') privateDescendant(context.tempRoot, directory);
 const profile = path.join(directory, 'electron-profile');
-if (mode === 'write') fs.mkdirSync(profile, { mode: 0o700 });
-else if (!fs.statSync(profile).isDirectory()) throw new Error('NATIVE_PROBE_PROFILE_MISSING');
-if (context.kind !== 'github-hosted') privateDescendant(directory, profile);
-app.setPath('userData', profile);
+const paths = { userData: profile, sessionData: path.join(directory, 'electron-session'),
+  temp: path.join(directory, 'electron-temp'), crashDumps: path.join(directory, 'electron-crashes'),
+  logs: path.join(directory, 'electron-logs') };
+if (mode === 'write') {
+  for (const target of Object.values(paths)) fs.mkdirSync(target, { mode: 0o700 });
+} else {
+  for (const target of Object.values(paths)) if (!fs.statSync(target).isDirectory()) throw new Error('NATIVE_PROBE_PROFILE_MISSING');
+}
+if (context.kind !== 'github-hosted') for (const target of Object.values(paths)) privateDescendant(directory, target);
+app.setName(require('../src/isolated-run.cjs').VALIDATION_IDENTITIES.validation.name);
+for (const name of ['userData', 'sessionData', 'temp', 'crashDumps']) app.setPath(name, paths[name]);
+app.setAppLogsPath(paths.logs);
 const recordPhase = value => fs.writeFileSync(path.join(directory, mode + '.phase'), value, { mode: 0o600 });
 recordPhase('APP_READY');
 app.whenReady().then(() => {

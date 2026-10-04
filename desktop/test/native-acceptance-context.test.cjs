@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { requireExecutionContext, validateVmIdentity, validateLocalEnvironment, privatePath,
+const { requireExecutionContext, validateVmIdentity, validateHostIdentity, validateLocalEnvironment, privatePath,
   privateDescendant, freshProfile, claimExecution, prepareArtifacts, writeRuntimeEnvironment } = require('../scripts/native-acceptance-context.cjs');
 
 const posix = { skip: process.platform === 'win32' };
@@ -42,6 +42,24 @@ test('VM identity policy binds approval to hardware UUID, exact image digest and
     { createdAt: '2026-10-04T12:01:00Z' }, { expiresAt: '2026-10-04T12:00:00Z' },
     { expiresAt: '2026-10-06T12:00:00Z' }, { createdAt: 'invalid' },
   ]) assert.throws(() => validateVmIdentity({ ...descriptor, ...change }, observed, now));
+});
+test('host identity uses a short-lived local authorization without storing a hardware UUID', () => {
+  const now = Date.parse('2026-10-04T12:00:00Z');
+  const descriptor = { format: 1, kind: 'isolated-macos-host', provider: 'local-macos', uid: 501,
+    revision: 'a'.repeat(40), buildSequence: '123',
+    createdAt: '2026-10-04T11:00:00Z', expiresAt: '2026-10-04T13:00:00Z' };
+  const observed = { platform: 'darwin', arch: 'arm64', model: 'Mac16,1', uid: 501 };
+  validateHostIdentity(descriptor, observed, now);
+  validateHostIdentity(descriptor, { ...observed, model: 'MacBookPro18,4' }, now);
+  assert.equal(Object.hasOwn(descriptor, 'uuid'), false);
+  for (const change of [{ platform: 'linux' }, { arch: 'x64' }, { model: 'VirtualMac2,1' }, { uid: 502 }]) {
+    assert.throws(() => validateHostIdentity(descriptor, { ...observed, ...change }, now));
+  }
+  for (const change of [{ kind: 'disposable-macos-vm' }, { provider: 'personal-host' }, { uid: 502 },
+    { revision: 'main' }, { buildSequence: '01' }, { createdAt: '2026-10-04T12:01:00Z' },
+    { expiresAt: '2026-10-06T12:00:00Z' }]) {
+    assert.throws(() => validateHostIdentity({ ...descriptor, ...change }, observed, now));
+  }
 });
 
 test('local consent cannot impersonate hosted context or inject startup/gate options', () => {

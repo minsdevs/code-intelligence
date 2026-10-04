@@ -6,10 +6,31 @@ const os = require('node:os');
 const path = require('node:path');
 const { included, requireHosted, copySource } = require('../scripts/native-acceptance.cjs');
 const { tapCounts } = require('../scripts/native-acceptance-windows.cjs');
+const { selectAdoptiumPackage } = require('../scripts/native-acceptance-host.cjs');
 
 const hosted = () => ({ GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', GITHUB_EVENT_NAME: 'workflow_dispatch',
   NATIVE_ACCEPTANCE_CONSENT: 'disposable-hosted-os', GITHUB_SHA: 'a'.repeat(40),
   CODE_INTELLIGENCE_BUILD_SEQUENCE: '123', RUNNER_TEMP: os.tmpdir(), GITHUB_WORKSPACE: os.tmpdir() });
+
+test('host JDK selection accepts only checksum-bound Temurin 21 macOS archives', () => {
+  const valid = { vendor: 'eclipse', version: { major: 21 }, binary: {
+    architecture: 'aarch64', os: 'mac', image_type: 'jdk', jvm_impl: 'hotspot', package: {
+      name: 'OpenJDK21U-jdk_aarch64_mac_hotspot_21.0.12.1_1.tar.gz', checksum: 'a'.repeat(64),
+      link: 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/archive.tar.gz'
+    }
+  } };
+  assert.deepEqual(selectAdoptiumPackage([valid]), {
+    name: valid.binary.package.name, checksum: valid.binary.package.checksum, link: valid.binary.package.link
+  });
+  for (const patch of [
+    { version: { major: 22 } }, { vendor: 'other' },
+    { binary: { ...valid.binary, architecture: 'x64' } },
+    { binary: { ...valid.binary, package: { ...valid.binary.package, checksum: 'latest' } } },
+    { binary: { ...valid.binary, package: { ...valid.binary.package, name: '../jdk.tar.gz' } } },
+    { binary: { ...valid.binary, package: { ...valid.binary.package, link: 'http://github.com/archive.tar.gz' } } },
+    { binary: { ...valid.binary, package: { ...valid.binary.package, link: 'https://example.invalid/archive.tar.gz' } } },
+  ]) assert.throws(() => selectAdoptiumPackage([{ ...valid, ...patch }]));
+});
 
 test('native TAP evidence requires complete unambiguous numeric counters', () => {
   const tap = '# tests 6\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n';
@@ -49,7 +70,7 @@ test('pre-merge execution accepts only same-repository head and target', t => {
 test('fresh source selection excludes dependencies, ignored outputs, credentials and original product data', () => {
   for (const relative of ['desktop/src/main.cjs', 'desktop/build/entitlements.mac.plist',
     'desktop/native/windows/CMakeLists.txt', 'backend/gradle/wrapper/gradle-wrapper.jar', 'frontend/package-lock.json']) assert.equal(included(relative), true, relative);
-  for (const relative of ['desktop/stage/runtime/java', 'desktop/dist/product.app', 'backend/build/app.jar',
+  for (const relative of ['desktop/stage/runtime/java', 'desktop/dist/product.app', 'desktop/dist-validation/product.app', 'backend/build/app.jar',
     'backend/.gradle/cache', '.repowise/wiki.db', 'desktop/node_modules/electron', 'analyzers/ts-analyzer/dist/index.js',
     'frontend/.env', 'desktop/secrets/secret.json', 'desktop/userData/cache', 'desktop/certificate.p12',
     'desktop/test-results/result.json']) assert.equal(included(relative), false, relative);

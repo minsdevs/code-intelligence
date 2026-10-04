@@ -5,8 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
+const { createRequire } = require('node:module');
 
-const EXCLUDED = new Set(['node_modules', 'dist', 'stage', '.git', '.gradle', '.repowise', 'test-results', 'playwright-report', 'coverage']);
+const EXCLUDED = new Set(['node_modules', 'dist', 'dist-validation', 'stage', '.git', '.gradle', '.repowise', 'test-results', 'playwright-report', 'coverage']);
 const ROOTS = ['desktop', 'frontend', 'backend', 'analyzers/ts-analyzer'];
 function included(relative) {
   const parts = relative.split(/[\\/]/);
@@ -329,7 +330,7 @@ async function main(target) {
     executionContext: context.evidence,
     buildSequence: context.buildSequence, mode: 'unsigned-development-native',
     nodeVersion: process.versions.node, osRelease: require('node:os').release(),
-    signedInstallation: false, notarizedInstallation: false, isolatedRunGateChanged: false,
+    signedInstallation: false, notarizedInstallation: false, isolatedLaunch: context.kind === 'isolated-macos-host',
     scope: target === 'windows' ? 'windows-native-development-app' : 'macos-native-development-app',
     installationAcceptance: { status: 'BLOCKED', code: 'SIGNING_AND_NOTARIZATION_UNAVAILABLE' },
     status: 'RUNNING', phase: 'fresh-source-copy', checks: [] };
@@ -349,6 +350,19 @@ async function main(target) {
     const packages = target === 'macos' ? ['frontend', 'analyzers/ts-analyzer', 'desktop'] : ['desktop'];
     for (const directory of packages) npm(['ci', '--install-links', '--no-audit', '--no-fund'], path.join(source, directory), env);
     report.checks.push('fresh-source-dependencies');
+    if (context.kind === 'isolated-macos-host') {
+      report.phase = 'real-macos-keychain-safe-storage'; save();
+      const probe = path.join(owned, 'macos-keychain-probe'); fs.mkdirSync(probe, { mode: 0o700 });
+      const desktop = path.join(source, 'desktop');
+      const electron = createRequire(path.join(desktop, 'package.json'))('electron');
+      const script = path.join(desktop, 'scripts', 'native-acceptance-safe-storage.cjs');
+      run(electron, [script, 'write', probe], desktop, env);
+      run(electron, [script, 'read', probe], desktop, env);
+      assert.equal(fs.readFileSync(path.join(probe, 'write.phase'), 'utf8'), 'COMPLETE');
+      assert.equal(fs.readFileSync(path.join(probe, 'read.phase'), 'utf8'), 'COMPLETE');
+      report.keychainIdentity = { name: 'Code Intelligence Validation', account: 'Code Intelligence Validation Key' };
+      report.checks.push('real-macos-Keychain-safeStorage-decrypt-after-process-restart');
+    }
     if (target === 'windows') {
       report.phase = 'standard-user-native-boundaries'; save();
       const { runWindows } = require('./native-acceptance-windows.cjs');
