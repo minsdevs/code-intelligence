@@ -4,7 +4,7 @@ import { goParser } from './tree'
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
 const ROUTER_RECEIVERS = /^(r|router|engine|api|group|app|e|mux|srv|server)$/
 
-export function extractGo(file: AnalyzeFile): { endpoints: EndpointHit[]; symbols: SymbolHit[] } {
+export function extractGo(file: AnalyzeFile): { endpoints: EndpointHit[]; symbols: SymbolHit[]; hasErrors: boolean } {
   const endpoints: EndpointHit[] = []
   const symbols: SymbolHit[] = []
   const content = file.content
@@ -22,7 +22,7 @@ export function extractGo(file: AnalyzeFile): { endpoints: EndpointHit[]; symbol
   }
 
   walkCalls(root, content, file.path, endpoints)
-  return { endpoints, symbols }
+  return { endpoints, symbols, hasErrors: root.hasError }
 }
 
 function collectTypes(node: any, content: string, filePath: string, symbols: SymbolHit[]): void {

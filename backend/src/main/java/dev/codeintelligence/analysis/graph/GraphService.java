@@ -22,6 +22,7 @@ public class GraphService {
 
     static final int DEFAULT_PAGE_SIZE = 50;
     static final int MAX_PAGE_SIZE = 100;
+    static final int MAX_RELATIONS = 500;
 
     public record GraphNodeSummary(
             long id,
@@ -45,14 +46,30 @@ public class GraphService {
             Integer lineEnd,
             String areaType,
             Map<String, Object> metadata,
-            List<GraphEvidenceView> evidences) {}
+            List<GraphEvidenceView> evidences,
+            long resolvedSnapshotId) {}
 
-    public record GraphNodePage(List<GraphNodeSummary> items, int page, int size, long total) {}
+    public record GraphNodePage(
+            List<GraphNodeSummary> items, int page, int size, long total, long resolvedSnapshotId) {}
+
+    public record GraphOverview(long resolvedSnapshotId, Map<String, Long> nodeCounts, Map<String, Long> edgeCounts) {}
 
     public record GraphRelation(
-            int depth, String direction, String edgeType, String confidence, GraphNodeSummary node) {}
+            int depth,
+            String direction,
+            String edgeType,
+            String confidence,
+            GraphNodeSummary node,
+            long sourceNodeId,
+            long targetNodeId) {}
 
-    public record GraphRelationsResponse(long nodeId, String direction, int depth, List<GraphRelation> relations) {}
+    public record GraphRelationsResponse(
+            long nodeId,
+            String direction,
+            int depth,
+            List<GraphRelation> relations,
+            long resolvedSnapshotId,
+            boolean truncated) {}
 
     private final ProjectRepository projectRepository;
     private final SnapshotRepository snapshotRepository;
@@ -80,24 +97,29 @@ public class GraphService {
             String q,
             String path,
             Integer page,
-            Integer size) {
+            Integer size,
+            String sort,
+            String category) {
         long resolved = requireSnapshot(requireOwned(projectId, userId), snapshotId);
         if (StringUtils.hasText(area)) {
             parseArea(area);
         }
         int resolvedPage = page == null || page < 1 ? 1 : page;
         int resolvedSize = size == null || size < 1 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
-        int offset = (resolvedPage - 1) * resolvedSize;
+        long offset = (long) (resolvedPage - 1) * resolvedSize;
+        String ordering = sortClause(sort);
+        String categoryFilter = categoryClause(category);
         String like = likePattern(q);
         Long total = jdbc.sql("""
                         select count(*) from graph_nodes n
-                        left join files f on f.id = n.file_id
-                        where n.snapshot_id = :snapshotId
+                        left join files f on f.id = n.file_id and f.snapshot_id = n.snapshot_id
+                        where n.snapshot_id = :snapshotId and n.node_type <> 'AMBIGUOUS'
                           and (:type::text is null or n.node_type = :type)
                           and (:area::text is null or n.area_type = :area)
                           and (:path::text is null or f.path = :path or n.natural_key = 'file:' || :path)
-                          and (:q::text is null or n.name ilike :q escape '\\' or n.natural_key ilike :q escape '\\')
-                        """)
+                          and (:q::text is null or n.name ilike :q escape '\\' or n.natural_key ilike :q escape '\\' or f.path ilike :q escape '\\')
+                          and %s
+                        """.formatted(categoryFilter))
                 .param("snapshotId", resolved)
                 .param("type", blankToNull(type))
                 .param("area", blankToNull(area))
@@ -109,15 +131,16 @@ public class GraphService {
                         select n.id, n.node_type, n.natural_key, n.name, n.line_start, n.line_end, n.area_type,
                                f.path as file_path
                         from graph_nodes n
-                        left join files f on f.id = n.file_id
-                        where n.snapshot_id = :snapshotId
+                        left join files f on f.id = n.file_id and f.snapshot_id = n.snapshot_id
+                        where n.snapshot_id = :snapshotId and n.node_type <> 'AMBIGUOUS'
                           and (:type::text is null or n.node_type = :type)
                           and (:area::text is null or n.area_type = :area)
                           and (:path::text is null or f.path = :path or n.natural_key = 'file:' || :path)
-                          and (:q::text is null or n.name ilike :q escape '\\' or n.natural_key ilike :q escape '\\')
-                        order by n.natural_key
+                          and (:q::text is null or n.name ilike :q escape '\\' or n.natural_key ilike :q escape '\\' or f.path ilike :q escape '\\')
+                          and %s
+                        order by %s
                         limit :limit offset :offset
-                        """)
+                        """.formatted(categoryFilter, ordering))
                 .param("snapshotId", resolved)
                 .param("type", blankToNull(type))
                 .param("area", blankToNull(area))
@@ -135,7 +158,7 @@ public class GraphService {
                         (Integer) rs.getObject("line_end"),
                         rs.getString("area_type")))
                 .list();
-        return new GraphNodePage(items, resolvedPage, resolvedSize, total);
+        return new GraphNodePage(items, resolvedPage, resolvedSize, total, resolved);
     }
 
     @Transactional(readOnly = true)
@@ -145,7 +168,7 @@ public class GraphService {
                         select n.id, n.node_type, n.natural_key, n.name, n.line_start, n.line_end, n.area_type,
                                n.metadata::text as metadata, f.path as file_path
                         from graph_nodes n
-                        left join files f on f.id = n.file_id
+                        left join files f on f.id = n.file_id and f.snapshot_id = n.snapshot_id
                         where n.snapshot_id = :snapshotId and n.id = :nodeId
                         """)
                 .param("snapshotId", resolved)
@@ -160,17 +183,19 @@ public class GraphService {
                         (Integer) rs.getObject("line_end"),
                         rs.getString("area_type"),
                         readMetadata(rs.getString("metadata")),
-                        new ArrayList<>()))
+                        new ArrayList<>(),
+                        resolved))
                 .optional()
                 .orElseThrow(GraphNodeNotFoundException::new);
         List<GraphEvidenceView> evidences = jdbc.sql("""
                         select e.file_path, e.line_start, e.line_end, e.excerpt
                         from evidence_links l
                         join evidences e on e.id = l.evidence_id
-                        where l.subject_type = 'GRAPH_NODE' and l.subject_id = :nodeId
+                        where l.subject_type = 'GRAPH_NODE' and l.subject_id = :nodeId and e.project_id = :projectId
                         order by e.id
                         """)
                 .param("nodeId", nodeId)
+                .param("projectId", projectId)
                 .query((rs, rowNum) -> new GraphEvidenceView(
                         rs.getString("file_path"),
                         (Integer) rs.getObject("line_start"),
@@ -187,7 +212,8 @@ public class GraphService {
                 base.lineEnd(),
                 base.areaType(),
                 base.metadata(),
-                evidences);
+                evidences,
+                resolved);
     }
 
     @Transactional(readOnly = true)
@@ -209,12 +235,13 @@ public class GraphService {
         if (resolvedDepth < 1 || resolvedDepth > 2) {
             throw new InvalidGraphQueryException("depth must be 1 or 2.");
         }
-        String sql = dir.equals("out") ? outRelationsSql() : inRelationsSql();
+        String sql = relationsSql(dir);
         List<GraphRelation> relations = jdbc.sql(sql)
                 .param("snapshotId", resolved)
                 .param("nodeId", nodeId)
                 .param("edgeType", blankToNull(edgeType))
                 .param("depth", resolvedDepth)
+                .param("limit", MAX_RELATIONS + 1)
                 .query((rs, rowNum) -> new GraphRelation(
                         rs.getInt("depth"),
                         dir,
@@ -228,67 +255,95 @@ public class GraphService {
                                 rs.getString("file_path"),
                                 (Integer) rs.getObject("line_start"),
                                 (Integer) rs.getObject("line_end"),
-                                rs.getString("area_type"))))
+                                rs.getString("area_type")),
+                        rs.getLong("source_node_id"),
+                        rs.getLong("target_node_id")))
                 .list();
-        return new GraphRelationsResponse(nodeId, dir, resolvedDepth, relations);
+        return new GraphRelationsResponse(
+                nodeId,
+                dir,
+                resolvedDepth,
+                relations.stream().limit(MAX_RELATIONS).toList(),
+                resolved,
+                relations.size() > MAX_RELATIONS);
     }
 
-    private String outRelationsSql() {
+    private String relationsSql(String direction) {
+        String from = direction.equals("out") ? "source_node_id" : "target_node_id";
+        String to = direction.equals("out") ? "target_node_id" : "source_node_id";
         return """
-                with recursive walk as (
-                    select e.source_node_id, e.target_node_id, e.edge_type, e.confidence,
-                           1 as depth, array[e.source_node_id, e.target_node_id]::bigint[] as seen
+                with first_hop as materialized (
+                    select e.source_node_id, e.target_node_id, e.edge_type, e.confidence, 1 as depth
                     from graph_edges e
-                    where e.snapshot_id = :snapshotId
-                      and e.source_node_id = :nodeId
+                    join graph_nodes source on source.id = e.source_node_id and source.snapshot_id = :snapshotId and source.node_type <> 'AMBIGUOUS'
+                    join graph_nodes target on target.id = e.target_node_id and target.snapshot_id = :snapshotId and target.node_type <> 'AMBIGUOUS'
+                    where e.snapshot_id = :snapshotId and e.%1$s = :nodeId
                       and (:edgeType::text is null or e.edge_type = :edgeType)
-                    union all
-                    select e.source_node_id, e.target_node_id, e.edge_type, e.confidence,
-                           w.depth + 1, w.seen || e.target_node_id
+                    order by e.id limit :limit
+                ), second_hop as materialized (
+                    select distinct e.source_node_id, e.target_node_id, e.edge_type, e.confidence, 2 as depth
                     from graph_edges e
-                    join walk w on e.source_node_id = w.target_node_id
-                    where e.snapshot_id = :snapshotId
-                      and w.depth < :depth
-                      and not e.target_node_id = any (w.seen)
+                    join first_hop w on e.%1$s = w.%2$s
+                    join graph_nodes source on source.id = e.source_node_id and source.snapshot_id = :snapshotId and source.node_type <> 'AMBIGUOUS'
+                    join graph_nodes target on target.id = e.target_node_id and target.snapshot_id = :snapshotId and target.node_type <> 'AMBIGUOUS'
+                    where :depth = 2 and e.snapshot_id = :snapshotId and e.%2$s <> :nodeId
                       and (:edgeType::text is null or e.edge_type = :edgeType)
-                )
-                select w.depth, w.edge_type, w.confidence,
+                    order by e.source_node_id, e.target_node_id, e.edge_type limit :limit
+                ), walk as (select * from first_hop union all select * from second_hop)
+                select w.depth, w.edge_type, w.confidence, w.source_node_id, w.target_node_id,
                        n.id, n.node_type, n.natural_key, n.name, n.line_start, n.line_end, n.area_type,
                        f.path as file_path
                 from walk w
-                join graph_nodes n on n.id = w.target_node_id
-                left join files f on f.id = n.file_id
-                order by w.depth, n.natural_key
-                """;
+                join graph_nodes n on n.id = w.%2$s and n.snapshot_id = :snapshotId
+                left join files f on f.id = n.file_id and f.snapshot_id = :snapshotId
+                order by w.depth, n.natural_key, w.source_node_id, w.target_node_id, w.edge_type
+                limit :limit
+                """.formatted(from, to);
     }
 
-    private String inRelationsSql() {
-        return """
-                with recursive walk as (
-                    select e.source_node_id, e.target_node_id, e.edge_type, e.confidence,
-                           1 as depth, array[e.target_node_id, e.source_node_id]::bigint[] as seen
-                    from graph_edges e
-                    where e.snapshot_id = :snapshotId
-                      and e.target_node_id = :nodeId
-                      and (:edgeType::text is null or e.edge_type = :edgeType)
-                    union all
-                    select e.source_node_id, e.target_node_id, e.edge_type, e.confidence,
-                           w.depth + 1, w.seen || e.source_node_id
-                    from graph_edges e
-                    join walk w on e.target_node_id = w.source_node_id
-                    where e.snapshot_id = :snapshotId
-                      and w.depth < :depth
-                      and not e.source_node_id = any (w.seen)
-                      and (:edgeType::text is null or e.edge_type = :edgeType)
-                )
-                select w.depth, w.edge_type, w.confidence,
-                       n.id, n.node_type, n.natural_key, n.name, n.line_start, n.line_end, n.area_type,
-                       f.path as file_path
-                from walk w
-                join graph_nodes n on n.id = w.source_node_id
-                left join files f on f.id = n.file_id
-                order by w.depth, n.natural_key
-                """;
+    @Transactional(readOnly = true)
+    public GraphOverview overview(long projectId, long userId, Long snapshotId) {
+        long resolved = requireSnapshot(requireOwned(projectId, userId), snapshotId);
+        Map<String, Long> nodes = new LinkedHashMap<>();
+        jdbc.sql(
+                        "select node_type, count(*) as total from graph_nodes where snapshot_id = :snapshotId and node_type <> 'AMBIGUOUS' group by node_type order by node_type")
+                .param("snapshotId", resolved)
+                .query((rs, rowNum) -> {
+                    nodes.put(rs.getString("node_type"), rs.getLong("total"));
+                    return 0;
+                })
+                .list();
+        Map<String, Long> edges = new LinkedHashMap<>();
+        jdbc.sql(
+                        "select e.edge_type, count(*) as total from graph_edges e join graph_nodes s on s.id = e.source_node_id and s.snapshot_id = e.snapshot_id and s.node_type <> 'AMBIGUOUS' join graph_nodes t on t.id = e.target_node_id and t.snapshot_id = e.snapshot_id and t.node_type <> 'AMBIGUOUS' where e.snapshot_id = :snapshotId group by e.edge_type order by e.edge_type")
+                .param("snapshotId", resolved)
+                .query((rs, rowNum) -> {
+                    edges.put(rs.getString("edge_type"), rs.getLong("total"));
+                    return 0;
+                })
+                .list();
+        return new GraphOverview(resolved, nodes, edges);
+    }
+
+    static String sortClause(String sort) {
+        if (sort == null || sort.isBlank()) return "n.natural_key, n.id";
+        return switch (sort) {
+            case "name" -> "n.name, n.natural_key, n.id";
+            case "path" -> "f.path nulls last, n.line_start nulls last, n.natural_key, n.id";
+            case "type" -> "n.node_type, n.natural_key, n.id";
+            default -> throw new InvalidGraphQueryException("sort must be name, path or type.");
+        };
+    }
+
+    static String categoryClause(String category) {
+        if (category == null || category.isBlank()) return "true";
+        return switch (category) {
+            case "symbols" ->
+                "n.node_type in ('METHOD', 'CLASS', 'INTERFACE', 'ENUM', 'ANNOTATION', 'FIELD', 'COMPONENT', 'HOOK', 'STORE', 'CONTROLLER', 'SERVICE', 'REPOSITORY', 'ENTITY', 'DB_ENTITY', 'FUNCTION')";
+            case "entrypoints" -> "n.node_type in ('API_ENDPOINT', 'FE_ROUTE')";
+            case "dependencies" -> "n.node_type = 'CONFIG' and n.natural_key like 'dep:%'";
+            default -> throw new InvalidGraphQueryException("category must be symbols, entrypoints or dependencies.");
+        };
     }
 
     private void requireNode(long snapshotId, long nodeId) {

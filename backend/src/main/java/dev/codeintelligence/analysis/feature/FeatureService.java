@@ -100,12 +100,13 @@ public class FeatureService {
         List<FeatureLinkView> links = jdbc.sql("""
                         select fl.role, fl.node_id, n.name, f.path as file_path
                         from feature_links fl
-                        join graph_nodes n on n.id = fl.node_id
-                        left join files f on f.id = n.file_id
+                        join graph_nodes n on n.id = fl.node_id and n.snapshot_id = :snapshotId and n.node_type <> 'AMBIGUOUS'
+                        left join files f on f.id = n.file_id and f.snapshot_id = :snapshotId
                         where fl.feature_id = :featureId
                         order by fl.role, n.name
                         """)
                 .param("featureId", feature.id())
+                .param("snapshotId", resolved)
                 .query((rs, rowNum) -> new FeatureLinkView(
                         rs.getString("role"), rs.getLong("node_id"), rs.getString("name"), rs.getString("file_path")))
                 .list();

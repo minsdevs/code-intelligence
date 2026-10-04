@@ -1,5 +1,6 @@
 package dev.codeintelligence.analysis.tree;
 
+import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import java.util.List;
 
 public final class TreeAnalyzeDtos {
@@ -38,12 +39,26 @@ public final class TreeAnalyzeDtos {
             List<ImportHit> imports,
             List<SymbolHit> symbols,
             List<EndpointHit> endpoints,
-            List<EntityHit> entities) {
+            List<EntityHit> entities,
+            List<FileAnalysisOutcome> fileOutcomes) {
+        public Response(
+                List<RouteHit> routes,
+                List<SymbolHit> components,
+                List<SymbolHit> hooks,
+                List<SymbolHit> stores,
+                List<ApiCallHit> apiCalls,
+                List<ImportHit> imports,
+                List<SymbolHit> symbols,
+                List<EndpointHit> endpoints,
+                List<EntityHit> entities) {
+            this(routes, components, hooks, stores, apiCalls, imports, symbols, endpoints, entities, List.of());
+        }
 
         public static final Response EMPTY = new Response(
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
 
         public Response {
+            fileOutcomes = fileOutcomes == null ? List.of() : List.copyOf(fileOutcomes);
             routes = routes == null ? List.of() : List.copyOf(routes);
             components = components == null ? List.of() : List.copyOf(components);
             hooks = hooks == null ? List.of() : List.copyOf(hooks);

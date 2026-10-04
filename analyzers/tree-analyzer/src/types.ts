@@ -56,6 +56,7 @@ export type EntityHit = {
 }
 
 export type AnalyzeResponse = {
+  fileOutcomes?: { path: string; status: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'UNSUPPORTED'; reason: string }[]
   routes: RouteHit[]
   components: SymbolHit[]
   hooks: SymbolHit[]

@@ -1,5 +1,6 @@
 package dev.codeintelligence.analysis.ts;
 
+import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,13 +97,41 @@ public final class TsAnalyzeDtos {
             List<EndpointHit> endpoints,
             List<SemanticNodeHit> nodes,
             List<SemanticEdgeHit> edges,
-            List<UnresolvedCallHit> unresolvedCalls) {
+            List<UnresolvedCallHit> unresolvedCalls,
+            List<FileAnalysisOutcome> fileOutcomes) {
+        public Response(
+                List<RouteHit> routes,
+                List<SymbolHit> components,
+                List<SymbolHit> hooks,
+                List<SymbolHit> stores,
+                List<ApiCallHit> apiCalls,
+                List<ImportHit> imports,
+                List<SymbolHit> symbols,
+                List<EndpointHit> endpoints,
+                List<SemanticNodeHit> nodes,
+                List<SemanticEdgeHit> edges,
+                List<UnresolvedCallHit> unresolvedCalls) {
+            this(
+                    routes,
+                    components,
+                    hooks,
+                    stores,
+                    apiCalls,
+                    imports,
+                    symbols,
+                    endpoints,
+                    nodes,
+                    edges,
+                    unresolvedCalls,
+                    List.of());
+        }
 
         public static final Response EMPTY = new Response(
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of(), List.of());
 
         public Response {
+            fileOutcomes = fileOutcomes == null ? List.of() : List.copyOf(fileOutcomes);
             routes = routes == null ? List.of() : List.copyOf(routes);
             components = components == null ? List.of() : List.copyOf(components);
             hooks = hooks == null ? List.of() : List.copyOf(hooks);

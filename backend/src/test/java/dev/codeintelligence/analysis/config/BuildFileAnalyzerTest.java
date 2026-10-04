@@ -10,6 +10,7 @@ import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.NaturalKeys;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -41,14 +42,40 @@ class BuildFileAnalyzerTest {
         assertThat(keys(result, "CONFIG")).contains(NaturalKeys.config("build.gradle"));
         assertThat(depKeys(result))
                 .contains(
-                        NaturalKeys.dependency("org.springframework.boot", "spring-boot-starter-web"),
-                        NaturalKeys.dependency("org.postgresql", "postgresql"),
-                        NaturalKeys.dependency("com.zaxxer", "HikariCP"),
-                        NaturalKeys.dependency("org.junit.jupiter", "junit-jupiter"),
-                        NaturalKeys.dependency("com.google.guava", "guava"));
+                        BuildFileAnalyzer.declarationKey(
+                                "build.gradle",
+                                "implementation",
+                                "org.springframework.boot",
+                                "spring-boot-starter-web",
+                                "org.springframework.boot:spring-boot-starter-web:3.4.0"),
+                        BuildFileAnalyzer.declarationKey(
+                                "build.gradle",
+                                "implementation",
+                                "org.postgresql",
+                                "postgresql",
+                                "org.postgresql:postgresql"),
+                        BuildFileAnalyzer.declarationKey(
+                                "build.gradle", "runtimeOnly", "com.zaxxer", "HikariCP", "com.zaxxer:HikariCP:5.1.0"),
+                        BuildFileAnalyzer.declarationKey(
+                                "build.gradle",
+                                "testImplementation",
+                                "org.junit.jupiter",
+                                "junit-jupiter",
+                                "org.junit.jupiter:junit-jupiter:5.11.0"),
+                        BuildFileAnalyzer.declarationKey(
+                                "build.gradle",
+                                "implementation",
+                                "com.google.guava",
+                                "guava",
+                                "com.google.guava:guava:33.0"));
         assertThat(dependsOn(result))
                 .contains(NaturalKeys.config("build.gradle") + "->"
-                        + NaturalKeys.dependency("org.springframework.boot", "spring-boot-starter-web"));
+                        + BuildFileAnalyzer.declarationKey(
+                                "build.gradle",
+                                "implementation",
+                                "org.springframework.boot",
+                                "spring-boot-starter-web",
+                                "org.springframework.boot:spring-boot-starter-web:3.4.0"));
         assertThat(result.nodes().stream()
                         .filter(node -> node.naturalKey().startsWith("dep:"))
                         .map(node -> node.name() + "=" + node.metadata().get("version"))
@@ -102,11 +129,55 @@ class BuildFileAnalyzerTest {
         AnalysisResult result = analyze(repo, "pom.xml", "xml");
         assertThat(depKeys(result))
                 .containsExactlyInAnyOrder(
-                        NaturalKeys.dependency("org.springframework.boot", "spring-boot-starter-web"),
-                        NaturalKeys.dependency("org.postgresql", "postgresql"));
+                        BuildFileAnalyzer.declarationKey(
+                                "pom.xml",
+                                "compile",
+                                "org.springframework.boot",
+                                "spring-boot-starter-web",
+                                "org.springframework.boot:spring-boot-starter-web:3.4.0"),
+                        BuildFileAnalyzer.declarationKey(
+                                "pom.xml",
+                                "runtime",
+                                "org.postgresql",
+                                "postgresql",
+                                "org.postgresql:postgresql:${postgresql.version}"));
         assertThat(versionOf(result, "spring-boot-starter-web")).isEqualTo("3.4.0");
         assertThat(versionOf(result, "postgresql")).isEqualTo("${postgresql.version}");
         assertThat(dependsOn(result)).hasSize(2);
+    }
+
+    @Test
+    void npmDeclarationsKeepDifferentModulesVersionsAndManifestEvidence() throws Exception {
+        Files.createDirectories(temp.resolve("app"));
+        Files.createDirectories(temp.resolve("worker"));
+        Files.writeString(temp.resolve("app/package.json"), """
+                {"dependencies":{"shared":"^1.0.0"},"devDependencies":{"tool":"2"},
+                 "scripts":{"postinstall":"must never execute"}}
+                """);
+        Files.writeString(temp.resolve("worker/package.json"), """
+                {"dependencies":{"shared":"^2.0.0"},"peerDependencies":{"host":"*"}}
+                """);
+        FileInventory inventory = FileInventory.of(List.of(
+                new InventoriedFile("app/package.json", "json", 0, 0, ""),
+                new InventoriedFile("worker/package.json", "json", 0, 0, "")));
+        AnalysisResult result = analyzer.analyze(new AnalysisContext(1, 1, temp, inventory));
+        var shared = result.nodes().stream()
+                .filter(node -> node.name().equals("shared"))
+                .toList();
+        assertThat(shared).hasSize(2);
+        assertThat(shared).extracting(GraphNodeDraft::naturalKey).doesNotHaveDuplicates();
+        assertThat(shared)
+                .extracting(GraphNodeDraft::filePath)
+                .containsExactly("app/package.json", "worker/package.json");
+        assertThat(shared).extracting(node -> node.metadata().get("version")).containsExactly("^1.0.0", "^2.0.0");
+        assertThat(result.edges())
+                .filteredOn(edge -> edge.edgeType().equals("DEPENDS_ON"))
+                .hasSize(4);
+        for (GraphNodeDraft node : shared) {
+            assertThat(result.evidences())
+                    .anyMatch(evidence -> node.naturalKey().equals(evidence.subjectNaturalKey())
+                            && node.filePath().equals(evidence.filePath()));
+        }
     }
 
     private AnalysisResult analyze(Path repo, String path, String language) {

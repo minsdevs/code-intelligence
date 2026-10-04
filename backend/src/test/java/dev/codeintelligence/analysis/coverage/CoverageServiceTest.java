@@ -129,6 +129,58 @@ class CoverageServiceTest {
     }
 
     @Test
+    void laterParserSuccessCannotErasePersistedAmbiguousIdentity() {
+        jdbc.update(
+                "update files set analysis_status='PARTIAL', analysis_reason='AMBIGUOUS_SYMBOL_IDENTITY' where snapshot_id=? and path='fixture-0'",
+                snapshotId);
+        dev.codeintelligence.analysis.core.FileAnalysisOutcome.record(
+                jdbcClient, snapshotId, "fixture-0", "SUCCESS", "JAVA_PARSED");
+        assertThat(jdbc.queryForObject(
+                        "select analysis_status from files where snapshot_id=? and path='fixture-0'",
+                        String.class,
+                        snapshotId))
+                .isEqualTo("PARTIAL");
+        assertThat(jdbc.queryForObject(
+                        "select analysis_reason from files where snapshot_id=? and path='fixture-0'",
+                        String.class,
+                        snapshotId))
+                .isEqualTo("AMBIGUOUS_SYMBOL_IDENTITY");
+    }
+
+    @Test
+    void measuredSnapshotCountsActualOutcomesAndKeepsOtherSnapshotsUnmeasured() {
+        jdbc.update("""
+                insert into snapshot_inventory_measurements
+                (snapshot_id, discovered_files, excluded_for_count, excluded_for_size, excluded_binary, excluded_submodules)
+                values (?,10,1,1,1,2)
+                """, snapshotId);
+        String[] states = {"SUCCESS", "PARTIAL", "FAILED", "UNSUPPORTED", "UNMEASURED", "TARGETED", "LEGACY_UNMEASURED"
+        };
+        for (int i = 0; i < states.length; i++) {
+            jdbc.update(
+                    "update files set analysis_status=?, analysis_targeted=? where snapshot_id=? and path=?",
+                    states[i],
+                    i < 3 || i == 5,
+                    snapshotId,
+                    "fixture-" + i);
+        }
+        CoverageReport report = service.getReport(projectId, userId, snapshotId);
+        assertThat(report.snapshotId()).isEqualTo(snapshotId);
+        assertThat(report.measurementStatus()).isEqualTo("PER_FILE_RECORDED");
+        assertThat(report.outcomes()).isEqualTo(new CoverageReport.OutcomeSummary(10, 4, 1, 1, 1, 3, 1, 2, 1, 2));
+        assertThat(report.fileCoverage().analyzedFiles()).isNull();
+        assertThat(report.fileCoverage().skippedBinary()).isEqualTo(1);
+        assertThat(report.languageCoverage())
+                .filteredOn(l -> l.language().equals("java"))
+                .allSatisfy(l -> assertThat(l.analyzed()).isEqualTo(1));
+        long previous = snapshot();
+        CoverageReport old = service.getReport(projectId, userId, previous);
+        assertThat(old.measurementStatus()).isEqualTo("LEGACY_UNMEASURED");
+        assertThat(old.outcomes()).isNull();
+        assertThat(old.snapshotId()).isEqualTo(previous);
+    }
+
+    @Test
     void storedFilesAreInventoryAndSerializedOutcomesRemainUnknown() throws Exception {
         CoverageReport report = service.getReport(projectId, userId);
         assertThat(report.measurementStatus()).isEqualTo("LEGACY_UNMEASURED");

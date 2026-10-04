@@ -68,7 +68,12 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
   const semantic = extractSemanticGraph(project, files)
   endpoints.push(...semantic.endpoints)
 
+  const unresolvedFiles = new Set(semantic.unresolvedCalls.map((call) => call.filePath))
   return {
+    fileOutcomes: tsFiles.map((file) => ({ path: file.path,
+      status: unresolvedFiles.has(file.path) ? 'PARTIAL' : 'SUCCESS',
+      reason: unresolvedFiles.has(file.path) ? 'UNRESOLVED_CALLS' : 'TS_PARSED',
+    })),
     routes,
     components,
     hooks,

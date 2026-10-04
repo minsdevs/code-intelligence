@@ -356,3 +356,16 @@ describe('extractTs', () => {
     expect(() => assertSafeRelativePath('../secret.ts')).toThrow(/must not contain/)
   })
 })
+
+
+describe('per-file outcomes', () => {
+  it('records successfully parsed empty files and keeps config inputs out of parser successes', () => {
+    const result = extractTs([{ path: 'empty.ts', content: '' }, { path: 'package.json', content: '{}' }])
+    expect(result.fileOutcomes).toEqual([{ path: 'empty.ts', status: 'SUCCESS', reason: 'TS_PARSED' }])
+  })
+
+  it('records unresolved calls as partial instead of claiming complete extraction', () => {
+    const result = extractTs([{ path: 'unresolved.ts', content: 'export function run() { dynamicTarget() }' }])
+    expect(result.fileOutcomes).toEqual([{ path: 'unresolved.ts', status: 'PARTIAL', reason: 'UNRESOLVED_CALLS' }])
+  })
+})

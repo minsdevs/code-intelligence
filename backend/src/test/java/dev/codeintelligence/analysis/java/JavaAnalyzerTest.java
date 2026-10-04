@@ -25,6 +25,42 @@ class JavaAnalyzerTest {
     Path temp;
 
     @Test
+    void duplicateFqcnInSeparateModulesDoesNotProduceCallsToAnArbitraryModule() throws Exception {
+        Path repo = java.nio.file.Files.createTempDirectory("java-identity-");
+        try {
+            String one = "one/src/main/java/demo/Service.java";
+            String two = "two/src/main/java/demo/Service.java";
+            for (String path : java.util.List.of(one, two)) {
+                java.nio.file.Files.createDirectories(repo.resolve(path).getParent());
+                java.nio.file.Files.writeString(
+                        repo.resolve(path),
+                        "package demo; public class Service { public void run() { helper(); } void helper() {} }");
+            }
+            var result = new JavaAnalyzer()
+                    .analyze(new dev.codeintelligence.analysis.core.AnalysisContext(
+                            1,
+                            1,
+                            repo,
+                            dev.codeintelligence.analysis.core.FileInventory.of(java.util.List.of(
+                                    new dev.codeintelligence.analysis.core.InventoriedFile(one, "java", 0, 1, ""),
+                                    new dev.codeintelligence.analysis.core.InventoriedFile(two, "java", 0, 1, "")))));
+            assertThat(result.edges()).noneMatch(edge -> edge.edgeType().equals("CALLS"));
+            assertThat(result.nodes())
+                    .filteredOn(node -> node.naturalKey().equals("java:demo.Service"))
+                    .singleElement()
+                    .matches(node -> node.nodeType().equals("AMBIGUOUS") && node.filePath() == null);
+            assertThat(result.fileOutcomes())
+                    .allMatch(outcome -> outcome.status().equals("PARTIAL")
+                            && outcome.reason().equals("AMBIGUOUS_SYMBOL_IDENTITY"));
+        } finally {
+            try (var paths = java.nio.file.Files.walk(repo)) {
+                for (Path path :
+                        paths.sorted(java.util.Comparator.reverseOrder()).toList()) java.nio.file.Files.delete(path);
+            }
+        }
+    }
+
+    @Test
     void springMiniCallsControllerToServiceConfirmedAndRepositoryPossible() throws Exception {
         Path clone = FixtureRepo.create("spring-mini", temp.resolve("repo"));
         FileInventory inventory = inventory(clone);
@@ -107,6 +143,10 @@ class JavaAnalyzerTest {
                                 "com.example.todo.repository.TodoRepository",
                                 "save",
                                 List.of("com.example.todo.domain.Todo")));
+        assertThat(result.fileOutcomes())
+                .anyMatch(outcome ->
+                        outcome.status().equals("PARTIAL") && outcome.reason().equals("UNRESOLVED_CALLS"));
+        assertThat(result.fileOutcomes()).anyMatch(outcome -> outcome.status().equals("SUCCESS"));
         assertThat(extendsEdges(result))
                 .contains("java:com.example.todo.repository.TodoRepository"
                         + "->java:org.springframework.data.jpa.repository.JpaRepository");
@@ -121,6 +161,12 @@ class JavaAnalyzerTest {
         AnalysisResult result = new JavaAnalyzer().analyze(new AnalysisContext(1, 1, clone, inventory));
         assertThat(keys(result, "CLASS")).contains("java:com.example.todo.api.TodoController");
         assertThat(keys(result, "CLASS")).doesNotContain("java:com.example.todo.Broken");
+        assertThat(result.fileOutcomes())
+                .anyMatch(outcome -> outcome.path().endsWith("Broken.java")
+                        && outcome.status().equals("FAILED"));
+        assertThat(result.fileOutcomes())
+                .filteredOn(outcome -> outcome.path().endsWith("Broken.java"))
+                .hasSize(1);
         assertThat(result.evidences())
                 .anyMatch(evidence -> evidence.subjectNaturalKey() == null
                         && evidence.filePath().endsWith("Broken.java"));

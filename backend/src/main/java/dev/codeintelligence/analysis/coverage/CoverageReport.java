@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Snapshot inventory and recorded job-step facts. Legacy snapshots do not persist per-file analyzer
+ * Snapshot inventory, explicit parser outcomes, and recorded job-step facts. Legacy snapshots do not persist per-file analyzer
  * outcomes, so inventory counts and completed steps cannot establish analysis coverage or support.
  * Existing JSON keys remain, but unmeasured counters are now null; numeric-only clients must update.
  */
@@ -18,7 +18,47 @@ public record CoverageReport(
         List<String> unsupportedItems,
         String measurementStatus,
         String supportStatus,
-        LocalImportSummary localImport) {
+        LocalImportSummary localImport,
+        Long snapshotId,
+        OutcomeSummary outcomes) {
+
+    public record OutcomeSummary(
+            int discoveredFiles,
+            int targetedFiles,
+            int successfulFiles,
+            int partialFiles,
+            int failedFiles,
+            int excludedFiles,
+            int unsupportedFiles,
+            int unmeasuredFiles,
+            int pendingFiles,
+            int excludedSubmodules) {}
+
+    public CoverageReport(
+            FileCoverage fileCoverage,
+            List<LanguageCoverage> languageCoverage,
+            List<ExcludedFolder> excludedFolders,
+            List<AnalyzerStatus> analyzerStatuses,
+            PartialResultInfo partialResults,
+            List<String> retryableIssues,
+            List<String> unsupportedItems,
+            String measurementStatus,
+            String supportStatus,
+            LocalImportSummary localImport) {
+        this(
+                fileCoverage,
+                languageCoverage,
+                excludedFolders,
+                analyzerStatuses,
+                partialResults,
+                retryableIssues,
+                unsupportedItems,
+                measurementStatus,
+                supportStatus,
+                localImport,
+                null,
+                null);
+    }
 
     public static final String LEGACY_UNMEASURED = "LEGACY_UNMEASURED";
     public static final String SUPPORT_UNVERIFIED = "UNVERIFIED";
@@ -90,7 +130,7 @@ public record CoverageReport(
         }
     }
 
-    /** total is a deprecated inventory alias. Analysis outcome counters are unmeasured and null. */
+    /** total is a deprecated inventory alias. Parser counters are null unless this run recorded its inventory and per-file outcomes. */
     public record LanguageCoverage(
             String language,
             @Deprecated int total,

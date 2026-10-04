@@ -1,6 +1,7 @@
 package dev.codeintelligence.analysis.tree;
 
 import dev.codeintelligence.analysis.core.AnalysisResult;
+import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import dev.codeintelligence.analysis.core.InvalidFilePathException;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.SafeRelativePath;
@@ -61,32 +62,60 @@ public class TreeParsingStep implements JobStep {
     public void run(JobContext ctx) {
         long snapshotId =
                 ctx.snapshotId().orElseThrow(() -> new IllegalStateException("no snapshot attached to the job"));
+        List<InventoriedFile> files = loadFiles(snapshotId);
         if (!client.enabled()) {
+            recordAll(snapshotId, files, "UNMEASURED", "ANALYZER_DISABLED");
             ctx.updateProgress(100);
             return;
         }
         ctx.updateProgress(10);
-        List<InventoriedFile> files = loadFiles(snapshotId);
         if (files.isEmpty()) {
             ctx.updateProgress(100);
             return;
         }
-        client.health();
+        recordAll(snapshotId, files, "TARGETED", "PARSER_STARTED");
+        try {
+            client.health();
+        } catch (RuntimeException failure) {
+            recordAll(snapshotId, files, "FAILED", "ANALYZER_UNAVAILABLE");
+            throw failure;
+        }
         ctx.updateProgress(20);
-        List<TreeAnalyzeDtos.FilePayload> payloads = readPayloads(ctx.clonePath(), files);
+        List<TreeAnalyzeDtos.FilePayload> payloads = readPayloads(ctx.clonePath(), files, snapshotId);
         if (payloads.isEmpty()) {
             ctx.updateProgress(100);
             return;
         }
         for (int start = 0; start < payloads.size(); start += BATCH_SIZE) {
             int end = Math.min(payloads.size(), start + BATCH_SIZE);
-            TreeAnalyzeDtos.Response response =
-                    client.analyze(new TreeAnalyzeDtos.Request(payloads.subList(start, end)));
+            List<TreeAnalyzeDtos.FilePayload> batch = payloads.subList(start, end);
+            TreeAnalyzeDtos.Response response;
+            try {
+                response = client.analyze(new TreeAnalyzeDtos.Request(batch));
+            } catch (RuntimeException failure) {
+                for (var payload : batch)
+                    FileAnalysisOutcome.record(jdbc, snapshotId, payload.path(), "FAILED", "ANALYZER_REQUEST_FAILED");
+                throw failure;
+            }
             AnalysisResult result = TreeGraphMapper.toGraph(response);
             persistence.persist(ctx.projectId(), snapshotId, result);
+            FileAnalysisOutcome.recordResponse(
+                    jdbc,
+                    snapshotId,
+                    batch.stream().map(TreeAnalyzeDtos.FilePayload::path).toList(),
+                    response.fileOutcomes());
             ctx.updateProgress(20 + Math.min(75, (75 * end) / payloads.size()));
         }
         ctx.updateProgress(100);
+    }
+
+    private void recordAll(long snapshotId, List<InventoriedFile> files, String status, String reason) {
+        for (InventoriedFile file : files) recordOne(snapshotId, file, status, reason);
+    }
+
+    private void recordOne(long snapshotId, InventoriedFile file, String status, String reason) {
+
+        FileAnalysisOutcome.record(jdbc, snapshotId, file.path(), status, reason);
     }
 
     private List<InventoriedFile> loadFiles(long snapshotId) {
@@ -108,20 +137,24 @@ public class TreeParsingStep implements JobStep {
                 .toList();
     }
 
-    private List<TreeAnalyzeDtos.FilePayload> readPayloads(Path clonePath, List<InventoriedFile> files) {
+    private List<TreeAnalyzeDtos.FilePayload> readPayloads(
+            Path clonePath, List<InventoriedFile> files, long snapshotId) {
         List<TreeAnalyzeDtos.FilePayload> payloads = new ArrayList<>();
         for (InventoriedFile file : files) {
             if (file.size() > analysisProperties.maxFileSize()) {
+                recordOne(snapshotId, file, "UNMEASURED", "SOURCE_SIZE_LIMIT");
                 continue;
             }
             try {
                 Path resolved = SafeRelativePath.resolve(clonePath, file.path());
                 if (!Files.isRegularFile(resolved)) {
+                    recordOne(snapshotId, file, "FAILED", "SOURCE_UNAVAILABLE");
                     continue;
                 }
                 String content = Files.readString(resolved, StandardCharsets.UTF_8);
                 payloads.add(new TreeAnalyzeDtos.FilePayload(file.path(), content));
             } catch (InvalidFilePathException | IOException e) {
+                recordOne(snapshotId, file, "FAILED", "SOURCE_READ_FAILED");
                 log.warn("Skipping source file {}: {}", file.path(), e.toString());
             }
         }

@@ -14,7 +14,19 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class FileService {
 
-    public record FileListItem(String path, String language, long size, Integer lineCount, long resolvedSnapshotId) {}
+    public record FileListItem(
+            String path,
+            String language,
+            long size,
+            Integer lineCount,
+            long resolvedSnapshotId,
+            String analysisStatus,
+            String analysisReason,
+            boolean analysisTargeted) {
+        public FileListItem(String path, String language, long size, Integer lineCount, long resolvedSnapshotId) {
+            this(path, language, size, lineCount, resolvedSnapshotId, "LEGACY_UNMEASURED", null, false);
+        }
+    }
 
     public record FileContent(
             String path,
@@ -58,7 +70,7 @@ public class FileService {
     public List<FileListItem> listFiles(long projectId, long userId, Long snapshotId) {
         long resolved = requireSnapshot(requireOwned(projectId, userId), snapshotId);
         return jdbc.sql("""
-                        select path, language, size, line_count
+                        select path, language, size, line_count, analysis_status, analysis_reason, analysis_targeted
                         from files where snapshot_id = :snapshotId order by path
                         """)
                 .param("snapshotId", resolved)
@@ -67,7 +79,10 @@ public class FileService {
                         rs.getString("language"),
                         rs.getLong("size"),
                         (Integer) rs.getObject("line_count"),
-                        resolved))
+                        resolved,
+                        rs.getString("analysis_status"),
+                        rs.getString("analysis_reason"),
+                        rs.getBoolean("analysis_targeted")))
                 .list();
     }
 
