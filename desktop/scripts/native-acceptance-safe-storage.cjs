@@ -14,18 +14,31 @@ const profile = path.join(directory, 'electron-profile');
 if (mode === 'write') fs.mkdirSync(profile);
 else if (!fs.statSync(profile).isDirectory()) throw new Error('NATIVE_PROBE_PROFILE_MISSING');
 app.setPath('userData', profile);
+const recordPhase = value => fs.writeFileSync(path.join(directory, mode + '.phase'), value, { mode: 0o600 });
+recordPhase('APP_READY');
 app.whenReady().then(() => {
+  recordPhase('ENCRYPTION_AVAILABLE');
   if (!safeStorage.isEncryptionAvailable()) throw new Error('NATIVE_ENCRYPTION_UNAVAILABLE');
   const cipher = path.join(directory, 'probe.enc'), digest = path.join(directory, 'probe.sha256');
   if (mode === 'write') {
     const secret = crypto.randomBytes(32).toString('hex');
+    recordPhase('ENCRYPT');
     const encrypted = safeStorage.encryptString(secret);
     if (encrypted.includes(Buffer.from(secret))) throw new Error('PLAINTEXT_STORAGE_REFUSED');
+    recordPhase('WRITE_CIPHERTEXT');
     fs.writeFileSync(cipher, encrypted, { flag: 'wx' });
+    recordPhase('WRITE_DIGEST');
     fs.writeFileSync(digest, crypto.createHash('sha256').update(secret).digest('hex'), { flag: 'wx' });
   } else {
-    const value = safeStorage.decryptString(fs.readFileSync(cipher));
-    if (crypto.createHash('sha256').update(value).digest('hex') !== fs.readFileSync(digest, 'utf8')) throw new Error('NATIVE_RESTART_DECRYPT_FAILED');
+    recordPhase('READ_CIPHERTEXT');
+    const encrypted = fs.readFileSync(cipher);
+    recordPhase('DECRYPT');
+    const value = safeStorage.decryptString(encrypted);
+    recordPhase('READ_DIGEST');
+    const expected = fs.readFileSync(digest, 'utf8');
+    recordPhase('VERIFY_DIGEST');
+    if (crypto.createHash('sha256').update(value).digest('hex') !== expected) throw new Error('NATIVE_RESTART_DECRYPT_FAILED');
   }
+  recordPhase('COMPLETE');
   app.exit(0);
 }).catch(() => app.exit(1));

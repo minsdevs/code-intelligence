@@ -144,7 +144,25 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
   const safeReport = { format: 1, provider: 'Electron-safeStorage-Windows-DPAPI', standardUser: true,
     processRestart: false, status: 'FAIL' };
   try {
-    for (const mode of ['write', 'read']) run(electron, [path.join(desktop, 'scripts', 'native-acceptance-safe-storage.cjs'), mode, probe], desktop, env);
+    for (const mode of ['write', 'read']) {
+      let failure;
+      try { run(electron, [path.join(desktop, 'scripts', 'native-acceptance-safe-storage.cjs'), mode, probe], desktop, env); }
+      catch (error) { failure = error; }
+      let phase = 'UNOBSERVED';
+      try {
+        const file = path.join(probe, mode + '.phase');
+        const stat = fs.lstatSync(file);
+        if (stat.isFile() && !stat.isSymbolicLink() && stat.size <= 32) {
+          const value = fs.readFileSync(file, 'utf8');
+          if (['APP_READY', 'ENCRYPTION_AVAILABLE', 'ENCRYPT', 'WRITE_CIPHERTEXT', 'WRITE_DIGEST',
+            'READ_CIPHERTEXT', 'DECRYPT', 'READ_DIGEST', 'VERIFY_DIGEST', 'COMPLETE'].includes(value)) phase = value;
+        }
+      } catch { /* Diagnostic absence must not replace the original process failure. */ }
+      if (failure || phase !== 'COMPLETE') {
+        safeReport.failure = { operation: mode, phase };
+        throw failure || new Error('NATIVE_SAFE_STORAGE_PROOF_MISSING');
+      }
+    }
     safeReport.processRestart = true; safeReport.status = 'PASS';
   } finally { fs.writeFileSync(path.join(artifacts, 'windows-safe-storage.json'), JSON.stringify(safeReport, null, 2) + '\n'); }
   report.checks.push('real-standard-user-electron-DPAPI-process-restart');

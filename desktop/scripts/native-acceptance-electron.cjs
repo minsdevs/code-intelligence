@@ -14,7 +14,8 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   const { expect } = frontendRequire('@playwright/test');
   const desktop = path.join(source, 'desktop');
   const executablePath = createRequire(path.join(desktop, 'package.json'))('electron');
-  const packageName = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8')).name;
+  const desktopPackage = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8'));
+  const packageName = desktopPackage.name;
   if (process.platform === 'win32') assert.ok(path.isAbsolute(env.APPDATA || ''), 'Fresh Windows application profile required');
   const expectedUserData = process.platform === 'win32' ? path.join(env.APPDATA, packageName)
     : path.join(os.homedir(), 'Library', 'Application Support', packageName);
@@ -39,6 +40,9 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.equal(userData, expectedUserData);
     report.electronVersion = await app.evaluate(() => process.versions.electron);
     await expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible({ timeout: 60000 });
+    const appVersion = await page.evaluate(() => window.codeIntelligenceDesktop.appVersion);
+    assert.equal(appVersion, desktopPackage.version, 'Renderer app version must come from the real desktop config IPC');
+    report.appVersion = appVersion; report.checks.push('native-app-version-ipc');
     const status = await page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus());
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null);
     assert.equal(status.aiOff, true, 'Provider egress must remain disabled for synthetic acceptance');
