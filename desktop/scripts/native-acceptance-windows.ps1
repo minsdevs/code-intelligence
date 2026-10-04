@@ -105,28 +105,32 @@ public static class AcceptanceToken {
 }
 "@
     [AcceptanceToken]::RequireNotElevated($identity.Token)
-    $phase = 'child-profile'
-    $profile = [AcceptanceToken]::Profile($identity.Token)
+    $phase = 'child-profile-token-path'
+    $userProfile = [AcceptanceToken]::Profile($identity.Token)
+    $phase = 'child-profile-registration'
     $registeredProfile = (Get-ItemProperty -LiteralPath ("Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\" + $identity.User.Value)).ProfileImagePath
-    if (-not [IO.Path]::IsPathFullyQualified($profile) -or $profile -ine [Environment]::ExpandEnvironmentVariables($registeredProfile) -or $profile -ieq $config.NATIVE_ACCEPTANCE_PARENT_PROFILE) { throw 'Fresh profile required' }
-    if (-not (Test-Path -LiteralPath ("Registry::HKEY_USERS\" + $identity.User.Value)) -or -not (Test-Path -LiteralPath $profile -PathType Container)) { throw 'Loaded user profile required' }
+    if (-not [IO.Path]::IsPathFullyQualified($userProfile) -or $userProfile -ine [Environment]::ExpandEnvironmentVariables($registeredProfile) -or $userProfile -ieq $config.NATIVE_ACCEPTANCE_PARENT_PROFILE) { throw 'Fresh profile required' }
+    $phase = 'child-profile-loaded-hive'
+    if (-not (Test-Path -LiteralPath ("Registry::HKEY_USERS\" + $identity.User.Value)) -or -not (Test-Path -LiteralPath $userProfile -PathType Container)) { throw 'Loaded user profile required' }
     # Alternate-credential processes can inherit runner environment variables. Keep
     # only OS/tool discovery, then derive all user paths from this token's profile.
+    $phase = 'child-profile-user-environment'
     foreach ($key in @([Environment]::GetEnvironmentVariables('Process').Keys)) {
         if ($key -notmatch '^(SystemRoot|windir|ProgramFiles(\(x86\))?|ProgramW6432|ProgramData|ALLUSERSPROFILE|COMSPEC|PATHEXT|OS|PROCESSOR_ARCHITECTURE|NUMBER_OF_PROCESSORS|COMPUTERNAME)$') {
             [Environment]::SetEnvironmentVariable($key, $null, 'Process')
         }
     }
-    $env:USERPROFILE = $profile
-    $env:HOMEDRIVE = [IO.Path]::GetPathRoot($profile).TrimEnd('\')
-    $env:HOMEPATH = $profile.Substring($env:HOMEDRIVE.Length)
-    $env:HOME = $profile
+    $env:USERPROFILE = $userProfile
+    $env:HOMEDRIVE = [IO.Path]::GetPathRoot($userProfile).TrimEnd('\')
+    $env:HOMEPATH = $userProfile.Substring($env:HOMEDRIVE.Length)
+    $env:HOME = $userProfile
     $env:USERNAME = $identity.Name.Split('\')[-1]
     $env:USERDOMAIN = $identity.Name.Split('\')[0]
-    $env:APPDATA = [Environment]::GetFolderPath('ApplicationData')
-    $env:LOCALAPPDATA = [Environment]::GetFolderPath('LocalApplicationData')
+    # User paths come from this token- and registry-verified profile.
+    $env:APPDATA = Join-Path $userProfile 'AppData\Roaming'
+    $env:LOCALAPPDATA = Join-Path $userProfile 'AppData\Local'
     foreach ($folder in @($env:APPDATA, $env:LOCALAPPDATA)) {
-        if (-not $folder.StartsWith($profile + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Foreign user shell folder rejected' }
+        New-Item -ItemType Directory -Path $folder -Force | Out-Null
     }
     $env:TEMP = Join-Path $env:LOCALAPPDATA 'Temp'; $env:TMP = $env:TEMP
     New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
@@ -203,7 +207,7 @@ exit $code
     if (Test-Path -LiteralPath $diagnostic) {
         try {
             $details = Get-Content -Raw -LiteralPath $diagnostic | ConvertFrom-Json
-            if ($details.phase -cin @('child-token', 'child-profile', 'child-dpapi', 'child-acceptance')) { $childPhase = $details.phase }
+            if ($details.phase -cin @('child-token', 'child-profile-token-path', 'child-profile-registration', 'child-profile-loaded-hive', 'child-profile-user-environment', 'child-dpapi', 'child-acceptance')) { $childPhase = $details.phase }
             $childHresult = [int]$details.hresult
             if ($null -ne $details.win32Error) { $childWin32Error = [int]$details.win32Error }
         } catch { $childPhase = 'child-diagnostic-invalid'; $childHresult = $null; $childWin32Error = $null }
@@ -226,7 +230,10 @@ exit $code
     }
     if (Test-Path (Join-Path $private 'native-acceptance-artifacts')) {
         # Only these explicit report names can cross the private account boundary.
-        foreach ($file in @('acceptance.json', 'token.json', 'windows-native.json', 'windows-native-build.log', 'windows-safe-storage.json')) {
+        foreach ($file in @('acceptance.json', 'token.json', 'windows-native.json', 'windows-native-build.log', 'windows-safe-storage.json',
+            'first-start-980x700.png', 'first-start-1280x800.png', 'first-start-1440x900.png',
+            'project-list-980x700.png', 'project-list-1280x800.png', 'project-list-1440x900.png',
+            'after-delete-980x700.png', 'after-delete-1280x800.png', 'after-delete-1440x900.png')) {
             $candidate = Join-Path $private "native-acceptance-artifacts/$file"
             if (Test-Path -LiteralPath $candidate) { Copy-Item -LiteralPath $candidate -Destination $artifacts }
         }

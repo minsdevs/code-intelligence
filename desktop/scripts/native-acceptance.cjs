@@ -111,7 +111,27 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
       if (locations.length === 32) break;
     }
   }
-  return { lastBuildStep: steps.at(-1) || null, categories, compilerCodes, policyCodes, javaSymbols, missingPackages, locations };
+  // Never publish linker lines, arguments, arbitrary symbols or library paths.
+  // Fixed enums distinguish provisioning failures without leaking credentials.
+  const nativeLink = {
+    reasons: [
+      ['undefined-symbols', /Undefined symbols for architecture|ld: (?:symbol\(s\) not found|undefined symbols)/],
+      ['library-not-found', /ld: (?:library not found for -l|library [^\r\n]+ not found)/],
+      ['duplicate-symbols', /duplicate symbol|ld: [0-9]+ duplicate symbols/],
+      ['architecture-mismatch', /ld: [^\r\n]*(?:incompatible architecture|wrong architecture)|ignoring file [^\r\n]*built for/],
+      ['deployment-target-mismatch', /was built for newer macOS version|built for macOS [^\r\n]*than being linked/],
+      ['unsupported-option', /ld: (?:unknown|unrecognized) (?:option|argument)/],
+      ['linker-crash', /ld: Assertion failed|clang: error: linker command failed due to signal/],
+    ].filter(([, pattern]) => pattern.test(text)).map(([reason]) => reason),
+    architectures: ['arm64', 'x86_64'].filter(arch => text.includes('Undefined symbols for architecture ' + arch + ':')),
+    missingLibraries: ['ssl', 'crypto', 'System', 'system', 'atomic', 'pthread', 'c++', 'stdc++']
+      .filter(name => text.includes('ld: library not found for -l' + name + '\n') || text.includes("ld: library '" + name + "' not found")),
+    failedTargets: ['redis-server', 'redis-cli', 'redis-benchmark', 'hiredis', 'lua', 'xxhash', 'tre', 'module_tests', 'commandfilter.so', 'build']
+      .filter(target => text.includes('*** [' + target + '] Error ')),
+    rejectedDriverFlags: ['-mmacosx-version-min=13.0', '-Wl,-headerpad_max_install_names']
+      .filter(flag => text.split(/\r?\n/).some(line => /^ld: (?:unknown|unrecognized) (?:options?|arguments?):/.test(line) && line.split(/\s+/).includes(flag))),
+  };
+  return { lastBuildStep: steps.at(-1) || null, categories, compilerCodes, policyCodes, javaSymbols, missingPackages, locations, nativeLink };
 }
 function run(command, args, cwd, env = process.env, options = {}) {
   const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout: 35 * 60 * 1000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
@@ -230,7 +250,7 @@ async function main(target) {
     buildSequence: process.env.CODE_INTELLIGENCE_BUILD_SEQUENCE, mode: 'unsigned-development-native',
     nodeVersion: process.versions.node, osRelease: require('node:os').release(),
     signedInstallation: false, notarizedInstallation: false, isolatedRunGateChanged: false,
-    scope: target === 'windows' ? 'windows-native-boundary-security' : 'macos-native-development-app',
+    scope: target === 'windows' ? 'windows-native-development-app' : 'macos-native-development-app',
     installationAcceptance: { status: 'BLOCKED', code: 'SIGNING_AND_NOTARIZATION_UNAVAILABLE' },
     status: 'RUNNING', phase: 'fresh-source-copy', checks: [] };
   const save = () => fs.writeFileSync(path.join(artifacts, 'acceptance.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
@@ -253,18 +273,19 @@ async function main(target) {
       const { runWindows } = require('./native-acceptance-windows.cjs');
       await runWindows({ source, owned, artifacts, report, run, env });
       report.phase = 'windows-product-readiness-gate'; save();
-      // Boundary smoke has its own conclusion. An unchanged product No-Go is not
-      // re-labelled as a failed native helper test or bypassed to launch the product.
+      // Release packaging stays blocked; unsigned development acceptance runs independently.
       let blocked = false;
       try { await require(path.join(source, 'desktop', 'scripts', 'desktop-build-gate.cjs'))({ electronPlatformName: 'win32' }); }
       catch { blocked = true; }
       assert.ok(blocked, 'Windows product gate changed without product acceptance');
       const readiness = require(path.join(source, 'desktop', 'scripts', 'windows-readiness.cjs')).windowsReadiness();
       assert.equal(readiness.status, 'BLOCKED');
-      report.productAcceptance = { status: 'BLOCKED', code: 'WINDOWS_PRODUCT_NOT_READY', blockers: readiness.blockers };
+      report.releaseAcceptance = { status: 'BLOCKED', code: 'WINDOWS_RELEASE_NOT_VALIDATED', blockers: readiness.blockers };
       report.checks.push('windows-product-build-gate-remains-enforced');
-      report.status = 'PASS'; report.phase = 'native-boundaries-complete'; save();
-      console.log('Windows native boundary smoke passed; WINDOWS_PRODUCT_NOT_READY.');
+      await require('./native-acceptance-windows-product.cjs').runWindowsProduct({ source, owned, artifacts, report, env, run,
+        phase: name => { report.phase = name; save(); } });
+      report.status = 'PASS'; report.phase = 'native-product-complete'; save();
+      console.log('Windows native product acceptance passed; signed release gates remain enforced.');
       return;
     }
     report.phase = 'actual-runtime-stage'; save();
@@ -276,8 +297,8 @@ async function main(target) {
     report.checks.push('current-source-runtime-stage');
     await require(path.join(source, 'desktop', 'scripts', 'desktop-build-gate.cjs'))({ electronPlatformName: 'darwin' });
     report.phase = 'real-electron-safe-storage-restart'; save();
-    const { runMac } = require('./native-acceptance-electron.cjs');
-    await runMac({ source, owned, artifacts, report, env, phase: name => { report.phase = name; save(); } });
+    const { runProduct } = require('./native-acceptance-electron.cjs');
+    await runProduct({ source, owned, artifacts, report, env, phase: name => { report.phase = name; save(); } });
     report.status = 'PASS'; report.phase = 'complete';
   } catch (error) {
     report.status = 'FAIL'; report.failure = { category: error.name === 'AssertionError' ? 'assertion' : 'native-step-failed',

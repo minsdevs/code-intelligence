@@ -24,7 +24,7 @@ function tapDiagnostics(output) {
   for (let index = 0; index < entries.length && index < 128; index++) {
     const entry = entries[index];
     const detail = output.slice(entry.index + entry[0].length, entries[index + 1]?.index ?? output.length);
-    const lines = [...detail.matchAll(/(windows-native-boundary|windows-unix-server)\.test\.cjs:(\d{1,6}):(\d{1,6})/g)];
+    const lines = [...detail.matchAll(/(windows-native-boundary|windows-unix-server|backup-windows|service-transport-windows)\.test\.cjs:(\d{1,6}):(\d{1,6})/g)];
     results.push({ ordinal: Number(entry[2]), status: entry[1] ? 'FAIL' : 'PASS',
       sourceLocations: lines.slice(0, 8).map(match => ({ file: `${match[1]}.test.cjs`, line: Number(match[2]), column: Number(match[3]) })) });
   }
@@ -81,8 +81,10 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
   report.checks.push('current-source-msvc-x64-native-helper');
   const temporary = path.join(owned, 'native-test-temp'); fs.mkdirSync(temporary);
   const nativeEnv = { ...env, TEMP: temporary, TMP: temporary, CI_WINDOWS_BOUNDARY_TEST_RUNTIME: runtime };
-  const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', path.join(source, 'desktop', 'test', 'windows-native-boundary.test.cjs')], {
-    cwd: source, env: nativeEnv, encoding: 'utf8', timeout: 180000, maxBuffer: 4 * 1024 * 1024, windowsHide: true
+  const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap',
+    ...['windows-native-boundary.test.cjs', 'windows-unix-server.test.cjs', 'backup-windows.test.cjs', 'service-transport-windows.test.cjs']
+      .map(file => path.join(source, 'desktop', 'test', file))], {
+    cwd: source, env: nativeEnv, encoding: 'utf8', timeout: 300000, maxBuffer: 4 * 1024 * 1024, windowsHide: true
   });
   fs.writeFileSync(path.join(owned, 'native-tests-private.tap'), result.stdout || '');
   fs.writeFileSync(path.join(owned, 'native-tests-private.stderr.log'), result.stderr || '');
@@ -109,6 +111,7 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
     safeReport.processRestart = true; safeReport.status = 'PASS';
   } finally { fs.writeFileSync(path.join(artifacts, 'windows-safe-storage.json'), JSON.stringify(safeReport, null, 2) + '\n'); }
   report.checks.push('real-standard-user-electron-DPAPI-process-restart');
-  report.nativeBoundaryStatus = 'PASS'; report.productAcceptance = 'BLOCKED';
+  report.nativeBoundaryStatus = 'PASS';
+  report.productAcceptance = { status: 'NOT_RUN', scope: 'fresh-standard-user-unsigned-development-runtime', signedInstallation: false };
 }
 module.exports = { runWindows, tapCounts, tapDiagnostics, requireNativePass, requireStandardUserToken };

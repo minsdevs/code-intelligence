@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       platform:
-        description: Native target (Windows exercises boundaries but product acceptance remains gated)
+        description: Native product target on a disposable hosted OS (unsigned; release gates remain separate)
         required: true
         type: choice
         options: [macos-arm64, windows-2025, both]
@@ -103,6 +103,15 @@ jobs:
             ${{ runner.temp }}/native-acceptance-artifacts/windows-native.json
             ${{ runner.temp }}/native-acceptance-artifacts/windows-native-build.log
             ${{ runner.temp }}/native-acceptance-artifacts/windows-safe-storage.json
+            ${{ runner.temp }}/native-acceptance-artifacts/first-start-980x700.png
+            ${{ runner.temp }}/native-acceptance-artifacts/first-start-1280x800.png
+            ${{ runner.temp }}/native-acceptance-artifacts/first-start-1440x900.png
+            ${{ runner.temp }}/native-acceptance-artifacts/project-list-980x700.png
+            ${{ runner.temp }}/native-acceptance-artifacts/project-list-1280x800.png
+            ${{ runner.temp }}/native-acceptance-artifacts/project-list-1440x900.png
+            ${{ runner.temp }}/native-acceptance-artifacts/after-delete-980x700.png
+            ${{ runner.temp }}/native-acceptance-artifacts/after-delete-1280x800.png
+            ${{ runner.temp }}/native-acceptance-artifacts/after-delete-1440x900.png
           if-no-files-found: error
           retention-days: 7
           include-hidden-files: false

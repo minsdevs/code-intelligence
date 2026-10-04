@@ -6,7 +6,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
 
-async function runMac({ source, owned, artifacts, report, env, phase }) {
+async function runProduct({ source, owned, artifacts, report, env, phase }) {
   // Keep direct callers subject to the same hosted-only safety boundary as main.
   require('./native-acceptance.cjs').requireHosted(env);
   const frontendRequire = createRequire(path.join(source, 'frontend', 'package.json'));
@@ -15,7 +15,9 @@ async function runMac({ source, owned, artifacts, report, env, phase }) {
   const desktop = path.join(source, 'desktop');
   const executablePath = createRequire(path.join(desktop, 'package.json'))('electron');
   const packageName = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8')).name;
-  const expectedUserData = path.join(os.homedir(), 'Library', 'Application Support', packageName);
+  if (process.platform === 'win32') assert.ok(path.isAbsolute(env.APPDATA || ''), 'Fresh Windows application profile required');
+  const expectedUserData = process.platform === 'win32' ? path.join(env.APPDATA, packageName)
+    : path.join(os.homedir(), 'Library', 'Application Support', packageName);
   assert.equal(fs.existsSync(expectedUserData), false, 'A fresh hosted application profile is required');
   const synthetic = path.join(owned, 'native-synthetic-project');
   fs.mkdirSync(synthetic, { mode: 0o700 });
@@ -41,6 +43,11 @@ async function runMac({ source, owned, artifacts, report, env, phase }) {
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null);
     assert.equal(status.aiOff, true, 'Provider egress must remain disabled for synthetic acceptance');
     assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
+    const productDataRoot = process.platform === 'win32' ? path.join(userData, 'private') : userData;
+    const dataState = fs.lstatSync(productDataRoot);
+    assert.ok(dataState.isDirectory() && !dataState.isSymbolicLink(), 'Real product private-data directory required');
+    report.productDataRoot = productDataRoot;
+    if (process.platform === 'win32') report.checks.push('windows-profile-private-data-separation');
     report.checks.push('native-services-ready');
   };
   const close = async () => { if (app) { const current = app; app = null; await current.close(); } };
@@ -173,4 +180,4 @@ async function runMac({ source, owned, artifacts, report, env, phase }) {
     phase('native-clean-shutdown'); await close(); report.checks.push('native-clean-shutdown');
   } finally { await close(); }
 }
-module.exports = { runMac };
+module.exports = { runProduct };

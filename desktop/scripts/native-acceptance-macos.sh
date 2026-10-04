@@ -15,12 +15,30 @@ printf '{"phase":"native-runtime-provision","status":"RUNNING"}\n' > "$artifacts
 on_exit() {
   code=$?
   if [[ "$code" != 0 ]]; then
-    node - "$helper" "$work" "$step" "$artifacts/provisioning.json" <<'NODE'
+    node - "$helper" "$work" "$step" "$code" "$artifacts/provisioning.json" <<'NODE'
 const fs = require('node:fs'), path = require('node:path');
-const [helper, work, step, artifact] = process.argv.slice(2);
+const [helper, work, step, code, artifact] = process.argv.slice(2);
 const log = path.join(work, 'build-output');
-const text = fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '';
+let text = '', logBytes = 0;
+if (fs.existsSync(log)) {
+  const fd = fs.openSync(log, 'r');
+  try {
+    logBytes = fs.fstatSync(fd).size;
+    const bytes = Buffer.alloc(Math.min(logBytes, 256 * 1024));
+    fs.readSync(fd, bytes, 0, bytes.length, logBytes - bytes.length);
+    text = bytes.toString('utf8');
+  } finally { fs.closeSync(fd); }
+}
+const sources = {};
+for (const name of ['openssl', 'postgres', 'pgvector', 'redis']) {
+  const file = path.join(work, name + '-source.json');
+  if (!fs.existsSync(file)) continue;
+  const source = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (/^[0-9]+(?:\.[0-9]+){1,3}$/.test(source.version) && /^[a-f0-9]{64}$/.test(source.sourceSha256))
+    sources[name] = { version: source.version, sha256: source.sourceSha256 };
+}
 fs.writeFileSync(artifact, JSON.stringify({phase: 'native-runtime-provision', status: 'FAIL', step,
+  exitCode: Number(code), logBytes, diagnosticsTruncated: logBytes > 256 * 1024, sources,
   diagnostics: require(helper).buildDiagnostics('', text)}, null, 2) + '\n');
 NODE
   fi
@@ -86,7 +104,9 @@ step=pgvector-build
 quiet /usr/bin/make -C "$work/pgvector-source" PG_CONFIG="$pg_config" OPTFLAGS= -j2
 quiet /usr/bin/make -C "$work/pgvector-source" PG_CONFIG="$pg_config" install
 step=redis-build
-quiet /usr/bin/make -C "$work/redis-source" -j2 BUILD_TLS=yes MALLOC=libc \
+# Build the shipped target, not upstream all: all also links test modules using
+# raw Darwin ld, which cannot accept our compiler-driver deployment/header flags.
+quiet /usr/bin/make -C "$work/redis-source/src" -j2 redis-server BUILD_TLS=yes MALLOC=libc \
   USE_SYSTEMD=no WITH_SYSTEMD=no OPENSSL_PREFIX="$prefix/openssl" \
   REDIS_CFLAGS="$CFLAGS" REDIS_LDFLAGS="$LDFLAGS"
 # Only the Redis server is shipped; no system install or background service.
