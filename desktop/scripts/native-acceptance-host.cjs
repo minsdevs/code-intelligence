@@ -113,4 +113,4 @@ if (require.main === module) {
   try { main(); }
   catch (error) { console.error(error?.message || 'HOST_ACCEPTANCE_FAILED'); process.exitCode = 1; }
 }
-module.exports = { main, selectAdoptiumPackage, javaMajor };
+module.exports = { main, selectAdoptiumPackage, javaMajor, resolveJavaHome };

@@ -110,7 +110,12 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   const { _electron: electron } = frontendRequire('playwright');
   const { expect } = frontendRequire('@playwright/test');
   const desktop = path.join(source, 'desktop');
-  const executablePath = createRequire(path.join(desktop, 'package.json'))('electron');
+  const packaged = typeof report.appBundle === 'string';
+  const executablePath = packaged
+    ? path.join(report.appBundle, 'Contents', 'MacOS', 'Code Intelligence Validation')
+    : createRequire(path.join(desktop, 'package.json'))('electron');
+  const runtimeDirectory = packaged ? path.join(report.appBundle, 'Contents', 'Resources', 'runtime')
+    : path.join(desktop, 'stage', 'runtime');
   const desktopPackage = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8'));
   const packageName = desktopPackage.name;
   let validationPlan;
@@ -118,7 +123,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     const runs = context.isolatedRunParent;
     const applicationSupport = path.join(os.homedir(), 'Library', 'Application Support');
     validationPlan = require(path.join(desktop, 'src', 'isolated-run.cjs')).prepareIsolatedRun({
-      parentDirectory: runs, runtimeDirectory: path.join(desktop, 'stage', 'runtime'), purpose: 'automation',
+      parentDirectory: runs, runtimeDirectory, purpose: 'automation',
       forbiddenRoots: [path.join(applicationSupport, packageName), path.join(applicationSupport, desktopPackage.build.productName)],
     });
     report.validationIdentity = validationPlan.appIdentity;
@@ -130,7 +135,9 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       : path.join(os.homedir(), 'Library', 'Application Support', packageName);
   if (validationPlan) assert.deepEqual(fs.readdirSync(expectedUserData), [], 'Fresh validation profile required');
   else assert.equal(fs.existsSync(expectedUserData), false, 'A fresh disposable application profile is required');
-  const launchArguments = validationPlan ? [desktop, '--isolated-run-claim=' + validationPlan.claimFile] : [desktop];
+  const launchArguments = packaged ? [] : [desktop];
+  if (validationPlan) launchArguments.push('--isolated-run-claim=' + validationPlan.claimFile);
+  if (validationPlan) report.validationClaim = validationPlan.claimFile;
   const synthetic = path.join(owned, 'native-synthetic-project');
   fs.mkdirSync(synthetic, { mode: 0o700 });
   const sourceFile = path.join(synthetic, 'acceptance.ts');
@@ -147,7 +154,8 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   };
   const launch = async () => {
     // Playwright enables its process-local inspector; no shipping flags or startup hooks change.
-    const startupEnds = performance.now() + 90000;
+    const launchStarted = performance.now();
+    const startupEnds = launchStarted + 90000;
     phase('electron-launch');
     app = await electron.launch({ executablePath, args: launchArguments, cwd: desktop, env, timeout: deadline.limit(90000) });
     delete report.startup;
@@ -166,6 +174,11 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     const appVersion = await step('native-app-version-ipc', () => page.evaluate(() => window.codeIntelligenceDesktop.appVersion));
     assert.equal(appVersion, desktopPackage.version, 'Renderer app version must come from the real desktop config IPC');
     report.appVersion = appVersion; report.checks.push('native-app-version-ipc');
+    const isPackaged = await step('native-packaged-identity', () => app.evaluate(({ app }) => app.isPackaged));
+    assert.equal(isPackaged, packaged, 'Acceptance must launch the claimed application bundle');
+    report.packagedLaunch = isPackaged;
+    report.launchToHomeMs ??= [];
+    report.launchToHomeMs.push(Math.round(performance.now() - launchStarted));
     const status = await step('native-runtime-status', () => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()));
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null);
     assert.equal(status.aiOff, true, 'Provider egress must remain disabled for synthetic acceptance');
@@ -216,6 +229,41 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     throw new Error('NATIVE_ANALYSIS_TIMEOUT');
+  };
+  const verifySnapshotContract = async (snapshot, label) => {
+    const files = await api(`/api/projects/${projectId}/files?snapshotId=${snapshot}`);
+    const coverage = await api(`/api/projects/${projectId}/coverage?snapshotId=${snapshot}`);
+    assert.equal(coverage.snapshotId, snapshot);
+    assert.equal(coverage.measurementStatus, 'PER_FILE_RECORDED');
+    assert.equal(coverage.supportStatus, 'UNVERIFIED');
+    assert.ok(coverage.outcomes && files.every(file => file.resolvedSnapshotId === snapshot));
+    const counts = files.reduce((result, file) => {
+      const status = file.analysisStatus ?? 'LEGACY_UNMEASURED'; result[status] = (result[status] ?? 0) + 1; return result;
+    }, {});
+    for (const [counter, status] of Object.entries({ successfulFiles: 'SUCCESS', partialFiles: 'PARTIAL',
+      failedFiles: 'FAILED', unsupportedFiles: 'UNSUPPORTED', pendingFiles: 'TARGETED' })) {
+      assert.equal(coverage.outcomes[counter], counts[status] ?? 0, 'Coverage must count persisted file results');
+    }
+    assert.equal(coverage.outcomes.unmeasuredFiles, (counts.UNMEASURED ?? 0) + (counts.LEGACY_UNMEASURED ?? 0));
+    assert.equal(coverage.outcomes.targetedFiles, files.filter(file => file.analysisTargeted).length);
+    assert.ok(coverage.outcomes.discoveredFiles >= files.length);
+    const graph = await api(`/api/projects/${projectId}/graph/overview?snapshotId=${snapshot}`);
+    assert.equal(graph.resolvedSnapshotId, snapshot);
+    const categories = {};
+    for (const category of ['symbols', 'entrypoints', 'dependencies']) {
+      const first = await api(`/api/projects/${projectId}/graph/nodes?snapshotId=${snapshot}&category=${category}&page=1&size=2&sort=path`);
+      assert.equal(first.resolvedSnapshotId, snapshot); assert.equal(first.page, 1); assert.ok(first.items.length <= 2);
+      categories[category] = first.total;
+      if (first.total > 2) {
+        const next = await api(`/api/projects/${projectId}/graph/nodes?snapshotId=${snapshot}&category=${category}&page=2&size=2&sort=path`);
+        assert.equal(next.resolvedSnapshotId, snapshot); assert.equal(next.page, 2);
+        assert.ok(next.items.length > 0 && next.items.every(item => !first.items.some(previous => previous.id === item.id)));
+      }
+    }
+    report.snapshotContracts ??= [];
+    report.snapshotContracts.push({ label, snapshotId: snapshot, inventoryFiles: files.length,
+      fileStatuses: counts, outcomes: coverage.outcomes, graphCategories: categories });
+    return files;
   };
   const sourceContent = async (expected, snapshot) => {
     await navigate(`/projects/${projectId}/code`);
@@ -323,6 +371,40 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.equal(created.length, 1, 'Restore must retain its pre-replacement recovery checkpoint');
     return selectedArchive(path.join(recovery, created[0], 'checkpoint.cibackup'), [recovery]);
   };
+  const importFolder = async folder => {
+    await navigate('/import');
+    const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
+    await perform(() => expect(picker).toBeVisible());
+    const bounds = await perform(() => picker.boundingBox()); assert.ok(bounds);
+    const cdp = await perform(() => page.context().newCDPSession(page));
+    let dragFailure;
+    try {
+      // Chromium supplies the real on-disk File via its native drag protocol.
+      // The unmodified UI calls preload -> folder:authorize -> the real folder policy.
+      const data = { items: [], files: [folder], dragOperationsMask: 1 };
+      for (const type of ['dragEnter', 'dragOver', 'drop']) await perform(() => cdp.send('Input.dispatchDragEvent', {
+        type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data
+      }));
+    } catch (error) { dragFailure = error; throw error; }
+    finally {
+      try { await bounded(cdp.detach(), 5000, 'NATIVE_CDP_CLOSE_TIMEOUT'); }
+      catch (error) { if (!dragFailure) throw error; }
+    }
+    const [previewResponse] = await perform(() => Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local/preview' && response.request().method() === 'POST', { timeout: deadline.limit() }),
+      page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click(),
+    ]));
+    assert.ok(previewResponse.ok());
+    const preview = await perform(() => previewResponse.json());
+    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
+    const firstResultStarted = performance.now();
+    const [created] = await perform(() => Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local' && response.request().method() === 'POST', { timeout: deadline.limit() }),
+      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click(),
+    ]));
+    assert.ok(created.ok());
+    return { result: await perform(() => created.json()), firstResultStarted, localImport: preview.localImport };
+  };
   let failure;
   try {
     phase('real-app-first-start'); await launch();
@@ -336,34 +418,30 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await captureSizes('first-start');
     phase('synthetic-local-import');
     assert.deepEqual(await api('/api/projects'), []);
-    await navigate('/import');
-    const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
-    await perform(() => expect(picker).toBeVisible());
-    const bounds = await perform(() => picker.boundingBox()); assert.ok(bounds);
-    const cdp = await perform(() => page.context().newCDPSession(page));
-    let dragFailure;
-    try {
-      // Chromium supplies the real on-disk File via its native drag protocol.
-      // The unmodified UI calls preload -> folder:authorize -> the real folder policy.
-      const data = { items: [], files: [synthetic], dragOperationsMask: 1 };
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await perform(() => cdp.send('Input.dispatchDragEvent', {
-        type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data
-      }));
-    } catch (error) { dragFailure = error; throw error; }
-    finally {
-      try { await bounded(cdp.detach(), 5000, 'NATIVE_CDP_CLOSE_TIMEOUT'); }
-      catch (error) { if (!dragFailure) throw error; }
-    }
-    await perform(() => page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click());
-    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
-    const [created] = await perform(() => Promise.all([
-      page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local' && response.request().method() === 'POST', { timeout: deadline.limit() }),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click(),
-    ]));
-    assert.ok(created.ok());
-    const result = await perform(() => created.json()); projectId = result.project.id;
+    const { result, firstResultStarted, localImport } = await importFolder(synthetic);
+    projectId = result.project.id;
     await awaitJob(result.jobId);
     const project = await api(`/api/projects/${projectId}`); snapshotId = project.currentSnapshot.id;
+    phase('import-default-repository-overview');
+    await perform(() => expect(page).toHaveURL(new RegExp('/projects/' + projectId + '/overview$')));
+    await perform(() => expect(page.getByLabel('레포 개요', { exact: true })).toBeVisible());
+    await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible());
+    report.firstResult = { scope: 'one-file TypeScript synthetic fixture; approved import click to populated native overview',
+      elapsedMs: Math.round(performance.now() - firstResultStarted), snapshotId, localImport };
+    await perform(() => expect(page.getByRole('link', { name: /^(Growth|Tasks)$/ })).toHaveCount(0));
+    await perform(() => expect(page.getByLabel('개요 분석 시점', { exact: true })).toHaveValue('current'));
+    await perform(() => page.getByRole('button', { name: '파일 · 분석 상태', exact: true }).click());
+    const searchStarted = performance.now();
+    await perform(() => page.getByRole('searchbox', { name: '분석 결과 검색', exact: true }).fill('acceptance.ts'));
+    const table = page.getByRole('table', { name: '분석 결과 표', exact: true });
+    await perform(() => expect(table.getByText('acceptance.ts', { exact: true }).first()).toBeVisible());
+    report.firstResult.searchRenderMs = Math.round(performance.now() - searchStarted);
+    await perform(() => table.getByRole('button', { name: '관련 심볼', exact: true }).first().click());
+    await perform(() => table.getByRole('button', { name: '관계 · 함께 확인할 곳', exact: true }).first().click());
+    await perform(() => expect(page.getByRole('region', { name: '선택한 코드 주변 관계', exact: true })).toBeVisible());
+    await captureSizes('repository-overview');
+    report.checks.push('import-default-overview-snapshot-table-filter-local-relations-without-ai');
+    await verifySnapshotContract(snapshotId, 'first-import');
     await sourceContent(first, snapshotId);
     report.checks.push('real-folder-grant-preview-import-analysis-source-navigation');
     await navigate('/projects'); await perform(() => expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible());
@@ -405,6 +483,8 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await awaitJob((await perform(() => refreshed.json())).jobId);
     const nextSnapshot = (await api(`/api/projects/${projectId}`)).currentSnapshot.id;
     assert.notEqual(nextSnapshot, snapshotId);
+    await verifySnapshotContract(snapshotId, 'prior-result-after-reanalysis');
+    await verifySnapshotContract(nextSnapshot, 'new-result-after-reanalysis');
     await sourceContent(second, nextSnapshot);
     report.checks.push('real-preview-approved-reanalysis-source-navigation');
     phase('real-main-restore');
@@ -427,6 +507,77 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     phase('final-process-restart'); await close(); await launch();
     assert.deepEqual(await api('/api/projects'), []);
     report.checks.push('deleted-project-stays-deleted-after-restart');
+    phase('representative-repository-import');
+    const repositorySample = path.join(owned, 'native-repository-sample');
+    const copied = require('./native-acceptance.cjs').copySource(source, repositorySample);
+    const larger = await importFolder(repositorySample);
+    projectId = larger.result.project.id;
+    await awaitJob(larger.result.jobId);
+    snapshotId = (await api(`/api/projects/${projectId}`)).currentSnapshot.id;
+    await perform(() => expect(page).toHaveURL(new RegExp('/projects/' + projectId + '/overview$')));
+    await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible());
+    report.representativeRepository = {
+      scope: 'filtered current Code Intelligence desktop/frontend/backend/TypeScript analyzer source; no dependency install or repository scripts executed',
+      sourceFiles: copied.files, sourceSha256: copied.sha256, localImport: larger.localImport,
+      importToOverviewMs: Math.round(performance.now() - larger.firstResultStarted), projectId, snapshotId,
+    };
+    const files = await verifySnapshotContract(snapshotId, 'representative-repository');
+    report.representativeRepository.fileOutcomes = files.reduce((counts, file) => {
+      const status = file.analysisStatus ?? 'LEGACY_UNMEASURED'; counts[status] = (counts[status] ?? 0) + 1; return counts;
+    }, {});
+    await perform(() => page.getByRole('button', { name: '파일 · 분석 상태', exact: true }).click());
+    const entrypoints = await api(`/api/projects/${projectId}/graph/nodes?snapshotId=${snapshotId}&category=entrypoints&page=1&size=2&sort=path`);
+    assert.equal(entrypoints.resolvedSnapshotId, snapshotId);
+    assert.ok(entrypoints.items.length > 0, 'Representative repository must have confirmed entrypoint rows');
+    await perform(() => page.getByRole('button', { name: '요청 · 화면 진입점', exact: true }).click());
+    await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })
+      .getByText(entrypoints.items[0].name, { exact: true }).first()).toBeVisible());
+    report.representativeRepository.entrypointCount = entrypoints.total;
+    await perform(() => page.getByRole('button', { name: '파일 · 분석 상태', exact: true }).click());
+    const representativePath = 'frontend/src/features/import/ImportWizardPage.tsx';
+    const searchStartedLarge = performance.now();
+    await perform(() => page.getByRole('searchbox', { name: '분석 결과 검색', exact: true }).fill(representativePath));
+    const largeTable = page.getByRole('table', { name: '분석 결과 표', exact: true });
+    await perform(() => expect(largeTable.getByRole('link', { name: representativePath, exact: true })).toBeVisible());
+    report.representativeRepository.fileSearchRenderMs = Math.round(performance.now() - searchStartedLarge);
+    await perform(() => largeTable.getByRole('button', { name: '관련 심볼', exact: true }).click());
+    const relationStarted = performance.now();
+    await perform(() => largeTable.getByRole('button', { name: '관계 · 함께 확인할 곳', exact: true }).first().click());
+    const neighborhood = page.getByRole('region', { name: '선택한 코드 주변 관계', exact: true });
+    await perform(() => expect(neighborhood.getByLabel('관계 방향', { exact: true })).toBeVisible());
+    await perform(() => expect(neighborhood.getByText('관계를 불러오는 중…', { exact: true })).toHaveCount(0));
+    await perform(() => expect(neighborhood.getByRole('alert')).toHaveCount(0));
+    report.representativeRepository.relationRenderMs = Math.round(performance.now() - relationStarted);
+    await captureSizes('representative-repository');
+    await perform(() => neighborhood.getByRole('link', { name: '선택한 항목의 보관된 소스', exact: true }).click());
+    await perform(() => expect(page.getByTestId('source-context')).toContainText('Snapshot #' + snapshotId));
+    await perform(() => expect(page.getByTestId('code-viewer').locator('.monaco-editor').first())
+      .toHaveAttribute('data-uri', new RegExp('^snapshot://' + projectId + '/' + snapshotId + '/')));
+    const flows = await api(`/api/projects/${projectId}/flows?snapshotId=${snapshotId}`);
+    let selectedFlow;
+    for (const candidate of flows.slice(0, 5)) {
+      const detail = await api(`/api/projects/${projectId}/flows/${candidate.id}?snapshotId=${snapshotId}`);
+      assert.equal(detail.resolvedSnapshotId, snapshotId);
+      if (detail.steps.some(step => step.filePath)) { selectedFlow = detail; break; }
+    }
+    assert.ok(selectedFlow, 'Representative repository must have a real flow with source evidence');
+    await navigate(`/projects/${projectId}/flows?snapshotId=${snapshotId}`);
+    await perform(() => page.locator('ul').getByRole('button').filter({ hasText: selectedFlow.name }).first().click());
+    const flowDetail = page.getByRole('article', { name: 'Flow detail', exact: true });
+    await perform(() => expect(flowDetail.getByRole('heading', { name: selectedFlow.name, exact: true })).toBeVisible());
+    await perform(() => flowDetail.getByRole('button').first().click());
+    await perform(() => expect(page.getByTestId('source-context')).toContainText('Snapshot #' + snapshotId));
+    await perform(() => expect(page.getByTestId('code-viewer').locator('.monaco-editor').first())
+      .toHaveAttribute('data-uri', new RegExp('^snapshot://' + projectId + '/' + snapshotId + '/')));
+    report.representativeRepository.flowEvidence = { flowCount: flows.length, selectedFlowId: selectedFlow.id,
+      stepCount: selectedFlow.steps.length, sourceSnapshotId: snapshotId };
+    report.checks.push('representative-repository-confirmed-entrypoints-flow-step-to-snapshot-source',
+      'representative-repository-approved-import-overview-search-relations-snapshot-source');
+    phase('representative-repository-restart'); await close(); await launch();
+    assert.equal((await api(`/api/projects/${projectId}`)).currentSnapshot.id, snapshotId);
+    await navigate(`/projects/${projectId}/overview`);
+    await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible());
+    report.checks.push('representative-repository-results-survive-packaged-app-restart');
     assert.equal(pageErrors, 0, 'Renderer errors occurred');
     phase('native-clean-shutdown'); await close(); report.checks.push('native-clean-shutdown');
   } catch (error) {
