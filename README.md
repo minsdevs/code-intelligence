@@ -212,6 +212,13 @@ The new native-acceptance.yml workflow runs on fresh hosted machines, on trusted
 PRs and explicit manual dispatch. It exercises the normal macOS Electron startup rather than
 bypassing isolated-launch guards, and runs Windows boundary/DPAPI checks as a fresh standard
 user. Artifacts distinguish native smoke results from blocked product/signing acceptance.
+The macOS runner builds PostgreSQL 16, OpenSSL, Redis TLS and pgvector from
+Homebrew-checksummed sources in private prefixes with a macOS 13.0 deployment target,
+instead of repackaging newer-OS bottles or relaxing the native publication policy.
+Source URLs/hashes and relocated native closure hashes are retained in `provisioning.json`.
+Staging failures export bounded compiler/policy IDs and validated public source locations;
+raw build/runtime logs and credentials remain private. Source copying excludes build
+outputs only at package roots, preserving real source packages such as `analysis/coverage`.
 Current local transport proof covers real PostgreSQL 16 and Redis TLS/authentication,
 wrong-peer/plaintext rejection, HTTPS pinning, token rotation and callback refusal. Hosted
 whole-app results, signed installation, real OAuth and provider approval remain separate gates.

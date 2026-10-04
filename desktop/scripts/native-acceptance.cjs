@@ -10,8 +10,13 @@ const EXCLUDED = new Set(['node_modules', 'dist', 'stage', '.git', '.gradle', '.
 const ROOTS = ['desktop', 'frontend', 'backend', 'analyzers/ts-analyzer'];
 function included(relative) {
   const parts = relative.split(/[\\/]/);
-  if (parts.some(part => EXCLUDED.has(part) || part.startsWith('.') || /^(?:secrets|credentials|userData|sessionData)$/i.test(part))) return false;
-  if (parts.includes('build') && !(parts[0] === 'desktop' && parts[1] === 'build')) return false;
+  if (parts.some(part => part === 'node_modules' || part.startsWith('.') || /^(?:secrets|credentials|userData|sessionData)$/i.test(part))) return false;
+  const normalized = parts.join('/');
+  const root = ROOTS.find(root => normalized === root || normalized.startsWith(root + '/'));
+  if (!root) return false;
+  const output = parts[root.split('/').length];
+  // Output names are scoped to package roots, not Java/TypeScript package names.
+  if (EXCLUDED.has(output) || (output === 'build' && root !== 'desktop')) return false;
   return !/\.(?:p12|pfx|pem|key|keystore|log|db)$/i.test(relative);
 }
 function requireHosted(env = process.env, platform = process.platform, arch = process.arch) {
@@ -55,7 +60,60 @@ function copySource(source, destination) {
   for (const root of ROOTS) visit(root);
   return { files: count, sha256: hash.digest('hex') };
 }
-function run(command, args, cwd, env = process.env) {
+// Build-only public compiler IDs/locations are retained; raw text stays private.
+function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
+  const text = stdout + '\n' + stderr;
+  const categories = [];
+  for (const [name, expression] of [
+    ['typescript', /error TS[0-9]{4,5}:/],
+    ['java-compilation', /(?:compileJava FAILED|\.java:[0-9]+: error:)/],
+    ['java-symbol-missing', /error: cannot find symbol/],
+    ['java-type-mismatch', /error: incompatible types:/],
+    ['java-package-missing', /error: package [^\r\n]+ does not exist/],
+    ['gradle-dependency-resolution', /Could not resolve all (?:files|dependencies)/],
+    ['gradle-toolchain', /(?:Cannot find a Java installation|No matching toolchains found)/],
+    ['cmake-configuration', /CMake Error/],
+    ['native-link', /(?:Undefined symbols for architecture|(?:^|\n)ld: |LINK : fatal error|fatal error LNK)/],
+    ['native-loader', /(?:dyld(?:\[[0-9]+\])?:|Library not loaded:)/],
+    ['pgvector-missing', /pgvector is not installed for the selected PostgreSQL runtime/],
+    ['native-compile', /(?:fatal error:|error C[0-9]{4}:)/],
+    ['native-runtime-policy', /Native runtime publication blocked:/],
+    ['missing-file', /\bENOENT\b/],
+    ['permission-denied', /\bEACCES\b|Permission denied/],
+    ['network-resolution', /\bENOTFOUND\b|Could not resolve host/],
+  ]) if (expression.test(text)) categories.push(name);
+  const compilerCodes = [...new Set([...text.matchAll(/\b(?:error|fatal error) (TS[0-9]{4,5}|C[0-9]{4}|LNK[0-9]{4}):/g)].map(match => match[1]))].slice(0, 32);
+  const policyCodes = ['MINIMUM_OS_EXCEEDED', 'NON_RELOCATABLE_REFERENCE', 'UNSUPPORTED_RPATH',
+    'UNRESOLVED_NATIVE_REFERENCE', 'BASENAME_COLLISION', 'ARCHITECTURE_MISMATCH',
+    'JAVA_MAJOR_MISMATCH', 'REQUIRED_MODULE_MISSING', 'REQUIRED_EXECUTABLE_MISSING',
+    'DEPENDENCY_NOT_DYLIB', 'UNRESOLVED_COPY_DEPENDENCY', 'NATIVE_CHANGED',
+    'COPY_BASENAME_COLLISION', 'NATIVE_INSPECTION_FAILED', 'UNSAFE_STAGE_ENTRY', 'INVALID_STAGE_ROOT',
+    'MISSING_OR_AMBIGUOUS_DEPLOYMENT_TARGET', 'INVALID_LOAD_COMMANDS', 'UNSUPPORTED_LIBRARY_FORMAT',
+    'PRIVATE_NATIVE_PREFIX_REQUIRED', 'UNVERIFIED_NATIVE_DEPENDENCY', 'NATIVE_PREFIX_LINK_ESCAPE',
+    'EXTENSION_CONTROL_BINDING', 'REQUIRED_EXTENSION_SQL', 'REQUIRED_EXTENSION_CONTROL']
+    .filter(code => (text.match(/[A-Z][A-Z0-9_]+/g) || []).includes(code));
+  const steps = [...stdout.matchAll(/^> (npm run build|\.\/gradlew bootJar|npm ci --omit=dev --ignore-scripts|[^\r\n]*\/bin\/jlink --add-modules[^\r\n]*)$/gm)]
+    .map(match => match[1].startsWith('npm run') ? 'typescript-build' : match[1].startsWith('./gradlew')
+      ? 'backend-boot-jar' : match[1].startsWith('npm ci') ? 'analyzer-production-dependencies' : 'jre-link');
+  const javaSymbols = [...new Set([...text.matchAll(/^[ \t]*symbol:[ \t]+(?:class|variable|method)[ \t]+([A-Za-z_$][A-Za-z0-9_$.]{0,159})/gm)].map(match => match[1]))].slice(0, 32);
+  const missingPackages = [...new Set([...text.matchAll(/error: package ([A-Za-z_$][A-Za-z0-9_$.]{0,159}) does not exist/g)].map(match => match[1]))].slice(0, 32);
+  const locations = [];
+  if (sourceRoot) {
+    for (const match of text.matchAll(/^([^\r\n]+\.java):([0-9]{1,7}): error:/gm)) {
+      if (!path.isAbsolute(match[1])) continue;
+      const relative = path.relative(sourceRoot, match[1]).split(path.sep).join('/');
+      if (!/^backend\/src\/(?:main|test)\/java\/[A-Za-z0-9_$/.-]+\.java$/.test(relative) || !included(relative)) continue;
+      try {
+        const stat = fs.lstatSync(match[1]);
+        if (stat.isFile() && !stat.isSymbolicLink() && fs.realpathSync(match[1]) === path.resolve(sourceRoot, relative))
+          locations.push({ file: relative, line: Number(match[2]) });
+      } catch { /* Only source files actually present in this fresh copy are reportable. */ }
+      if (locations.length === 32) break;
+    }
+  }
+  return { lastBuildStep: steps.at(-1) || null, categories, compilerCodes, policyCodes, javaSymbols, missingPackages, locations };
+}
+function run(command, args, cwd, env = process.env, options = {}) {
   const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout: 35 * 60 * 1000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
   // Compiler output and runtime logs can include paths, source, URLs or credentials.
   // Keep them out of artifacts and GitHub logs; retain only bounded outcome metadata.
@@ -64,6 +122,7 @@ function run(command, args, cwd, env = process.env) {
     error.exitStatus = Number.isInteger(result.status) ? result.status : null;
     error.commandEvidence = { executable: path.basename(command), signal: result.signal || null,
       stdoutBytes: Buffer.byteLength(result.stdout || ''), stderrBytes: Buffer.byteLength(result.stderr || '') };
+    if (options.buildDiagnostics) error.commandEvidence.buildDiagnostics = buildDiagnostics(result.stdout || '', result.stderr || '', options.sourceRoot);
     throw error;
   }
   return result.stdout;
@@ -75,6 +134,92 @@ function npm(args, cwd, env) {
     return run(process.execPath, [cli, ...args], cwd, env);
   }
   return run('npm', args, cwd, env);
+}
+// Only newly source-built hosted prefixes may be relocated. Never touch system bottles.
+function relocateMacLibraries(prefix) {
+  assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64');
+  assert.ok(path.isAbsolute(prefix) && fs.realpathSync(prefix) === prefix);
+  const identity = fs.lstatSync(prefix);
+  assert.ok(identity.isDirectory() && identity.uid === process.getuid() && (identity.mode & 0o077) === 0, 'PRIVATE_NATIVE_PREFIX_REQUIRED');
+  const policy = require('./native-runtime-policy.cjs');
+  const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  const inside = file => file.startsWith(prefix + path.sep);
+  const system = value => value.startsWith('/usr/lib/') || value.startsWith('/System/Library/');
+  const inspect = file => policy.parseLoadCommands(run('/usr/bin/otool', ['-l', file], prefix));
+  function nativeFiles(directory) {
+    const files = [];
+    for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, item.name);
+      if (item.isDirectory()) files.push(...nativeFiles(file));
+      else if (item.isFile()) {
+        const fd = fs.openSync(file, 'r'), magic = Buffer.alloc(4);
+        try { fs.readSync(fd, magic, 0, 4, 0); } finally { fs.closeSync(fd); }
+        if (magic.toString('hex') === 'cffaedfe') files.push(file);
+      } else if (item.isSymbolicLink()) assert.ok(inside(fs.realpathSync(file)), 'NATIVE_PREFIX_LINK_ESCAPE');
+    }
+    return files;
+  }
+  const summary = [];
+  for (const component of ['postgres', 'redis']) {
+    const root = path.join(prefix, component), library = path.join(root, 'lib');
+    fs.mkdirSync(library, { recursive: true, mode: 0o700 });
+    const queue = nativeFiles(root), visited = new Set(), origins = new Map(), changes = [];
+    for (let index = 0; index < queue.length; index++) {
+      const file = queue[index]; if (visited.has(file)) continue; visited.add(file);
+      const metadata = inspect(file), origin = origins.get(file) || file;
+      assert.ok(metadata.version[0] < 13 || (metadata.version[0] === 13 && metadata.version.slice(1).every(part => part === 0)), 'MINIMUM_OS_EXCEEDED');
+      assert.equal(run('/usr/bin/lipo', ['-archs', file], prefix).trim(), 'arm64');
+      function resolve(reference) {
+        if (reference.startsWith('/')) return reference;
+        if (reference.startsWith('@loader_path/')) return path.resolve(path.dirname(origin), reference.slice(13));
+        if (reference.startsWith('@executable_path/')) return path.resolve(path.dirname(origin), reference.slice(17));
+        if (reference.startsWith('@rpath/')) {
+          assert.ok(metadata.rpaths.every(rpath => !rpath.startsWith('@rpath')), 'UNSUPPORTED_RPATH');
+          const matches = metadata.rpaths.map(rpath => resolve(rpath + '/' + reference.slice(7))).filter(candidate => candidate && fs.existsSync(candidate));
+          assert.equal(new Set(matches.map(candidate => fs.realpathSync(candidate))).size, 1, 'UNRESOLVED_NATIVE_REFERENCE');
+          return matches[0];
+        }
+        throw new Error('NON_RELOCATABLE_REFERENCE');
+      }
+      const args = [];
+      for (const reference of metadata.dependencies) {
+        if (system(reference) || reference === '/usr/lib/dyld') continue;
+        const dependency = fs.realpathSync(resolve(reference));
+        assert.ok(inside(dependency), 'UNVERIFIED_NATIVE_DEPENDENCY');
+        let bundled = dependency;
+        if (!dependency.startsWith(root + path.sep)) {
+          bundled = path.join(library, path.basename(dependency));
+          if (fs.existsSync(bundled)) assert.equal(hash(bundled), hash(dependency), 'BASENAME_COLLISION');
+          else fs.copyFileSync(dependency, bundled, fs.constants.COPYFILE_EXCL);
+          origins.set(bundled, dependency);
+        }
+        queue.push(bundled);
+        const replacement = '@loader_path/' + path.relative(path.dirname(file), bundled).split(path.sep).join('/');
+        if (replacement !== reference) args.push('-change', reference, replacement);
+      }
+      // All dependency edges are now direct loader-relative references.
+      for (const rpath of metadata.rpaths) args.push('-delete_rpath', rpath);
+      changes.push({ file, args });
+    }
+    for (const { file, args } of changes) {
+      if (args.length) run('/usr/bin/install_name_tool', [...args, file], prefix);
+      run('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', file], prefix);
+    }
+    const digest = crypto.createHash('sha256');
+    for (const file of [...visited].sort()) {
+      const metadata = inspect(file);
+      for (const reference of metadata.dependencies) {
+        if (system(reference)) continue;
+        assert.ok(reference.startsWith('@loader_path/'), 'NON_RELOCATABLE_REFERENCE');
+        const resolved = fs.realpathSync(path.resolve(path.dirname(file), reference.slice(13)));
+        assert.ok(resolved.startsWith(root + path.sep), 'UNRESOLVED_NATIVE_REFERENCE');
+      }
+      assert.equal(metadata.rpaths.length, 0);
+      digest.update(path.relative(root, file)).update('\0').update(hash(file));
+    }
+    summary.push({ component, nativeFiles: visited.size, minimumSystemVersion: '13.0', sha256: digest.digest('hex') });
+  }
+  return summary;
 }
 async function main(target) {
   requireHosted();
@@ -123,7 +268,7 @@ async function main(target) {
       return;
     }
     report.phase = 'actual-runtime-stage'; save();
-    run(process.execPath, ['scripts/stage-runtime.mjs'], path.join(source, 'desktop'), env);
+    run(process.execPath, ['scripts/stage-runtime.mjs'], path.join(source, 'desktop'), env, { buildDiagnostics: true, sourceRoot: source });
     const manifest = JSON.parse(fs.readFileSync(path.join(source, 'desktop', 'stage', 'runtime', 'runtime-manifest.json'), 'utf8'));
     assert.equal(String(manifest.buildSequence), report.buildSequence);
     assert.equal(manifest.platform, 'darwin'); assert.equal(manifest.arch, 'arm64');
@@ -145,5 +290,5 @@ async function main(target) {
   } finally { save(); }
   console.log(`Native acceptance: ${report.status}; phase=${report.phase}. Only credential-free evidence was retained.`);
 }
+module.exports = { included, requireHosted, copySource, run, buildDiagnostics, relocateMacLibraries, main };
 if (require.main === module) main(process.argv[2]).catch(() => { console.error('Native acceptance preflight refused.'); process.exitCode = 1; });
-module.exports = { included, requireHosted, copySource, run, main };

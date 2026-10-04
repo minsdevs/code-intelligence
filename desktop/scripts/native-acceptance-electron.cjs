@@ -7,6 +7,8 @@ const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
 
 async function runMac({ source, owned, artifacts, report, env, phase }) {
+  // Keep direct callers subject to the same hosted-only safety boundary as main.
+  require('./native-acceptance.cjs').requireHosted(env);
   const frontendRequire = createRequire(path.join(source, 'frontend', 'package.json'));
   const { _electron: electron } = frontendRequire('playwright');
   const { expect } = frontendRequire('@playwright/test');
@@ -22,7 +24,6 @@ async function runMac({ source, owned, artifacts, report, env, phase }) {
   const second = 'export function acceptanceValue(): number { return 42; }\n';
   fs.writeFileSync(sourceFile, first, { flag: 'wx', mode: 0o600 });
   const secret = crypto.randomBytes(32).toString('hex');
-  const expectedDigest = crypto.createHash('sha256').update(secret).digest('hex');
   const cipherPath = path.join(owned, 'safestorage-probe.enc');
   let app, page, userData, projectId, snapshotId;
   let pageErrors = 0;
@@ -138,11 +139,12 @@ async function runMac({ source, owned, artifacts, report, env, phase }) {
     await expect(page.getByText('native-synthetic-project', { exact: true }).first()).toBeVisible();
     await captureSizes('project-list');
     phase('real-app-restart'); await close(); await launch();
-    const decryptedDigest = await app.evaluate(({ safeStorage }, bytes) => {
+    const decryptedMatches = await app.evaluate(({ safeStorage }, { bytes, expected }) => {
       if (!safeStorage.isEncryptionAvailable()) throw new Error('NATIVE_SAFE_STORAGE_UNAVAILABLE');
-      return require('node:crypto').createHash('sha256').update(safeStorage.decryptString(Buffer.from(bytes, 'base64'))).digest('hex');
-    }, fs.readFileSync(cipherPath).toString('base64'));
-    assert.equal(decryptedDigest, expectedDigest);
+      // Serialized evaluate callbacks have no CommonJS module-local require binding.
+      return safeStorage.decryptString(Buffer.from(bytes, 'base64')) === expected;
+    }, { bytes: fs.readFileSync(cipherPath).toString('base64'), expected: secret });
+    assert.equal(decryptedMatches, true);
     assert.equal((await api(`/api/projects/${projectId}`)).currentSnapshot.id, snapshotId);
     await sourceContent(first, snapshotId);
     report.checks.push('native-safeStorage-decrypt-after-process-restart', 'real-database-and-encrypted-source-persistence');
@@ -160,7 +162,9 @@ async function runMac({ source, owned, artifacts, report, env, phase }) {
     report.checks.push('real-preview-approved-reanalysis-source-navigation');
     phase('synthetic-delete'); await api(`/api/projects/${projectId}`, 'DELETE');
     assert.deepEqual(await api('/api/projects'), []);
-    await navigate('/projects'); await captureSizes('after-delete');
+    await navigate('/projects');
+    await expect(page.getByText('native-synthetic-project', { exact: true })).toHaveCount(0);
+    await captureSizes('after-delete');
     report.checks.push('synthetic-project-delete');
     phase('final-process-restart'); await close(); await launch();
     assert.deepEqual(await api('/api/projects'), []);
