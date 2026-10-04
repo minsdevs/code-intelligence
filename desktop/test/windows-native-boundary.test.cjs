@@ -192,6 +192,7 @@ test('native retained storage streams past 16 MiB and returns the exact bytes', 
     const writer = await storage.openWrite('large.bin', { maxBytes: 32 * 1024 * 1024 });
     const expected = crypto.createHash('sha256');
     for (let i = 0; i < 18; i++) { expected.update(chunk); await writer.write(chunk); }
+    const tail = Buffer.from([251]); expected.update(tail); await writer.write(tail);
     const committed = await writer.commit();
     const persisted = await storage.stat('large.bin');
     for (const [field, label] of [['volume', 'VOLUME'], ['fileId', 'FILE_ID'], ['owner', 'OWNER'],
@@ -202,7 +203,7 @@ test('native retained storage streams past 16 MiB and returns the exact bytes', 
       }
     }
     assert.equal(persisted.token, committed.token);
-    assert.equal(committed.size, String(18 * chunk.length));
+    assert.equal(committed.size, String(18 * chunk.length + 1));
     assert.equal(committed.platform, 'win32'); assert.ok(BigInt(committed.allocationSize) > 0n);
     const reader = await storage.openRead('large.bin', { expected: committed, maxBytes: 32 * 1024 * 1024 });
     const actual = crypto.createHash('sha256');
@@ -219,7 +220,8 @@ test('native conditional append refuses a stale state without losing acknowledge
   let rejected = false;
   try {
     const first = await writeStorageFile(storage, 'events.log', Buffer.from('one\n'), { maxBytes: 1024 });
-    await writeStorageFile(storage, 'events.log', Buffer.from('two\n'), { mode: 'append', expected: first, maxBytes: 1024 });
+    const appended = await writeStorageFile(storage, 'events.log', Buffer.from('two\n'), { mode: 'append', expected: first, maxBytes: 1024 });
+    assert.equal((await storage.stat('events.log')).token, appended.token);
     const saved = await readStorageFile(storage, 'events.log', 1024);
     assert.equal(saved.bytes.toString(), 'one\ntwo\n'); saved.bytes.fill(0);
     await assert.rejects(storage.openWrite('events.log', { mode: 'append', expected: first, maxBytes: 1024 }));
@@ -239,6 +241,12 @@ test('native inactive-slot overwrite truncates old suffix and exact retry preser
     assert.equal(flushed.token, second.token);
     const saved = await readStorageFile(storage, 'value.0', 1024, { expected: flushed });
     assert.equal(saved.bytes.toString(), 'new generation'); saved.bytes.fill(0);
+    const empty = await storage.openWrite('value.0', { mode: 'slot', expected: flushed, maxBytes: 1024 });
+    const truncated = await empty.commit();
+    assert.equal(truncated.size, '0');
+    assert.equal((await storage.stat('value.0')).token, truncated.token);
+    const emptyRead = await readStorageFile(storage, 'value.0', 1024, { expected: truncated });
+    assert.deepEqual(emptyRead.bytes, Buffer.alloc(0));
   } finally { await storage.close(); }
 });
 

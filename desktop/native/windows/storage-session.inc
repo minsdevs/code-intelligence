@@ -211,6 +211,12 @@ void storageSession() {
                 // NTFS may defer write/change timestamps until the writing handle
                 // closes. Commit must return a token that survives that close.
                 if (entry.mode != "append" || entry.position != entry.initial.size) {
+                    // Remove speculative allocation while the exclusive writer
+                    // and retained parents are still held; closing must not
+                    // change the allocation component of the acknowledged WS1.
+                    FILE_ALLOCATION_INFO allocation{};
+                    allocation.AllocationSize.QuadPart = static_cast<LONGLONG>(entry.position);
+                    require(SetFileInformationByHandle(entry.handle.value, FileAllocationInfo, &allocation, sizeof(allocation)) != 0);
                     FILETIME now{}; GetSystemTimeAsFileTime(&now);
                     FILE_BASIC_INFO times{};
                     times.LastWriteTime.QuadPart = times.ChangeTime.QuadPart = static_cast<LONGLONG>(fileTime(now));
