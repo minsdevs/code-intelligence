@@ -34,6 +34,7 @@ const { createWindowsBoundary } = require('./windows-native-boundary.cjs');
 const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 const { writeStorageFile } = require('./windows-storage-files.cjs');
 const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
+const packageMetadata = require('../package.json');
 
 const children = new Map();
 const childStops = new Map();
@@ -537,6 +538,13 @@ async function authorizePath(selected, persist = true) {
   return result.path;
 }
 
+function nativeGithubClientId() {
+  // Public build metadata supports Finder launches without a terminal environment.
+  // Invalid configuration disables GitHub login while preserving local analysis.
+  const value = process.env.GITHUB_NATIVE_CLIENT_ID || packageMetadata.githubNativeClientId || '';
+  return typeof value === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(value) ? value : '';
+}
+
 async function startBackend({ maintenanceId = '' } = {}) {
   const java = binary('jre', 'bin', 'java');
   const jar = binary('backend', 'code-intelligence.jar');
@@ -567,7 +575,7 @@ async function startBackend({ maintenanceId = '' } = {}) {
       DESKTOP_ALLOWED_ORIGIN: runtime.apiBaseUrl,
       APP_DESKTOP_AI_BOOTSTRAP_STDIN: 'true',
       APP_DESKTOP_MAINTENANCE_STARTUP_ID: maintenanceId,
-      GITHUB_NATIVE_CLIENT_ID: process.env.GITHUB_NATIVE_CLIENT_ID || '',
+      GITHUB_NATIVE_CLIENT_ID: nativeGithubClientId(),
       CORS_ALLOWED_ORIGINS: runtime.apiBaseUrl
     }
   });

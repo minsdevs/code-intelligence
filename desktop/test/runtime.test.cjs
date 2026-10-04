@@ -246,8 +246,8 @@ test('privileged IPC rejects foreign frames and origins', () => {
 
 test('renderer runtime configuration never includes the path authorization token', () => {
   const h = harness();
-  h.run('assertTrustedRenderer = () => {}; registerIpc();');
-  const event = {};
+  h.run("mainWindow = { webContents: { mainFrame: { url: runtime.apiBaseUrl + '/' } } }; registerIpc();");
+  const event = h.run('({ sender: mainWindow.webContents, senderFrame: mainWindow.webContents.mainFrame })');
   h.handlers.get('runtime:config')(event);
   assert.deepEqual(Object.keys(event.returnValue).sort(), ['apiBaseUrl', 'apiToken', 'appVersion']);
   assert.equal(JSON.stringify(event.returnValue).includes('main-only-token'), false);
@@ -592,9 +592,10 @@ test('no new safety key or admission capability reaches backend environment or r
   const h = harness();
   h.run(`binary = (...parts) => parts.join('/'); waitUntil = async () => {}; saveEncryptedJson = async () => {};
     safetyLifecycle.hiddenKey = 'private-purpose-key'; safetyLifecycle.hiddenPermit = 'private-permit';
-    assertTrustedRenderer = () => {}; registerIpc();`);
+    mainWindow = { webContents: { mainFrame: { url: runtime.apiBaseUrl + '/' } } }; registerIpc();`);
   await h.run('startBackend()');
-  const event = {}; h.handlers.get('runtime:config')(event);
+  const event = h.run('({ sender: mainWindow.webContents, senderFrame: mainWindow.webContents.mainFrame })');
+  h.handlers.get('runtime:config')(event);
   const exposed = JSON.stringify([h.spawned[0].options.env, event.returnValue]);
   assert.equal(exposed.includes('private-purpose-key'), false); assert.equal(exposed.includes('private-permit'), false);
   assert.equal(exposed.includes('synthetic-private-gateway-capability'), false);

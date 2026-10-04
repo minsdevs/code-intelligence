@@ -540,6 +540,26 @@ test('actual main startup passes fresh enrollment before paths file and private 
   assert.equal([...h.handlers.keys()].some(name => /activate|gateway|settle|enrollment|permit/.test(name)), false);
 });
 
+test('packaged public GitHub client ID reaches backend without a shell environment', async t => {
+  const h = await harness(t, { modules: { '../package.json': { githubNativeClientId: 'Iv1.synthetic-public-client' } } });
+  delete h.context.process.env.GITHUB_NATIVE_CLIENT_ID;
+  await h.start();
+  assert.equal(h.run('runtime.ready'), true);
+  const backend = h.children.find(value => path.basename(value.command) === 'java');
+  assert.equal(backend.options.env.GITHUB_NATIVE_CLIENT_ID, 'Iv1.synthetic-public-client');
+  for (const child of h.children) if (child !== backend) assert.equal(child.options.env.GITHUB_NATIVE_CLIENT_ID, undefined);
+  h.context.process.env.GITHUB_NATIVE_CLIENT_ID = 'explicit-public-client';
+  assert.equal(h.run('nativeGithubClientId()'), 'explicit-public-client');
+  h.context.process.env.GITHUB_NATIVE_CLIENT_ID = 'invalid value\n';
+  assert.equal(h.run('nativeGithubClientId()'), '');
+});
+
+test('non-string packaged OAuth configuration keeps GitHub disabled', async t => {
+  const h = await harness(t, { modules: { '../package.json': { githubNativeClientId: { unexpected: true } } } });
+  delete h.context.process.env.GITHUB_NATIVE_CLIENT_ID;
+  assert.equal(h.run('nativeGithubClientId()'), '');
+});
+
 test('a manifest without backup protocol retains the guard before dialogs or backup constructor work', async t => {
   const h = await harness(t, { selection: '/synthetic/unused-selection' }); await h.start();
   assert.equal(h.run('runtime.ready'), true);
