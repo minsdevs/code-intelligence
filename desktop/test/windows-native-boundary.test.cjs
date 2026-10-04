@@ -166,3 +166,87 @@ test('actual launcher death closes the guardian lifeline and removes descendants
   for (let i = 0; i < 100; i++) { try { process.kill(child, 0); } catch { alive = false; break; } await new Promise(resolve => setTimeout(resolve, 50)); }
   assert.equal(alive, false);
 });
+
+test('native retained storage streams past 16 MiB and returns the exact bytes', { skip: !enabled, timeout: 60000 }, async t => {
+  const { boundary, root } = fixture(t); const storage = await boundary.openStorage(root);
+  const crypto = require('node:crypto'), chunk = Buffer.alloc(1024 * 1024);
+  for (let i = 0; i < chunk.length; i++) chunk[i] = i % 251;
+  try {
+    const writer = await storage.openWrite('large.bin', { maxBytes: 32 * 1024 * 1024 });
+    const expected = crypto.createHash('sha256');
+    for (let i = 0; i < 18; i++) { expected.update(chunk); await writer.write(chunk); }
+    const committed = await writer.commit();
+    assert.equal(committed.size, String(18 * chunk.length));
+    assert.equal(committed.platform, 'win32'); assert.ok(BigInt(committed.allocationSize) > 0n);
+    const reader = await storage.openRead('large.bin', { expected: committed, maxBytes: 32 * 1024 * 1024 });
+    const actual = crypto.createHash('sha256');
+    try { for (;;) { const bytes = await reader.read(); if (!bytes.length) break; actual.update(bytes); bytes.fill(0); } }
+    finally { await reader.close(); }
+    assert.equal(actual.digest('hex'), expected.digest('hex'));
+  } finally { chunk.fill(0); await storage.close(); }
+});
+
+test('native conditional append refuses a stale state without losing acknowledged records', { skip: !enabled }, async t => {
+  const { boundary, root } = fixture(t); const storage = await boundary.openStorage(root);
+  const { readStorageFile, writeStorageFile } = require('../src/windows-storage-files.cjs');
+  let rejected = false;
+  try {
+    const first = await writeStorageFile(storage, 'events.log', Buffer.from('one\n'), { maxBytes: 1024 });
+    await writeStorageFile(storage, 'events.log', Buffer.from('two\n'), { mode: 'append', expected: first, maxBytes: 1024 });
+    const saved = await readStorageFile(storage, 'events.log', 1024);
+    assert.equal(saved.bytes.toString(), 'one\ntwo\n'); saved.bytes.fill(0);
+    await assert.rejects(storage.openWrite('events.log', { mode: 'append', expected: first, maxBytes: 1024 }));
+    rejected = true;
+  } finally { if (rejected) await assert.rejects(storage.close()); else await storage.close(); }
+  assert.equal(boundary.readPrivate(path.join(root, 'events.log'), 1024).toString(), 'one\ntwo\n');
+});
+
+test('native inactive-slot overwrite truncates old suffix and exact retry preserves bytes', { skip: !enabled }, async t => {
+  const { boundary, root } = fixture(t); const storage = await boundary.openStorage(root);
+  const { readStorageFile, writeStorageFile } = require('../src/windows-storage-files.cjs');
+  try {
+    const first = await writeStorageFile(storage, 'value.0', Buffer.from('old generation with a longer authenticated payload'), { maxBytes: 1024 });
+    const second = await writeStorageFile(storage, 'value.0', Buffer.from('new generation'), { mode: 'slot', expected: first, maxBytes: 1024 });
+    const retry = await storage.openWrite('value.0', { mode: 'append', expected: second, maxBytes: 1024 });
+    const flushed = await retry.commit();
+    const saved = await readStorageFile(storage, 'value.0', 1024, { expected: flushed });
+    assert.equal(saved.bytes.toString(), 'new generation'); saved.bytes.fill(0);
+  } finally { await storage.close(); }
+});
+
+test('native private workspace inheritance permits real child files without accepting them as strict private files', { skip: !enabled }, async t => {
+  const { boundary, root } = fixture(t), workspace = path.join(root, 'workspace');
+  boundary.createDirectory(workspace, { inherit: true });
+  fs.mkdirSync(path.join(workspace, 'nested')); const file = path.join(workspace, 'nested', 'Source.java');
+  fs.writeFileSync(file, 'class Source {}');
+  const storage = await boundary.openStorage(workspace, { mode: 'workspace' });
+  try {
+    const reader = await storage.openRead('nested/Source.java', { maxBytes: 1024 });
+    try { const bytes = await reader.read(); assert.equal(bytes.toString(), 'class Source {}'); bytes.fill(0); }
+    finally { await reader.close(); }
+    assert.throws(() => boundary.readPrivate(file, 1024));
+  } finally { await storage.close(); }
+});
+
+test('native retained root blocks rename until the owned session exits', { skip: !enabled }, async t => {
+  const { boundary, root } = fixture(t), destination = path.join(path.dirname(root), 'moved');
+  const storage = await boundary.openStorage(root);
+  try { assert.throws(() => fs.renameSync(root, destination)); assert.equal((await storage.stat('', { directory: true })).identity, storage.rootState.identity); }
+  finally { await storage.close(); }
+  fs.renameSync(root, destination); assert.equal(fs.existsSync(root), false);
+});
+
+test('native workspace owner locks contend and reopen the same permanent marker', { skip: !enabled }, async t => {
+  const { boundary, root } = fixture(t), marker = Buffer.from('CI-WORKSPACE-1\ntest-project\n');
+  const owner = await boundary.openStorage(root), contender = await boundary.openStorage(root);
+  let refused = false, identity;
+  try {
+    const lock = await owner.lock('workspace.owner', marker); identity = lock.state.identity;
+    assert.equal((await lock.check()).identity, identity);
+    await assert.rejects(contender.lock('workspace.owner', marker)); refused = true;
+    await lock.close();
+  } finally { await owner.close(); if (refused) await assert.rejects(contender.close()); else await contender.close(); }
+  const reopened = await boundary.openStorage(root);
+  try { const lock = await reopened.lock('workspace.owner', marker); assert.equal(lock.state.identity, identity); await lock.close(); }
+  finally { await reopened.close(); marker.fill(0); }
+});

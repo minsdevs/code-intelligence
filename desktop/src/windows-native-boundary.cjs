@@ -60,7 +60,7 @@ function createWindowsBoundary(runtimeRoot) {
   return Object.freeze({
     readPrivate: (file, maximum = MAX_BYTES) => read('read-private', file, maximum),
     readPublic: (file, maximum = MAX_BYTES) => read('read-public', file, maximum),
-    createDirectory: directory => { invoke('mkdir', directory); },
+    createDirectory: (directory, { inherit = false } = {}) => { invoke(inherit ? 'mkdir-inherited' : 'mkdir', directory); },
     writeFresh: (file, bytes) => write('write-fresh', file, bytes),
     replacePrivate: (file, bytes) => write('replace-private', file, bytes),
     inspect(file, { directory = false, private: privateObject = true } = {}) {
@@ -69,8 +69,11 @@ function createWindowsBoundary(runtimeRoot) {
       if (!/^\d+:\d+:\d+$/.test(identity)) refuse();
       return identity;
     },
+    openStorage(root, options) {
+      return require('./windows-storage.cjs').openWindowsStorage(this, localPath(root), options);
+    },
     launch(operation, spawn = childProcess.spawn) {
-      if (!['lease', 'managed'].includes(operation)) refuse();
+      if (!['lease', 'managed', 'storage', 'unix-server'].includes(operation)) refuse();
       assertBinary();
       return spawn(executable, [operation], { env: inheritedEnvironment(process.env),
         stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });

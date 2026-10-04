@@ -18,7 +18,12 @@ $password = 'Aa1!' + [Convert]::ToBase64String([Security.Cryptography.RandomNumb
 Write-Output "::add-mask::$password"
 $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
 $private = Join-Path 'C:\' ('native-acceptance-' + [Guid]::NewGuid().ToString('N'))
-$taskName = $name + '-native'
+$child = $null
+$credential = $null
+$outcome = 'STANDARD_USER_PROVISIONING_FAILED'
+$childPhase = $null
+$childHresult = $null
+$childWin32Error = $null
 $node = (Get-Command node.exe).Source
 $pwsh = (Get-Command pwsh.exe).Source
 $cmake = (Get-Command cmake.exe).Source
@@ -27,8 +32,7 @@ try {
     $user = New-LocalUser -Name $name -Password $securePassword -AccountNeverExpires -PasswordNeverExpires -Description 'Disposable native acceptance only'
     Add-LocalGroupMember -SID 'S-1-5-32-545' -Member $user
     $sid = $user.SID.Value
-    # Task Scheduler's XML principal must not rely on the .\ account alias.
-    # Resolve the fresh SAM identity both ways before supplying its password.
+    # Resolve the fresh SAM identity both ways before password-authenticated logon.
     $account = $user.SID.Translate([Security.Principal.NTAccount]).Value
     $accountSid = [Security.Principal.NTAccount]::new($account).Translate([Security.Principal.SecurityIdentifier]).Value
     if ($accountSid -ne $sid -or $account -ine "$env:COMPUTERNAME\$name") { throw 'Fresh local account resolution failed' }
@@ -55,7 +59,8 @@ try {
         GITHUB_WORKSPACE = $env:GITHUB_WORKSPACE; RUNNER_TEMP = $private;
         CODE_INTELLIGENCE_BUILD_SEQUENCE = $env:CODE_INTELLIGENCE_BUILD_SEQUENCE;
         NATIVE_ACCEPTANCE_CMAKE = $cmake; PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1';
-        NATIVE_ACCEPTANCE_EXPECTED_SID = $sid;
+        JAVA_HOME = $env:JAVA_HOME;
+        NATIVE_ACCEPTANCE_EXPECTED_SID = $sid; NATIVE_ACCEPTANCE_PARENT_PROFILE = $env:USERPROFILE;
         PATH = (Join-Path $private 'node-runtime') + ';' + $env:PATH
     }
     $config | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $private 'environment.json') -Encoding utf8
@@ -63,7 +68,10 @@ try {
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = $PSScriptRoot
+$phase = 'child-token'
+$code = 1
 try {
+    [IO.File]::WriteAllText((Join-Path $root 'child-started'), [string]$PID)
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
     if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Elevated acceptance token rejected' }
@@ -71,48 +79,151 @@ try {
     $config = Get-Content -Raw (Join-Path $root 'environment.json') | ConvertFrom-Json -AsHashtable
     if ($identity.User.Value -ne $config.NATIVE_ACCEPTANCE_EXPECTED_SID) { throw 'Unexpected acceptance identity rejected' }
     if ($identity.Groups.Value -contains 'S-1-5-32-544') { throw 'Administrative group acceptance token rejected' }
+    $env:TEMP = Join-Path $root 'bootstrap-temp'; $env:TMP = $env:TEMP
+    New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
+    Add-Type -TypeDefinition @"
+using System;
+using System.Text;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class AcceptanceToken {
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool GetTokenInformation(IntPtr token, int informationClass, out uint value, uint length, out uint returned);
+    [DllImport("userenv.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool GetUserProfileDirectory(IntPtr token, StringBuilder directory, ref uint length);
+    public static void RequireNotElevated(IntPtr token) {
+        uint elevated, returned;
+        if (!GetTokenInformation(token, 20, out elevated, 4, out returned)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        if (returned != 4 || elevated != 0) throw new InvalidOperationException("Nonstandard token rejected");
+    }
+    public static string Profile(IntPtr token) {
+        uint length = 32768;
+        var directory = new StringBuilder((int)length);
+        if (!GetUserProfileDirectory(token, directory, ref length)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        return directory.ToString();
+    }
+}
+"@
+    [AcceptanceToken]::RequireNotElevated($identity.Token)
+    $phase = 'child-profile'
+    $profile = [AcceptanceToken]::Profile($identity.Token)
+    $registeredProfile = (Get-ItemProperty -LiteralPath ("Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\" + $identity.User.Value)).ProfileImagePath
+    if (-not [IO.Path]::IsPathFullyQualified($profile) -or $profile -ine [Environment]::ExpandEnvironmentVariables($registeredProfile) -or $profile -ieq $config.NATIVE_ACCEPTANCE_PARENT_PROFILE) { throw 'Fresh profile required' }
+    if (-not (Test-Path -LiteralPath ("Registry::HKEY_USERS\" + $identity.User.Value)) -or -not (Test-Path -LiteralPath $profile -PathType Container)) { throw 'Loaded user profile required' }
+    # Alternate-credential processes can inherit runner environment variables. Keep
+    # only OS/tool discovery, then derive all user paths from this token's profile.
+    foreach ($key in @([Environment]::GetEnvironmentVariables('Process').Keys)) {
+        if ($key -notmatch '^(SystemRoot|windir|ProgramFiles(\(x86\))?|ProgramW6432|ProgramData|ALLUSERSPROFILE|COMSPEC|PATHEXT|OS|PROCESSOR_ARCHITECTURE|NUMBER_OF_PROCESSORS|COMPUTERNAME)$') {
+            [Environment]::SetEnvironmentVariable($key, $null, 'Process')
+        }
+    }
+    $env:USERPROFILE = $profile
+    $env:HOMEDRIVE = [IO.Path]::GetPathRoot($profile).TrimEnd('\')
+    $env:HOMEPATH = $profile.Substring($env:HOMEDRIVE.Length)
+    $env:HOME = $profile
+    $env:USERNAME = $identity.Name.Split('\')[-1]
+    $env:USERDOMAIN = $identity.Name.Split('\')[0]
+    $env:APPDATA = [Environment]::GetFolderPath('ApplicationData')
+    $env:LOCALAPPDATA = [Environment]::GetFolderPath('LocalApplicationData')
+    foreach ($folder in @($env:APPDATA, $env:LOCALAPPDATA)) {
+        if (-not $folder.StartsWith($profile + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Foreign user shell folder rejected' }
+    }
+    $env:TEMP = Join-Path $env:LOCALAPPDATA 'Temp'; $env:TMP = $env:TEMP
+    New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
     foreach ($key in $config.Keys) { [Environment]::SetEnvironmentVariable($key, [string]$config[$key], 'Process') }
+    $phase = 'child-dpapi'
+    $probe = [Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+    $cipher = $null; $plain = $null
+    try {
+        $cipher = [Security.Cryptography.ProtectedData]::Protect($probe, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+        $plain = [Security.Cryptography.ProtectedData]::Unprotect($cipher, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+        if ($plain.Length -ne $probe.Length) { throw 'CurrentUser DPAPI failed' }
+        $difference = 0
+        for ($index = 0; $index -lt $probe.Length; $index++) { $difference = $difference -bor ($probe[$index] -bxor $plain[$index]) }
+        if ($difference -ne 0) { throw 'CurrentUser DPAPI failed' }
+    } finally {
+        [Array]::Clear($probe, 0, $probe.Length)
+        if ($cipher) { [Array]::Clear($cipher, 0, $cipher.Length) }
+        if ($plain) { [Array]::Clear($plain, 0, $plain.Length) }
+    }
     New-Item -ItemType Directory -Path (Join-Path $root 'native-acceptance-artifacts') -Force | Out-Null
-    @{ elevated = $false; serviceAccount = $false; freshLocalUser = $true } | ConvertTo-Json | Set-Content (Join-Path $root 'native-acceptance-artifacts/token.json')
+    @{ elevated = $false; serviceAccount = $false; freshLocalUser = $true; exactSid = $true; administratorGroup = $false; profileLoaded = $true; currentUserDpapi = $true } | ConvertTo-Json | Set-Content (Join-Path $root 'native-acceptance-artifacts/token.json')
+    [IO.File]::WriteAllText((Join-Path $root 'child-ready.pending'), [string]$PID)
+    [IO.File]::Move((Join-Path $root 'child-ready.pending'), (Join-Path $root 'child-ready'))
+    $phase = 'child-acceptance'
     & '__NODE__' (Join-Path $env:GITHUB_WORKSPACE 'desktop/scripts/native-acceptance.cjs') windows *> (Join-Path $root 'private-run.log')
     $code = $LASTEXITCODE
-} catch { $code = 1 }
+} catch {
+    $failure = $_.Exception
+    $nativeError = $null
+    while ($failure) {
+        if ($failure -is [ComponentModel.Win32Exception]) { $nativeError = [int]$failure.NativeErrorCode; break }
+        $failure = $failure.InnerException
+    }
+    @{ phase = $phase; hresult = [int]$_.Exception.HResult; win32Error = $nativeError } | ConvertTo-Json | Set-Content (Join-Path $root 'child-failure.json')
+}
 [IO.File]::WriteAllText((Join-Path $root 'exit-code'), [string]$code)
 exit $code
 '@
     $childScript.Replace('__NODE__', $node.Replace("'", "''")) | Set-Content -LiteralPath (Join-Path $private 'run.ps1') -Encoding utf8
-    $action = New-ScheduledTaskAction -Execute $pwsh -Argument "-NoLogo -NoProfile -NonInteractive -File `"$private\run.ps1`"" -WorkingDirectory $private
-    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 38) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-    $phase = 'standard-user-task-registration'
-    $taskPrincipal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Password -RunLevel Limited
-    $task = New-ScheduledTask -Action $action -Settings $settings -Principal $taskPrincipal
-    Register-ScheduledTask -TaskName $taskName -InputObject $task -User $account -Password $password -Force | Out-Null
-    $registered = (Get-ScheduledTask -TaskName $taskName).Principal
-    $registeredSid = if ($registered.UserId -match '^S-1-') { $registered.UserId } else { [Security.Principal.NTAccount]::new($registered.UserId).Translate([Security.Principal.SecurityIdentifier]).Value }
-    if ($registeredSid -ne $sid -or $registered.RunLevel -ne 'Limited' -or $registered.LogonType -ne 'Password') { throw 'Task must use the fresh password-authenticated standard-user principal' }
-    $phase = 'standard-user-task-execution'
-    $requestedAt = Get-Date
-    Start-ScheduledTask -TaskName $taskName
-    $deadline = [DateTime]::UtcNow.AddMinutes(39)
-    while (-not (Test-Path (Join-Path $private 'exit-code'))) {
-        if ([DateTime]::UtcNow -gt $deadline) { throw 'Standard-user acceptance timed out' }
-        Start-Sleep -Seconds 2
-        $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName
-        $taskState = (Get-ScheduledTask -TaskName $taskName).State
-        if ($taskState -notin @('Running', 'Queued') -and $taskInfo.LastRunTime -ge $requestedAt.AddSeconds(-1) -and -not (Test-Path (Join-Path $private 'exit-code'))) {
-            throw 'Standard-user task exited without its completion marker'
-        }
+    $credential = [Management.Automation.PSCredential]::new($account, $securePassword)
+    $phase = 'standard-user-process-startup'
+    $outcome = 'STANDARD_USER_LOGON_FAILED'
+    $startup = [Diagnostics.Stopwatch]::StartNew()
+    # Password logon loads a real fresh-user profile (and hence CurrentUser DPAPI).
+    # No scheduler, S4U, elevated fallback, inherited runner token or current-user credentials.
+    $child = Start-Process -FilePath $pwsh -Credential $credential -LoadUserProfile -PassThru -WorkingDirectory $private -ArgumentList @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', ('"' + $private + '\run.ps1"')) -RedirectStandardOutput (Join-Path $private 'private-launch.stdout.log') -RedirectStandardError (Join-Path $private 'private-launch.stderr.log')
+    $outcome = 'STANDARD_USER_STARTUP_EXITED'
+    $ready = Join-Path $private 'child-ready'
+    while (-not (Test-Path -LiteralPath $ready)) {
+        if ($child.HasExited) { throw 'Standard-user child exited before readiness' }
+        if ($startup.Elapsed.TotalSeconds -ge 120) { $outcome = 'STANDARD_USER_STARTUP_TIMEOUT'; throw 'Standard-user child startup deadline exceeded' }
+        Start-Sleep -Milliseconds 200
     }
-    $code = [int](Get-Content -Raw (Join-Path $private 'exit-code'))
-    if ($code -ne 0) { throw 'NATIVE_ACCEPTANCE_FAILED: inspect acceptance.json and windows-native.json' }
-    @{ status = 'PASS'; phase = $phase; code = 'STANDARD_USER_RUN_COMPLETED' } | ConvertTo-Json | Set-Content (Join-Path $artifacts 'provisioning.json')
+    if ($startup.Elapsed.TotalSeconds -ge 120) { $outcome = 'STANDARD_USER_STARTUP_TIMEOUT'; throw 'Standard-user child startup deadline exceeded' }
+    if ([int](Get-Content -Raw -LiteralPath $ready) -ne $child.Id -or [int](Get-Content -Raw -LiteralPath (Join-Path $private 'child-started')) -ne $child.Id) { $outcome = 'STANDARD_USER_PROCESS_IDENTITY_FAILED'; throw 'Unexpected child marker' }
+    $phase = 'standard-user-process-execution'
+    $outcome = 'STANDARD_USER_EXECUTION_TIMEOUT'
+    if (-not $child.WaitForExit(38 * 60 * 1000)) { throw 'Standard-user acceptance deadline exceeded' }
+    $outcome = 'STANDARD_USER_COMPLETION_MISSING'
+    if (-not (Test-Path -LiteralPath (Join-Path $private 'exit-code'))) { throw 'Standard-user completion missing' }
+    $code = [int](Get-Content -Raw -LiteralPath (Join-Path $private 'exit-code'))
+    $outcome = 'STANDARD_USER_ACCEPTANCE_FAILED'
+    if ($code -ne 0 -or $child.ExitCode -ne 0) { throw 'Standard-user acceptance failed' }
+    @{ status = 'PASS'; phase = $phase; code = 'STANDARD_USER_RUN_COMPLETED'; processExitCode = $child.ExitCode } | ConvertTo-Json | Set-Content (Join-Path $artifacts 'provisioning.json')
 } catch {
-    $lastResult = $null
-    $failedTask = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
-    if ($failedTask) { $lastResult = [long]$failedTask.LastTaskResult }
-    @{ status = 'FAIL'; phase = $phase; code = 'WINDOWS_NATIVE_ACCEPTANCE_LAUNCH_OR_CHECK_FAILED'; hresult = [int]$_.Exception.HResult; lastTaskResult = $lastResult } | ConvertTo-Json | Set-Content (Join-Path $artifacts 'provisioning.json')
-    throw
+    $failure = $_.Exception; $hresult = [int]$failure.HResult; $win32Error = $null
+    while ($failure) {
+        if ($failure -is [ComponentModel.Win32Exception]) { $win32Error = [int]$failure.NativeErrorCode; break }
+        $failure = $failure.InnerException
+    }
+    $processExitCode = $null
+    if ($child -and $child.HasExited) { $processExitCode = $child.ExitCode }
+    $diagnostic = Join-Path $private 'child-failure.json'
+    if (Test-Path -LiteralPath $diagnostic) {
+        try {
+            $details = Get-Content -Raw -LiteralPath $diagnostic | ConvertFrom-Json
+            if ($details.phase -cin @('child-token', 'child-profile', 'child-dpapi', 'child-acceptance')) { $childPhase = $details.phase }
+            $childHresult = [int]$details.hresult
+            if ($null -ne $details.win32Error) { $childWin32Error = [int]$details.win32Error }
+        } catch { $childPhase = 'child-diagnostic-invalid'; $childHresult = $null; $childWin32Error = $null }
+    }
+    @{ status = 'FAIL'; phase = $phase; code = $outcome; hresult = $hresult; win32Error = $win32Error; processExitCode = $processExitCode; childPhase = $childPhase; childHresult = $childHresult; childWin32Error = $childWin32Error } | ConvertTo-Json | Set-Content (Join-Path $artifacts 'provisioning.json')
+    # Do not rethrow a credential/process exception with raw runtime paths or arguments.
+    throw 'WINDOWS_NATIVE_ACCEPTANCE_FAILED: inspect allowlisted reports'
 } finally {
+    if ($child) {
+        # Only this retained process handle is terminated. Descendants are not
+        # guessed from PID trees; disposable hosted-VM teardown owns final cleanup.
+        try {
+            if (-not $child.HasExited) {
+                $child.Kill()
+                if (-not $child.WaitForExit(10000)) { throw 'Owned root exit unconfirmed' }
+            }
+        } catch {
+            Write-Warning 'OWNED_ROOT_CLEANUP_UNCONFIRMED: disposable hosted VM teardown required'
+        } finally { $child.Dispose() }
+    }
     if (Test-Path (Join-Path $private 'native-acceptance-artifacts')) {
         # Only these explicit report names can cross the private account boundary.
         foreach ($file in @('acceptance.json', 'token.json', 'windows-native.json', 'windows-native-build.log', 'windows-safe-storage.json')) {
@@ -120,9 +231,8 @@ exit $code
             if (Test-Path -LiteralPath $candidate) { Copy-Item -LiteralPath $candidate -Destination $artifacts }
         }
     }
-    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     # Removing this test account does not mutate any pre-existing user or credential store.
     Remove-LocalUser -Name $name -ErrorAction SilentlyContinue
-    $password = $null; $securePassword = $null
+    $credential = $null; $password = $null
+    if ($securePassword) { $securePassword.Dispose(); $securePassword = $null }
 }

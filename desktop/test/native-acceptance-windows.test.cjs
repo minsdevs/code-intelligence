@@ -1,14 +1,15 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { tapCounts, tapDiagnostics, requireNativePass } = require('../scripts/native-acceptance-windows.cjs');
+const { tapCounts, tapDiagnostics, requireNativePass, requireStandardUserToken } = require('../scripts/native-acceptance-windows.cjs');
 
 // These are parser/gate regressions, not native acceptance or DPAPI substitutes.
 const successfulCounts = () => ({ tests: 9, pass: 9, fail: 0, cancelled: 0, skipped: 0, todo: 0 });
 const successfulExit = () => ({ status: 0, error: undefined, signal: null });
 
-test('Windows acceptance requires nine executed tests and a clean process exit', () => {
+test('Windows acceptance requires at least nine executed tests and a clean process exit', () => {
   requireNativePass(successfulExit(), successfulCounts());
+  requireNativePass(successfulExit(), { ...successfulCounts(), tests: 32, pass: 32 });
   assert.throws(() => requireNativePass(successfulExit(), { ...successfulCounts(), tests: 8, pass: 8 }));
   assert.throws(() => requireNativePass(successfulExit(), { ...successfulCounts(), pass: 8 }));
   for (const field of ['fail', 'cancelled', 'skipped', 'todo']) {
@@ -19,7 +20,7 @@ test('Windows acceptance requires nine executed tests and a clean process exit',
   }
 });
 
-test('Windows TAP diagnostics export only ordinals, outcomes and numeric source locations', () => {
+test('Windows TAP diagnostics export only ordinals, outcomes and allowlisted source locations', () => {
   const privateValue = 'do-not-export-password-or-private-path';
   const tap = `TAP version 13
 # Subtest: ${privateValue}
@@ -34,7 +35,7 @@ not ok 2 - ${privateValue}
   expected: '${privateValue}'
   actual: '${privateValue}'
   stack: |-
-    TestContext.<anonymous> (C:\\${privateValue}\\windows-native-boundary.test.cjs:43:10)
+    TestContext.<anonymous> (C:\\${privateValue}\\windows-unix-server.test.cjs:43:10)
   ...
 # tests 2
 # pass 1
@@ -46,7 +47,7 @@ not ok 2 - ${privateValue}
   const evidence = tapDiagnostics(tap);
   assert.deepEqual(evidence, [
     { ordinal: 1, status: 'PASS', sourceLocations: [] },
-    { ordinal: 2, status: 'FAIL', sourceLocations: [{ line: 41, column: 1 }, { line: 43, column: 10 }] },
+    { ordinal: 2, status: 'FAIL', sourceLocations: [{ file: 'windows-native-boundary.test.cjs', line: 41, column: 1 }, { file: 'windows-unix-server.test.cjs', line: 43, column: 10 }] },
   ]);
   assert.equal(JSON.stringify(evidence).includes(privateValue), false);
   assert.deepEqual(tapDiagnostics(tap.replaceAll('\n', '\r\n')), evidence);
@@ -62,4 +63,19 @@ test('Windows diagnostics remain bounded and cannot replace missing or failing T
   assert.equal(evidence.length, 128);
   assert.equal(evidence[0].sourceLocations.length, 8);
   assert.throws(() => tapCounts(lines));
+});
+
+test('Windows child attestation requires exact fresh SID, actual nonadmin token, loaded profile and CurrentUser DPAPI', () => {
+  const token = { elevated: false, serviceAccount: false, freshLocalUser: true, exactSid: true,
+    administratorGroup: false, profileLoaded: true, currentUserDpapi: true };
+  requireStandardUserToken(token);
+  for (const key of Object.keys(token)) {
+    assert.throws(() => requireStandardUserToken({ ...token, [key]: !token[key] }));
+    assert.throws(() => requireStandardUserToken({ ...token, [key]: String(token[key]) }));
+    const missing = { ...token }; delete missing[key];
+    assert.throws(() => requireStandardUserToken(missing));
+  }
+  assert.throws(() => requireStandardUserToken({ elevated: false, serviceAccount: false, freshLocalUser: true }));
+  assert.throws(() => requireStandardUserToken({ ...token, privateProfilePath: 'private' }));
+  for (const invalid of [undefined, null, [], 1, true]) assert.throws(() => requireStandardUserToken(invalid));
 });

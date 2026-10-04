@@ -1,4 +1,6 @@
+#include <winsock2.h>
 #include <windows.h>
+#include <afunix.h>
 #include <aclapi.h>
 #include <sddl.h>
 #include <bcrypt.h>
@@ -15,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 // No paths, payloads or Win32 messages are emitted on failure. This executable is
 // a fixed bundled capability, not an arbitrary command interpreter.
@@ -96,7 +99,7 @@ bool installerSid(PSID sid) {
     Local value(raw);
     return EqualSid(sid, raw) != 0;
 }
-void security(HANDLE h, bool privateObject, bool ancestor = false) {
+void security(HANDLE h, bool privateObject, bool ancestor = false, bool managedInheritance = false) {
     PSID owner = nullptr; PACL acl = nullptr; PSECURITY_DESCRIPTOR raw = nullptr;
     require(GetSecurityInfo(h, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, &owner, nullptr, &acl, nullptr, &raw) == ERROR_SUCCESS);
     Local descriptor(raw);
@@ -104,7 +107,7 @@ void security(HANDLE h, bool privateObject, bool ancestor = false) {
     require(EqualSid(owner, userSid()) || (!privateObject && (systemSid(owner) || adminSid(owner) || installerSid(owner))));
     SECURITY_DESCRIPTOR_CONTROL control{}; DWORD revision = 0;
     require(GetSecurityDescriptorControl(raw, &control, &revision) != 0);
-    if (privateObject) require((control & SE_DACL_PROTECTED) != 0 && EqualSid(owner, userSid()));
+    if (privateObject) require((managedInheritance || (control & SE_DACL_PROTECTED) != 0) && EqualSid(owner, userSid()));
     for (DWORD index = 0; index < acl->AceCount; ++index) {
         void* rawAce = nullptr; require(GetAce(acl, index, &rawAce) != 0);
         auto* header = static_cast<ACE_HEADER*>(rawAce);
@@ -112,8 +115,8 @@ void security(HANDLE h, bool privateObject, bool ancestor = false) {
         auto* ace = static_cast<ACCESS_ALLOWED_ACE*>(rawAce);
         PSID sid = &ace->SidStart;
         require(IsValidSid(sid) != 0);
-        if (privateObject) require((header->AceFlags & INHERITED_ACE) == 0);
-        if (header->AceFlags & INHERIT_ONLY_ACE) continue;
+        if (privateObject && !managedInheritance) require((header->AceFlags & INHERITED_ACE) == 0);
+        if (!privateObject && (header->AceFlags & INHERIT_ONLY_ACE)) continue;
         if (header->AceType == ACCESS_DENIED_ACE_TYPE) continue;
         if (EqualSid(sid, userSid()) || systemSid(sid)) continue;
         if (!privateObject && (adminSid(sid) || installerSid(sid))) continue;
@@ -127,7 +130,7 @@ void security(HANDLE h, bool privateObject, bool ancestor = false) {
         }
     }
 }
-BY_HANDLE_FILE_INFORMATION inspect(HANDLE h, bool directory, bool privateObject, bool ancestor = false) {
+BY_HANDLE_FILE_INFORMATION inspect(HANDLE h, bool directory, bool privateObject, bool ancestor = false, bool managedInheritance = false) {
     require(h && h != INVALID_HANDLE_VALUE && GetFileType(h) == FILE_TYPE_DISK);
     FILE_ATTRIBUTE_TAG_INFO tag{};
     require(GetFileInformationByHandleEx(h, FileAttributeTagInfo, &tag, sizeof(tag)) != 0);
@@ -135,12 +138,32 @@ BY_HANDLE_FILE_INFORMATION inspect(HANDLE h, bool directory, bool privateObject,
     require(((tag.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) == directory);
     BY_HANDLE_FILE_INFORMATION info{};
     require(GetFileInformationByHandle(h, &info) != 0 && (directory || info.nNumberOfLinks == 1));
-    security(h, privateObject, ancestor);
+    security(h, privateObject, ancestor, managedInheritance);
     return info;
+}
+void canonicalHandle(HANDLE h, const std::wstring& expected) {
+    std::array<wchar_t, 8192> name{};
+    DWORD length = GetFinalPathNameByHandleW(h, name.data(), static_cast<DWORD>(name.size()), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    require(length > 4 && length < name.size() && wcsncmp(name.data(), L"\\\\?\\", 4) == 0);
+    require(CompareStringOrdinal(name.data() + 4, static_cast<int>(length - 4), expected.data(), static_cast<int>(expected.size()), TRUE) == CSTR_EQUAL);
+}
+void requirePrivateInheritance(HANDLE h) {
+    security(h, true); PACL acl = nullptr; PSECURITY_DESCRIPTOR raw = nullptr;
+    require(GetSecurityInfo(h, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, &acl, nullptr, &raw) == ERROR_SUCCESS);
+    Local descriptor(raw); bool user = false, system = false;
+    for (DWORD i = 0; i < acl->AceCount; ++i) {
+        void* rawAce = nullptr; require(GetAce(acl, i, &rawAce) != 0);
+        const auto* ace = static_cast<ACCESS_ALLOWED_ACE*>(rawAce);
+        if (ace->Header.AceType != ACCESS_ALLOWED_ACE_TYPE || (ace->Header.AceFlags & (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE)) != (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE)) continue;
+        auto sid = const_cast<DWORD*>(&ace->SidStart);
+        if ((ace->Mask & FILE_ALL_ACCESS) != FILE_ALL_ACCESS) continue;
+        user = user || EqualSid(sid, userSid()); system = system || systemSid(sid);
+    }
+    require(user && system);
 }
 Handle openObject(const std::wstring& p, bool directory, DWORD access = GENERIC_READ | READ_CONTROL, DWORD sharing = FILE_SHARE_READ) {
     Handle h(CreateFileW(p.c_str(), access, sharing, nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | (directory ? FILE_FLAG_BACKUP_SEMANTICS : 0), nullptr));
-    require(h.value != INVALID_HANDLE_VALUE); return h;
+    require(h.value != INVALID_HANDLE_VALUE); canonicalHandle(h.value, p); return h;
 }
 std::vector<Handle> ancestors(const std::wstring& p) {
     std::vector<Handle> handles;
@@ -155,9 +178,10 @@ std::vector<Handle> ancestors(const std::wstring& p) {
 struct PrivateSecurity {
     Local descriptor;
     SECURITY_ATTRIBUTES attributes{ sizeof(SECURITY_ATTRIBUTES), nullptr, FALSE };
-    PrivateSecurity() {
+    explicit PrivateSecurity(bool inherit = false) {
         LPWSTR sid = nullptr; require(ConvertSidToStringSidW(userSid(), &sid) != 0); Local s(sid);
-        auto text = std::wstring(L"O:") + sid + L"D:P(A;;FA;;;" + sid + L")(A;;FA;;;SY)";
+        const std::wstring flags = inherit ? L"OICI" : L"";
+        auto text = std::wstring(L"O:") + sid + L"D:P(A;" + flags + L";FA;;;" + sid + L")(A;" + flags + L";FA;;;SY)";
         PSECURITY_DESCRIPTOR raw = nullptr;
         require(ConvertStringSecurityDescriptorToSecurityDescriptorW(text.c_str(), SDDL_REVISION_1, &raw, nullptr) != 0);
         descriptor.reset(raw); attributes.lpSecurityDescriptor = raw;
@@ -198,11 +222,12 @@ Secret readProtected(const std::wstring& p, bool privateObject, uint32_t maximum
     for (const auto& ancestor : chain) inspect(ancestor.value, true, false, true);
     return bytes;
 }
-void createDirectory(const std::wstring& p) {
-    auto chain = ancestors(p); PrivateSecurity sec;
+void createDirectory(const std::wstring& p, bool inherit = false) {
+    auto chain = ancestors(p); PrivateSecurity sec(inherit);
     if (!CreateDirectoryW(p.c_str(), &sec.attributes)) require(GetLastError() == ERROR_ALREADY_EXISTS);
     auto h = openObject(p, true, READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE);
     inspect(h.value, true, true);
+    if (inherit) requirePrivateInheritance(h.value);
 }
 void writeFresh(const std::wstring& p, const Secret& bytes) {
     auto chain = ancestors(p); require(!chain.empty()); inspect(chain.back().value, true, true);
@@ -228,6 +253,8 @@ void replacePrivate(const std::wstring& p, const Secret& bytes) {
 }
 #include "owner-lease.inc"
 #include "owned-process.inc"
+#include "storage-session.inc"
+#include "unix-server.inc"
 }
 
 int wmain(int argc, wchar_t** argv) {
@@ -236,9 +263,11 @@ int wmain(int argc, wchar_t** argv) {
         std::wstring op(argv[1]);
         if (op == L"lease") { lease(); return 0; }
         if (op == L"managed") { inputMaximum = 256 * 1024; managedProcess(); return 0; }
+        if (op == L"storage") { storageSession(); return 0; }
+        if (op == L"unix-server") { unixServer(); return 0; }
         auto p = checkedPath(wide(field(16384)));
         if (op == L"read-private" || op == L"read-public") { auto bytes = readProtected(p, op == L"read-private", number()); output(bytes.data.data(), bytes.data.size()); }
-        else if (op == L"mkdir") createDirectory(p);
+        else if (op == L"mkdir" || op == L"mkdir-inherited") createDirectory(p, op == L"mkdir-inherited");
         else if (op == L"inspect-private-directory" || op == L"inspect-private" || op == L"inspect-public") {
             bool dir = op == L"inspect-private-directory"; auto chain = ancestors(p);
             auto h = openObject(p, dir, READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE);

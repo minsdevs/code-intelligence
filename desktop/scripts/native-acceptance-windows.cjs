@@ -18,15 +18,15 @@ function tapCounts(output) {
 
 function tapDiagnostics(output) {
   // Never export TAP names, assertion values/messages, paths, or raw stacks.
-  // Ordinals and source line numbers locate failures in the checked-in test file.
+  // Fixed test basenames and numeric locations locate failures without disclosing paths.
   const results = [];
   const entries = [...output.matchAll(/^(not )?ok (\d+) - [^\r\n]*(?:\r?\n|$)/gm)];
   for (let index = 0; index < entries.length && index < 128; index++) {
     const entry = entries[index];
     const detail = output.slice(entry.index + entry[0].length, entries[index + 1]?.index ?? output.length);
-    const lines = [...detail.matchAll(/windows-native-boundary\.test\.cjs:(\d{1,6}):(\d{1,6})/g)];
+    const lines = [...detail.matchAll(/(windows-native-boundary|windows-unix-server)\.test\.cjs:(\d{1,6}):(\d{1,6})/g)];
     results.push({ ordinal: Number(entry[2]), status: entry[1] ? 'FAIL' : 'PASS',
-      sourceLocations: lines.slice(0, 8).map(match => ({ line: Number(match[1]), column: Number(match[2]) })) });
+      sourceLocations: lines.slice(0, 8).map(match => ({ file: `${match[1]}.test.cjs`, line: Number(match[2]), column: Number(match[3]) })) });
   }
   return results;
 }
@@ -60,11 +60,16 @@ function buildNative(cmake, native, build, owned, artifacts, env) {
     }
   } finally { fs.closeSync(fd); }
 }
+function requireStandardUserToken(token) {
+  assert.deepEqual(token, { elevated: false, serviceAccount: false, freshLocalUser: true,
+    exactSid: true, administratorGroup: false, profileLoaded: true, currentUserDpapi: true });
+}
+
 async function runWindows({ source, owned, artifacts, report, run, env }) {
   assert.equal(process.platform, 'win32'); assert.equal(process.arch, 'x64');
   // The launcher attests its actual WindowsPrincipal token before this process is created.
   const token = JSON.parse(fs.readFileSync(path.join(artifacts, 'token.json'), 'utf8'));
-  assert.deepEqual(token, { elevated: false, serviceAccount: false, freshLocalUser: true });
+  requireStandardUserToken(token);
   const build = path.join(owned, 'native-build');
   const native = path.join(source, 'desktop', 'native', 'windows');
   assert.ok(path.isAbsolute(env.NATIVE_ACCEPTANCE_CMAKE || ''));
@@ -106,4 +111,4 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
   report.checks.push('real-standard-user-electron-DPAPI-process-restart');
   report.nativeBoundaryStatus = 'PASS'; report.productAcceptance = 'BLOCKED';
 }
-module.exports = { runWindows, tapCounts, tapDiagnostics, requireNativePass };
+module.exports = { runWindows, tapCounts, tapDiagnostics, requireNativePass, requireStandardUserToken };
