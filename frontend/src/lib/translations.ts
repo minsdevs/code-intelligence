@@ -23,7 +23,7 @@ export const en: Record<string, string> = {
   'sidebar.projects': 'Projects',
   'sidebar.projectsLoading': 'Loading projects…',
   'sidebar.areas': 'Areas',
-  'sidebar.noProject': 'No connected projects. Import a GitHub repository from the Import Wizard.',
+  'sidebar.noProject': 'No projects yet. Import a local folder or GitHub repository.',
   'sidebar.areasHint': 'Analysis areas appear here after importing a repository.',
   'sidebar.areasLoading': 'Loading areas…',
   'sidebar.areasNotReady': 'Areas appear here once analysis finishes.',
@@ -57,7 +57,7 @@ export const en: Record<string, string> = {
   'projects.analyzedAt': 'Analyzed',
   'projects.areas': 'Areas',
   'projects.emptyTitle': 'No connected projects yet',
-  'projects.emptyDesc': 'Import a GitHub repository from the Import Wizard to get started.',
+  'projects.emptyDesc': 'Import a local folder or GitHub repository to get started.',
   'projects.import': 'Import repository',
 
   // ── workspace ───────────────────────────────────────────────────────────
@@ -496,7 +496,7 @@ export const ko: Record<string, string> = {
   'sidebar.projects': '프로젝트',
   'sidebar.projectsLoading': '프로젝트를 불러오는 중…',
   'sidebar.areas': '영역',
-  'sidebar.noProject': '연결된 프로젝트가 없습니다. Import Wizard에서 GitHub 저장소를 가져올 수 있습니다.',
+  'sidebar.noProject': '프로젝트가 없습니다. 로컬 폴더나 GitHub 저장소를 가져오세요.',
   'sidebar.areasHint': 'Analysis Areas는 저장소를 import한 뒤 이곳에 표시됩니다.',
   'sidebar.areasLoading': '영역을 불러오는 중…',
   'sidebar.areasNotReady': '분석이 끝나면 영역이 여기에 표시됩니다.',
@@ -529,7 +529,7 @@ export const ko: Record<string, string> = {
   'projects.analyzedAt': '분석 시각',
   'projects.areas': '영역',
   'projects.emptyTitle': '아직 연결된 프로젝트가 없습니다',
-  'projects.emptyDesc': 'Import Wizard에서 GitHub 저장소를 가져오면 시작할 수 있습니다.',
+  'projects.emptyDesc': '로컬 폴더나 GitHub 저장소를 가져오면 시작할 수 있습니다.',
   'projects.import': 'Import repository',
 
   'workspace.checking': '세션을 확인하는 중…',

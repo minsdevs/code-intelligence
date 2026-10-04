@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { getMe } from '../../api/auth'
 import { useT } from '../../lib/i18n'
 import type { MeResponse } from '../../api/types'
@@ -18,6 +19,7 @@ export default function ImportWizardPage() {
 function ImportWizard({ initialPath }: { initialPath: string | null }) {
   const t = useT()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [step, setStep] = useState<WizardStepId>('connect')
   const [me, setMe] = useState<MeResponse | null>(null)
   const [bootstrapping, setBootstrapping] = useState(true)
@@ -82,8 +84,11 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
   }
 
   const handleProgressDone = useCallback(() => {
-    if (projectId != null) navigate(`/projects/${projectId}/overview`)
-  }, [navigate, projectId])
+    if (projectId != null) {
+      void queryClient.invalidateQueries({ queryKey: ['projects'] })
+      navigate(`/projects/${projectId}/overview`)
+    }
+  }, [navigate, projectId, queryClient])
 
   // If a local path is provided and the user is authenticated, show the local import confirmation
   const showLocalConfirm = localPath && me?.authenticated && step !== 'progress'

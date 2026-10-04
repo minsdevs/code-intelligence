@@ -50,7 +50,7 @@ export const useUiStore = create<UiState>()(
     (set) => ({
       sidebarCollapsed: false,
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
-      aiPanelOpen: true,
+      aiPanelOpen: false,
       aiPanelWidth: AI_PANEL_DEFAULT_WIDTH,
       selectedAreas: [],
       focusedFile: null,

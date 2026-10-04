@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getMe } from '../../api/auth'
 import {
@@ -59,7 +60,8 @@ function renderWizard() {
     ],
     { initialEntries: ['/import?path=%2Ffixture%2Ffirst'] },
   )
-  render(<RouterProvider router={router} />)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
   return router
 }
 
