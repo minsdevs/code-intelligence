@@ -37,6 +37,7 @@ public class GithubNativeOAuthService {
     private final RestClient restClient;
     private final Clock clock;
     private final Map<UUID, Attempt> attempts = new ConcurrentHashMap<>();
+    private final Map<Long, ConnectionGeneration> connections = new ConcurrentHashMap<>();
 
     @Autowired
     public GithubNativeOAuthService(
@@ -65,6 +66,11 @@ public class GithubNativeOAuthService {
             throw new GithubNativeOAuthUnavailableException();
         }
         cleanupExpired();
+        ConnectionGeneration connection = connection(userId);
+        long generation;
+        synchronized (connection) {
+            generation = ++connection.value;
+        }
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("client_id", properties.clientId());
         form.add("scope", properties.scope());
@@ -105,9 +111,14 @@ public class GithubNativeOAuthService {
                     "GitHub device authorization expired before it could start.");
         }
         UUID id = UUID.randomUUID();
-        Attempt attempt =
-                new Attempt(id, userId, response.deviceCode(), expiresAt, response.interval(), clock.instant());
-        attempts.put(id, attempt);
+        Attempt attempt = new Attempt(
+                id, userId, generation, response.deviceCode(), expiresAt, response.interval(), clock.instant());
+        synchronized (connection) {
+            if (connection.value != generation) {
+                throw new GithubNativeOAuthUnavailableException("GitHub connection changed. Start a new login.");
+            }
+            attempts.put(id, attempt);
+        }
         return new StartResult(id, VERIFICATION_URI, response.userCode(), expiresAt, attempt.intervalSeconds);
     }
 
@@ -145,9 +156,16 @@ public class GithubNativeOAuthService {
                 expireIfNeeded(attempt);
                 if (attempt.status == Status.WAITING) {
                     if (authorized) {
-                        accountService.linkGithub(
-                                attempt.userId, profile, CredentialKind.OAUTH, response.accessToken());
-                        finish(attempt, Status.CONNECTED, "GitHub account connected.");
+                        // Disconnect and credential publication share a short per-user lock;
+                        // provider I/O never holds it. Older attempts cannot reconnect the account.
+                        synchronized (connection(attempt.userId)) {
+                            expireIfNeeded(attempt);
+                            if (attempt.status == Status.WAITING) {
+                                accountService.linkGithub(
+                                        attempt.userId, profile, CredentialKind.OAUTH, response.accessToken());
+                                finish(attempt, Status.CONNECTED, "GitHub account connected.");
+                            }
+                        }
                     } else {
                         applyProviderError(attempt, response);
                     }
@@ -200,6 +218,18 @@ public class GithubNativeOAuthService {
             }
             return statusResult(attempt);
         }
+    }
+
+    public void disconnect(long userId) {
+        ConnectionGeneration connection = connection(userId);
+        synchronized (connection) {
+            connection.value++;
+            accountService.disconnectGithub(userId);
+        }
+    }
+
+    private ConnectionGeneration connection(long userId) {
+        return connections.computeIfAbsent(userId, ignored -> new ConnectionGeneration());
     }
 
     public boolean configured() {
@@ -257,6 +287,9 @@ public class GithubNativeOAuthService {
     }
 
     private void expireIfNeeded(Attempt attempt) {
+        if (attempt.status == Status.WAITING && connection(attempt.userId).value != attempt.generation) {
+            finish(attempt, Status.CANCELLED, "GitHub connection changed. Start a new login.");
+        }
         if (attempt.status == Status.WAITING && !clock.instant().isBefore(attempt.expiresAt)) {
             finish(attempt, Status.EXPIRED, "GitHub login expired. Start a new login.");
         }
@@ -318,9 +351,14 @@ public class GithubNativeOAuthService {
             String error,
             Integer interval) {}
 
+    private static final class ConnectionGeneration {
+        private volatile long value;
+    }
+
     private static final class Attempt {
         private final UUID id;
         private final long userId;
+        private final long generation;
         private String deviceCode;
         private final Instant expiresAt;
         private Status status = Status.WAITING;
@@ -329,9 +367,17 @@ public class GithubNativeOAuthService {
         private Instant nextPollAt;
         private boolean polling;
 
-        private Attempt(UUID id, long userId, String deviceCode, Instant expiresAt, int intervalSeconds, Instant now) {
+        private Attempt(
+                UUID id,
+                long userId,
+                long generation,
+                String deviceCode,
+                Instant expiresAt,
+                int intervalSeconds,
+                Instant now) {
             this.id = id;
             this.userId = userId;
+            this.generation = generation;
             this.deviceCode = deviceCode;
             this.expiresAt = expiresAt;
             this.intervalSeconds = intervalSeconds;

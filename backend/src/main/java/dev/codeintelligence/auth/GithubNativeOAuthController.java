@@ -53,7 +53,7 @@ public class GithubNativeOAuthController {
     /** Removes local credentials only. GitHub-side authorization is a separate user action. */
     @DeleteMapping("/connection")
     public ConnectionResponse disconnect(@AuthenticationPrincipal AuthenticatedUser user) {
-        accounts.disconnectGithub(user.userId());
+        oauth.disconnect(user.userId());
         return connection(user);
     }
 

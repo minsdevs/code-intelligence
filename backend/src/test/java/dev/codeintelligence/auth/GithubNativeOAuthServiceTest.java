@@ -186,6 +186,75 @@ class GithubNativeOAuthServiceTest {
     }
 
     @Test
+    void disconnectDuringProfileLookupPreventsLateCredentialPublication() throws Exception {
+        expectDevice(DEVICE_JSON);
+        expectToken().andRespond(withSuccess(TOKEN_JSON, MediaType.APPLICATION_JSON));
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        when(github.getUser(TOKEN)).thenAnswer(invocation -> {
+            entered.countDown();
+            awaitRelease(release);
+            return PROFILE;
+        });
+        var start = service.start(1L);
+        clock.advance(Duration.ofSeconds(5));
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            var pending = threads.submit(() -> service.poll(1L, start.attemptId()));
+            try {
+                assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+                threads.submit(() -> service.disconnect(1L)).get(5, TimeUnit.SECONDS);
+                release.countDown();
+                assertThat(pending.get(5, TimeUnit.SECONDS).status())
+                        .isEqualTo(GithubNativeOAuthService.Status.CANCELLED);
+            } finally {
+                release.countDown();
+            }
+        }
+        verify(accounts).disconnectGithub(1L);
+        org.mockito.Mockito.verifyNoMoreInteractions(accounts);
+        server.verify();
+    }
+
+    @Test
+    void disconnectInvalidatesADeviceRequestThatHasNotReturnedYet() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        server.expect(requestTo(DEVICE_URL)).andRespond(request -> {
+            entered.countDown();
+            awaitRelease(release);
+            return withSuccess(DEVICE_JSON, MediaType.APPLICATION_JSON).createResponse(request);
+        });
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            var pending = threads.submit(() -> service.start(1L));
+            try {
+                assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+                threads.submit(() -> service.disconnect(1L)).get(5, TimeUnit.SECONDS);
+                release.countDown();
+                assertThatThrownBy(() -> pending.get(5, TimeUnit.SECONDS))
+                        .hasCauseInstanceOf(GithubNativeOAuthUnavailableException.class);
+            } finally {
+                release.countDown();
+            }
+        }
+        verify(accounts).disconnectGithub(1L);
+        org.mockito.Mockito.verifyNoMoreInteractions(accounts);
+        server.verify();
+    }
+
+    @Test
+    void aNewLoginSupersedesOnlyTheSameUsersPreviousAttempt() {
+        expectDevice(DEVICE_JSON);
+        expectDevice(DEVICE_JSON);
+        expectDevice(DEVICE_JSON);
+        var old = service.start(1L);
+        var otherUser = service.start(2L);
+        var current = service.start(1L);
+        assertThat(service.poll(1L, old.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.CANCELLED);
+        assertThat(service.poll(2L, otherUser.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.WAITING);
+        assertThat(service.poll(1L, current.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.WAITING);
+        verifyNoInteractions(github, accounts);
+        server.verify();
+    }
+
+    @Test
     void concurrentPollsCannotExchangeTheSameDeviceCodeTwice() throws Exception {
         expectDevice(DEVICE_JSON);
         CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
