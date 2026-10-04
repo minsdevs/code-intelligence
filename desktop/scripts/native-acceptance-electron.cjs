@@ -531,7 +531,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.ok(entrypoints.items.length > 0, 'Representative repository must have confirmed entrypoint rows');
     await perform(() => page.getByRole('button', { name: '요청 · 화면 진입점', exact: true }).click());
     await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })
-      .getByText(entrypoints.items[0].name, { exact: true }).first()).toBeVisible());
+      .locator('tbody tr').filter({ hasText: entrypoints.items[0].name }).first()).toBeVisible());
     report.representativeRepository.entrypointCount = entrypoints.total;
     await perform(() => page.getByRole('button', { name: '파일 · 분석 상태', exact: true }).click());
     const representativePath = 'frontend/src/features/import/ImportWizardPage.tsx';
