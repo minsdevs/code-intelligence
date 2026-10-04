@@ -231,6 +231,10 @@ PRs and explicit manual dispatch. It exercises normal Electron startup rather th
 bypassing isolated-launch guards. Windows requires a fresh standard-user token, verified
 loaded profile and CurrentUser DPAPI before native NTFS/AF_UNIX/backup/TLS checks,
 Garnet Spring Session/Lua/pub-sub compatibility and the complete unsigned product flow.
+Its build selects an installed x64 MSVC/Windows SDK after a compile/link/run probe
+under that same token, then pins the installation and versions for the helper and
+pgvector. CMake uses explicit NMake/compiler/SDK paths; the runner's PATH and developer
+environment are not inherited.
 Native checks may not pass by skipping. Artifacts separate unsigned product results from
 signed release acceptance; raw runtime logs and credential stores are never exported.
 The macOS runner builds PostgreSQL 16, OpenSSL, Redis TLS and pgvector from
@@ -239,6 +243,9 @@ instead of repackaging newer-OS bottles or relaxing the native publication polic
 Only Redis's shipped `redis-server` target is built; upstream development module tests
 are not part of the runtime closure. This avoids their raw-linker/compiler-flag mismatch
 without weakening the deployment target, TLS or relocation checks.
+Mach-O staging follows actual dynamic-library load commands, not LC_ID_DYLIB install
+identities. A real dependency edge to different-content bytes still fails the digest
+collision guard, and publication still requires a closed relocated dependency graph.
 Source URLs/hashes and relocated native closure hashes are retained in `provisioning.json`.
 Staging failures export bounded compiler/policy IDs and validated public source locations;
 raw build/runtime logs and credentials remain private. Source copying excludes build
