@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { createBackupPayload, readBackupPayload, inspectBackupPayload, BackupPayloadError, LIMITS } = require('../src/backup-payload.cjs');
-const { createBackupExportPolicy, REVIEWED_SCHEMA } = require('../src/backup-export-policy.cjs');
+const { createBackupExportPolicy, createBackupRestorePolicy, REVIEWED_SCHEMA, REVIEWED_V26_SCHEMA } = require('../src/backup-export-policy.cjs');
 
 // Independent framing/digest oracles. No SQL, JGit process, provider or OS key storage is used.
 const POLICY = createBackupExportPolicy(REVIEWED_SCHEMA);
@@ -523,4 +523,38 @@ test('a delayed beforeWrite cannot bypass file identity checks or write to a rep
   await rejects(writer.writeRow(user()), 'UNSAFE_PATH'); await writer.close();
   assert.deepEqual(await fs.readFile(path.join(f.root, 'original')), before);
   assert.equal(await fs.readFile(f.file, 'utf8'), 'replacement');
+});
+
+function legacyRecords(rows) {
+  const database = summary(rows); database.schema = clone(REVIEWED_V26_SCHEMA);
+  delete database.tableCounts.snapshot_inventory_measurements; delete database.tableSha256.snapshot_inventory_measurements;
+  return [header(), ...rows.map(row => ({ kind: 'ROW', row })), { kind: 'DATABASE', summary: database }];
+}
+test('reader accepts only exact V26 rows/schema while writer remains V27-only', async t => {
+  const f = await fixture(t);
+  const row = createBackupRestorePolicy(REVIEWED_V26_SCHEMA).projectRow('files', {
+    id: '5', snapshot_id: '3', path: 'main.ts', language: 'typescript', size: '5', line_count: 1, content_hash: 'a'.repeat(64),
+  });
+  const records = footer(legacyRecords([user(), row])); await f.raw(records);
+  assert.deepEqual(await f.read(), records); // original hashes and footer, no archive mutation
+  const writeFixture = await fixture(t); const writer = await writeFixture.create();
+  await rejects(writer.writeRow(row), 'ROW');
+  const summaryFixture = await fixture(t); const currentWriter = await summaryFixture.create();
+  await currentWriter.writeRow(user());
+  await rejects(currentWriter.writeDatabase(legacyRecords([user()]).at(-1).summary), 'SUMMARY');
+});
+test('legacy reader rejects forged migration, partial outcome columns, hybrid table, row digest and footer', async t => {
+  const row = createBackupRestorePolicy(REVIEWED_V26_SCHEMA).projectRow('files', {
+    id: '5', snapshot_id: '3', path: 'main.ts', language: null, size: '5', line_count: null, content_hash: 'a'.repeat(64),
+  });
+  const cases = [records => { records.at(-1).summary.schema.migrations[25].sha256 = 'b'.repeat(64); },
+    records => { records.at(-1).summary.schema.migrations.pop(); },
+    records => { records.at(-1).summary.schema.tables.push(clone(REVIEWED_SCHEMA.tables.find(t => t.name === 'snapshot_inventory_measurements'))); },
+    records => { records[2].row.values.analysis_reason = null; },
+    records => { records[2].row.values.analysis_status = 'SUCCESS'; },
+    records => { records.at(-1).summary.tableSha256.files = 'b'.repeat(64); }];
+  for (const mutate of cases) { const f = await fixture(t); const records = clone(legacyRecords([user(), row])); mutate(records);
+    await f.raw(footer(records)); await rejects(f.read()); }
+  const f = await fixture(t); const records = footer(legacyRecords([user(), row])); records.at(-1).recordsSha256 = 'b'.repeat(64);
+  await f.raw(records); await rejects(f.read(), 'INTEGRITY');
 });

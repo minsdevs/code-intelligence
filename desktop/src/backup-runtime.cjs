@@ -10,6 +10,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { encryptFile, decryptFile } = require('./backup-archive.cjs');
 const { createBackupPayload, readBackupPayload } = require('./backup-payload.cjs');
+const { upgradeV26FileRow } = require('./backup-export-policy.cjs');
 const { createBackupSourceInventory } = require('./backup-source-selection.cjs');
 const { createBackupCostCollector, buildMaintenanceMergeInputs, maintenanceProjectionDigest,
   createMaintenanceVerifier } = require('./backup-cost-state.cjs');
@@ -296,8 +297,14 @@ async function copySelectedFile(selected, destination, created) {
   async function inspectPayload(root) {
     const inventory = createBackupSourceInventory(), costs = createBackupCostCollector(installationId);
     const git = [], vault = []; let summary;
+    const upgradedFiles = crypto.createHash('sha256');
     for await (const record of readBackupPayload(readOptions(root))) {
-      if (record.kind === 'ROW') { inventory.add(record.row); costs.add(record.row); }
+      if (record.kind === 'ROW') {
+        const row = record.row.table === 'files' && !Object.hasOwn(record.row.values, 'analysis_status')
+          ? upgradeV26FileRow(record.row.values) : record.row;
+        inventory.add(row); costs.add(row);
+        if (row.table === 'files') upgradedFiles.update(`${canonical(row)}\n`);
+      }
       else if (record.kind === 'DATABASE') summary = record.summary;
       else if (record.kind === 'SOURCE_BEGIN') git.push({ projectId: record.projectId, selection: record.selection,
         selectionSha256: record.receipt.selectionSha256 });
@@ -308,7 +315,9 @@ async function copySelectedFile(selected, destination, created) {
     if (!same(sources.git, git) || !same(sources.vault, vault) || !summary) fail('INPUT');
     const file = path.join(root, 'payload.bin');
     const payloadSha256 = await fileHash(file);
-    return { summary, sources, costs: costs.finish(), payloadSha256,
+    const restoredHashes = { ...summary.tableSha256 };
+    if (summary.schema.migrations.length === 26) restoredHashes.files = upgradedFiles.digest('hex');
+    return { summary, restoredHashes, sources, costs: costs.finish(), payloadSha256,
       payloadIdentity: identity(await fs.lstat(file, { bigint: true })) };
   }
   async function exportCurrent(root, lease) {
@@ -605,7 +614,10 @@ async function copySelectedFile(selected, destination, created) {
           || !same(observed.value.sources, expected.sources)) fail();
       for (const table of Object.keys(expected.summary.tableCounts)) if (!derived.has(table)
           && (observed.value.summary.tableCounts[table] !== expected.summary.tableCounts[table]
-          || observed.value.summary.tableSha256[table] !== expected.summary.tableSha256[table])) fail();
+          || observed.value.summary.tableSha256[table] !== (expected.restoredHashes || expected.summary.tableSha256)[table])) fail();
+      if (expected.summary.schema.migrations.length === 26
+          && (observed.value.summary.tableCounts.snapshot_inventory_measurements !== '0'
+          || observed.value.summary.tableSha256.snapshot_inventory_measurements !== crypto.createHash('sha256').digest('hex'))) fail();
       await ports.prepareResume({ transactionId, restored: true, recovery: true });
       if (active.phase !== 'COMPLETED') await records.append({ transactionId, phase: 'HEALTH_VERIFIED', data: { checked: true } });
       const finalize = async () => {

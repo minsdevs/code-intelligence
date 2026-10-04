@@ -6,10 +6,11 @@ const fs = require('node:fs/promises');
 const { constants } = require('node:fs');
 const crypto = require('node:crypto');
 const path = require('node:path');
-const { createBackupExportPolicy, REVIEWED_SCHEMA } = require('./backup-export-policy.cjs');
+const { createBackupExportPolicy, createBackupRestorePolicy, REVIEWED_SCHEMA, REVIEWED_V26_SCHEMA } = require('./backup-export-policy.cjs');
 const { validateBackupSummary } = require('./backup-postgres.cjs');
 const { sourceSelectionSha256 } = require('./backup-source-selection.cjs');
 const POLICY = createBackupExportPolicy(REVIEWED_SCHEMA);
+const V26_POLICY = createBackupRestorePolicy(REVIEWED_V26_SCHEMA);
 const native = require('./backup-windows-io.cjs');
 const LIMITS = Object.freeze({ frameBytes: 16 * 1024 * 1024, payloadBytes: 10 * 1024 * 1024 * 1024,
   records: 1_000_000, depth: 64, metadataBytes: 64 * 1024 * 1024 });
@@ -78,9 +79,9 @@ async function syncRoot(root, expected) {
   try { if (!same(await fd.stat({ bigint: true }), expected)) fail('UNSAFE_PATH'); await fd.sync(); }
   finally { await fd.close(); }
 }
-function validateRow(row) {
+function validateRow(row, policy = POLICY) {
   let expected;
-  try { expected = POLICY.projectRow(row?.table, row?.values); } catch { fail('ROW'); }
+  try { expected = policy.projectRow(row?.table, row?.values); } catch { fail('ROW'); }
   if (canonical(expected) !== canonical(row)) fail('ROW'); scan(row.values); return row;
 }
 function validateReceipt(value, kind, projectId) {
@@ -123,8 +124,9 @@ function sourceRecord(value) {
     finally { bytes.fill(0); }
   } else fail('SOURCE');
 }
-function stateMachine(installationId, runningBuild) {
+function stateMachine(installationId, runningBuild, allowV26 = false) {
   const identityHash = identity(installationId); decimal(runningBuild);
+  let fileVersion;
   let header, summary, tableIndex = -1, source = null, records = 0, rows = 0, sources = 0, ended = false, metadataBytes = 0;
   const counts = Object.fromEntries(TABLES.map(name => [name, 0]));
   const hashes = Object.fromEntries(TABLES.map(name => [name, crypto.createHash('sha256')]));
@@ -138,14 +140,24 @@ function stateMachine(installationId, runningBuild) {
             || record.installationSha256 !== identityHash || BigInt(decimal(record.minimumVersion)) > BigInt(runningBuild)) fail('HEADER');
         header = record;
       } else if (record.kind === 'ROW') {
-        if (summary) fail('ORDER'); exact(record, ['kind', 'row']); validateRow(record.row);
+        if (summary) fail('ORDER'); exact(record, ['kind', 'row']);
+        let rowPolicy = POLICY;
+        if (record.row?.table === 'files') {
+          const version = allowV26 && !Object.hasOwn(record.row.values || {}, 'analysis_status') ? 26 : 27;
+          if (fileVersion && fileVersion !== version) fail('ROW'); fileVersion = version;
+          if (version === 26) rowPolicy = V26_POLICY;
+        }
+        validateRow(record.row, rowPolicy);
         const index = TABLES.indexOf(record.row.table); if (index < tableIndex) fail('ORDER'); tableIndex = index;
         counts[record.row.table]++; rows++; hashes[record.row.table].update(canonical(record.row)).update('\n');
       } else if (record.kind === 'DATABASE') {
         if (summary) fail('ORDER'); exact(record, ['kind', 'summary']); const s = record.summary;
-        try { validateBackupSummary(s); } catch { fail('SUMMARY'); }
+        try { validateBackupSummary(s, { allowV26 }); } catch { fail('SUMMARY'); }
+        const version = s.schema.migrations.length;
+        if (fileVersion && fileVersion !== version) fail('SUMMARY');
+        if (version === 26 && counts.snapshot_inventory_measurements !== 0) fail('SUMMARY');
         if (s.rowCount !== String(rows)) fail('SUMMARY');
-        for (const name of TABLES) if (s.tableCounts?.[name] !== String(counts[name])
+        for (const { name } of s.schema.tables) if (s.tableCounts?.[name] !== String(counts[name])
             || s.tableSha256?.[name] !== hashes[name].digest('hex')) fail('SUMMARY');
         hash(s.catalogSha256); project(s.ownerUserId); summary = s;
       } else if (record.kind === 'FOOTER') {
@@ -248,7 +260,7 @@ async function* readBackupPayload({ root, installationId, runningBuild, windowsB
     if (BigInt(info.size) > BigInt(LIMITS.payloadBytes)) fail('LIMIT');
     fd = storage ? await native.readHandle(storage, 'payload.bin', LIMITS.payloadBytes, info) : await fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     if (!(storage ? native.sameState(info, await fd.stat()) : unchanged(info, await fd.stat({ bigint: true })))) fail('CHANGED');
-    const machine = stateMachine(installationId, runningBuild); let offset = 0;
+    const machine = stateMachine(installationId, runningBuild, true); let offset = 0;
     async function read(length) {
       if (offset + length > Number(info.size)) fail('TRUNCATED'); const bytes = Buffer.alloc(length);
       for (let at = 0; at < length;) { const result = await fd.read(bytes, at, length - at, offset + at);
