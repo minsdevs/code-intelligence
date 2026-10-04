@@ -27,11 +27,10 @@ function tapDiagnostics(output) {
     'ERR_INVALID_ARG_TYPE', 'ERR_OUT_OF_RANGE',
     ...['ARGUMENT', 'UNSUPPORTED', 'UNSAFE_PATH', 'MISSING', 'EXISTS', 'LIMIT', 'BUSY', 'FORMAT', 'INTEGRITY', 'KEY_UNAVAILABLE', 'SOURCE_CHANGED', 'IO'].map(code => 'BACKUP_ARCHIVE_' + code),
     ...['INVALID', 'UNSAFE', 'CHANGED', 'STATE', 'LIMIT', 'BUSY', 'CLOSED', 'IO', 'TRANSITION'].map(code => 'BACKUP_SOURCE_SWAP_' + code),
-    ...['OPEN', 'CONNECT', 'WRITE', 'FIN', 'PREFIX', 'LENGTH', 'BODY', 'EOF', 'OUTPUT', 'PROCESS'].map(phase => 'WINDOWS_JAVA_PROBE_' + phase + '_FAILED'),
+    ...['PATH', 'OPEN', 'CONNECT', 'WRITE', 'FIN', 'PREFIX', 'LENGTH', 'BODY', 'EOF', 'OUTPUT', 'PROCESS'].map(phase => 'WINDOWS_JAVA_PROBE_' + phase + '_FAILED'),
     ...['WRITE', 'PROCESS'].map(phase => 'WINDOWS_ACL_TAMPER_' + phase + '_FAILED'),
     ...['VOLUME', 'FILE_ID', 'OWNER', 'SIZE', 'ALLOCATION_SIZE', 'MODIFIED', 'CHANGED'].map(field => 'WINDOWS_STORAGE_COMMIT_' + field + '_CHANGED'),
-    ...['ACCESS_DENIED', 'REFUSED', 'INVALID_ARGUMENT', 'PATH_NOT_FOUND', 'ADDRESS_UNAVAILABLE', 'TIMED_OUT', 'OTHER'].map(reason => 'WINDOWS_JAVA_PROBE_CONNECT_' + reason + '_FAILED'),
-    ...['OPEN', 'DACL', 'PROCESS'].map(phase => 'WINDOWS_UNIX_PIN_' + phase + '_FAILED')]);
+    ...['ACCESS_DENIED', 'REFUSED', 'INVALID_ARGUMENT', 'INVALID_PATH', 'PATH_NOT_FOUND', 'ADDRESS_UNAVAILABLE', 'TIMED_OUT', 'OTHER'].map(reason => 'WINDOWS_JAVA_PROBE_CONNECT_' + reason + '_FAILED')]);
   const messages = new Map([
     ['Windows protected boundary refused the operation.', 'windows-boundary'],
     ['Windows protected storage refused the operation.', 'windows-storage'],
@@ -45,6 +44,8 @@ function tapDiagnostics(output) {
     const lines = [...detail.matchAll(/((?:windows-native-boundary|windows-unix-server|backup-windows|service-transport-windows)\.test\.cjs|(?:windows-native-boundary|windows-storage|windows-unix-server|backup-windows-io)\.cjs):(\d{1,6}):(\d{1,6})/g)];
     const evidence = { ordinal: Number(entry[2]), status: entry[1] ? 'FAIL' : 'PASS',
       sourceLocations: lines.slice(0, 8).map(match => ({ file: match[1], line: Number(match[2]), column: Number(match[3]) })) };
+    const observations = [...detail.matchAll(/^# NATIVE_JAVA_ARGV_(MATCH|MISMATCH)\r?$/gm)].map(match => 'java-argv-' + match[1].toLowerCase());
+    if (observations.length) evidence.observations = [...new Set(observations)];
     if (entry[1]) {
       const diagnostic = {};
       const field = name => detail.match(new RegExp('^  ' + name + ': [\"\']?([^\r\n\"\']+)[\"\']?\r?$', 'm'))?.[1];
