@@ -118,3 +118,56 @@ test('product staging follows relocated load edges, not original dylib install I
     assert.equal(records.length, 12, 'evidence is bounded before transaction cleanup');
   } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
 });
+
+test('staged JVM bootstrap edges become self-resolving without accepting missing or substituted targets', { skip: !nativeMac }, () => {
+  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-jre-closure-')));
+  try {
+    const staging = path.join(scratch, 'stage'); fs.mkdirSync(staging);
+    const jre = path.join(staging, 'jre'), library = path.join(jre, 'lib');
+    fs.mkdirSync(path.join(library, 'server'), { recursive: true });
+    const run = (command, args) => execFileSync(command, args, {
+      cwd: scratch, encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' },
+    }).trim();
+    const compile = (name, text, args) => {
+      const source = path.join(scratch, name + '.c'); fs.writeFileSync(source, text);
+      run('/usr/bin/xcrun', ['clang', '-arch', 'arm64', '-mmacosx-version-min=13.0',
+        '-Wl,-headerpad_max_install_names', source, ...args]);
+    };
+    const jvm = path.join(library, 'server/libjvm.dylib'), consumer = path.join(library, 'libjava.dylib');
+    compile('jvm', 'int vm_value(void) { return 42; }',
+      ['-dynamiclib', '-Wl,-install_name,@rpath/libjvm.dylib', '-o', jvm]);
+    compile('java', 'extern int vm_value(void); int java_value(void) { return vm_value(); }',
+      ['-dynamiclib', '-Wl,-install_name,@rpath/libjava.dylib', '-Wl,-rpath,@loader_path', jvm, '-o', consumer]);
+    const launcher = path.join(scratch, 'launcher');
+    compile('launcher', '#include <dlfcn.h>\n#include <stdio.h>\nint main(int n, char **v) { if(n != 2) return 1; void *h=dlopen(v[1],RTLD_NOW); if(!h) return 2; int (*f)(void)=dlsym(h,"java_value"); if(!f) return 3; printf("%d",f()); return 0; }', ['-o', launcher]);
+    const source = fs.readFileSync(path.resolve(__dirname, '../scripts/stage-runtime.mjs'), 'utf8');
+    const begin = source.indexOf('function createStageDestinationGuard('), end = source.indexOf('\nfunction commonDirectory(');
+    const product = vm.runInNewContext(source.slice(begin, end) + '\nconst guardStageDestination = createStageDestinationGuard(staging);\n({ closeJreVmReferences });', {
+      fs, path, process, nativePolicy: policy, staging, output: run,
+    });
+    const original = fs.readFileSync(consumer), originalJvm = fs.readFileSync(jvm);
+    assert.throws(() => run(launcher, [consumer]), error => error.status === 2, 'standalone load genuinely lacks VM context');
+    fs.renameSync(jvm, jvm + '.missing');
+    assert.throws(() => product.closeJreVmReferences(jre), /ENOENT/);
+    assert.deepEqual(fs.readFileSync(consumer), original);
+    fs.renameSync(jvm + '.missing', jvm);
+    run('/usr/bin/install_name_tool', ['-id', '@rpath/substitute.dylib', jvm]);
+    assert.throws(() => product.closeJreVmReferences(jre), /JRE_VM_IDENTITY_REQUIRED/);
+    assert.deepEqual(fs.readFileSync(consumer), original);
+    fs.writeFileSync(jvm, originalJvm);
+    fs.renameSync(jvm, jvm + '.target'); fs.symlinkSync(jvm + '.target', jvm);
+    assert.throws(() => product.closeJreVmReferences(jre), /without links/);
+    fs.unlinkSync(jvm); fs.renameSync(jvm + '.target', jvm);
+    assert.equal(product.closeJreVmReferences(jre), 1);
+    const metadata = policy.parseLoadCommands(run('/usr/bin/otool', ['-l', consumer]));
+    assert.ok(metadata.dependencies.includes('@loader_path/server/libjvm.dylib'));
+    assert.equal(metadata.dependencies.includes('@rpath/libjvm.dylib'), false);
+    assert.equal(metadata.installName, '@rpath/libjava.dylib');
+    assert.deepEqual(fs.readFileSync(jvm), originalJvm, 'the VM target is not rewritten');
+    run('/usr/bin/codesign', ['--verify', '--strict', consumer]);
+    assert.equal(run(launcher, [consumer]), '42');
+    assert.equal(product.closeJreVmReferences(jre), 0, 'already normalized images are not re-signed');
+  } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+});
+

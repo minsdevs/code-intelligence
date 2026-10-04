@@ -250,6 +250,11 @@ without weakening the deployment target, TLS or relocation checks.
 Mach-O staging follows actual dynamic-library load commands, not LC_ID_DYLIB install
 identities. A real dependency edge to different-content bytes still fails the digest
 collision guard, and publication still requires a closed relocated dependency graph.
+Temurin21 JNI libraries rely on the already loaded HotSpot VM rather than declaring its
+server directory in every RPATH. Fresh JRE staging rewrites only their verified JVM load
+edges to the contained loader-relative lib/server/libjvm.dylib and ad-hoc signs changed
+images; it does not relax per-object closure or modify the source JDK. This is relocation,
+not Developer ID signing or release acceptance.
 Source URLs/hashes and relocated native closure hashes are retained in `provisioning.json`.
 Staging failures export bounded compiler/policy IDs and validated public source locations.
 Before an unsuccessful transaction removes its incoming stage, verified Mach-O closure

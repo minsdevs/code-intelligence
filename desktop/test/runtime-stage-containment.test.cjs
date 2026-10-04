@@ -167,7 +167,12 @@ async function fullStage(t, { pkgOutside = false, elf = false, wrongJava = false
       return Buffer.alloc(0);
     }
     if (command === pgConfig) return ({ '--bindir': pgBin, '--libdir': pgLib, '--pkglibdir': pgPkgLib, '--sharedir': pgShare })[args[0]] + '\n';
-    if (command === 'otool' && args[0] === '-l') return 'Load command 0\ncmd LC_BUILD_VERSION\nplatform 1\nminos 13.0\nsdk 26.4\nLoad command 1\ncmd LC_LOAD_DYLIB\nname /usr/lib/libSystem.B.dylib (offset 24)\n';
+    if (command === '/usr/bin/file' && args[0] === '-b') return 'Mach-O 64-bit dynamically linked shared library arm64\n';
+    if (['otool', '/usr/bin/otool'].includes(command) && args.includes('-l')) {
+      const identity = path.basename(args.at(-1)) === 'libjvm.dylib'
+        ? 'Load command 2\ncmd LC_ID_DYLIB\nname @rpath/libjvm.dylib (offset 24)\n' : '';
+      return 'Load command 0\ncmd LC_BUILD_VERSION\nplatform 1\nminos 13.0\nsdk 26.4\nLoad command 1\ncmd LC_LOAD_DYLIB\nname /usr/lib/libSystem.B.dylib (offset 24)\n' + identity;
+    }
     throw new Error('Unexpected synthetic command');
   }
   const nativePolicy = require('../scripts/native-runtime-policy.cjs');

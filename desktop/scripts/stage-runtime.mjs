@@ -133,6 +133,38 @@ function filesUnder(directory) {
   return result;
 }
 
+function closeJreVmReferences(jre) {
+  guardStageDestination(jre);
+  const library = guardStageDestination(path.join(jre, 'lib'));
+  const jvm = guardStageDestination(path.join(library, 'server', 'libjvm.dylib'));
+  const reference = '@rpath/libjvm.dylib';
+  const inspect = file => nativePolicy.parseLoadCommands(output('/usr/bin/otool', ['-arch', 'arm64', '-l', file]));
+  // HotSpot is explicitly dlopened by the Java launcher. Temurin JNI libraries
+  // rely on its loaded-image/runpath context rather than declaring server/ as
+  // their own RPATH. Make that reviewed bootstrap edge self-resolving in the
+  // fresh image instead of relaxing the publication gate for arbitrary plugins.
+  if (!fs.lstatSync(jvm).isFile()
+      || !/Mach-O 64-bit dynamically linked shared library arm64\b/.test(output('/usr/bin/file', ['-b', jvm]))
+      || inspect(jvm).installName !== reference) {
+    throw new Error('JRE_VM_IDENTITY_REQUIRED');
+  }
+  const plans = [];
+  for (const file of filesUnder(library)) {
+    if (!file.endsWith('.dylib')) continue;
+    guardStageDestination(file);
+    const metadata = inspect(file);
+    if (!metadata.dependencies.includes(reference)) continue;
+    const replacement = '@loader_path/' + path.relative(path.dirname(file), jvm).split(path.sep).join('/');
+    plans.push({ file, replacement });
+  }
+  for (const { file, replacement } of plans) {
+    guardStageDestination(jvm); guardStageDestination(file);
+    output('/usr/bin/install_name_tool', ['-change', reference, replacement, file]);
+    output('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', file]);
+  }
+  return plans.length;
+}
+
 function commonDirectory(paths) {
   if (!paths.length || paths.some(value => typeof value !== 'string' || value.includes('\0') || !path.isAbsolute(value)
       || path.normalize(value) !== value)) throw new Error('PostgreSQL layout requires absolute normalized build directories.');
@@ -234,6 +266,7 @@ exec(jlink, [
   '--output', guardStageDestination(path.join(staging, 'jre'))
 ]);
 stageTransaction.materializeJreLegal();
+closeJreVmReferences(path.join(staging, 'jre'));
 
 const pgConfig = process.env.PG_CONFIG || output('which', ['pg_config']);
 const pgBin = output(pgConfig, ['--bindir']);

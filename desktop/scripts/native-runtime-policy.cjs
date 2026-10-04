@@ -49,7 +49,7 @@ function parseLoadCommands(value) {
   if (typeof value !== 'string' || Buffer.byteLength(value) > LIMITS.outputBytes || value.includes('\0')) invalid('INVALID_LOAD_COMMANDS');
   const blocks = value.split(/^Load command [0-9]+\s*$/m).slice(1);
   if (!blocks.length || blocks.length > 4096) invalid('INVALID_LOAD_COMMANDS');
-  let minimum = null, platform = null, deploymentCommands = 0;
+  let minimum = null, platform = null, deploymentCommands = 0, installName = null;
   const dependencies = [], rpaths = [];
   const field = (block, expression) => {
     const values = [...block.matchAll(expression)];
@@ -72,11 +72,15 @@ function parseLoadCommands(value) {
     } else if (command === 'LC_RPATH') {
       const name = field(block, /^[ \t]*path (.+) \(offset [0-9]+\)[ \t]*\r?$/gm);
       if (!safeText(name) || !name) invalid('INVALID_LOAD_COMMANDS'); rpaths.push(name);
+    } else if (command === 'LC_ID_DYLIB') {
+      const name = field(block, /^[ \t]*name (.+) \(offset [0-9]+\)[ \t]*\r?$/gm);
+      if (installName !== null || !safeText(name) || !name) invalid('INVALID_LOAD_COMMANDS');
+      // Identity may bind a staged rewrite target, but is never a load/copy edge.
+      installName = name;
     } else if (command === 'LC_DYLD_ENVIRONMENT') invalid('EMBEDDED_DYLD_ENVIRONMENT');
-    // LC_ID_DYLIB is an identity, not a dependency; never treat its name as a file to copy.
   }
   if (deploymentCommands !== 1 || platform !== 'macos' || minimum === null) invalid('MISSING_OR_AMBIGUOUS_DEPLOYMENT_TARGET');
-  return Object.freeze({ minimum, version: Object.freeze(version(minimum)), dependencies: Object.freeze(dependencies), rpaths: Object.freeze(rpaths) });
+  return Object.freeze({ minimum, version: Object.freeze(version(minimum)), dependencies: Object.freeze(dependencies), rpaths: Object.freeze(rpaths), installName });
 }
 
 function executablePaths(values) {

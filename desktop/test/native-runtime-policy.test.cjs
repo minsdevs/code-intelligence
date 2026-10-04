@@ -132,6 +132,13 @@ test('LC_ID_DYLIB is not mistaken for a dependency', () => {
   const value = inventory(); value.native[1].loadCommands = commands({ extra: ['cmd LC_ID_DYLIB\nname /build/identity-only.dylib (offset 24)'] });
   assert.equal(policy.validateNativeInventory(value).nativeFiles, 14);
 });
+test('dylib identity is bounded and unique without entering the dependency list', () => {
+  const identity = 'cmd LC_ID_DYLIB\nname @rpath/libjvm.dylib (offset 24)';
+  const metadata = policy.parseLoadCommands(commands({ extra: [identity] }));
+  assert.equal(metadata.installName, '@rpath/libjvm.dylib');
+  assert.deepEqual(metadata.dependencies, []);
+  rejects(() => policy.parseLoadCommands(commands({ extra: [identity, identity] })), 'INVALID_LOAD_COMMANDS');
+});
 
 for (const major of ['17.0.15', '22', '26.0.2']) {
   test(`JAVA_VERSION ${major} is refused even with compatible deployment metadata`, () => {
