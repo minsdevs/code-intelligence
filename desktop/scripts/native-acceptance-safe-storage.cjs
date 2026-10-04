@@ -40,5 +40,7 @@ app.whenReady().then(() => {
     if (crypto.createHash('sha256').update(value).digest('hex') !== expected) throw new Error('NATIVE_RESTART_DECRYPT_FAILED');
   }
   recordPhase('COMPLETE');
-  app.exit(0);
+  // The ready callback can precede Electron's main message loop. app.exit()
+  // would then bypass the Local State commit; test a real normal shutdown.
+  app.quit();
 }).catch(() => app.exit(1));

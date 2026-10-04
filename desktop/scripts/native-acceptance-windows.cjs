@@ -142,7 +142,7 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
   const electron = createRequire(path.join(desktop, 'package.json'))('electron');
   const probe = path.join(owned, 'safe-storage'); fs.mkdirSync(probe);
   const safeReport = { format: 1, provider: 'Electron-safeStorage-Windows-DPAPI', standardUser: true,
-    processRestart: false, status: 'FAIL' };
+    processRestart: false, shutdown: 'graceful-app-quit', status: 'FAIL' };
   try {
     for (const mode of ['write', 'read']) {
       let failure;
