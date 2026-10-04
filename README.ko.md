@@ -20,10 +20,13 @@
 이전 [백업·복원](docs/audit/backup-restore-integration-2026-10-03.md)과
 [비용 통합](docs/audit/strict-ai-cost-integration-2026-10-03.md) 기록은 보존합니다.
 
-GitHub 저장소 전체를 분석하여 프로젝트를 구성하는 기술 영역(Backend, Frontend,
-Database, Infrastructure, DevOps, Security, Testing, AI, …)을 자동으로 발견하고,
-근거 기반의 컨텍스트 인식 AI 어시스턴트와 함께 기능, 아키텍처, 호출 흐름,
-의존성, 이력, 설계 근거와 대안을 탐색할 수 있는 개인용 워크스페이스입니다.
+낯선 로컬 폴더나 GitHub 레포의 주요 구성, 기능 위치, 호출·의존 경로와 근거 소스를
+탐색하는 개인용 워크스페이스입니다. 가져오기 미리보기·승인과 분석이 끝나면 개요로
+진입하며, 영역 필터는 결과를 확인한 뒤 선택적으로 사용합니다. 핵심 탐색은 AI 없이
+동작하고, AI는 승인한 컨텍스트에 대한 설명과 추가 확인을 돕습니다.
+
+학습 관리·성장 리포트·학습 과제 생성은 제품 경로에서 제거했습니다. 분석 메모,
+검토 작업과 체크리스트는 유지하며 기존 학습 데이터와 과거 migration은 삭제하지 않습니다.
 
 > **과거 RC 기록 / 내부 테스트.**
 > Phase 1–5 기능이 구현되어 있으며, 현재 RC에는 로컬 폴더 가져오기,
@@ -64,8 +67,8 @@ surface입니다. 서명/notarization된 프로덕션 배포나 자동 업데이
 | Frontend | React 19, TypeScript (strict), Vite, Tailwind CSS v4, TanStack Query, Zustand, React Flow |
 | Analyzer sidecar (Phase 2) | NestJS, ts-morph (TypeScript Compiler API), tree-sitter |
 | AI (Phase 3) | Provider 추상화(OpenAI / Gemini), pgvector embeddings, 근거 기반 어시스턴트 |
-| Learning (Phase 4) | 코드 참조가 있는 노트, 작업 + AI DRAFT 승인, FTS/`pg_trgm`/vector 하이브리드 검색 |
-| Advanced (Phase 5) | PR 리뷰(정적 finding + AI), playground(clone 실행 없음), 성장 보고서, 정적 what-if |
+| 분석 보조 | 코드 참조 메모, 검토 작업과 체크리스트, 승인 기반 AI 설명, 통합 검색 |
+| Advanced (Phase 5) | PR 리뷰(정적 finding + AI), playground(clone 실행 없음), 정적 what-if |
 
 ## 시작하기
 
@@ -352,8 +355,8 @@ AI 컨텍스트를 구성하기 전에 secret을 마스킹하지만, 사용자�
 | 1 — Repository Intelligence Core | GitHub OAuth, import & clone, project-area detection, Java AST analysis, code explorer, architecture view, history |
 | 2 — Cross-domain Intelligence | TypeScript analyzer, FE↔BE↔DB↔Infra linking, flows, findings, impact analysis |
 | 3 — AI | Context-aware assistant, why/alternative analysis, evidence-grounded answers |
-| 4 — Learning & Productivity | Notes, tasks, AI learning-task generation, unified search |
-| 5 — Advanced | PR review, playground, growth reports, what-if simulator |
+| 4 — Analysis support | Notes, analysis tasks, manual verification checklists, unified search |
+| 5 — Advanced | PR review, playground, what-if simulator |
 
 이 표는 구현된 phase 범위를 설명하며 현재 RC 릴리스 게이트를 의미하지 않습니다.
 

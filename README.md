@@ -30,7 +30,7 @@ of impact. Core exploration works without AI.
 
 Current product direction and implementation: [PRD](docs/multilanguage-plan-2026-10-02/01-prd.md)
 and [stages A–G](docs/multilanguage-plan-2026-10-02/11-first-implementation.md).
-Learning progress, growth reports and learning assignments are being removed; existing
+Learning progress, growth reports and learning assignments are removed from product paths; existing
 user records and historical migrations are preserved. Existing source encryption,
 backup/recovery, local import approval and AI request approval/cost controls are reused.
 Mind maps, broader languages, model subscription integrations and monetization are follow-ups.
@@ -673,8 +673,8 @@ available or used for this local verification.
 | 1 — Repository Intelligence Core | GitHub OAuth, import & clone, project-area detection, Java AST analysis, code explorer, architecture view, history |
 | 2 — Cross-domain Intelligence | TypeScript analyzer, FE↔BE↔DB↔Infra linking, flows, findings, impact analysis |
 | 3 — AI | Context-aware assistant, why/alternative analysis, evidence-grounded answers |
-| 4 — Learning & Productivity | Notes, tasks, AI learning-task generation, unified search |
-| 5 — Advanced | PR review, playground, growth reports, what-if simulator |
+| 4 — Analysis support | Notes, analysis tasks, manual verification checklists, unified search |
+| 5 — Advanced | PR review, playground, what-if simulator |
 
 This table describes implemented phase scope, not the current RC release gate.
 
