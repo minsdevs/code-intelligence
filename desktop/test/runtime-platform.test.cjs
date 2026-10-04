@@ -36,7 +36,8 @@ for (const unsafe of ['CON', 'dir/NUL.txt', 'dir/COM1.dll', 'dir/LPT².txt', 'di
 
 test('untrusted PostgreSQL layout and drive-relative runtime roots cannot escape the bundle', () => {
   assert.throws(()=>runtimeFile('C:\\runtime',['postgres','bin','psql'],'C:relative','win32'),/unsafe/);
-  assert.throws(()=>runtimeFile('C:runtime',['jre','bin','java'],null,'win32'),/Invalid/);
+  for (const unsafe of ['C:runtime', '\\\\server\\share\\runtime', '\\\\?\\C:\\runtime', '\\runtime', 'C:\\runtime\\..\\other'])
+    assert.throws(()=>runtimeFile(unsafe,['jre','bin','java'],null,'win32'),/Invalid/);
   assert.throws(()=>runtimeFile('/runtime',['jre','bin','../java'],null,'darwin'),/Invalid/);
 });
 

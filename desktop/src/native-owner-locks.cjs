@@ -8,7 +8,8 @@ const path = require('node:path');
 const { types: { isProxy } } = require('node:util');
 const providers = new WeakMap();
 const ROLES = Object.freeze({ 'purpose-keyring': 'owner.lock', 'ai-journal': 'writer.lock', 'source-vault': 'owner.lock' });
-const SYSTEM_ENV = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'USER', 'LOGNAME'];
+const { inheritedEnvironment } = require('./runtime-platform.cjs');
+const { boundaryFromJava } = require('./windows-native-boundary.cjs');
 class NativeOwnerLockError extends Error {
   constructor(code) { super(`Native owner lock: ${code}`); this.name = 'NativeOwnerLockError'; this.code = `NATIVE_OWNER_${code}`; }
 }
@@ -21,7 +22,12 @@ function absolute(value) {
 }
 function same(a, b) { return a.dev === b.dev && a.ino === b.ino; }
 function unchanged(a, b) { return same(a, b) && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs; }
-async function directory(value, expected) {
+async function directory(value, expected, boundary) {
+  if (boundary) {
+    const identity = boundary.inspect(value, { directory: true });
+    if (expected && expected.identity !== identity) fail('UNSAFE_PATH');
+    return { identity };
+  }
   let part = path.parse(value).root;
   for (const segment of value.slice(part.length).split(path.sep)) {
     part = path.join(part, segment);
@@ -34,13 +40,19 @@ async function directory(value, expected) {
       || expected && !same(stat, expected)) fail('UNSAFE_PATH');
   return stat;
 }
-async function binary(value) {
+async function binary(value, boundary) {
+  if (boundary) boundary.inspect(value, { private: false });
   const canonical = await fs.realpath(absolute(value));
   const stat = await fs.lstat(canonical, { bigint: true });
-  if (!stat.isFile() || (stat.mode & 0o022n) !== 0n) fail('BINARY_CHANGED');
+  if (!stat.isFile() || !boundary && (stat.mode & 0o022n) !== 0n) fail('BINARY_CHANGED');
   return { path: canonical, stat };
 }
-async function lockStat(file, expected) {
+async function lockStat(file, expected, boundary) {
+  if (boundary) {
+    const identity = boundary.inspect(file);
+    if (expected && expected.identity !== identity) fail('LOST');
+    return { identity };
+  }
   const stat = await fs.lstat(file, { bigint: true });
   if (!stat.isFile() || stat.nlink !== 1n || stat.uid !== BigInt(process.getuid())
       || (stat.mode & 0o7777n) !== 0o600n || stat.size > 256n
@@ -51,7 +63,7 @@ async function lockStat(file, expected) {
 async function createNativeOwnerLocks(options) {
   if (!options || typeof options !== 'object' || isProxy(options)
       || Object.values(Object.getOwnPropertyDescriptors(options)).some(d => !Object.hasOwn(d, 'value'))
-      || typeof process.getuid !== 'function') fail('INVALID');
+      || process.platform !== 'win32' && typeof process.getuid !== 'function') fail('INVALID');
   const { installationId, assertMainOwnership, onLost } = options;
   const safetyRoot = absolute(options.safetyRoot);
   const timeoutMs = options.timeoutMs ?? 10000;
@@ -65,9 +77,10 @@ async function createNativeOwnerLocks(options) {
     if (owned !== true) fail('MAIN_OWNERSHIP');
   };
   assertOwner();
-  await directory(path.dirname(safetyRoot));
-  const [java, jar] = await Promise.all([binary(options.javaPath), binary(options.jarPath)]);
-  const state = { safetyRoot, installationId, java, jar, timeoutMs, assertOwner, onLost,
+  const boundary = process.platform === 'win32' ? boundaryFromJava(options.javaPath) : null;
+  await directory(path.dirname(safetyRoot), null, boundary);
+  const [java, jar] = await Promise.all([binary(options.javaPath, boundary), binary(options.jarPath, boundary)]);
+  const state = { safetyRoot, installationId, java, jar, boundary, timeoutMs, assertOwner, onLost,
     spawn: options.spawnImpl || childProcess.spawn, active: new Map(), closed: false, lost: false, rootStat: null };
   const facade = Object.freeze({ async close() {
     if (state.active.size) fail('BUSY');
@@ -127,16 +140,17 @@ async function acquireNativeOwnerLock(provider, { safetyRoot, kind, installation
     state.active.delete(kind);
   };
   try {
-    const rootStat = await directory(safetyRoot, state.rootStat); state.rootStat ||= rootStat;
-    const dir = path.join(safetyRoot, kind); const dirStat = await directory(dir);
+    const rootStat = await directory(safetyRoot, state.rootStat, state.boundary); state.rootStat ||= rootStat;
+    const dir = path.join(safetyRoot, kind); const dirStat = await directory(dir, null, state.boundary);
     for (const known of [state.java, state.jar]) {
-      const now = await binary(known.path);
+      const now = await binary(known.path, state.boundary);
       if (now.path !== known.path || !unchanged(now.stat, known.stat)) fail('BINARY_CHANGED');
     }
     state.assertOwner();
-    const env = Object.fromEntries(SYSTEM_ENV.filter(key => typeof process.env[key] === 'string').map(key => [key, process.env[key]]));
-    child = state.spawn(state.java.path, ['-jar', state.jar.path, '--ci-desktop-lease'],
-      { env, cwd: path.dirname(state.jar.path), stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });
+    const env = inheritedEnvironment(process.env);
+    child = state.boundary ? state.boundary.launch('lease', state.spawn)
+      : state.spawn(state.java.path, ['-jar', state.jar.path, '--ci-desktop-lease'],
+        { env, cwd: path.dirname(state.jar.path), stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });
     child.on('error', () => lose('PROCESS'));
     child.stdin.on('error', () => lose('PROCESS'));
     child.stdout.on('error', () => lose('PROCESS'));
@@ -162,10 +176,10 @@ async function acquireNativeOwnerLock(provider, { safetyRoot, kind, installation
     const nonce = crypto.randomBytes(16).toString('hex');
     await exchange(`ACQUIRE\t${Buffer.from(safetyRoot).toString('base64url')}\t${installationId}\t${kind}\t${nonce}`, `READY\t${nonce}`);
     assertLive(); ready = true;
-    const file = path.join(dir, ROLES[kind]); const markerStat = await lockStat(file);
+    const file = path.join(dir, ROLES[kind]); const markerStat = await lockStat(file, null, state.boundary);
     const verifyPath = async () => {
-      assertLive(); await directory(safetyRoot, rootStat); await directory(dir, dirStat);
-      await lockStat(file, markerStat); assertLive();
+      assertLive(); await directory(safetyRoot, rootStat, state.boundary); await directory(dir, dirStat, state.boundary);
+      await lockStat(file, markerStat, state.boundary); assertLive();
     };
     let queue = Promise.resolve(); let releasing = false;
     const lease = Object.freeze({

@@ -1,0 +1,168 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { once } = require('node:events');
+const { spawn, spawnSync } = require('node:child_process');
+const { createWindowsBoundary, managedWire, localPath } = require('../src/windows-native-boundary.cjs');
+
+// This input is test-only. Production code has no helper-path environment override.
+const runtime = process.env.CI_WINDOWS_BOUNDARY_TEST_RUNTIME;
+const enabled = process.platform === 'win32' && !!runtime;
+function fixture(t) {
+  const boundary = createWindowsBoundary(runtime);
+  const container = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-native-boundary-'));
+  const root = path.join(container, 'private space 한글');
+  boundary.createDirectory(root);
+  t.after(() => fs.rmSync(container, { recursive: true, force: true }));
+  return { boundary, root };
+}
+function reply(child) {
+  let buffered = '';
+  return new Promise((resolve, reject) => {
+    const closed = () => { cleanup(); reject(new Error('Lease closed before response')); };
+    const data = chunk => { buffered += chunk.toString('ascii'); if (buffered.endsWith('\n')) { cleanup(); resolve(buffered.trimEnd()); } };
+    const cleanup = () => { child.stdout.off('data', data); child.off('close', closed); };
+    child.stdout.on('data', data); child.once('close', closed);
+  });
+}
+async function acquire(boundary, root, nonce = 'a'.repeat(32)) {
+  const child = boundary.launch('lease'); const ready = reply(child);
+  child.stdin.write(`ACQUIRE\t${Buffer.from(root).toString('base64url')}\ttest-installation\tpurpose-keyring\t${nonce}\n`);
+  assert.equal(await ready, `READY\t${nonce}`); return child;
+}
+test('Windows path boundary rejects network/device/stream and normalization aliases', () => {
+  for (const candidate of ['\\\\server\\share\\x', '\\\\?\\C:\\x', 'C:relative', 'C:\\x:stream', 'C:\\x\\..\\y', 'C:\\CON.txt', 'C:\\name.'])
+    assert.throws(() => localPath(candidate));
+  assert.equal(localPath('C:\\private space\\한글.pem'), 'C:\\private space\\한글.pem');
+});
+test('real NTFS protected creation/read/atomic replacement and recovery refusal', { skip: !enabled }, t => {
+  const { boundary, root } = fixture(t); const file = path.join(root, 'secret.bin');
+  boundary.writeFresh(file, Buffer.from('first'));
+  assert.equal(boundary.readPrivate(file, 32).toString(), 'first');
+  assert.throws(() => boundary.writeFresh(file, Buffer.from('overwrite')));
+  assert.throws(() => boundary.readPrivate(file, 4));
+  boundary.replacePrivate(file, Buffer.from('second'));
+  assert.equal(boundary.readPrivate(file, 32).toString(), 'second');
+  boundary.writeFresh(`${file}.pending`, Buffer.from('interrupted'));
+  assert.throws(() => boundary.replacePrivate(file, Buffer.from('third')));
+  assert.equal(boundary.readPrivate(file, 32).toString(), 'second');
+});
+test('real NTFS rejects hardlinks, streams, junction ancestors and broad inherited private ACLs', { skip: !enabled }, t => {
+  const { boundary, root } = fixture(t); const file = path.join(root, 'secret.bin');
+  boundary.writeFresh(file, Buffer.from('secret'));
+  fs.linkSync(file, path.join(root, 'hardlink'));
+  assert.throws(() => boundary.readPrivate(file, 32));
+  fs.unlinkSync(path.join(root, 'hardlink'));
+  assert.throws(() => boundary.readPrivate(`${file}:stream`, 32));
+  const junction = path.join(path.dirname(root), 'junction');
+  fs.symlinkSync(root, junction, 'junction');
+  assert.throws(() => boundary.readPrivate(path.join(junction, 'secret.bin'), 32));
+  const inherited = path.join(path.dirname(root), 'inherited-file');
+  fs.writeFileSync(inherited, 'unprotected');
+  assert.throws(() => boundary.readPrivate(inherited, 32));
+});
+test('native leases contend, enforce monotonic protocol and release on guardian death', { skip: !enabled, timeout: 20000 }, async t => {
+  const { boundary, root } = fixture(t);
+  boundary.createDirectory(path.join(root, 'purpose-keyring'));
+  const first = await acquire(boundary, root); t.after(() => first.kill());
+  const second = boundary.launch('lease'); const secondClosed = once(second, 'close');
+  second.stdin.write(`ACQUIRE\t${Buffer.from(root).toString('base64url')}\ttest-installation\tpurpose-keyring\t${'b'.repeat(32)}\n`);
+  assert.notEqual((await secondClosed)[0], 0);
+  let response = reply(first); first.stdin.write('CHECK\t1\n'); assert.equal(await response, 'HELD\t1');
+  const killed = once(first, 'close'); first.kill(); await killed;
+  const replacement = await acquire(boundary, root); t.after(() => replacement.kill());
+  response = reply(replacement); const closed = once(replacement, 'close');
+  replacement.stdin.write('RELEASE\t1\n'); assert.equal(await response, 'RELEASED\t1'); assert.equal((await closed)[0], 0);
+});
+function frames(child) {
+  const values = []; let buffered = Buffer.alloc(0);
+  child.stdout.on('data', bytes => {
+    buffered = Buffer.concat([buffered, bytes]);
+    while (buffered.length >= 4 && buffered.length >= 4 + buffered.readUInt32BE(0)) {
+      const length = buffered.readUInt32BE(0); values.push(JSON.parse(buffered.subarray(4, length + 4))); buffered = buffered.subarray(length + 4);
+    }
+  });
+  return values;
+}
+function launchProbe(boundary, root, script) {
+  const child = boundary.launch('managed');
+  child.stdin.write(managedWire({ command: process.execPath, cwd: root, logPath: path.join(root, 'process.log'),
+    args: ['-e', script], env: { SystemRoot: process.env.SystemRoot }, bootstrap: Buffer.alloc(0) }));
+  return child;
+}
+test('native suspended launch owns descendants before execution and proves stopped', { skip: !enabled, timeout: 30000 }, async t => {
+  const { boundary, root } = fixture(t);
+  const child = launchProbe(boundary, root, 'process.stdout.write("native-child"); process.exit(17)');
+  const messages = frames(child); const closed = await once(child, 'close');
+  assert.equal(closed[0], 0); assert.equal(messages[0].kind, 'STARTED');
+  assert.deepEqual(messages[1], { version: 1, kind: 'EXIT', pid: messages[0].pid, exitCode: 17, stopped: true });
+  assert.equal(fs.readFileSync(path.join(root, 'process.log'), 'utf8'), 'native-child');
+});
+test('guardian death closes its non-inherited Job and kills a live descendant', { skip: !enabled, timeout: 30000 }, async t => {
+  const { boundary, root } = fixture(t); const pidFile = path.join(root, 'descendant.pid');
+  const script = `const c=require('node:child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(c.pid));setInterval(()=>{},1000)`;
+  const child = launchProbe(boundary, root, script); t.after(() => child.kill());
+  for (let i = 0; i < 100 && !fs.existsSync(pidFile); i++) await new Promise(resolve => setTimeout(resolve, 50));
+  assert.ok(fs.existsSync(pidFile)); const descendant = Number(fs.readFileSync(pidFile, 'utf8'));
+  const closed = once(child, 'close'); child.kill(); await closed;
+  let alive = true;
+  for (let i = 0; i < 100; i++) { try { process.kill(descendant, 0); } catch { alive = false; break; } await new Promise(resolve => setTimeout(resolve, 50)); }
+  assert.equal(alive, false);
+});
+test('native TLS material supports a real pinned loopback handshake and rejects mismatched keys', { skip: !enabled, timeout: 30000 }, async t => {
+  const { boundary, root } = fixture(t);
+  const crypto = require('node:crypto'); const https = require('node:https');
+  require('reflect-metadata'); const x509 = require('@peculiar/x509');
+  const algorithm = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]) };
+  const keys = await crypto.webcrypto.subtle.generateKey(algorithm, true, ['sign', 'verify']);
+  const certificate = await x509.X509CertificateGenerator.createSelfSigned({
+    serialNumber: '01' + crypto.randomBytes(15).toString('hex'), name: 'CN=Native boundary test',
+    notBefore: new Date(Date.now() - 60000), notAfter: new Date(Date.now() + 3600000), signingAlgorithm: algorithm, keys,
+    extensions: [new x509.BasicConstraintsExtension(false, undefined, true),
+      new x509.KeyUsagesExtension(x509.KeyUsageFlags.digitalSignature | x509.KeyUsageFlags.keyEncipherment, true),
+      new x509.ExtendedKeyUsageExtension(['1.3.6.1.5.5.7.3.1'], true),
+      new x509.SubjectAlternativeNameExtension([{ type: 'ip', value: '127.0.0.1' }])],
+  }, crypto.webcrypto);
+  const der = Buffer.from(await crypto.webcrypto.subtle.exportKey('pkcs8', keys.privateKey));
+  const pem = crypto.createPrivateKey({ key: der, format: 'der', type: 'pkcs8' }).export({ format: 'pem', type: 'pkcs8' }); der.fill(0);
+  const certFile = path.join(root, 'cert.pem'), keyFile = path.join(root, 'key.pem');
+  boundary.writeFresh(certFile, Buffer.from(certificate.toString('pem')));
+  boundary.writeFresh(keyFile, Buffer.from(pem));
+  const cert = boundary.readPublic(certFile, 65536), key = boundary.readPrivate(keyFile, 65536);
+  const server = https.createServer({ cert, key, minVersion: 'TLSv1.2' }, (_req, response) => response.end('protected-native-tls'));
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); cert.fill(0); key.fill(0); });
+  const body = await new Promise((resolve, reject) => {
+    https.get({ hostname: '127.0.0.1', port: server.address().port, ca: cert, rejectUnauthorized: true, agent: false }, response => {
+      let data = ''; response.setEncoding('utf8'); response.on('data', chunk => { data += chunk; }); response.once('end', () => resolve(data));
+    }).once('error', reject);
+  });
+  assert.equal(body, 'protected-native-tls');
+  const mismatch = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ format: 'pem', type: 'pkcs8' });
+  assert.throws(() => require('node:tls').createSecureContext({ cert, key: mismatch }));
+});
+test('native private read rejects an explicit other-user read grant', { skip: !enabled }, t => {
+  const { boundary, root } = fixture(t); const file = path.join(root, 'acl.bin'); boundary.writeFresh(file, Buffer.from('private'));
+  const shell = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const script = "$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + Buffer.from(file).toString('base64') + "'));$a=Get-Acl -LiteralPath $p;$s=New-Object System.Security.Principal.SecurityIdentifier(\"S-1-1-0\");$r=New-Object System.Security.AccessControl.FileSystemAccessRule($s,\"Read\",\"Allow\");$a.AddAccessRule($r);Set-Acl -LiteralPath $p -AclObject $a";
+  const result = spawnSync(shell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true });
+  assert.equal(result.status, 0, result.stderr);
+  assert.throws(() => boundary.readPrivate(file, 32));
+});
+test('actual launcher death closes the guardian lifeline and removes descendants', { skip: !enabled, timeout: 30000 }, async t => {
+  const { root } = fixture(t); const pidFile = path.join(root, 'orphan-probe.pid');
+  const probe = 'require("node:fs").writeFileSync(' + JSON.stringify(pidFile) + ',String(process.pid));setInterval(()=>{},1000)';
+  const specification = { command: process.execPath, cwd: root, logPath: path.join(root, 'parent-death.log'), args: ['-e', probe], env: { SystemRoot: process.env.SystemRoot } };
+  const launcherCode = 'const {createWindowsBoundary,managedWire}=require(' + JSON.stringify(path.resolve(__dirname, '../src/windows-native-boundary.cjs')) + ');const c=createWindowsBoundary(' + JSON.stringify(runtime) + ').launch("managed");c.stdin.write(managedWire(' + JSON.stringify(specification) + '));setInterval(()=>{},1000)';
+  const launcher = spawn(process.execPath, ['-e', launcherCode], { env: { SystemRoot: process.env.SystemRoot }, stdio: 'ignore', windowsHide: true });
+  t.after(() => launcher.kill());
+  for (let i = 0; i < 100 && !fs.existsSync(pidFile); i++) await new Promise(resolve => setTimeout(resolve, 50));
+  assert.ok(fs.existsSync(pidFile)); const child = Number(fs.readFileSync(pidFile, 'utf8'));
+  const closed = once(launcher, 'close'); launcher.kill(); await closed;
+  let alive = true;
+  for (let i = 0; i < 100; i++) { try { process.kill(child, 0); } catch { alive = false; break; } await new Promise(resolve => setTimeout(resolve, 50)); }
+  assert.equal(alive, false);
+});

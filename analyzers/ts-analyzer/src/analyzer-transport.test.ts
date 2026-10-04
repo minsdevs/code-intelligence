@@ -24,7 +24,7 @@ beforeEach(() => {
 afterEach(() => { rmSync(root, { recursive: true, force: true }) })
 
 describe('opt-in analyzer TLS configuration', () => {
-  it('refuses protected file loading on Windows while retaining development HTTP', () => {
+  it('refuses Windows protected loading without a native runtime helper while retaining development HTTP', () => {
     vi.stubGlobal('process', { ...process, platform: 'win32' })
     try {
       expect(() => analyzerTransport(env)).toThrow(/^Invalid analyzer transport configuration$/)

@@ -3,11 +3,13 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpat
 import { isAbsolute, normalize, parse, join, sep } from 'node:path'
 import { createSecureContext } from 'node:tls'
 import type { RequestHandler } from 'express'
+import { readWindowsProtectedMaterial } from './windows-protected-file'
 
 const MAX_MATERIAL_BYTES = 64 * 1024
 const invalid = (): never => { throw new Error('Invalid analyzer transport configuration') }
 
 function readMaterial(file: string, privateKey: boolean): Buffer {
+  if (process.platform === 'win32') return readWindowsProtectedMaterial(file, privateKey)
   if (!isAbsolute(file) || normalize(file) !== file || /[\x00-\x1f\x7f]/.test(file)) invalid()
   let cursor = parse(file).root
   const parts = file.slice(cursor.length).split(sep)
@@ -78,8 +80,8 @@ export function analyzerTransport(env: NodeJS.ProcessEnv): AnalyzerTransport {
   let cert: Buffer | undefined
   let key: Buffer | undefined
   try {
-    // POSIX ownership/mode and O_NOFOLLOW are required; there is no equivalent Windows boundary here.
-    if (process.platform === 'win32' || !constants.O_NOFOLLOW || typeof process.getuid !== 'function'
+    // Each platform must supply its real no-follow protected-file boundary.
+    if ((process.platform !== 'win32' && (!constants.O_NOFOLLOW || typeof process.getuid !== 'function'))
       || names.some(name => !env[name]) || !['127.0.0.1', '::1'].includes(host)
       || !Number.isInteger(port) || port < 0 || port > 65535
       || (env.TS_ANALYZER_PORT !== undefined && String(port) !== env.TS_ANALYZER_PORT)) invalid()
