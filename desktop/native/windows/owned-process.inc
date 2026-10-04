@@ -55,7 +55,7 @@ void managedProcess() {
     auto bootstrapLength = number(); require(bootstrapLength <= 16384);
     Secret bootstrap; bootstrap.data.resize(bootstrapLength); readExact(bootstrap.data.data(), bootstrapLength);
     PrivateSecurity sec;
-    Handle logHandle(CreateFileW(log.c_str(), GENERIC_WRITE | GENERIC_READ | READ_CONTROL, FILE_SHARE_READ, &sec.attributes, OPEN_ALWAYS, FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+    Handle logHandle(CreateFileW(filesystemPath(log).c_str(), GENERIC_WRITE | GENERIC_READ | READ_CONTROL, FILE_SHARE_READ, &sec.attributes, OPEN_ALWAYS, FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
     inspect(logHandle.value, false, true);
     LARGE_INTEGER end{}; require(SetFilePointerEx(logHandle.value, end, nullptr, FILE_END) != 0);
     Handle inputRead, inputWrite;

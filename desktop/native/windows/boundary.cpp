@@ -161,8 +161,13 @@ void requirePrivateInheritance(HANDLE h) {
     }
     require(user && system);
 }
+// Validated local DOS paths only; do not opt the wire protocol into device paths.
+std::wstring filesystemPath(const std::wstring& p) { return L"\\\\?\\" + p; }
 Handle openObject(const std::wstring& p, bool directory, DWORD access = GENERIC_READ | READ_CONTROL, DWORD sharing = FILE_SHARE_READ) {
-    Handle h(CreateFileW(p.c_str(), access, sharing, nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | (directory ? FILE_FLAG_BACKUP_SEMANTICS : 0), nullptr));
+    // Metadata-only handles bypass share-access checks. List access makes omission
+    // of SHARE_DELETE actually pin the directory and every retained ancestor.
+    if (directory) access |= FILE_LIST_DIRECTORY;
+    Handle h(CreateFileW(filesystemPath(p).c_str(), access, sharing, nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | (directory ? FILE_FLAG_BACKUP_SEMANTICS : 0), nullptr));
     require(h.value != INVALID_HANDLE_VALUE); canonicalHandle(h.value, p); return h;
 }
 std::vector<Handle> ancestors(const std::wstring& p) {
@@ -224,7 +229,7 @@ Secret readProtected(const std::wstring& p, bool privateObject, uint32_t maximum
 }
 void createDirectory(const std::wstring& p, bool inherit = false) {
     auto chain = ancestors(p); PrivateSecurity sec(inherit);
-    if (!CreateDirectoryW(p.c_str(), &sec.attributes)) require(GetLastError() == ERROR_ALREADY_EXISTS);
+    if (!CreateDirectoryW(filesystemPath(p).c_str(), &sec.attributes)) require(GetLastError() == ERROR_ALREADY_EXISTS);
     auto h = openObject(p, true, READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE);
     inspect(h.value, true, true);
     if (inherit) requirePrivateInheritance(h.value);
@@ -232,7 +237,7 @@ void createDirectory(const std::wstring& p, bool inherit = false) {
 void writeFresh(const std::wstring& p, const Secret& bytes) {
     auto chain = ancestors(p); require(!chain.empty()); inspect(chain.back().value, true, true);
     PrivateSecurity sec;
-    Handle file(CreateFileW(p.c_str(), GENERIC_READ | GENERIC_WRITE | READ_CONTROL, 0, &sec.attributes, CREATE_NEW, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH, nullptr));
+    Handle file(CreateFileW(filesystemPath(p).c_str(), GENERIC_READ | GENERIC_WRITE | READ_CONTROL, 0, &sec.attributes, CREATE_NEW, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH, nullptr));
     inspect(file.value, false, true); writeAll(file.value, bytes.data.data(), bytes.data.size()); inspect(file.value, false, true);
     // A failed fresh publication is intentionally retained: enrollment must not
     // reinterpret a partial file as absent and generate a replacement identity.
@@ -243,11 +248,11 @@ void replacePrivate(const std::wstring& p, const Secret& bytes) {
     // The fixed sidecar is recovery evidence. Never remove/reuse it on startup.
     // An interrupted replacement fails closed until higher-level authenticated
     // recovery decides which generation is valid; atomicity is not durability.
-    require(GetFileAttributesW(pending.c_str()) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
+    require(GetFileAttributesW(filesystemPath(pending).c_str()) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
     auto old = openObject(p, false, GENERIC_READ | READ_CONTROL, FILE_SHARE_READ | FILE_SHARE_DELETE);
     inspect(old.value, false, true);
     writeFresh(pending, bytes);
-    require(ReplaceFileW(p.c_str(), pending.c_str(), nullptr, 0, nullptr, nullptr) != 0);
+    require(ReplaceFileW(filesystemPath(p).c_str(), filesystemPath(pending).c_str(), nullptr, 0, nullptr, nullptr) != 0);
     auto current = openObject(p, false, GENERIC_READ | GENERIC_WRITE | READ_CONTROL);
     inspect(current.value, false, true); require(FlushFileBuffers(current.value) != 0);
 }

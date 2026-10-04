@@ -81,7 +81,14 @@ function probe(socketPath, request, mode = 'normal') {
   const result = new Promise((resolve, reject) => {
     child.once('error', reject);
     child.once('close', (code, signal) => {
-      try { assert.equal(signal, null); assert.equal(code, 0, stderr); const bytes = Buffer.concat(chunks); resolve(bytes.length ? JSON.parse(bytes) : null); }
+      try {
+        if (signal !== null || code !== 0) {
+          const failure = stderr.match(/^(WINDOWS_JAVA_PROBE_(?:OPEN|CONNECT|WRITE|FIN|PREFIX|LENGTH|BODY|EOF|OUTPUT)_FAILED)\r?$/m)?.[1]
+            ?? 'WINDOWS_JAVA_PROBE_PROCESS_FAILED';
+          throw Object.assign(new Error(failure), { code: failure });
+        }
+        const bytes = Buffer.concat(chunks); resolve(bytes.length ? JSON.parse(bytes) : null);
+      }
       catch (error) { reject(error); }
     });
   });

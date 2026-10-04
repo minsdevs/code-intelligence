@@ -16,8 +16,19 @@ function fixture(t) {
   const container = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-native-boundary-'));
   const root = path.join(container, 'private space 한글');
   boundary.createDirectory(root);
-  t.after(() => fs.rmSync(container, { recursive: true, force: true }));
-  return { boundary, root };
+  const children = [];
+  const ownChild = child => {
+    const closed = new Promise(resolve => child.once('close', resolve));
+    children.push({ child, closed }); return child;
+  };
+  t.after(async () => {
+    for (const { child, closed } of children.reverse()) {
+      if (child.exitCode === null && child.signalCode === null) child.kill();
+      await closed;
+    }
+    await fs.promises.rm(container, { recursive: true, force: true });
+  });
+  return { boundary, root, ownChild };
 }
 function reply(child) {
   let buffered = '';
@@ -65,15 +76,15 @@ test('real NTFS rejects hardlinks, streams, junction ancestors and broad inherit
   assert.throws(() => boundary.readPrivate(inherited, 32));
 });
 test('native leases contend, enforce monotonic protocol and release on guardian death', { skip: !enabled, timeout: 20000 }, async t => {
-  const { boundary, root } = fixture(t);
+  const { boundary, root, ownChild } = fixture(t);
   boundary.createDirectory(path.join(root, 'purpose-keyring'));
-  const first = await acquire(boundary, root); t.after(() => first.kill());
-  const second = boundary.launch('lease'); const secondClosed = once(second, 'close');
+  const first = ownChild(await acquire(boundary, root));
+  const second = ownChild(boundary.launch('lease')); const secondClosed = once(second, 'close');
   second.stdin.write(`ACQUIRE\t${Buffer.from(root).toString('base64url')}\ttest-installation\tpurpose-keyring\t${'b'.repeat(32)}\n`);
   assert.notEqual((await secondClosed)[0], 0);
   let response = reply(first); first.stdin.write('CHECK\t1\n'); assert.equal(await response, 'HELD\t1');
   const killed = once(first, 'close'); first.kill(); await killed;
-  const replacement = await acquire(boundary, root); t.after(() => replacement.kill());
+  const replacement = ownChild(await acquire(boundary, root));
   response = reply(replacement); const closed = once(replacement, 'close');
   replacement.stdin.write('RELEASE\t1\n'); assert.equal(await response, 'RELEASED\t1'); assert.equal((await closed)[0], 0);
 });
@@ -102,15 +113,18 @@ test('native suspended launch owns descendants before execution and proves stopp
   assert.equal(fs.readFileSync(path.join(root, 'process.log'), 'utf8'), 'native-child');
 });
 test('guardian death closes its non-inherited Job and kills a live descendant', { skip: !enabled, timeout: 30000 }, async t => {
-  const { boundary, root } = fixture(t); const pidFile = path.join(root, 'descendant.pid');
+  const { boundary, root, ownChild } = fixture(t); const pidFile = path.join(root, 'descendant.pid');
   const script = `const c=require('node:child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(c.pid));setInterval(()=>{},1000)`;
-  const child = launchProbe(boundary, root, script); t.after(() => child.kill());
+  const child = ownChild(launchProbe(boundary, root, script)); const messages = frames(child);
   for (let i = 0; i < 100 && !fs.existsSync(pidFile); i++) await new Promise(resolve => setTimeout(resolve, 50));
   assert.ok(fs.existsSync(pidFile)); const descendant = Number(fs.readFileSync(pidFile, 'utf8'));
+  assert.equal(messages[0]?.kind, 'STARTED'); const parent = Number(messages[0].pid);
   const closed = once(child, 'close'); child.kill(); await closed;
-  let alive = true;
-  for (let i = 0; i < 100; i++) { try { process.kill(descendant, 0); } catch { alive = false; break; } await new Promise(resolve => setTimeout(resolve, 50)); }
-  assert.equal(alive, false);
+  for (const pid of [parent, descendant]) {
+    let alive = true;
+    for (let i = 0; i < 100; i++) { try { process.kill(pid, 0); } catch { alive = false; break; } await new Promise(resolve => setTimeout(resolve, 50)); }
+    assert.equal(alive, false);
+  }
 });
 test('native TLS material supports a real pinned loopback handshake and rejects mismatched keys', { skip: !enabled, timeout: 30000 }, async t => {
   const { boundary, root } = fixture(t);
@@ -147,18 +161,20 @@ test('native TLS material supports a real pinned loopback handshake and rejects 
 test('native private read rejects an explicit other-user read grant', { skip: !enabled }, t => {
   const { boundary, root } = fixture(t); const file = path.join(root, 'acl.bin'); boundary.writeFresh(file, Buffer.from('private'));
   const shell = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  const script = "$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + Buffer.from(file).toString('base64') + "'));$a=Get-Acl -LiteralPath $p;$s=New-Object System.Security.Principal.SecurityIdentifier(\"S-1-1-0\");$r=New-Object System.Security.AccessControl.FileSystemAccessRule($s,\"Read\",\"Allow\");$a.AddAccessRule($r);Set-Acl -LiteralPath $p -AclObject $a";
+  const script = "$ErrorActionPreference='Stop';$phase='READ';try {$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + Buffer.from(file).toString('base64') + "'));$a=Get-Acl -LiteralPath $p;$phase='CONSTRUCT';$s=[System.Security.Principal.SecurityIdentifier]::new('S-1-1-0');$r=[System.Security.AccessControl.FileSystemAccessRule]::new($s,[System.Security.AccessControl.FileSystemRights]::Read,[System.Security.AccessControl.AccessControlType]::Allow);$a.AddAccessRule($r);$phase='WRITE';Set-Acl -LiteralPath $p -AclObject $a} catch {[Console]::Error.WriteLine('WINDOWS_ACL_TAMPER_'+$phase+'_FAILED');exit 1}";
   const result = spawnSync(shell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true });
-  assert.equal(result.status, 0, result.stderr);
+  if (result.status !== 0 || result.error || result.signal) {
+    const code = result.stderr?.match(/^(WINDOWS_ACL_TAMPER_(?:READ|CONSTRUCT|WRITE)_FAILED)\r?$/m)?.[1] ?? 'WINDOWS_ACL_TAMPER_PROCESS_FAILED';
+    throw Object.assign(new Error(code), { code });
+  }
   assert.throws(() => boundary.readPrivate(file, 32));
 });
 test('actual launcher death closes the guardian lifeline and removes descendants', { skip: !enabled, timeout: 30000 }, async t => {
-  const { root } = fixture(t); const pidFile = path.join(root, 'orphan-probe.pid');
+  const { root, ownChild } = fixture(t); const pidFile = path.join(root, 'orphan-probe.pid');
   const probe = 'require("node:fs").writeFileSync(' + JSON.stringify(pidFile) + ',String(process.pid));setInterval(()=>{},1000)';
   const specification = { command: process.execPath, cwd: root, logPath: path.join(root, 'parent-death.log'), args: ['-e', probe], env: { SystemRoot: process.env.SystemRoot } };
   const launcherCode = 'const {createWindowsBoundary,managedWire}=require(' + JSON.stringify(path.resolve(__dirname, '../src/windows-native-boundary.cjs')) + ');const c=createWindowsBoundary(' + JSON.stringify(runtime) + ').launch("managed");c.stdin.write(managedWire(' + JSON.stringify(specification) + '));setInterval(()=>{},1000)';
-  const launcher = spawn(process.execPath, ['-e', launcherCode], { env: { SystemRoot: process.env.SystemRoot }, stdio: 'ignore', windowsHide: true });
-  t.after(() => launcher.kill());
+  const launcher = ownChild(spawn(process.execPath, ['-e', launcherCode], { env: { SystemRoot: process.env.SystemRoot }, stdio: 'ignore', windowsHide: true }));
   for (let i = 0; i < 100 && !fs.existsSync(pidFile); i++) await new Promise(resolve => setTimeout(resolve, 50));
   assert.ok(fs.existsSync(pidFile)); const child = Number(fs.readFileSync(pidFile, 'utf8'));
   const closed = once(launcher, 'close'); launcher.kill(); await closed;
@@ -171,11 +187,13 @@ test('native retained storage streams past 16 MiB and returns the exact bytes', 
   const { boundary, root } = fixture(t); const storage = await boundary.openStorage(root);
   const crypto = require('node:crypto'), chunk = Buffer.alloc(1024 * 1024);
   for (let i = 0; i < chunk.length; i++) chunk[i] = i % 251;
+  let failed = false;
   try {
     const writer = await storage.openWrite('large.bin', { maxBytes: 32 * 1024 * 1024 });
     const expected = crypto.createHash('sha256');
     for (let i = 0; i < 18; i++) { expected.update(chunk); await writer.write(chunk); }
     const committed = await writer.commit();
+    assert.equal((await storage.stat('large.bin')).token, committed.token);
     assert.equal(committed.size, String(18 * chunk.length));
     assert.equal(committed.platform, 'win32'); assert.ok(BigInt(committed.allocationSize) > 0n);
     const reader = await storage.openRead('large.bin', { expected: committed, maxBytes: 32 * 1024 * 1024 });
@@ -183,7 +201,8 @@ test('native retained storage streams past 16 MiB and returns the exact bytes', 
     try { for (;;) { const bytes = await reader.read(); if (!bytes.length) break; actual.update(bytes); bytes.fill(0); } }
     finally { await reader.close(); }
     assert.equal(actual.digest('hex'), expected.digest('hex'));
-  } finally { chunk.fill(0); await storage.close(); }
+  } catch (error) { failed = true; throw error; }
+  finally { chunk.fill(0); if (failed) await storage.close().catch(() => {}); else await storage.close(); }
 });
 
 test('native conditional append refuses a stale state without losing acknowledged records', { skip: !enabled }, async t => {
@@ -209,6 +228,7 @@ test('native inactive-slot overwrite truncates old suffix and exact retry preser
     const second = await writeStorageFile(storage, 'value.0', Buffer.from('new generation'), { mode: 'slot', expected: first, maxBytes: 1024 });
     const retry = await storage.openWrite('value.0', { mode: 'append', expected: second, maxBytes: 1024 });
     const flushed = await retry.commit();
+    assert.equal(flushed.token, second.token);
     const saved = await readStorageFile(storage, 'value.0', 1024, { expected: flushed });
     assert.equal(saved.bytes.toString(), 'new generation'); saved.bytes.fill(0);
   } finally { await storage.close(); }
@@ -230,9 +250,16 @@ test('native private workspace inheritance permits real child files without acce
 
 test('native retained root blocks rename until the owned session exits', { skip: !enabled }, async t => {
   const { boundary, root } = fixture(t), destination = path.join(path.dirname(root), 'moved');
-  const storage = await boundary.openStorage(root);
-  try { assert.throws(() => fs.renameSync(root, destination)); assert.equal((await storage.stat('', { directory: true })).identity, storage.rootState.identity); }
-  finally { await storage.close(); }
+  boundary.createDirectory(path.join(root, 'nested'));
+  const nested = await boundary.openStorage(path.join(root, 'nested'));
+  try {
+    const storage = await boundary.openStorage(root);
+    try { assert.throws(() => fs.renameSync(root, destination)); assert.equal((await storage.stat('', { directory: true })).identity, storage.rootState.identity); }
+    finally { await storage.close(); }
+    // Closing the root session must not release another session's ancestor pin.
+    assert.throws(() => fs.renameSync(root, destination));
+    assert.equal((await nested.stat('', { directory: true })).identity, nested.rootState.identity);
+  } finally { await nested.close(); }
   fs.renameSync(root, destination); assert.equal(fs.existsSync(root), false);
 });
 

@@ -45,7 +45,7 @@ void lease() {
     for (auto c : digest) { identity += "0123456789abcdef"[c >> 4]; identity += "0123456789abcdef"[c & 15]; }
     const auto marker = "CI-NATIVE-OWNER-2\n" + identity + "\n" + parts[3] + "\n";
     PrivateSecurity sec;
-    Handle file(CreateFileW(p.c_str(), GENERIC_READ | GENERIC_WRITE | READ_CONTROL, FILE_SHARE_READ | FILE_SHARE_WRITE, &sec.attributes, CREATE_NEW, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH, nullptr));
+    Handle file(CreateFileW(filesystemPath(p).c_str(), GENERIC_READ | GENERIC_WRITE | READ_CONTROL, FILE_SHARE_READ | FILE_SHARE_WRITE, &sec.attributes, CREATE_NEW, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH, nullptr));
     bool created = file.value != INVALID_HANDLE_VALUE;
     if (!created) { require(GetLastError() == ERROR_FILE_EXISTS); file = openObject(p, false, GENERIC_READ | GENERIC_WRITE | READ_CONTROL, FILE_SHARE_READ | FILE_SHARE_WRITE); }
     inspect(file.value, false, true);

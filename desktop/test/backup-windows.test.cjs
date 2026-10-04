@@ -131,8 +131,12 @@ test('native marker requires both enrolled slots even when the remaining slot au
 });
 test('native tree measurement preserves the depth64 limit without exhausting directory handles', { skip: !enabled, timeout: 120000 }, async t => {
   const f = await fixture(t); let current = '';
-  for (let depth = 1; depth <= 64; depth++) { current += (current ? '/' : '') + 'd'; await f.storage.mkdir(current, { inherit: true }); }
-  const parent = current.slice(0, -2); await writeStorageFile(f.storage, parent + '/value', Buffer.from('deep'));
+  for (let depth = 1; depth <= 64; depth++) { current += (current ? '/' : '') + 'depth'; await f.storage.mkdir(current, { inherit: true }); }
+  assert.ok(path.join(f.root, current).length > 260);
+  const parent = path.posix.dirname(current); await writeStorageFile(f.storage, parent + '/value', Buffer.from('deep'));
+  const original = await f.storage.stat(current, { directory: true });
+  const renamed = await f.storage.rename(current, parent + '/renamed', original.identity, { directory: true });
+  assert.equal(renamed.identity, original.identity);
   const measured = await measureBackupTree({ root: f.root, windowsBoundary: f.windowsBoundary });
   assert.equal(measured.logicalBytes, '4'); assert.equal(measured.entries, 66);
   await assert.rejects(measureBackupTree({ root: f.root, windowsBoundary: f.windowsBoundary, maxDepth: 63 }));

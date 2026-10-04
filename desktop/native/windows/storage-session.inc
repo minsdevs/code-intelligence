@@ -130,14 +130,14 @@ void storageSession() {
         if (operation == "stat") {
             const auto file = resolve(field(16384), true); const bool directory = number() != 0, missing = number() != 0;
             auto parents = ancestors(file);
-            Handle handle(CreateFileW(file.c_str(), READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            Handle handle(CreateFileW(filesystemPath(file).c_str(), READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE,
                 nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | (directory ? FILE_FLAG_BACKUP_SEMANTICS : 0), nullptr));
             if (handle.value == INVALID_HANDLE_VALUE) { require(missing && GetLastError() == ERROR_FILE_NOT_FOUND); result += ",\"state\":null"; }
             else { canonicalHandle(handle.value, file); result += ",\"state\":" + storageState(handle.value, directory, privateObject, managed && file != root).jsonValue(); }
         } else if (operation == "mkdir") {
             require(privateObject); const auto file = resolve(field(16384)); const bool inherit = number() != 0;
             auto parents = ancestors(file); PrivateSecurity descriptor(inherit);
-            require(CreateDirectoryW(file.c_str(), &descriptor.attributes) != 0);
+            require(CreateDirectoryW(filesystemPath(file).c_str(), &descriptor.attributes) != 0);
             auto handle = openObject(file, true, READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE);
             if (inherit) requirePrivateInheritance(handle.value);
             result += ",\"state\":" + storageState(handle.value, true, true).jsonValue();
@@ -146,10 +146,10 @@ void storageSession() {
             const auto file = resolve(field(16384)); const auto length = number(); require(length > 0 && length <= 4096);
             StorageFile entry; entry.parents = ancestors(file); entry.mode = "lock"; entry.marker.data.resize(length);
             readExact(entry.marker.data.data(), length); PrivateSecurity descriptor;
-            entry.handle = Handle(CreateFileW(file.c_str(), GENERIC_READ | GENERIC_WRITE | READ_CONTROL, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            entry.handle = Handle(CreateFileW(filesystemPath(file).c_str(), GENERIC_READ | GENERIC_WRITE | READ_CONTROL, FILE_SHARE_READ | FILE_SHARE_WRITE,
                 &descriptor.attributes, CREATE_NEW, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH, nullptr));
             const bool fresh = entry.handle.value != INVALID_HANDLE_VALUE;
-            if (!fresh) { require(GetLastError() == ERROR_FILE_EXISTS); entry.handle = Handle(CreateFileW(file.c_str(), GENERIC_READ | GENERIC_WRITE | READ_CONTROL,
+            if (!fresh) { require(GetLastError() == ERROR_FILE_EXISTS); entry.handle = Handle(CreateFileW(filesystemPath(file).c_str(), GENERIC_READ | GENERIC_WRITE | READ_CONTROL,
                 FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH, nullptr)); }
             canonicalHandle(entry.handle.value, file); inspect(entry.handle.value, false, true, false, managed);
             OVERLAPPED position{}; require(LockFileEx(entry.handle.value, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &position) != 0);
@@ -166,7 +166,7 @@ void storageSession() {
             require(!writing || mode == "create" || expected.rfind("WS1:", 0) == 0);
             StorageFile entry; entry.parents = ancestors(file); entry.mode = mode; entry.maximum = maximum;
             PrivateSecurity descriptor;
-            entry.handle = Handle(CreateFileW(file.c_str(), READ_CONTROL | GENERIC_READ | (writing ? GENERIC_WRITE : 0),
+            entry.handle = Handle(CreateFileW(filesystemPath(file).c_str(), READ_CONTROL | GENERIC_READ | (writing ? GENERIC_WRITE : 0),
                 FILE_SHARE_READ, mode == "create" ? &descriptor.attributes : nullptr, mode == "create" ? CREATE_NEW : OPEN_EXISTING,
                 FILE_FLAG_OPEN_REPARSE_POINT | (directory ? FILE_FLAG_BACKUP_SEMANTICS : 0) | (writing ? FILE_FLAG_WRITE_THROUGH : 0), nullptr));
             canonicalHandle(entry.handle.value, file);
@@ -208,6 +208,16 @@ void storageSession() {
                 require(entry.mode == "create" || entry.mode == "append" || entry.mode == "slot");
                 filePosition(entry.handle.value, entry.position);
                 if (entry.mode == "slot") require(SetEndOfFile(entry.handle.value) != 0);
+                // NTFS may defer write/change timestamps until the writing handle
+                // closes. Commit must return a token that survives that close.
+                if (entry.mode != "append" || entry.position != entry.initial.size) {
+                    FILETIME now{}; GetSystemTimeAsFileTime(&now);
+                    FILE_BASIC_INFO times{};
+                    times.LastWriteTime.QuadPart = times.ChangeTime.QuadPart = static_cast<LONGLONG>(fileTime(now));
+                    require(SetFileInformationByHandle(entry.handle.value, FileBasicInfo, &times, sizeof(times)) != 0);
+                    times.LastWriteTime.QuadPart = times.ChangeTime.QuadPart = -1;
+                    require(SetFileInformationByHandle(entry.handle.value, FileBasicInfo, &times, sizeof(times)) != 0);
+                }
                 require(FlushFileBuffers(entry.handle.value) != 0);
                 const auto state = storageState(entry.handle.value, false, true, managed); require(state.size == entry.position);
                 result += ",\"state\":" + state.jsonValue(); files.erase(found);
@@ -251,11 +261,14 @@ void storageSession() {
                 require(SetFileInformationByHandle(handle.value, FileDispositionInfo, &disposition, sizeof(disposition)) != 0);
             } else {
                 const auto destination = resolve(field(16384)); auto destinationParents = ancestors(destination);
-                const size_t nameBytes = destination.size() * sizeof(wchar_t);
-                std::vector<unsigned char> storage(offsetof(FILE_RENAME_INFO, FileName) + nameBytes);
+                const auto destinationPath = filesystemPath(destination);
+                const size_t nameBytes = destinationPath.size() * sizeof(wchar_t);
+                // FileNameLength excludes the terminator; Win32 FILE_RENAME_INFO
+                // also specifies a NUL-terminated FileName.
+                std::vector<unsigned char> storage(offsetof(FILE_RENAME_INFO, FileName) + nameBytes + sizeof(wchar_t));
                 auto* rename = reinterpret_cast<FILE_RENAME_INFO*>(storage.data());
                 rename->ReplaceIfExists = FALSE; rename->RootDirectory = nullptr; rename->FileNameLength = static_cast<DWORD>(nameBytes);
-                memcpy(rename->FileName, destination.data(), nameBytes);
+                memcpy(rename->FileName, destinationPath.data(), nameBytes);
                 require(SetFileInformationByHandle(handle.value, FileRenameInfo, rename, static_cast<DWORD>(storage.size())) != 0);
                 result += ",\"state\":" + storageState(handle.value, directory, true, managed).jsonValue();
             }
@@ -263,7 +276,7 @@ void storageSession() {
             // reconcile immutable identities and receipt records before reuse.
         } else if (operation == "capacity") {
             ULARGE_INTEGER available{}, total{}, free{};
-            require(GetDiskFreeSpaceExW(root.c_str(), &available, &total, &free) != 0);
+            require(GetDiskFreeSpaceExW(filesystemPath(root).c_str(), &available, &total, &free) != 0);
             result += ",\"available\":" + quoted(std::to_string(available.QuadPart)) + ",\"total\":" + quoted(std::to_string(total.QuadPart));
         } else fail();
         verifyRoot(); storageJson(result + "}");

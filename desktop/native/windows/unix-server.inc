@@ -46,7 +46,7 @@ void unixServer() {
         && maxConnections >= 1 && maxConnections <= 16 && frameTimeout >= 1 && frameTimeout <= 30000);
     auto chain = ancestors(socketPath);
     require(!chain.empty()); inspect(chain.back().value, true, true);
-    require(GetFileAttributesW(socketPath.c_str()) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
+    require(GetFileAttributesW(filesystemPath(socketPath).c_str()) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
     WSADATA wsa{}; require(WSAStartup(MAKEWORD(2, 2), &wsa) == 0);
     struct CleanupWinsock { ~CleanupWinsock() { WSACleanup(); } } cleanupWinsock;
     UnixSocket listener(socket(AF_UNIX, SOCK_STREAM, 0)); require(listener.value != INVALID_SOCKET);
@@ -54,7 +54,7 @@ void unixServer() {
     require(encoded.size() <= 100 && encoded.size() < sizeof(address.sun_path));
     memcpy(address.sun_path, encoded.data(), encoded.size());
     require(bind(listener.value, reinterpret_cast<sockaddr*>(&address), static_cast<int>(sizeof(address))) == 0);
-    Handle leaf(CreateFileW(socketPath.c_str(), READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES | DELETE,
+    Handle leaf(CreateFileW(filesystemPath(socketPath).c_str(), READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES | DELETE,
         FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
         FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr));
     require(leaf.value != INVALID_HANDLE_VALUE);
