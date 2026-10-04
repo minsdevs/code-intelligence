@@ -222,9 +222,14 @@ on pre-retained query/synchronization process handles, not PID-existence polling
 boundaries alone does not attest Electron credential-store restart or full product acceptance.
 The standalone Electron credential probe uses normal `app.quit()` shutdown: an immediate
 `app.exit()` from Electron44's ready callback can bypass the Local State commit. This
-restart proof does not attest crash or power-loss durability. Native Electron operations
-and shutdown have bounded waits; primary failures are saved before cleanup, and forced
-termination of the SDK-owned launcher can never pass clean-shutdown acceptance.
+restart proof does not attest crash or power-loss durability. Native product actions share
+one nine-minute monotonic deadline across all restarts; cleanup is reserved within ten minutes.
+Each Electron launch plus first window has a 90-second deadline. Build commands are separate
+and limited to eight minutes; the disposable OS job has a 20-minute infrastructure backstop
+including provisioning, builds and evidence upload, rather than waiting 45–75 minutes.
+Only static startup phases/error codes and bounded public runtime dependency names enter reports.
+Primary failures are saved before cleanup; forced termination of the SDK-owned launcher can
+never pass clean-shutdown acceptance.
 
 Main owns the encrypted source vault and private source broker. Java receives one bounded
 version2 JSON+EOF bootstrap for both AI and source capabilities, never environment fallback.

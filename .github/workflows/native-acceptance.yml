@@ -39,7 +39,7 @@ jobs:
   macos:
     if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && inputs.disposable_os_consent && (inputs.platform == 'macos-arm64' || inputs.platform == 'both'))
     runs-on: macos-15
-    timeout-minutes: 75
+    timeout-minutes: 20
     env:
       CODE_INTELLIGENCE_BUILD_SEQUENCE: ${{ inputs.build_sequence || github.run_number }}
       NATIVE_ACCEPTANCE_CONSENT: disposable-hosted-os
@@ -56,8 +56,10 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Provision verified native runtime (no background services)
+        timeout-minutes: 8
         run: bash desktop/scripts/native-acceptance-macos.sh
       - name: Build current source and exercise native app
+        timeout-minutes: 18
         run: node desktop/scripts/native-acceptance.cjs macos
       - name: Preserve credential-free diagnostic evidence
         if: always()
@@ -72,7 +74,7 @@ jobs:
   windows:
     if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && inputs.disposable_os_consent && (inputs.platform == 'windows-2025' || inputs.platform == 'both'))
     runs-on: windows-2025
-    timeout-minutes: 45
+    timeout-minutes: 20
     env:
       CODE_INTELLIGENCE_BUILD_SEQUENCE: ${{ inputs.build_sequence || github.run_number }}
       NATIVE_ACCEPTANCE_CONSENT: disposable-hosted-os
@@ -89,6 +91,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Run real native boundaries under a new standard-user token
+        timeout-minutes: 18
         shell: pwsh
         run: ./desktop/scripts/native-acceptance-windows.ps1
       - name: Preserve credential-free diagnostic evidence

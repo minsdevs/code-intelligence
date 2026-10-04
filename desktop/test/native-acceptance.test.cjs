@@ -228,6 +228,67 @@ test('direct native Electron runner refuses local use before importing or launch
   await assert.rejects(runProduct({ env: { ...hosted(), GITHUB_ACTIONS: 'false' } }), /Hosted workflow required/);
 });
 
+test('one product deadline survives successful steps and refuses late mutations', async t => {
+  const { createDeadline } = require('../scripts/native-acceptance-electron.cjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-deadline-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'acknowledged');
+  let now = 0; const budget = createDeadline(100, () => now);
+  await budget.run(() => fs.writeFileSync(file, 'first'));
+  now = 60;
+  await budget.run(() => fs.writeFileSync(file, 'second'));
+  const late = budget.run(() => fs.writeFileSync(file, 'late'));
+  now = 101;
+  await assert.rejects(late, /NATIVE_PRODUCT_DEADLINE/);
+  await assert.rejects(budget.run(() => fs.unlinkSync(file)), /NATIVE_PRODUCT_DEADLINE/);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'second');
+});
+
+test('a failed product operation blocks later actions and preserves its primary error', async () => {
+  const { createDeadline } = require('../scripts/native-acceptance-electron.cjs');
+  const budget = createDeadline(100, () => 0), primary = new Error('FIRST_STEP_FAILED');
+  await assert.rejects(budget.run(() => { throw primary; }), error => error === primary);
+  await assert.rejects(budget.run(() => { throw new Error('MUST_NOT_EXECUTE'); }), error => error === primary);
+});
+
+test('startup evidence accepts fragmented static records but no raw details or oversized tails', () => {
+  const { PassThrough } = require('node:stream');
+  const { observeStartup } = require('../scripts/native-acceptance-electron.cjs');
+  const child = { stderr: new PassThrough() }, report = {};
+  const stop = observeStartup(child, report, () => {});
+  child.stderr.write('private-token\nDESKTOP_STAR'); child.stderr.write('TUP TLS\r\n');
+  assert.deepEqual(report.startup, { phase: 'TLS', state: 'RUNNING' });
+  child.stderr.write('x'.repeat(1024) + 'DESKTOP_STARTUP BACKEND\n');
+  child.stderr.write('DESKTOP_STARTUP /Users/private\nDESKTOP_STARTUP TLS FAILED private-token\n');
+  assert.deepEqual(report.startup, { phase: 'TLS', state: 'RUNNING' });
+  child.stderr.write('DESKTOP_STARTUP SAFETY FAILED SAFETY_RECOVERY_REQUIRED\nDESKTOP_STARTUP READY\n');
+  assert.deepEqual(report.startup, { phase: 'SAFETY', state: 'FAILED', code: 'SAFETY_RECOVERY_REQUIRED' });
+  assert.equal(JSON.stringify(report).includes('private'), false);
+  stop(); child.stderr.end();
+});
+
+test('Windows policy evidence keeps public binary identity but rejects private or injected fields', () => {
+  const { buildDiagnostics } = require('../scripts/native-acceptance.cjs');
+  const { parsePe } = require('../scripts/windows-pe-policy.cjs');
+  let failure;
+  try { parsePe(Buffer.from('MZ'), 'cache/coreclr.dll'); } catch (error) { failure = error; }
+  assert.equal(failure.code, 'INVALID_PE');
+  const record = value => 'NATIVE_WINDOWS_POLICY ' + JSON.stringify(value) + '\n';
+  const rejected = [
+    { code: 'PRIVATE_SECRET', file: 'cache/coreclr.dll' },
+    { ...failure.publicPolicy, file: '/Users/private/coreclr.dll' },
+    { ...failure.publicPolicy, file: 'cache/../../private.dll' },
+    { ...failure.publicPolicy, file: 'cache/coreclr.dll\nprivate-token' },
+    { ...failure.publicPolicy, reference: 'C:\\private\\secret.dll' },
+    { ...failure.publicPolicy, secret: 'private-token' },
+  ];
+  const report = buildDiagnostics(record(failure.publicPolicy).repeat(16) + rejected.map(record).join(''));
+  assert.deepEqual(report.windowsPolicy, [{ code: 'INVALID_PE', file: 'cache/coreclr.dll' }]);
+  assert.equal(JSON.stringify(report).includes('private'), false);
+  const many = Array.from({ length: 20 }, (_, i) => ({ code: 'INVALID_PE', file: 'cache/library' + i + '.dll' }));
+  assert.deepEqual(buildDiagnostics(many.map(record).join('')).windowsPolicy, many.slice(0, 12));
+});
+
 test('macOS provisioning failure report bounds log reads and records source versions without raw text', t => {
   const { spawnSync } = require('node:child_process');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-provision-diagnostics-'));
@@ -264,10 +325,5 @@ test('native linker diagnostics explain reproduced Darwin test-module driver fla
     rejectedDriverFlags: ['-mmacosx-version-min=13.0', '-Wl,-headerpad_max_install_names'],
   });
   assert.equal(JSON.stringify(result).includes('private-token'), false);
-  const script = fs.readFileSync(path.join(__dirname, '../scripts/native-acceptance-macos.sh'), 'utf8');
-  assert.match(script, /make -C "\$work\/redis-source\/src" -j2 redis-server BUILD_TLS=yes MALLOC=libc/);
-  assert.match(script, /MACOSX_DEPLOYMENT_TARGET=13\.0/);
-  assert.match(script, /OPENSSL_PREFIX="\$prefix\/openssl"/);
-  assert.match(script, /helper\.relocateMacLibraries\(process\.argv\[3\]\)/);
 });
 

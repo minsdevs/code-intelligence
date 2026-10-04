@@ -8,7 +8,17 @@ const SYSTEM_DLLS = new Set(('advapi32 avrt bcrypt bcryptprimitives cabinet cfgm
 SYSTEM_DLLS.add('winspool.drv');
 for (const name of ['pdh.dll', 'winscard.dll', 'msi.dll']) SYSTEM_DLLS.add(name);
 const API_SETS = new Set(["api-ms-win-core-console-l1-1-0.dll","api-ms-win-core-datetime-l1-1-0.dll","api-ms-win-core-debug-l1-1-0.dll","api-ms-win-core-errorhandling-l1-1-0.dll","api-ms-win-core-fibers-l1-1-0.dll","api-ms-win-core-fibers-l1-1-1.dll","api-ms-win-core-file-l1-1-0.dll","api-ms-win-core-file-l1-2-0.dll","api-ms-win-core-file-l2-1-0.dll","api-ms-win-core-handle-l1-1-0.dll","api-ms-win-core-heap-l1-1-0.dll","api-ms-win-core-interlocked-l1-1-0.dll","api-ms-win-core-kernel32-legacy-l1-1-1.dll","api-ms-win-core-libraryloader-l1-1-0.dll","api-ms-win-core-localization-l1-2-0.dll","api-ms-win-core-memory-l1-1-0.dll","api-ms-win-core-namedpipe-l1-1-0.dll","api-ms-win-core-processenvironment-l1-1-0.dll","api-ms-win-core-processthreads-l1-1-0.dll","api-ms-win-core-processthreads-l1-1-1.dll","api-ms-win-core-profile-l1-1-0.dll","api-ms-win-core-rtlsupport-l1-1-0.dll","api-ms-win-core-string-l1-1-0.dll","api-ms-win-core-synch-l1-1-0.dll","api-ms-win-core-synch-l1-2-0.dll","api-ms-win-core-sysinfo-l1-1-0.dll","api-ms-win-core-sysinfo-l1-2-0.dll","api-ms-win-core-timezone-l1-1-0.dll","api-ms-win-core-util-l1-1-0.dll","api-ms-win-core-winrt-l1-1-0.dll","api-ms-win-crt-convert-l1-1-0.dll","api-ms-win-crt-environment-l1-1-0.dll","api-ms-win-crt-filesystem-l1-1-0.dll","api-ms-win-crt-heap-l1-1-0.dll","api-ms-win-crt-locale-l1-1-0.dll","api-ms-win-crt-math-l1-1-0.dll","api-ms-win-crt-multibyte-l1-1-0.dll","api-ms-win-crt-runtime-l1-1-0.dll","api-ms-win-crt-stdio-l1-1-0.dll","api-ms-win-crt-string-l1-1-0.dll","api-ms-win-crt-time-l1-1-0.dll","api-ms-win-crt-utility-l1-1-0.dll"]);
-function fail(code, file = '') { const error = new Error(`Native runtime publication blocked: ${code}${file ? ': ' + file : ''}`); error.code = code; throw error; }
+function fail(code, file = '') {
+  const error = new Error('Native runtime publication blocked: ' + code + (file ? ': ' + file : ''));
+  error.code = code;
+  const parts = typeof file === 'string' ? file.split(' -> ') : [];
+  if (parts.length >= 1 && parts.length <= 2 && parts[0].length <= 256 && /^(?:jre|cache|postgres|native)\/[A-Za-z0-9_+./-]+$/.test(parts[0])
+      && path.posix.normalize(parts[0]) === parts[0] && !parts[0].endsWith('/')) {
+    error.publicPolicy = { code, file: parts[0] };
+    if (parts[1] && /^[A-Za-z0-9_.-]{1,240}\.dll$/i.test(parts[1])) error.publicPolicy.reference = parts[1];
+  }
+  throw error;
+}
 function parsePe(bytes, file = '') {
   const bad = () => fail('INVALID_PE', file);
   const range = (offset, length) => { if (!Number.isSafeInteger(offset) || offset < 0 || length < 0 || offset + length > bytes.length) bad(); return offset; };

@@ -162,5 +162,8 @@ async function provision(destination) {
   writeJson(path.join(destination, 'supply.json'), { format: 1, platform: 'win32', arch: 'x64', jdk, runtime, sources: SUPPLIES, toolchain: toolchain.pin });
   return { jdk, runtime };
 }
-if (require.main === module) provision(path.resolve(process.argv[2] || '')).then(() => console.log('Windows runtime supply prepared; native product acceptance still required.')).catch(error => { console.error(error); process.exitCode = 1; });
+if (require.main === module) provision(path.resolve(process.argv[2] || '')).then(() => console.log('Windows runtime supply prepared; native product acceptance still required.')).catch(error => {
+  if (error.publicPolicy) console.error('NATIVE_WINDOWS_POLICY ' + JSON.stringify(error.publicPolicy));
+  console.error(error); process.exitCode = 1;
+});
 module.exports = { provision, command, fresh, copy, copyTree, writeJson, digest };

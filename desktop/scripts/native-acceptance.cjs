@@ -115,8 +115,22 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
     'COPY_BASENAME_COLLISION', 'NATIVE_INSPECTION_FAILED', 'UNSAFE_STAGE_ENTRY', 'INVALID_STAGE_ROOT',
     'MISSING_OR_AMBIGUOUS_DEPLOYMENT_TARGET', 'INVALID_LOAD_COMMANDS', 'UNSUPPORTED_LIBRARY_FORMAT',
     'PRIVATE_NATIVE_PREFIX_REQUIRED', 'UNVERIFIED_NATIVE_DEPENDENCY', 'NATIVE_PREFIX_LINK_ESCAPE',
-    'EXTENSION_CONTROL_BINDING', 'REQUIRED_EXTENSION_SQL', 'REQUIRED_EXTENSION_CONTROL']
+    'EXTENSION_CONTROL_BINDING', 'REQUIRED_EXTENSION_SQL', 'REQUIRED_EXTENSION_CONTROL',
+    'INVALID_PE', 'INVENTORY_LIMIT', 'CASE_COLLISION', 'SYSTEM_DLL_SHADOW', 'DEPENDENCY_NOT_NATIVE',
+    'INVALID_WINDOWS_MANIFEST', 'INVENTORY_MISMATCH', 'REQUIRED_NATIVE_MISSING', 'REQUIRED_NATIVE_KIND',
+    'PROVENANCE_MISSING', 'UNPINNED_SUPPLY', 'NOTICE_MISSING', 'DEPENDENCY_NOTICE_MISSING', 'CACHE_SELF_CONTAINED_REQUIRED']
     .filter(code => (text.match(/[A-Z][A-Z0-9_]+/g) || []).includes(code));
+  const windowsPolicy = [];
+  for (const match of text.matchAll(/^NATIVE_WINDOWS_POLICY (\{[^\r\n]{1,1024}\})\r?$/gm)) {
+    let item; try { item = JSON.parse(match[1]); } catch { continue; }
+    if (!item || !policyCodes.includes(item.code) || typeof item.file !== 'string' || item.file.length > 256
+        || !/^(?:jre|cache|postgres|native)\/[A-Za-z0-9_+./-]+$/.test(item.file)
+        || path.posix.normalize(item.file) !== item.file || item.file.endsWith('/')
+        || Object.keys(item).some(key => !['code', 'file', 'reference'].includes(key))
+        || (item.reference !== undefined && (typeof item.reference !== 'string' || !/^[A-Za-z0-9_.-]{1,240}\.dll$/i.test(item.reference)))) continue;
+    if (!windowsPolicy.some(value => JSON.stringify(value) === JSON.stringify(item))) windowsPolicy.push(item);
+    if (windowsPolicy.length === 12) break;
+  }
   const steps = [...stdout.matchAll(/^> (npm run build|\.\/gradlew bootJar|npm ci --omit=dev --ignore-scripts|[^\r\n]*\/bin\/jlink --add-modules[^\r\n]*)$/gm)]
     .map(match => match[1].startsWith('npm run') ? 'typescript-build' : match[1].startsWith('./gradlew')
       ? 'backend-boot-jar' : match[1].startsWith('npm ci') ? 'analyzer-production-dependencies' : 'jre-link');
@@ -157,17 +171,19 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
       .filter(flag => text.split(/\r?\n/).some(line => /^ld: (?:unknown|unrecognized) (?:options?|arguments?):/.test(line) && line.split(/\s+/).includes(flag))),
   };
   return { lastBuildStep: steps.at(-1) || null, categories, compilerCodes, policyCodes, javaSymbols, missingPackages, locations, nativeLink,
-    nativeClosure: nativeClosureDiagnostics(text) };
+    nativeClosure: nativeClosureDiagnostics(text), windowsPolicy };
 }
 function run(command, args, cwd, env = process.env, options = {}) {
-  const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout: 35 * 60 * 1000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
+  const timeoutMs = options.timeoutMs ?? 8 * 60 * 1000;
+  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 8 * 60 * 1000);
+  const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout: timeoutMs, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024, windowsHide: true });
   // Compiler output and runtime logs can include paths, source, URLs or credentials.
   // Keep them out of artifacts and GitHub logs; retain only bounded outcome metadata.
   if (result.status !== 0 || result.error) {
-    const error = new Error('NATIVE_ACCEPTANCE_COMMAND_FAILED');
+    const error = new Error(result.error?.code === 'ETIMEDOUT' ? 'NATIVE_BUILD_TIMEOUT' : 'NATIVE_ACCEPTANCE_COMMAND_FAILED');
     error.exitStatus = Number.isInteger(result.status) ? result.status : null;
     error.commandEvidence = { executable: path.basename(command), signal: result.signal || null,
-      stdoutBytes: Buffer.byteLength(result.stdout || ''), stderrBytes: Buffer.byteLength(result.stderr || '') };
+      timeoutMs, stdoutBytes: Buffer.byteLength(result.stdout || ''), stderrBytes: Buffer.byteLength(result.stderr || '') };
     if (options.buildDiagnostics) error.commandEvidence.buildDiagnostics = buildDiagnostics(result.stdout || '', result.stderr || '', options.sourceRoot);
     throw error;
   }

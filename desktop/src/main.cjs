@@ -57,6 +57,11 @@ let quitContinuation = false;
 let restartTimer;
 let restartAttempts = 0;
 let runtimeOperation = Promise.resolve();
+let startupPhase = 'MANIFEST';
+function noteStartup(phase) {
+  startupPhase = phase;
+  console.error('DESKTOP_STARTUP ' + phase);
+}
 
 // Dialogs, backup, restore and restart must never mutate the same runtime concurrently.
 function withRuntimeOperation(action) {
@@ -585,12 +590,15 @@ async function startRuntime() {
   stopping = false;
   runtime.ready = false;
   runtime.error = null;
+  noteStartup('POSTGRES');
   await startPostgres();
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
+  noteStartup('CACHE_AND_ANALYZER');
   await Promise.all([startRedis(), startAnalyzer()]);
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
+  noteStartup('BACKEND');
   await startBackend();
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
@@ -1092,8 +1100,10 @@ function createWindow() {
 async function startApplication() {
   if (!ownsInstance || quitting) return;
   try {
+    noteStartup('MANIFEST');
     runtimeManifest = await verifyRuntimeIntegrity();
     const runningBuild = requireBuildSequence(runtimeManifest.buildSequence);
+    noteStartup('PROFILE');
     const profile = app.getPath('userData');
     await fsp.mkdir(profile, { recursive: true, mode: 0o700 });
     const windowsBoundary = process.platform === 'win32' ? createWindowsBoundary(runtimeRoot()) : undefined;
@@ -1125,10 +1135,12 @@ async function startApplication() {
       error: null
     };
     if (windowsBoundary) runtime.storage = await windowsBoundary.openStorage(userData, { onLost: loseRuntimeOwnership });
+    noteStartup('CREDENTIALS');
     const secrets = await loadDesktopSecrets({ userData, safeStorage, windowsBoundary, electronApp: app,
       ...(windowsBoundary ? { initializeEnrollment: value => openAuthorizedRoots(value, true) } : {}) });
     runtime.secrets = secrets;
     if (windowsBoundary && !runtime.grantState) await openAuthorizedRoots(secrets);
+    noteStartup('PRIVATE_IPC');
     const temporaryRoot = await fsp.realpath(app.getPath('temp'));
     if (windowsBoundary) {
       runtime.ipcRoot = path.join(temporaryRoot, 'ci-' + crypto.randomBytes(4).toString('hex'));
@@ -1139,9 +1151,11 @@ async function startApplication() {
       runtime.ipcRoot = await fsp.realpath(await fsp.mkdtemp(path.join(temporaryRoot, 'ci-')));
       await fsp.chmod(runtime.ipcRoot, 0o700); runtime.ipcIdentity = await fsp.lstat(runtime.ipcRoot);
     }
+    noteStartup('TLS');
     runtime.transport = await createServiceTransport({ userData, ports: runtime.ports, getApiToken: () => runtime.apiToken,
       windowsBoundary, onLost: loseRuntimeOwnership });
     runtime.apiBaseUrl = runtime.transport.backend.origin;
+    noteStartup('OWNER_LOCKS');
     if (runtimeManifest.ownershipProtocol === 1) ownerLocks = await createNativeOwnerLocks({
       javaPath: binary('jre', 'bin', 'java'), jarPath: binary('backend', 'code-intelligence.jar'),
       safetyRoot: path.join(runtime.userData, 'safety'), installationId: secrets.localIdentity,
@@ -1155,9 +1169,11 @@ async function startApplication() {
       env: postgresEnvironment() });
     const maintenanceVerifier = runtimeManifest.backupProtocol === 3
       ? createMaintenanceVerifier({ installationId: secrets.localIdentity, readProjection: aiPostgres.readProjection }) : undefined;
+      noteStartup('SAFETY');
       safetyLifecycle = await openSafetyLifecycle({ userData, safeStorage, windowsBoundary, electronApp: app,
       installationId: secrets.localIdentity, runningBuild, recoveryMode, ...(ownerLocks ? { ownerLocks } : {}),
       createGateway: async ({ openJournal, freshEnrollmentAllowed, recoveryMode: gatewayRecoveryMode }) => {
+        noteStartup('GATEWAY');
         aiGateway = await openDesktopAiGateway({ installationId: secrets.localIdentity, runningBuild,
           temporaryRoot: runtime.ipcRoot, tokenEncryptionKey: secrets.tokenEncryptionKey, windowsBoundary,
           openJournal, freshEnrollmentAllowed, adapter: aiPostgres, recoveryMode: gatewayRecoveryMode,
@@ -1165,6 +1181,7 @@ async function startApplication() {
         return aiGateway;
       },
       ...(runtimeManifest.backupProtocol === 3 ? { createBackupRuntime: async hooks => {
+        noteStartup('BACKUP');
         backupRuntime = await createDesktopBackupRuntime({ ...hooks, userData,
           installationId: secrets.localIdentity, runningBuild, recoveryMode, windowsBoundary,
           gateway: aiGateway, adapter: aiPostgres, ports: backupPorts() });
@@ -1194,16 +1211,20 @@ async function startApplication() {
       await openSafety(false);
     }
     if (quitting) return;
+    noteStartup('AUTHORIZED_ROOTS');
     runtime.authorizedRoots = await readAuthorizedRoots();
     registerIpc();
     await startRuntime();
-    if (!quitting) createWindow();
+    if (!quitting) { noteStartup('WINDOW'); createWindow(); noteStartup('READY'); }
   } catch (error) {
     // Requested quit cancels further startup; the serialized shutdown still latches and closes B.
     if (quitting) return;
     runtime = runtime || { ready: false };
     runtime.error = error.message;
     runtime.recoveryRequired = true;
+    const code = ['EACCES', 'ENOENT', 'SAFETY_RECOVERY_REQUIRED', 'SAFETY_STORAGE_UNAVAILABLE', 'SAFETY_OWNER_LOST'].includes(error.code)
+      ? error.code : 'MAIN_STARTUP_FAILED';
+    console.error('DESKTOP_STARTUP ' + startupPhase + ' FAILED ' + code);
     dialog.showErrorBox('Code Intelligence could not start', error.message);
     app.quit();
   }

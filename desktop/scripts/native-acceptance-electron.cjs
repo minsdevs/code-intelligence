@@ -35,10 +35,54 @@ async function closeOwnedApplication(current, { timeoutMs = 30000, killGraceMs =
   } finally { child.removeListener('exit', onExit); }
 }
 
+function createDeadline(timeoutMs = 540000, now = () => performance.now()) {
+  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 540000);
+  const expires = now() + timeoutMs;
+  let failure;
+  const limit = (maximum = 30000) => {
+    if (failure) throw failure;
+    const remaining = Math.floor(expires - now());
+    if (remaining <= 0) throw new Error('NATIVE_PRODUCT_DEADLINE');
+    return Math.min(maximum, remaining);
+  };
+  return { limit, async run(action, maximum = 30000, code = 'NATIVE_ELECTRON_OPERATION_TIMEOUT') {
+    const duration = limit(maximum);
+    try {
+      return await bounded(Promise.resolve().then(() => { limit(maximum); return action(); }), duration,
+        duration < maximum ? 'NATIVE_PRODUCT_DEADLINE' : code);
+    } catch (error) { failure = error; throw error; }
+  } };
+}
+
+function parseStartupLine(line) {
+  const match = /^DESKTOP_STARTUP (MANIFEST|PROFILE|CREDENTIALS|PRIVATE_IPC|TLS|OWNER_LOCKS|SAFETY|GATEWAY|BACKUP|AUTHORIZED_ROOTS|POSTGRES|CACHE_AND_ANALYZER|BACKEND|WINDOW|READY)(?: FAILED (EACCES|ENOENT|SAFETY_RECOVERY_REQUIRED|SAFETY_STORAGE_UNAVAILABLE|SAFETY_OWNER_LOST|MAIN_STARTUP_FAILED))?$/.exec(line);
+  return match ? { phase: match[1], state: match[2] ? 'FAILED' : 'RUNNING', ...(match[2] ? { code: match[2] } : {}) } : null;
+}
+function observeStartup(child, report, save) {
+  let line = '', dropping = false;
+  const data = bytes => {
+    for (const character of bytes.toString('utf8')) {
+      if (character === '\n') {
+        const value = dropping ? null : parseStartupLine(line.replace(/\r$/, ''));
+        if (value && report.startup?.state !== 'FAILED') { report.startup = value; save(); }
+        line = ''; dropping = false;
+      } else if (!dropping) {
+        if (line.length === 256) { line = ''; dropping = true; } else line += character;
+      }
+    }
+  };
+  child.stderr.on('data', data);
+  return () => child.stderr.off('data', data);
+}
+
 async function runProduct({ source, owned, artifacts, report, env, phase }) {
   // Keep direct callers subject to the same hosted-only safety boundary as main.
   const { requireHosted, recordFailure } = require('./native-acceptance.cjs');
   requireHosted(env);
+  const deadline = createDeadline();
+  const perform = (action, timeoutMs, code) => deadline.run(action, timeoutMs, code);
+  report.executionLimitMs = 600000;
+  const executionStarted = performance.now();
   const frontendRequire = createRequire(path.join(source, 'frontend', 'package.json'));
   const { _electron: electron } = frontendRequire('playwright');
   const { expect } = frontendRequire('@playwright/test');
@@ -58,25 +102,30 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   fs.writeFileSync(sourceFile, first, { flag: 'wx', mode: 0o600 });
   const secret = crypto.randomBytes(32).toString('hex');
   const cipherPath = path.join(owned, 'safestorage-probe.enc');
-  let app, page, userData, projectId, snapshotId;
+  let app, page, userData, projectId, snapshotId, stopObserving;
   let pageErrors = 0;
   const step = (name, action, timeoutMs = 30000) => {
     phase(name);
-    return bounded(Promise.resolve().then(action), timeoutMs, 'NATIVE_ELECTRON_OPERATION_TIMEOUT');
+    return perform(action, timeoutMs);
   };
   const launch = async () => {
     // Playwright enables its process-local inspector; no shipping flags or startup hooks change.
+    const startupEnds = performance.now() + 90000;
     phase('electron-launch');
-    app = await electron.launch({ executablePath, args: [desktop], cwd: desktop, env, timeout: 180000 });
+    app = await electron.launch({ executablePath, args: [desktop], cwd: desktop, env, timeout: deadline.limit(90000) });
+    delete report.startup;
+    stopObserving = observeStartup(app.process(), report, () => phase(report.phase));
     phase('electron-first-window');
-    page = await app.firstWindow({ timeout: 180000 });
+    const remaining = Math.floor(startupEnds - performance.now());
+    if (remaining <= 0) throw new Error('NATIVE_STARTUP_TIMEOUT');
+    page = await app.firstWindow({ timeout: deadline.limit(remaining) });
     page.setDefaultTimeout(30000);
     page.on('pageerror', () => pageErrors++);
     userData = await step('native-profile-path', () => app.evaluate(({ app }) => app.getPath('userData')));
     assert.equal(userData, expectedUserData);
     report.electronVersion = await step('native-electron-version', () => app.evaluate(() => process.versions.electron));
     phase('native-home-visible');
-    await expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible({ timeout: 60000 });
+    await perform(() => expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible({ timeout: deadline.limit(30000) }));
     const appVersion = await step('native-app-version-ipc', () => page.evaluate(() => window.codeIntelligenceDesktop.appVersion));
     assert.equal(appVersion, desktopPackage.version, 'Renderer app version must come from the real desktop config IPC');
     report.appVersion = appVersion; report.checks.push('native-app-version-ipc');
@@ -95,10 +144,11 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     if (!app) return;
     const current = app; app = null;
     phase('native-clean-shutdown');
-    await closeOwnedApplication(current);
+    try { await closeOwnedApplication(current); }
+    finally { stopObserving?.(); stopObserving = null; }
   };
   const api = async (route, method = 'GET', body) => {
-    const result = await bounded(page.evaluate(async ({ route, method, body }) => {
+    const result = await perform(() => page.evaluate(async ({ route, method, body }) => {
       const desktop = window.codeIntelligenceDesktop;
       const headers = { 'X-Code-Intelligence-Token': desktop.apiToken };
       if (method !== 'GET') {
@@ -116,7 +166,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.ok(result.status >= 200 && result.status < 300, 'Real application API request failed');
     return result.body;
   };
-  const navigate = route => bounded(page.evaluate(route => {
+  const navigate = route => perform(() => page.evaluate(route => {
     history.pushState(null, '', route); window.dispatchEvent(new PopStateEvent('popstate'));
   }, route), 30000, 'NATIVE_RENDERER_TIMEOUT');
   const awaitJob = async id => {
@@ -132,11 +182,11 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   };
   const sourceContent = async (expected, snapshot) => {
     await navigate(`/projects/${projectId}/code`);
-    await page.getByRole('treeitem', { name: 'acceptance.ts', exact: true }).click();
-    await expect(page.getByTestId('code-viewer').locator('.view-lines')).toHaveText(expected.trimEnd());
-    await expect(page.getByTestId('source-context')).toContainText(`Snapshot #${snapshot}`);
+    await perform(() => page.getByRole('treeitem', { name: 'acceptance.ts', exact: true }).click());
+    await perform(() => expect(page.getByTestId('code-viewer').locator('.view-lines')).toHaveText(expected.trimEnd()));
+    await perform(() => expect(page.getByTestId('source-context')).toContainText('Snapshot #' + snapshot));
     const model = page.getByTestId('code-viewer').locator('.monaco-editor').first();
-    await expect(model).toHaveAttribute('data-uri', new RegExp(`^snapshot://${projectId}/${snapshot}/`));
+    await perform(() => expect(model).toHaveAttribute('data-uri', new RegExp('^snapshot://' + projectId + '/' + snapshot + '/')));
   };
   const captureSizes = async label => {
     // Capture the actual Electron native window content, not a browser replay/mock.
@@ -145,13 +195,13 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     for (const [width, height] of [[980, 700], [1280, 800], [1440, 900]]) {
       await step('native-' + label + '-size-' + width + 'x' + height,
         () => window.evaluate((win, size) => { win.setContentSize(size.width, size.height); win.show(); }, { width, height }));
-      await expect.poll(() => bounded(page.evaluate(() => [innerWidth, innerHeight]), 30000, 'NATIVE_RENDERER_TIMEOUT')).toEqual([width, height]);
+      await perform(() => expect.poll(() => perform(() => page.evaluate(() => [innerWidth, innerHeight]))).toEqual([width, height]));
       await step('native-window-paint', () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
-      assert.equal(await bounded(page.evaluate(() => document.documentElement.scrollWidth > innerWidth), 30000, 'NATIVE_RENDERER_TIMEOUT'), false, 'Horizontal overflow');
+      assert.equal(await perform(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth)), false, 'Horizontal overflow');
       const image = await step('native-window-capture', () => window.evaluate(async win => (await win.capturePage()).toPNG({ scaleFactor: 1 }).toString('base64')));
       fs.writeFileSync(path.join(artifacts, `${label}-${width}x${height}.png`), Buffer.from(image, 'base64'), { flag: 'wx', mode: 0o600 });
     }
-    await bounded(window.dispose(), 30000, 'NATIVE_WINDOW_DISPOSE_TIMEOUT');
+    await perform(() => window.dispose(), 30000, 'NATIVE_WINDOW_DISPOSE_TIMEOUT');
     report.checks.push(`${label}-three-native-window-sizes`);
   };
   let failure;
@@ -169,29 +219,36 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.deepEqual(await api('/api/projects'), []);
     await navigate('/import');
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
-    await expect(picker).toBeVisible();
-    const bounds = await picker.boundingBox(); assert.ok(bounds);
-    const cdp = await page.context().newCDPSession(page);
+    await perform(() => expect(picker).toBeVisible());
+    const bounds = await perform(() => picker.boundingBox()); assert.ok(bounds);
+    const cdp = await perform(() => page.context().newCDPSession(page));
+    let dragFailure;
     try {
       // Chromium supplies the real on-disk File via its native drag protocol.
       // The unmodified UI calls preload -> folder:authorize -> the real folder policy.
       const data = { items: [], files: [synthetic], dragOperationsMask: 1 };
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.send('Input.dispatchDragEvent', {
+      for (const type of ['dragEnter', 'dragOver', 'drop']) await perform(() => cdp.send('Input.dispatchDragEvent', {
         type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data
-      });
-    } finally { await cdp.detach(); }
-    await page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click();
-    await expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible();
-    const createdResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local' && response.request().method() === 'POST');
-    await page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click();
-    const created = await createdResponse; assert.ok(created.ok());
-    const result = await created.json(); projectId = result.project.id;
+      }));
+    } catch (error) { dragFailure = error; throw error; }
+    finally {
+      try { await bounded(cdp.detach(), 5000, 'NATIVE_CDP_CLOSE_TIMEOUT'); }
+      catch (error) { if (!dragFailure) throw error; }
+    }
+    await perform(() => page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click());
+    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
+    const [created] = await perform(() => Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local' && response.request().method() === 'POST', { timeout: deadline.limit() }),
+      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click(),
+    ]));
+    assert.ok(created.ok());
+    const result = await perform(() => created.json()); projectId = result.project.id;
     await awaitJob(result.jobId);
     const project = await api(`/api/projects/${projectId}`); snapshotId = project.currentSnapshot.id;
     await sourceContent(first, snapshotId);
     report.checks.push('real-folder-grant-preview-import-analysis-source-navigation');
-    await navigate('/projects'); await expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible();
-    await expect(page.getByText('native-synthetic-project', { exact: true }).first()).toBeVisible();
+    await navigate('/projects'); await perform(() => expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible());
+    await perform(() => expect(page.getByText('native-synthetic-project', { exact: true }).first()).toBeVisible());
     await captureSizes('project-list');
     phase('real-app-restart'); await close(); await launch();
     const decryptedMatches = await step('native-safe-storage-decrypt', () => app.evaluate(({ safeStorage }, { bytes, expected }) => {
@@ -204,13 +261,15 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await sourceContent(first, snapshotId);
     report.checks.push('native-safeStorage-decrypt-after-process-restart', 'real-database-and-encrypted-source-persistence');
     phase('synthetic-reanalysis'); fs.writeFileSync(sourceFile, second, { mode: 0o600 });
-    await page.getByRole('button', { name: '상태 새로고침', exact: true }).click();
-    await page.getByRole('button', { name: '변경 사항 미리보기', exact: true }).click();
-    await expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible();
-    const refreshedResponse = page.waitForResponse(response => new URL(response.url()).pathname === `/api/projects/${projectId}/reanalyze` && response.request().method() === 'POST');
-    await page.getByRole('button', { name: '변경 확인 후 전체 재분석', exact: true }).click();
-    const refreshed = await refreshedResponse; assert.ok(refreshed.ok());
-    await awaitJob((await refreshed.json()).jobId);
+    await perform(() => page.getByRole('button', { name: '상태 새로고침', exact: true }).click());
+    await perform(() => page.getByRole('button', { name: '변경 사항 미리보기', exact: true }).click());
+    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
+    const [refreshed] = await perform(() => Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/' + projectId + '/reanalyze' && response.request().method() === 'POST', { timeout: deadline.limit() }),
+      page.getByRole('button', { name: '변경 확인 후 전체 재분석', exact: true }).click(),
+    ]));
+    assert.ok(refreshed.ok());
+    await awaitJob((await perform(() => refreshed.json())).jobId);
     const nextSnapshot = (await api(`/api/projects/${projectId}`)).currentSnapshot.id;
     assert.notEqual(nextSnapshot, snapshotId);
     await sourceContent(second, nextSnapshot);
@@ -218,7 +277,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     phase('synthetic-delete'); await api(`/api/projects/${projectId}`, 'DELETE');
     assert.deepEqual(await api('/api/projects'), []);
     await navigate('/projects');
-    await expect(page.getByText('native-synthetic-project', { exact: true })).toHaveCount(0);
+    await perform(() => expect(page.getByText('native-synthetic-project', { exact: true })).toHaveCount(0));
     await captureSizes('after-delete');
     report.checks.push('synthetic-project-delete');
     phase('final-process-restart'); await close(); await launch();
@@ -236,7 +295,11 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       else report.cleanupFailure = recordFailure({ phase: 'native-cleanup' }, error);
     }
     if (failure) phase(report.failure.phase);
+    report.executionElapsedMs = Math.round(performance.now() - executionStarted);
+    if (!failure && report.executionElapsedMs >= report.executionLimitMs) {
+      failure = new Error('NATIVE_PRODUCT_DEADLINE'); recordFailure(report, failure);
+    }
   }
   if (failure) throw failure;
 }
-module.exports = { runProduct, closeOwnedApplication };
+module.exports = { runProduct, closeOwnedApplication, createDeadline, observeStartup };
