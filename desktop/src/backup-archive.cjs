@@ -276,7 +276,7 @@ function publicMetadata(metadata) {
     payloadSha256: metadata.payloadSha256, chunkCount: metadata.chunkCount });
 }
 async function encrypt(input, options) {
-  let dek; let output;
+  let dek; let output; let failed = false;
   try {
     const payloadBytes = Number(input.stat.size);
     const payloadSha256 = await digestFile(input.handle, payloadBytes, 'BACKUP_ARCHIVE_SOURCE_CHANGED');
@@ -306,10 +306,14 @@ async function encrypt(input, options) {
     await eof(input.handle, payloadBytes, 'BACKUP_ARCHIVE_SOURCE_CHANGED'); await input.verify();
     if (payloadDigest.digest('hex') !== payloadSha256) fail('BACKUP_ARCHIVE_SOURCE_CHANGED');
     await output.publish(() => input.verify()); return publicMetadata(metadata);
-  } finally { dek?.fill(0); if (output) await output.close(); }
+  } catch (error) { failed = true; throw error; }
+  finally {
+    dek?.fill(0);
+    if (output) { if (failed) await output.close().catch(() => {}); else await output.close(); }
+  }
 }
 async function decrypt(input, options) {
-  let dek; let output;
+  let dek; let output; let failed = false;
   try {
     const parsed = await metadataFromInput(input, options); ({ dek } = parsed);
     const { metadata, headerHash } = parsed; let position = parsed.position;
@@ -329,7 +333,11 @@ async function decrypt(input, options) {
     await eof(input.handle, position, 'BACKUP_ARCHIVE_INTEGRITY'); await input.verify();
     if (payloadDigest.digest('hex') !== metadata.payloadSha256) fail('BACKUP_ARCHIVE_INTEGRITY');
     await output.publish(() => input.verify()); return publicMetadata(metadata);
-  } finally { dek?.fill(0); if (output) await output.close(); }
+  } catch (error) { failed = true; throw error; }
+  finally {
+    dek?.fill(0);
+    if (output) { if (failed) await output.close().catch(() => {}); else await output.close(); }
+  }
 }
 async function nativeOutput(options) {
   const storage = options.destinationStorage;
@@ -344,8 +352,10 @@ async function nativeOutput(options) {
       const written = await writer.commit(); closed = true;
       await options.fault?.('output:file-synced');
       const reader = await native.readHandle(storage, options.destinationPath, maximum, written);
+      let failed = false;
       try { if (Number(written.size) !== length || await digestFile(reader, length, 'BACKUP_ARCHIVE_INTEGRITY') !== digest.digest('hex')) fail('BACKUP_ARCHIVE_INTEGRITY'); await reader.stat(); }
-      finally { await reader.close(); }
+      catch (error) { failed = true; throw error; }
+      finally { if (failed) await reader.close().catch(() => {}); else await reader.close(); }
       await verifyInput(); await options.fault?.('output:published');
     },
     async close() { if (!closed) { closed = true; await writer.close(); } },
@@ -353,7 +363,7 @@ async function nativeOutput(options) {
   };
 }
 async function run(value, decrypting) {
-  let input, sourceStorage, destinationStorage;
+  let input, sourceStorage, destinationStorage, result, failure;
   if (activeOperations >= 2) throw new BackupArchiveError('BACKUP_ARCHIVE_BUSY');
   activeOperations += 1;
   try {
@@ -384,13 +394,17 @@ async function run(value, decrypting) {
     }
     const maximum = decrypting ? options.maximum + 12 + MAX_HEADER + chunkCount(options.maximum) * FRAME_BYTES : options.maximum;
     input = await inputFile(options, maximum);
-    return await (decrypting ? decrypt(input, options) : encrypt(input, options));
-  } catch (error) { throw safeError(error); }
+    result = await (decrypting ? decrypt(input, options) : encrypt(input, options));
+  } catch (error) { failure = safeError(error); }
   finally {
-    try { if (input) await input.handle.close(); }
-    catch (error) { throw safeError(error); }
-    finally { try { await sourceStorage?.close(); } finally { try { await destinationStorage?.close(); } finally { activeOperations -= 1; } } }
+    for (const resource of [input?.handle, sourceStorage, destinationStorage]) {
+      try { await resource?.close(); }
+      catch (error) { failure ??= safeError(error); }
+    }
+    activeOperations -= 1;
   }
+  if (failure) throw failure;
+  return result;
 }
 
 module.exports = Object.freeze({ encryptFile: options => run(options, false), decryptFile: options => run(options, true), BackupArchiveError });

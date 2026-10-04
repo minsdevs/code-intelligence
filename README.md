@@ -271,6 +271,9 @@ The real native backup fixture now covers pinned Spring HTTPS, authenticated Red
 PostgreSQL verify-full TLS, encrypted backup/restore, and an injected post-health failure
 that rolls back product data while preserving the OFF credentials and unresolved safety seal.
 All three cases passed; its OS key wrapper remains explicitly synthetic.
+Archive failures preserve the original integrity/source-change rejection while attempting
+every owned-resource close. A cleanup-only failure still prevents success acknowledgement;
+cleanup errors do not turn a failed operation into success or replace its primary cause.
 A separate cold clone of the real V20 database migrated through actual Flyway to V26;
 existing-table row counts were preserved, and a cold V20 restore reproduced all data digests.
 All 1,602 original DB files retained their bytes, sizes and permissions. This is not a signed-app upgrade.

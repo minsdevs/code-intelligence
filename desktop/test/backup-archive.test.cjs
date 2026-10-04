@@ -329,6 +329,50 @@ test('same-size source mutation between hashing and encryption is detected', asy
   } }), 'BACKUP_ARCHIVE_SOURCE_CHANGED'); await noPublication(f, false);
 });
 
+for (const decrypting of [false, true]) {
+  test((decrypting ? 'decrypt integrity' : 'encrypt source mutation') + ' remains the primary error when resource closes also fail', async t => {
+    const f = await fixture(t, Buffer.alloc(31, 40));
+    let original;
+    if (decrypting) {
+      await f.encrypt(); original = await fs.readFile(f.archivePath);
+      const corrupt = Buffer.from(original); corrupt[corrupt.length - 1] ^= 1;
+      await fs.writeFile(f.archivePath, corrupt);
+    }
+    const open = fs.open, inputPath = decrypting ? f.archivePath : f.sourcePath;
+    t.mock.method(fs, 'open', async (...args) => {
+      const handle = await open(...args);
+      if (args[0] === inputPath || path.basename(args[0]).startsWith('.archive-pending-')) {
+        const close = handle.close.bind(handle);
+        t.mock.method(handle, 'close', async () => { await close(); throw new Error('private cleanup detail'); });
+      }
+      return handle;
+    });
+    const operation = decrypting ? f.decrypt() : f.encrypt({ async fault(stage) {
+      if (stage === 'encrypt:after-hash') await fs.writeFile(f.sourcePath, Buffer.alloc(31, 41));
+    } });
+    await rejects(operation, decrypting ? 'BACKUP_ARCHIVE_INTEGRITY' : 'BACKUP_ARCHIVE_SOURCE_CHANGED');
+    await noPublication(f, decrypting);
+    t.mock.restoreAll();
+    if (decrypting) { await fs.writeFile(f.archivePath, original); await f.decrypt(); }
+    else await f.encrypt();
+  });
+}
+
+test('a final input close failure still prevents an archive success acknowledgement', async t => {
+  const payload = Buffer.alloc(31, 53), f = await fixture(t, payload), open = fs.open;
+  t.mock.method(fs, 'open', async (...args) => {
+    const handle = await open(...args);
+    if (args[0] === f.sourcePath) {
+      const close = handle.close.bind(handle);
+      t.mock.method(handle, 'close', async () => { await close(); throw new Error('private cleanup detail'); });
+    }
+    return handle;
+  });
+  await rejects(f.encrypt(), 'BACKUP_ARCHIVE_IO');
+  t.mock.restoreAll();
+  await f.decrypt(); assert.deepEqual(await fs.readFile(f.restoredPath), payload);
+});
+
 test('replaced input path cannot be read through an old open descriptor', async t => {
   const f = await fixture(t);
   await rejects(f.encrypt({ async fault(stage) {
