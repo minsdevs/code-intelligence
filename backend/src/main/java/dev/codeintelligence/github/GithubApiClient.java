@@ -99,6 +99,93 @@ public class GithubApiClient {
         return new GithubRepoPage(items, hasNextPage(response.getHeaders()));
     }
 
+    public InstallationPage listUserInstallations(String token, int page, int perPage) {
+        ResponseEntity<InstallationsResponse> response =
+                installationRequest(token, "/user/installations", page, perPage).toEntity(InstallationsResponse.class);
+        consumeRateLimit(response.getHeaders());
+        List<InstallationResponse> body =
+                response.getBody() == null || response.getBody().installations() == null
+                        ? List.of()
+                        : response.getBody().installations();
+        return new InstallationPage(
+                body.stream()
+                        .map(item -> new InstallationSummary(
+                                item.id(),
+                                item.account() == null ? null : item.account().login(),
+                                item.appSlug(),
+                                item.repositorySelection(),
+                                item.suspendedAt() != null))
+                        .toList(),
+                hasNextPage(response.getHeaders()));
+    }
+
+    public GithubRepoPage listInstallationRepos(String token, long installationId, int page, int perPage) {
+        if (installationId <= 0) throw new IllegalArgumentException("Installation ID must be positive");
+        ResponseEntity<InstallationReposResponse> response = installationRequest(
+                        token, "/user/installations/" + installationId + "/repositories", page, perPage)
+                .toEntity(InstallationReposResponse.class);
+        consumeRateLimit(response.getHeaders());
+        List<RepoResponse> body =
+                response.getBody() == null || response.getBody().repositories() == null
+                        ? List.of()
+                        : response.getBody().repositories();
+        return new GithubRepoPage(
+                body.stream()
+                        .map(repo -> new GithubRepoSummary(
+                                repo.owner() == null ? null : repo.owner().login(),
+                                repo.name(),
+                                repo.fullName(),
+                                repo.isPrivate(),
+                                repo.defaultBranch(),
+                                repo.description(),
+                                repo.updatedAt()))
+                        .toList(),
+                hasNextPage(response.getHeaders()));
+    }
+
+    private RestClient.ResponseSpec installationRequest(String token, String endpoint, int page, int perPage) {
+        // Fixed endpoints only: never follow upstream Link/repositories_url into another origin.
+        return restClient
+                .get()
+                .uri(uri -> uri.path(endpoint)
+                        .queryParam("per_page", Math.clamp(perPage, 1, 100))
+                        .queryParam("page", Math.max(1, page))
+                        .build())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .onStatus(status -> status.value() == 401, (request, res) -> {
+                    throw new InvalidGithubTokenException();
+                })
+                .onStatus(
+                        status -> status.value() == 403 || status.value() == 404 || status.value() == 429,
+                        (request, res) -> {
+                            if (res.getStatusCode().value() == 429
+                                    || isRateLimited(res.getStatusCode().value(), res.getHeaders())) {
+                                throw new GithubRateLimitException(parseRetryAfter(res.getHeaders()));
+                            }
+                            throw new GithubRepositoryAccessException();
+                        });
+    }
+
+    public record InstallationSummary(
+            long id, String accountLogin, String appSlug, String repositorySelection, boolean suspended) {}
+
+    public record InstallationPage(List<InstallationSummary> items, boolean hasNext) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record InstallationsResponse(List<InstallationResponse> installations) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record InstallationResponse(
+            long id,
+            RepoOwner account,
+            @JsonProperty("app_slug") String appSlug,
+            @JsonProperty("repository_selection") String repositorySelection,
+            @JsonProperty("suspended_at") String suspendedAt) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record InstallationReposResponse(List<RepoResponse> repositories) {}
+
     public GithubBranchPage listRepoBranches(String token, String owner, String repo, int page, int perPage) {
         ResponseEntity<List<BranchResponse>> response = restClient
                 .get()

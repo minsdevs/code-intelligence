@@ -146,7 +146,7 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
             <ConnectStep me={me} onConnected={handleConnected} onLocalPath={handleLocalPath} />
           )}
           {!showLocalConfirm && step === 'repo' && (
-            <RepoStep onImported={handleImported} onUnauthorized={goConnect} />
+            <RepoStep credentialKind={me?.credentialKind ?? null} onImported={handleImported} onUnauthorized={goConnect} />
           )}
           {step === 'progress' && jobId != null && (
             <ProgressStep
