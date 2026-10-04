@@ -190,13 +190,29 @@ The backend checks the exact certificate, validity and IP subject alternative na
 before sending the caller token or source; it does not use a proxy, follow redirects
 or fall back to HTTP. The analyzer authenticates before parsing request JSON.
 Incomplete TLS configuration is rejected, including HTTPS without a pin. Development
-HTTP remains available when no TLS settings are supplied. No certificate or token is
-generated or trusted automatically. Protected TLS file loading currently refuses
-Windows pending native file-access validation.
+HTTP remains available for the browser development profile when no TLS settings are
+supplied. Electron startup now generates separate launch-scoped loopback certificates
+for PostgreSQL, Redis, the analyzer and the backend in an owned private directory;
+it never changes the system trust store. PostgreSQL requires SCRAM over verify-full TLS,
+Redis requires a launch password over TLS, and analyzer/backend requests require the
+current capability after peer authentication. Backend health and static resources are
+not authentication exceptions. Session and CSRF cookies are Secure in the desktop profile.
 
-This connection is not yet wired into Electron startup. It does not establish
-PostgreSQL, Redis or backend endpoint ownership, isolate the OS credential store,
-or remove either isolated-launch blocker above.
+External GitHub redirects use a separate, narrowly bounded HTTP loopback callback;
+only validated callback parameters are forwarded to the pinned HTTPS backend. That
+bridge is not a generic HTTP API listener and does not solve the OAuth provider limitation below.
+
+The Windows native protected-file/lease/Job helper and analyzer reader are implemented,
+but the durable safety lifecycle, private IPC, runtime supply and packaging gates remain
+closed. Neither this transport change nor a successful helper test proves Windows product support.
+
+The new native-acceptance.yml workflow runs on fresh hosted machines, on trusted same-repository
+PRs and explicit manual dispatch. It exercises the normal macOS Electron startup rather than
+bypassing isolated-launch guards, and runs Windows boundary/DPAPI checks as a fresh standard
+user. Artifacts distinguish native smoke results from blocked product/signing acceptance.
+Current local transport proof covers real PostgreSQL 16 and Redis TLS/authentication,
+wrong-peer/plaintext rejection, HTTPS pinning, token rotation and callback refusal. Hosted
+whole-app results, signed installation, real OAuth and provider approval remain separate gates.
 
 The explicit macOS integration fixture below compiles private copies of the actual
 Java client and Nest analyzer using existing dependencies, generates short-lived

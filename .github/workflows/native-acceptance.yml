@@ -1,0 +1,105 @@
+name: Native acceptance (disposable OS)
+
+on:
+  # Same-repository PRs can execute this new workflow before default-branch registration.
+  # Never use pull_request_target or execute a fork's source with privileged credentials.
+  pull_request:
+    paths:
+      - '.github/workflows/native-acceptance.yml'
+      - 'desktop/**'
+      - 'backend/src/main/**/config/**'
+      - 'backend/src/main/**/security/**'
+      - 'backend/src/main/resources/application-desktop.*'
+      - 'analyzers/ts-analyzer/src/**'
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Native target (Windows exercises boundaries but product acceptance remains gated)
+        required: true
+        type: choice
+        options: [macos-arm64, windows-2025, both]
+      build_sequence:
+        description: Reviewed positive build sequence (must match the build being accepted)
+        required: true
+        type: string
+      disposable_os_consent:
+        description: Allow synthetic app data and OS credential-store entries on fresh hosted machines only
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-acceptance-${{ github.ref }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && inputs.disposable_os_consent && (inputs.platform == 'macos-arm64' || inputs.platform == 'both'))
+    runs-on: macos-15
+    timeout-minutes: 75
+    env:
+      CODE_INTELLIGENCE_BUILD_SEQUENCE: ${{ inputs.build_sequence || github.run_number }}
+      NATIVE_ACCEPTANCE_CONSENT: disposable-hosted-os
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Provision verified native runtime (no background services)
+        run: bash desktop/scripts/native-acceptance-macos.sh
+      - name: Build current source and exercise native app
+        run: node desktop/scripts/native-acceptance.cjs macos
+      - name: Preserve credential-free diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-macos-arm64-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-acceptance-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  windows:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && inputs.disposable_os_consent && (inputs.platform == 'windows-2025' || inputs.platform == 'both'))
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      CODE_INTELLIGENCE_BUILD_SEQUENCE: ${{ inputs.build_sequence || github.run_number }}
+      NATIVE_ACCEPTANCE_CONSENT: disposable-hosted-os
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Run real native boundaries under a new standard-user token
+        shell: pwsh
+        run: ./desktop/scripts/native-acceptance-windows.ps1
+      - name: Preserve credential-free diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-windows-2025-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-acceptance-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+  consent:
+    if: github.event_name == 'workflow_dispatch' && !inputs.disposable_os_consent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse missing explicit consent
+        run: echo 'Disposable hosted OS consent is required.'; exit 1
