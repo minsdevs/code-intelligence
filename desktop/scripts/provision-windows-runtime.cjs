@@ -72,8 +72,13 @@ async function provision(destination) {
   }
   const runtime = path.join(destination, 'runtime'); fs.mkdirSync(runtime);
   const jre = path.join(runtime, 'jre');
+  // Supported Windows hosts supply these OS contracts. Do not publish the
+  // JDK's legacy UCRT/API-set compatibility copies beside application DLLs.
+  const systemLibraries = fs.readdirSync(path.join(jdk, 'bin')).filter(name => systemDll(name.toLowerCase()))
+    .map(name => 'glob:**/' + name);
   command(path.join(jdk, 'bin', 'jlink.exe'), ['--add-modules', 'java.base,java.compiler,java.desktop,java.instrument,java.logging,java.management,java.naming,java.net.http,java.security.jgss,java.sql,jdk.crypto.ec,jdk.net,jdk.unsupported',
-    '--strip-debug', '--no-header-files', '--no-man-pages', '--compress=zip-6', '--output', jre], destination, toolchain.env);
+    '--strip-debug', '--no-header-files', '--no-man-pages', '--compress=zip-6',
+    ...(systemLibraries.length ? ['--exclude-files', systemLibraries.join(',')] : []), '--output', jre], destination, toolchain.env);
   const env = { ...toolchain.env, PGROOT: pg, JAVA_HOME: jdk, DOTNET_ROOT: dotnet, DOTNET_MULTILEVEL_LOOKUP: '0', DOTNET_CLI_TELEMETRY_OPTOUT: '1',
     DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1', DOTNET_CLI_HOME: path.join(destination, 'dotnet-home'), NUGET_PACKAGES: path.join(destination, 'nuget') };
   command(toolchain.make, ['/NOLOGO', '/F', 'Makefile.win'], vector, env);
