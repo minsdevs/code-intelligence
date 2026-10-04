@@ -57,8 +57,8 @@ public class FileInventoryStep implements JobStep {
                     .update();
             for (InventoriedFile file : result.files()) {
                 jdbc.sql("""
-                                insert into files (snapshot_id, path, language, size, line_count, content_hash)
-                                values (:snapshotId, :path, :language, :size, :lineCount, :contentHash)
+                                insert into files (snapshot_id, path, language, size, line_count, content_hash, analysis_status, analysis_reason)
+                                values (:snapshotId, :path, :language, :size, :lineCount, :contentHash, :status, :reason)
                                 """)
                         .param("snapshotId", snapshotId)
                         .param("path", file.path())
@@ -66,8 +66,34 @@ public class FileInventoryStep implements JobStep {
                         .param("size", file.size())
                         .param("lineCount", file.lineCount())
                         .param("contentHash", file.contentHash())
+                        .param("status", FileAnalysisOutcome.initialStatus(file))
+                        .param(
+                                "reason",
+                                "UNSUPPORTED".equals(FileAnalysisOutcome.initialStatus(file))
+                                        ? "SOURCE_LANGUAGE_UNSUPPORTED"
+                                        : "PARSER_NOT_MEASURED")
                         .update();
             }
+            jdbc.sql("""
+                    insert into snapshot_inventory_measurements
+                    (snapshot_id, discovered_files, excluded_for_count, excluded_for_size, excluded_binary, excluded_submodules)
+                    values (:sid,:discovered,:count,:size,:binary,:submodules)
+                    on conflict (snapshot_id) do update set discovered_files=excluded.discovered_files,
+                    excluded_for_count=excluded.excluded_for_count, excluded_for_size=excluded.excluded_for_size,
+                    excluded_binary=excluded.excluded_binary, excluded_submodules=excluded.excluded_submodules
+                    """)
+                    .param("sid", snapshotId)
+                    .param(
+                            "discovered",
+                            result.files().size()
+                                    + result.skippedForCount()
+                                    + result.skippedForSize()
+                                    + result.skippedBinary())
+                    .param("count", result.skippedForCount())
+                    .param("size", result.skippedForSize())
+                    .param("binary", result.skippedBinary())
+                    .param("submodules", result.skippedSubmodules())
+                    .update();
         });
         recordSkipWarnings(ctx.projectId(), snapshotId, result);
         ctx.updateProgress(100);

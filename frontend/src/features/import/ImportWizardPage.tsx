@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { getMe } from '../../api/auth'
 import { useT } from '../../lib/i18n'
 import type { MeResponse } from '../../api/types'
-import AreasStep from './AreasStep'
 import ConnectStep from './ConnectStep'
 import ProgressStep from './ProgressStep'
 import RepoStep from './RepoStep'
@@ -19,6 +19,7 @@ export default function ImportWizardPage() {
 function ImportWizard({ initialPath }: { initialPath: string | null }) {
   const t = useT()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [step, setStep] = useState<WizardStepId>('connect')
   const [me, setMe] = useState<MeResponse | null>(null)
   const [bootstrapping, setBootstrapping] = useState(true)
@@ -64,6 +65,8 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
   const handleConnected = async () => {
     const profile = await getMe()
     setMe(profile)
+    await queryClient.invalidateQueries({ queryKey: ['github-connection'] })
+    await queryClient.invalidateQueries({ queryKey: ['account-profile'] })
     if (
       profile.authenticated &&
       !localPath &&
@@ -83,11 +86,14 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
   }
 
   const handleProgressDone = useCallback(() => {
-    setStep('areas')
-  }, [])
+    if (projectId != null) {
+      void queryClient.invalidateQueries({ queryKey: ['projects'] })
+      navigate(`/projects/${projectId}/overview`)
+    }
+  }, [navigate, projectId, queryClient])
 
   // If a local path is provided and the user is authenticated, show the local import confirmation
-  const showLocalConfirm = localPath && me?.authenticated && step !== 'progress' && step !== 'areas'
+  const showLocalConfirm = localPath && me?.authenticated && step !== 'progress'
 
   return (
     <div className="flex flex-1 flex-col px-6 py-5">
@@ -140,7 +146,7 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
             <ConnectStep me={me} onConnected={handleConnected} onLocalPath={handleLocalPath} />
           )}
           {!showLocalConfirm && step === 'repo' && (
-            <RepoStep onImported={handleImported} onUnauthorized={goConnect} />
+            <RepoStep credentialKind={me?.credentialKind ?? null} onImported={handleImported} onUnauthorized={goConnect} />
           )}
           {step === 'progress' && jobId != null && (
             <ProgressStep
@@ -149,13 +155,6 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
               onDone={handleProgressDone}
               onUnauthorized={goConnect}
               onSourcePreviewRequired={(id) => navigate(`/projects/${id}`)}
-            />
-          )}
-          {step === 'areas' && projectId != null && (
-            <AreasStep
-              projectId={projectId}
-              onSaved={() => navigate(`/projects/${projectId}`)}
-              onUnauthorized={goConnect}
             />
           )}
         </>

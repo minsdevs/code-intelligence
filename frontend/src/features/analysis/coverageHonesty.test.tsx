@@ -92,6 +92,21 @@ beforeEach(() => {
 })
 
 describe('coverage measurement honesty', () => {
+  it('shows explicit measured outcomes and requests the exact snapshot', async () => {
+    vi.mocked(getCoverage).mockResolvedValue({ ...report(7), snapshotId: 12,
+      measurementStatus: 'PER_FILE_RECORDED',
+      outcomes: { discoveredFiles: 10, targetedFiles: 4, successfulFiles: 1, partialFiles: 1,
+        failedFiles: 1, excludedFiles: 3, unsupportedFiles: 1, unmeasuredFiles: 2, pendingFiles: 1, excludedSubmodules: 0 },
+    })
+    renderQuery(<CoveragePanel projectId={7} snapshotId={12} />)
+    const panel = await screen.findByRole('region', { name: '파일별 분석 결과' })
+    expect(within(panel).getByText('부분 성공')).toBeInTheDocument()
+    expect(within(panel).getByText('미지원')).toBeInTheDocument()
+    expect(within(panel).getByText('대상 지정 후 결과 없음')).toBeInTheDocument()
+    expect(within(panel).getByText(/보장이 아닙니다/)).toBeInTheDocument()
+    expect(getCoverage).toHaveBeenCalledWith(7, 12)
+  })
+
   it('shows inventory while ignoring contradictory analyzed, success, and zero-failure counters', async () => {
     const data = report()
     data.fileCoverage.analyzedFiles = 777

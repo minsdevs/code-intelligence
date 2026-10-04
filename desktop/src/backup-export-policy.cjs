@@ -134,6 +134,11 @@ const MIGRATIONS = [
     "version": 26,
     "filename": "V26__platform_source_identities.sql",
     "sha256": "c371145fd690b2418e2a79996e9842d1b3d5707324248a264c132eb81507d20b"
+  },
+  {
+    "version": 27,
+    "filename": "V27__file_analysis_outcomes.sql",
+    "sha256": "451d6875544abfcb2d2b8b613741e3faed2fb5b762ed25d95421fd3f014fae5c"
   }
 ];
 
@@ -229,6 +234,17 @@ const TABLE_DEFINITIONS = [
     ["size", "bigint", false, "none", "keep"],
     ["line_count", "integer", true, "none", "keep"],
     ["content_hash", "text", false, "none", "keep"],
+    ["analysis_status", "varchar(32)", false, "none", "keep"],
+    ["analysis_reason", "varchar(128)", true, "none", "keep"],
+    ["analysis_targeted", "boolean", false, "none", "keep"],
+  ]],
+  ["snapshot_inventory_measurements", "data", [
+    ["snapshot_id", "bigint", false, "none", "keep"],
+    ["discovered_files", "integer", false, "none", "keep"],
+    ["excluded_for_count", "integer", false, "none", "keep"],
+    ["excluded_for_size", "integer", false, "none", "keep"],
+    ["excluded_binary", "integer", false, "none", "keep"],
+    ["excluded_submodules", "integer", false, "none", "keep"],
   ]],
   ["project_areas", "data", [
     ["id", "bigint", false, "serial", "keep"],
@@ -741,12 +757,47 @@ const TABLES = new Map(TABLE_DEFINITIONS.map(([name, kind, columns]) => [name, {
   names: Object.freeze(columns.filter(column => column[4] === 'keep').map(column => column[0])),
 }]));
 
+// The only legacy reader is the reviewed V26 -> V27 additive migration. Export stays V27.
+const OUTCOME_COLUMNS = ['analysis_status', 'analysis_reason', 'analysis_targeted'];
+const V26_TABLES = new Map([...TABLES].filter(([name]) => name !== 'snapshot_inventory_measurements')
+  .map(([name, table]) => [name, name === 'files' ? {
+    ...table, columns: table.columns.filter(c => !OUTCOME_COLUMNS.includes(c[0])),
+    names: table.names.filter(c => !OUTCOME_COLUMNS.includes(c)),
+  } : table]));
+const REVIEWED_V26_SCHEMA = deepFreeze({ migrations: MIGRATIONS.slice(0, 26),
+  tables: REVIEWED_SCHEMA.tables.filter(t => t.name !== 'snapshot_inventory_measurements').map(t =>
+    t.name === 'files' ? { ...t, columns: t.columns.filter(c => !OUTCOME_COLUMNS.includes(c.name)) } : t),
+});
+function upgradeV26FileRow(row) {
+  const values = exactRecord(row, V26_TABLES.get('files').names, 'INVALID_ROW');
+  return projectRow('files', { ...Object.fromEntries(values), analysis_status: 'LEGACY_UNMEASURED',
+    analysis_reason: null, analysis_targeted: false });
+}
+function createBackupRestorePolicy(schema) {
+  // Never infer a legacy version from a prefix, a caller version string, or missing columns.
+  const root = exactRecord(schema, ['migrations', 'tables'], 'SCHEMA_MISMATCH');
+  const legacy = arrayValues(root.get('migrations'), 'SCHEMA_MISMATCH', MIGRATIONS.length).length === 26;
+  validateSchema(schema, legacy ? REVIEWED_V26_SCHEMA.migrations : MIGRATIONS, legacy ? V26_TABLES : TABLES);
+  if (!legacy) return Object.freeze({ ...createBackupExportPolicy(schema), schema: REVIEWED_SCHEMA });
+  return Object.freeze({ schema: REVIEWED_V26_SCHEMA,
+    columnsFor(name) { const t = V26_TABLES.get(name); if (!t) fail('TABLE_UNKNOWN'); return t.names; },
+    projectRow(name, values) {
+      if (!V26_TABLES.has(name)) fail('TABLE_UNKNOWN');
+      if (name !== 'files') return projectRow(name, values);
+      const row = upgradeV26FileRow(values);
+      return deepFreeze({ ...row, values: Object.fromEntries(Object.entries(row.values)
+        .filter(([key]) => !OUTCOME_COLUMNS.includes(key))) });
+    },
+  });
+}
+
 // SQL CHECK enums plus the current application identity/source/job discriminators.
 // Unconstrained free-form columns remain text; their contents are never executed here.
 const ENUMS = deepFreeze({
   'users.identity_type': ['GITHUB', 'LOCAL', 'LOCAL_LINKED'],
   'projects.source_type': ['GITHUB', 'LOCAL'],
   'snapshots.status': ['ANALYZING', 'READY', 'FAILED'],
+  'files.analysis_status': ['LEGACY_UNMEASURED', 'UNMEASURED', 'TARGETED', 'SUCCESS', 'PARTIAL', 'FAILED', 'UNSUPPORTED'],
   'analysis_jobs.type': ['IMPORT', 'REANALYZE'],
   'analysis_jobs.status': ['QUEUED', 'RUNNING', 'CANCELLING', 'DONE', 'FAILED', 'CANCELLED'],
   'analysis_job_steps.status': ['PENDING', 'RUNNING', 'DONE', 'FAILED', 'SKIPPED'],
@@ -817,27 +868,27 @@ function arrayValues(value, code, maximum = POLICY_LIMITS.maxMembers) {
   return result;
 }
 
-function validateSchema(schema) {
+function validateSchema(schema, migrationsExpected = MIGRATIONS, tablesExpected = TABLES) {
   const code = 'SCHEMA_MISMATCH';
   const root = exactRecord(schema, ['migrations', 'tables'], code);
-  const migrations = arrayValues(root.get('migrations'), code, MIGRATIONS.length);
-  if (migrations.length !== MIGRATIONS.length) fail(code);
+  const migrations = arrayValues(root.get('migrations'), code, migrationsExpected.length);
+  if (migrations.length !== migrationsExpected.length) fail(code);
   const seenVersions = new Set();
   for (const value of migrations) {
     const row = exactRecord(value, ['version', 'filename', 'sha256'], code);
     const version = row.get('version');
-    if (!Number.isInteger(version) || version < 1 || version > MIGRATIONS.length || seenVersions.has(version)) fail(code);
+    if (!Number.isInteger(version) || version < 1 || version > migrationsExpected.length || seenVersions.has(version)) fail(code);
     seenVersions.add(version);
-    const expected = MIGRATIONS[version - 1];
+    const expected = migrationsExpected[version - 1];
     if (row.get('filename') !== expected.filename || row.get('sha256') !== expected.sha256) fail(code);
   }
-  const tables = arrayValues(root.get('tables'), code, TABLES.size);
-  if (tables.length !== TABLES.size) fail(code);
+  const tables = arrayValues(root.get('tables'), code, tablesExpected.size);
+  if (tables.length !== tablesExpected.size) fail(code);
   const seenTables = new Set();
   for (const value of tables) {
     const table = exactRecord(value, ['name', 'columns'], code);
     const name = table.get('name');
-    const expected = typeof name === 'string' ? TABLES.get(name) : undefined;
+    const expected = typeof name === 'string' ? tablesExpected.get(name) : undefined;
     if (!expected || seenTables.has(name)) fail(code);
     seenTables.add(name);
     const columns = arrayValues(table.get('columns'), code, expected.columns.length);
@@ -1003,6 +1054,11 @@ function validateRowState(table, values) {
   if (table === 'user_ai_preferences' && values.model !== null && values.provider === null) fail();
   if (table === 'projects' && values.current_generation_id !== null && values.current_snapshot_id === null) fail();
   if (table === 'snapshots' && ![0, 1].includes(values.source_contract_version)) fail();
+  if (table === 'snapshot_inventory_measurements') {
+    for (const column of ['discovered_files', 'excluded_for_count', 'excluded_for_size', 'excluded_binary', 'excluded_submodules']) {
+      if (values[column] < 0) fail();
+    }
+  }
   if (table === 'source_manifests' || table === 'analysis_generations') {
     if (values.contract_version !== 1) fail();
   }
@@ -1095,4 +1151,4 @@ function createBackupExportPolicy(schemaInventory) {
   });
 }
 
-module.exports = Object.freeze({ createBackupExportPolicy, REVIEWED_SCHEMA, POLICY_LIMITS, BackupExportPolicyError });
+module.exports = Object.freeze({ createBackupExportPolicy, createBackupRestorePolicy, upgradeV26FileRow, REVIEWED_SCHEMA, REVIEWED_V26_SCHEMA, POLICY_LIMITS, BackupExportPolicyError });

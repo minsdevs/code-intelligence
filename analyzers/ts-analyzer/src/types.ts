@@ -82,6 +82,7 @@ export type UnresolvedCallHit = {
 }
 
 export type AnalyzeResponse = {
+  fileOutcomes?: { path: string; status: 'SUCCESS' | 'PARTIAL' | 'UNMEASURED'; reason: string }[]
   routes: RouteHit[]
   components: SymbolHit[]
   hooks: SymbolHit[]

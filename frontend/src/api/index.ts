@@ -37,8 +37,6 @@ export {
   updateTask,
   approveTask,
   patchTaskGoal,
-  addLearningRecord,
-  createTaskDraft,
 } from './tasks'
 export { searchWorkspace } from './search'
 export { getPullReview, generatePullReview } from './review'
@@ -50,7 +48,6 @@ export {
   deletePlaygroundSession,
   askPlayground,
 } from './playground'
-export { getGrowth } from './growth'
 export { getCoverage } from './coverage'
 export { openInIde } from './ide'
 export { previewAiContext } from './aiPreview'
@@ -93,7 +90,6 @@ export type {
   TaskView,
   ReviewView,
   PlaygroundSessionView,
-  GrowthView,
   WhatIfView,
   CoverageReport,
   IdeOpenRequest,

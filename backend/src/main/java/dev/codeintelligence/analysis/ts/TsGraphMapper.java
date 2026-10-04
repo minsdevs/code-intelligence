@@ -5,6 +5,7 @@ import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.EdgeConfidence;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphEdgeType;
+import dev.codeintelligence.analysis.core.GraphIdentityGuard;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeType;
 import dev.codeintelligence.analysis.core.NaturalKeys;
@@ -47,13 +48,27 @@ final class TsGraphMapper {
         }
         for (TsAnalyzeDtos.ApiCallHit call : response.apiCalls()) {
             String owner = call.owner() == null ? "" : call.owner();
-            callsByOwner.computeIfAbsent(owner, key -> new ArrayList<>()).add(call);
+            callsByOwner
+                    .computeIfAbsent(ownerIdentity(call.filePath(), owner), key -> new ArrayList<>())
+                    .add(call);
         }
         for (TsAnalyzeDtos.SymbolHit component : response.components()) {
-            addSymbol(nodes, edges, evidences, component, GraphNodeType.COMPONENT, callsByOwner.get(component.name()));
+            addSymbol(
+                    nodes,
+                    edges,
+                    evidences,
+                    component,
+                    GraphNodeType.COMPONENT,
+                    callsByOwner.get(ownerIdentity(component.filePath(), component.name())));
         }
         for (TsAnalyzeDtos.SymbolHit hook : response.hooks()) {
-            addSymbol(nodes, edges, evidences, hook, GraphNodeType.HOOK, callsByOwner.get(hook.name()));
+            addSymbol(
+                    nodes,
+                    edges,
+                    evidences,
+                    hook,
+                    GraphNodeType.HOOK,
+                    callsByOwner.get(ownerIdentity(hook.filePath(), hook.name())));
         }
         for (TsAnalyzeDtos.SymbolHit store : response.stores()) {
             addSymbol(nodes, edges, evidences, store, GraphNodeType.STORE, null);
@@ -83,9 +98,11 @@ final class TsGraphMapper {
                         NaturalKeys.file(route.filePath()), key, GraphEdgeType.CONTAINS, EdgeConfidence.CONFIRMED));
             }
             if (route.component() != null && route.filePath() != null) {
-                String componentKey = NaturalKeys.component(
-                        ownerFile(response, route.component(), route.filePath()), route.component());
-                edges.add(GraphEdgeDraft.of(key, componentKey, GraphEdgeType.CONTAINS, EdgeConfidence.LIKELY));
+                TsAnalyzeDtos.SymbolHit component = routeComponent(response, route.component(), route.filePath());
+                if (component != null) {
+                    String componentKey = NaturalKeys.component(component.filePath(), component.name());
+                    edges.add(GraphEdgeDraft.of(key, componentKey, GraphEdgeType.CONTAINS, EdgeConfidence.LIKELY));
+                }
             }
         }
         for (TsAnalyzeDtos.EndpointHit endpoint : response.endpoints()) {
@@ -205,7 +222,7 @@ final class TsGraphMapper {
                     confidence(semanticEdge.confidence()).name(),
                     metadata));
         }
-        return new AnalysisResult(nodes, edges, evidences);
+        return GraphIdentityGuard.sanitize(new AnalysisResult(nodes, edges, evidences, response.fileOutcomes()));
     }
 
     private static void addSymbol(
@@ -255,13 +272,27 @@ final class TsGraphMapper {
                 NaturalKeys.file(symbol.filePath()), key, GraphEdgeType.CONTAINS, EdgeConfidence.CONFIRMED));
     }
 
-    private static String ownerFile(TsAnalyzeDtos.Response response, String component, String fallback) {
-        for (TsAnalyzeDtos.SymbolHit hit : response.components()) {
-            if (component.equals(hit.name()) && hit.filePath() != null) {
-                return hit.filePath();
-            }
-        }
-        return fallback;
+    private static String ownerIdentity(String filePath, String name) {
+        return (filePath == null ? "" : filePath) + "#" + name;
+    }
+
+    private static TsAnalyzeDtos.SymbolHit routeComponent(
+            TsAnalyzeDtos.Response response, String name, String routeFile) {
+        var local = response.components().stream()
+                .filter(hit -> name.equals(hit.name()) && routeFile.equals(hit.filePath()))
+                .toList();
+        if (local.size() == 1) return local.getFirst();
+        if (!local.isEmpty()) return null;
+        // A name alone does not identify a module. Follow only an observed import binding.
+        var imported = response.imports().stream()
+                .filter(hit -> routeFile.equals(hit.fromPath()) && name.equals(hit.imported()))
+                .flatMap(binding -> response.components().stream()
+                        .filter(hit -> binding.toPath() != null
+                                && binding.toPath().equals(hit.filePath())
+                                && hit.name().equals(binding.importedName())))
+                .distinct()
+                .toList();
+        return imported.size() == 1 ? imported.getFirst() : null;
     }
 
     private static EdgeConfidence confidence(String raw) {

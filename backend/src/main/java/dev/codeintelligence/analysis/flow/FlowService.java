@@ -35,7 +35,8 @@ public class FlowService {
             String kind,
             Long entryNodeId,
             List<FlowStepView> steps,
-            List<FlowEvidenceView> evidences) {}
+            List<FlowEvidenceView> evidences,
+            long resolvedSnapshotId) {}
 
     private final ProjectRepository projectRepository;
     private final SnapshotRepository snapshotRepository;
@@ -51,11 +52,12 @@ public class FlowService {
     public List<FlowSummary> list(long projectId, long userId, Long snapshotId, String kind) {
         long resolved = requireSnapshot(requireOwned(projectId, userId), snapshotId);
         return jdbc.sql("""
-                        select id, name, kind, entry_node_id
-                        from flows
-                        where snapshot_id = :snapshotId
-                          and (:kind::text is null or kind = :kind)
-                        order by kind, name
+                        select fl.id, fl.name, fl.kind, n.id as entry_node_id
+                        from flows fl
+                        left join graph_nodes n on n.id = fl.entry_node_id and n.snapshot_id = fl.snapshot_id and n.node_type <> 'AMBIGUOUS'
+                        where fl.snapshot_id = :snapshotId
+                          and (:kind::text is null or fl.kind = :kind)
+                        order by fl.kind, fl.name
                         """)
                 .param("snapshotId", resolved)
                 .param("kind", blankToNull(kind))
@@ -69,8 +71,10 @@ public class FlowService {
     public FlowDetail detail(long projectId, long userId, long flowId, Long snapshotId) {
         long resolved = requireSnapshot(requireOwned(projectId, userId), snapshotId);
         FlowSummary flow = jdbc.sql("""
-                        select id, name, kind, entry_node_id
-                        from flows where snapshot_id = :snapshotId and id = :flowId
+                        select fl.id, fl.name, fl.kind, n.id as entry_node_id
+                        from flows fl
+                        left join graph_nodes n on n.id = fl.entry_node_id and n.snapshot_id = fl.snapshot_id and n.node_type <> 'AMBIGUOUS'
+                        where fl.snapshot_id = :snapshotId and fl.id = :flowId
                         """)
                 .param("snapshotId", resolved)
                 .param("flowId", flowId)
@@ -80,15 +84,16 @@ public class FlowService {
                 .optional()
                 .orElseThrow(FlowNotFoundException::new);
         List<FlowStepView> steps = jdbc.sql("""
-                        select s.seq, s.node_id, n.name as node_name, n.node_type, f.path as file_path,
+                        select s.seq, n.id as node_id, n.name as node_name, n.node_type, f.path as file_path,
                                n.line_start, s.description
                         from flow_steps s
-                        left join graph_nodes n on n.id = s.node_id
-                        left join files f on f.id = n.file_id
+                        left join graph_nodes n on n.id = s.node_id and n.snapshot_id = :snapshotId and n.node_type <> 'AMBIGUOUS'
+                        left join files f on f.id = n.file_id and f.snapshot_id = :snapshotId
                         where s.flow_id = :flowId
                         order by s.seq
                         """)
                 .param("flowId", flow.id())
+                .param("snapshotId", resolved)
                 .query((rs, rowNum) -> new FlowStepView(
                         rs.getInt("seq"),
                         (Long) rs.getObject("node_id"),
@@ -102,17 +107,18 @@ public class FlowService {
                         select e.file_path, e.line_start, e.line_end, e.excerpt
                         from evidence_links l
                         join evidences e on e.id = l.evidence_id
-                        where l.subject_type = 'FLOW' and l.subject_id = :flowId
+                        where l.subject_type = 'FLOW' and l.subject_id = :flowId and e.project_id = :projectId
                         order by e.id
                         """)
                 .param("flowId", flow.id())
+                .param("projectId", projectId)
                 .query((rs, rowNum) -> new FlowEvidenceView(
                         rs.getString("file_path"),
                         (Integer) rs.getObject("line_start"),
                         (Integer) rs.getObject("line_end"),
                         rs.getString("excerpt")))
                 .list();
-        return new FlowDetail(flow.id(), flow.name(), flow.kind(), flow.entryNodeId(), steps, evidences);
+        return new FlowDetail(flow.id(), flow.name(), flow.kind(), flow.entryNodeId(), steps, evidences, resolved);
     }
 
     private Project requireOwned(long projectId, long userId) {

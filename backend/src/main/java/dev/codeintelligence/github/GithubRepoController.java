@@ -27,6 +27,10 @@ public class GithubRepoController {
             @RequestParam(defaultValue = "30") int perPage,
             @RequestParam(required = false) String q) {
         GithubRepoPage repoPage = githubRepoService.listRepos(user.userId(), page, perPage, q);
+        return repoResponse(repoPage, page);
+    }
+
+    private RepoListResponse repoResponse(GithubRepoPage repoPage, int page) {
         List<RepoItem> items = repoPage.items().stream()
                 .map(repo -> new RepoItem(
                         repo.owner(),
@@ -39,6 +43,34 @@ public class GithubRepoController {
                 .toList();
         return new RepoListResponse(items, page, repoPage.hasNext());
     }
+
+    @GetMapping("/installations")
+    public InstallationListResponse installations(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "30") int perPage) {
+        int boundedPage = Math.max(1, page);
+        GithubApiClient.InstallationPage result =
+                githubRepoService.listInstallations(user.userId(), boundedPage, Math.clamp(perPage, 1, 100));
+        return new InstallationListResponse(result.items(), boundedPage, result.hasNext());
+    }
+
+    @GetMapping("/installations/{installationId}/repos")
+    public RepoListResponse installationRepos(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable long installationId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "30") int perPage,
+            @RequestParam(required = false) String q) {
+        int boundedPage = Math.max(1, page);
+        return repoResponse(
+                githubRepoService.listInstallationRepos(
+                        user.userId(), installationId, boundedPage, Math.clamp(perPage, 1, 100), q),
+                boundedPage);
+    }
+
+    public record InstallationListResponse(
+            List<GithubApiClient.InstallationSummary> items, int page, boolean hasNext) {}
 
     @GetMapping("/repos/{owner}/{repo}/branches")
     public BranchListResponse branches(

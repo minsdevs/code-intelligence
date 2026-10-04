@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -50,7 +51,7 @@ class GithubNativeOAuthServiceTest {
              "verification_uri":"https://github.com/login/device","expires_in":900,"interval":5}
             """;
     private static final String TOKEN_JSON = """
-            {"access_token":"backend-only-github-token","token_type":"bearer"}
+            {"access_token":"backend-only-github-token","token_type":"bearer","expires_in":28800}
             """;
     private static final GithubNativeOAuthProperties PROPERTIES =
             new GithubNativeOAuthProperties("client-id", DEVICE_URL, TOKEN_URL, "read:user user:email repo", 300);
@@ -66,6 +67,21 @@ class GithubNativeOAuthServiceTest {
     private final GithubNativeOAuthService service =
             new GithubNativeOAuthService(PROPERTIES, github, accounts, builder.build(), clock);
 
+    @ParameterizedTest
+    @ValueSource(strings = {"null", "0", "-1", "28801", "9223372036854775807"})
+    void rejectsMissingOrUnsafeTokenExpiry(String expiresIn) {
+        expectDevice(DEVICE_JSON);
+        expectToken()
+                .andRespond(withSuccess(
+                        "{\"access_token\":\"synthetic\",\"token_type\":\"bearer\",\"expires_in\":" + expiresIn + "}",
+                        MediaType.APPLICATION_JSON));
+        var start = service.start(17L);
+        clock.advance(Duration.ofSeconds(5));
+        assertThat(service.poll(17L, start.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.FAILED);
+        verifyNoInteractions(accounts, github);
+        server.verify();
+    }
+
     @Test
     void completesDeviceAuthorizationOnceWithoutExposingProviderCredentials() throws Exception {
         expectDevice(DEVICE_JSON);
@@ -80,7 +96,13 @@ class GithubNativeOAuthServiceTest {
         var connected = service.poll(17L, start.attemptId());
         assertThat(connected.status()).isEqualTo(GithubNativeOAuthService.Status.CONNECTED);
         assertThat(service.poll(17L, start.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.CONNECTED);
-        verify(accounts, times(1)).linkGithub(17L, PROFILE, CredentialKind.OAUTH, TOKEN);
+        verify(accounts, times(1))
+                .linkGithub(
+                        17L,
+                        PROFILE,
+                        CredentialKind.OAUTH,
+                        TOKEN,
+                        clock.instant().plusSeconds(28800));
         JsonMapper mapper = JsonMapper.builder().build();
         assertThat(mapper.writeValueAsString(start)).doesNotContain(DEVICE_CODE, TOKEN, "client_secret");
         assertThat(mapper.writeValueAsString(connected)).doesNotContain(DEVICE_CODE, TOKEN, "client_secret");
@@ -182,6 +204,75 @@ class GithubNativeOAuthServiceTest {
             }
         }
         verifyNoInteractions(accounts);
+        server.verify();
+    }
+
+    @Test
+    void disconnectDuringProfileLookupPreventsLateCredentialPublication() throws Exception {
+        expectDevice(DEVICE_JSON);
+        expectToken().andRespond(withSuccess(TOKEN_JSON, MediaType.APPLICATION_JSON));
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        when(github.getUser(TOKEN)).thenAnswer(invocation -> {
+            entered.countDown();
+            awaitRelease(release);
+            return PROFILE;
+        });
+        var start = service.start(1L);
+        clock.advance(Duration.ofSeconds(5));
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            var pending = threads.submit(() -> service.poll(1L, start.attemptId()));
+            try {
+                assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+                threads.submit(() -> service.disconnect(1L)).get(5, TimeUnit.SECONDS);
+                release.countDown();
+                assertThat(pending.get(5, TimeUnit.SECONDS).status())
+                        .isEqualTo(GithubNativeOAuthService.Status.CANCELLED);
+            } finally {
+                release.countDown();
+            }
+        }
+        verify(accounts).disconnectGithub(1L);
+        org.mockito.Mockito.verifyNoMoreInteractions(accounts);
+        server.verify();
+    }
+
+    @Test
+    void disconnectInvalidatesADeviceRequestThatHasNotReturnedYet() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        server.expect(requestTo(DEVICE_URL)).andRespond(request -> {
+            entered.countDown();
+            awaitRelease(release);
+            return withSuccess(DEVICE_JSON, MediaType.APPLICATION_JSON).createResponse(request);
+        });
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            var pending = threads.submit(() -> service.start(1L));
+            try {
+                assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+                threads.submit(() -> service.disconnect(1L)).get(5, TimeUnit.SECONDS);
+                release.countDown();
+                assertThatThrownBy(() -> pending.get(5, TimeUnit.SECONDS))
+                        .hasCauseInstanceOf(GithubNativeOAuthUnavailableException.class);
+            } finally {
+                release.countDown();
+            }
+        }
+        verify(accounts).disconnectGithub(1L);
+        org.mockito.Mockito.verifyNoMoreInteractions(accounts);
+        server.verify();
+    }
+
+    @Test
+    void aNewLoginSupersedesOnlyTheSameUsersPreviousAttempt() {
+        expectDevice(DEVICE_JSON);
+        expectDevice(DEVICE_JSON);
+        expectDevice(DEVICE_JSON);
+        var old = service.start(1L);
+        var otherUser = service.start(2L);
+        var current = service.start(1L);
+        assertThat(service.poll(1L, old.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.CANCELLED);
+        assertThat(service.poll(2L, otherUser.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.WAITING);
+        assertThat(service.poll(1L, current.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.WAITING);
+        verifyNoInteractions(github, accounts);
         server.verify();
     }
 
@@ -317,19 +408,30 @@ class GithubNativeOAuthServiceTest {
         when(github.getUser(TOKEN)).thenReturn(PROFILE);
         doThrow(new GithubAccountConflictException())
                 .when(accounts)
-                .linkGithub(1L, PROFILE, CredentialKind.OAUTH, TOKEN);
+                .linkGithub(
+                        1L,
+                        PROFILE,
+                        CredentialKind.OAUTH,
+                        TOKEN,
+                        clock.instant().plusSeconds(28805));
         var start = service.start(1L);
         clock.advance(Duration.ofSeconds(5));
         assertThat(service.poll(1L, start.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.CONFLICT);
         assertThat(service.poll(1L, start.attemptId()).status()).isEqualTo(GithubNativeOAuthService.Status.CONFLICT);
-        verify(accounts, times(1)).linkGithub(1L, PROFILE, CredentialKind.OAUTH, TOKEN);
+        verify(accounts, times(1))
+                .linkGithub(
+                        1L,
+                        PROFILE,
+                        CredentialKind.OAUTH,
+                        TOKEN,
+                        clock.instant().plusSeconds(28800));
         server.verify();
     }
 
     private void expectDevice(String body) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("client_id", PROPERTIES.clientId());
-        form.add("scope", PROPERTIES.scope());
+
         server.expect(requestTo(DEVICE_URL))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("Accept", MediaType.APPLICATION_JSON_VALUE))

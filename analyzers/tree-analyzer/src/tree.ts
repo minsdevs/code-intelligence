@@ -29,6 +29,7 @@ export function javascriptParser(): Parser {
 export function extract(files: AnalyzeFile[]): AnalyzeResponse {
   const localPaths = new Set(files.map((file) => file.path))
   const response: AnalyzeResponse = {
+    fileOutcomes: [],
     routes: [],
     components: [],
     hooks: [],
@@ -40,25 +41,36 @@ export function extract(files: AnalyzeFile[]): AnalyzeResponse {
     entities: [],
   }
   for (const file of files) {
-    if (isPython(file.path)) {
-      const result = extractPython(file, localPaths)
-      response.endpoints.push(...result.endpoints)
-      response.symbols.push(...result.symbols)
-      response.entities.push(...result.entities)
-      response.imports.push(...result.imports)
-    } else if (isGo(file.path)) {
-      const result = extractGo(file)
-      response.endpoints.push(...result.endpoints)
-      response.symbols.push(...result.symbols)
-    } else if (isVue(file.path)) {
-      const result = extractVue(file)
-      response.components.push(...result.components)
-      response.apiCalls.push(...result.apiCalls)
-    } else if (isSvelte(file.path)) {
-      const result = extractSvelte(file)
-      response.components.push(...result.components)
-      response.apiCalls.push(...result.apiCalls)
-      response.routes.push(...result.routes)
+    try {
+      if (isPython(file.path)) {
+        const result = extractPython(file, localPaths)
+        response.fileOutcomes!.push({ path: file.path, status: result.hasErrors ? 'PARTIAL' : 'SUCCESS', reason: result.hasErrors ? 'RECOVERED_SYNTAX_ERRORS' : 'PYTHON_PARSED' })
+        response.endpoints.push(...result.endpoints)
+        response.symbols.push(...result.symbols)
+        response.entities.push(...result.entities)
+        response.imports.push(...result.imports)
+      } else if (isGo(file.path)) {
+        const result = extractGo(file)
+        response.fileOutcomes!.push({ path: file.path, status: result.hasErrors ? 'PARTIAL' : 'SUCCESS', reason: result.hasErrors ? 'RECOVERED_SYNTAX_ERRORS' : 'GO_PARSED' })
+        response.endpoints.push(...result.endpoints)
+        response.symbols.push(...result.symbols)
+      } else if (isVue(file.path)) {
+        response.fileOutcomes!.push({ path: file.path, status: 'PARTIAL', reason: 'SCRIPT_ONLY_EXTRACTION' })
+        const result = extractVue(file)
+        response.components.push(...result.components)
+        response.apiCalls.push(...result.apiCalls)
+      } else if (isSvelte(file.path)) {
+        response.fileOutcomes!.push({ path: file.path, status: 'PARTIAL', reason: 'SCRIPT_ONLY_EXTRACTION' })
+        const result = extractSvelte(file)
+        response.components.push(...result.components)
+        response.apiCalls.push(...result.apiCalls)
+        response.routes.push(...result.routes)
+      } else {
+        response.fileOutcomes!.push({ path: file.path, status: 'UNSUPPORTED', reason: 'SOURCE_LANGUAGE_UNSUPPORTED' })
+      }
+    } catch {
+      response.fileOutcomes = response.fileOutcomes!.filter((outcome) => outcome.path !== file.path)
+      response.fileOutcomes.push({ path: file.path, status: 'FAILED', reason: 'TREE_EXTRACTION_FAILED' })
     }
   }
   return response

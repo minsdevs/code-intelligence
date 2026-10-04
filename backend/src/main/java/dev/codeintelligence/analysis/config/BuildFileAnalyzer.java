@@ -13,6 +13,8 @@ import dev.codeintelligence.analysis.core.GraphNodeType;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.NaturalKeys;
 import dev.codeintelligence.evidence.EvidenceKind;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,6 +30,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * pom.xml (DOM) and build.gradle(.kts) (regex + structure) → CONFIG nodes and DEPENDS_ON edges
@@ -67,7 +70,9 @@ public class BuildFileAnalyzer implements CodeAnalyzer {
                 continue;
             }
             try {
-                if (isPom(file.path())) {
+                if (ConfigFileSupport.filename(file.path()).equalsIgnoreCase("package.json")) {
+                    parsePackageJson(file.path(), text, collector);
+                } else if (isPom(file.path())) {
                     parsePom(file.path(), text, collector);
                 } else {
                     parseGradle(file.path(), text, collector);
@@ -87,7 +92,10 @@ public class BuildFileAnalyzer implements CodeAnalyzer {
 
     static boolean isBuildFile(InventoriedFile file) {
         String name = ConfigFileSupport.filename(file.path()).toLowerCase(Locale.ROOT);
-        return "pom.xml".equals(name) || "build.gradle".equals(name) || "build.gradle.kts".equals(name);
+        return "package.json".equals(name)
+                || "pom.xml".equals(name)
+                || "build.gradle".equals(name)
+                || "build.gradle.kts".equals(name);
     }
 
     private static boolean isPom(String path) {
@@ -199,9 +207,10 @@ public class BuildFileAnalyzer implements CodeAnalyzer {
         if (artifact == null || artifact.isBlank()) {
             return;
         }
-        String depKey = NaturalKeys.dependency(group, artifact);
+        String depKey = declarationKey(path, configuration, group, artifact, raw);
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("configuration", configuration);
+        meta.put("source", "MANIFEST_DECLARATION");
         if (group != null && !group.isBlank()) {
             meta.put("group", group);
         }
@@ -215,6 +224,43 @@ public class BuildFileAnalyzer implements CodeAnalyzer {
                 .withAreaType(AreaType.BUILD_TOOLING.name())
                 .withMetadata(meta));
         collector.edge(configKey, depKey, GraphEdgeType.DEPENDS_ON, EdgeConfidence.CONFIRMED);
+        collector.evidence(new AnalyzerEvidence(
+                depKey, EvidenceKind.DEPENDENCY, path, null, null, "Declared " + configuration + ": " + raw));
+    }
+
+    static String declarationKey(String path, String configuration, String group, String artifact, String raw) {
+        // One declaration per manifest/configuration/version; shared package names must not overwrite module evidence.
+        return NaturalKeys.dependency(group, artifact) + "@"
+                + URLEncoder.encode(path, StandardCharsets.UTF_8) + "#"
+                + URLEncoder.encode(configuration, StandardCharsets.UTF_8) + "="
+                + URLEncoder.encode(raw, StandardCharsets.UTF_8);
+    }
+
+    private void parsePackageJson(String path, String text, GraphCollector collector) {
+        var root = JsonMapper.builder().build().readTree(text);
+        if (!root.isObject()) throw new IllegalArgumentException("package.json must contain an object");
+        String configKey = putConfigNode(path, text, collector);
+        List<Map<String, Object>> dependencies = new ArrayList<>();
+        for (String section : List.of("dependencies", "devDependencies", "peerDependencies", "optionalDependencies")) {
+            var values = root.get(section);
+            if (values == null || !values.isObject()) continue;
+            for (var entry : values.properties()) {
+                if (!entry.getValue().isString()) continue;
+                String version = entry.getValue().asString();
+                addDependency(
+                        collector,
+                        configKey,
+                        path,
+                        section,
+                        "npm",
+                        entry.getKey(),
+                        version,
+                        entry.getKey() + "@" + version,
+                        dependencies);
+            }
+        }
+        collector.put(collectorNode(collector, configKey, path, text)
+                .withMetadata(Map.of("kind", "npm", "dependencies", dependencies)));
     }
 
     static ParsedGav parseGav(String coordinate) {

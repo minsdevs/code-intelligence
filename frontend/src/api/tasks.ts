@@ -1,5 +1,5 @@
 import { apiGet, apiSend } from './client'
-import type { GeneratedTask, LearningRecordView, TaskGoalView, TaskType, TaskView } from './types'
+import type { TaskGoalView, TaskType, TaskView } from './types'
 
 export function listTasks(projectId: number, includeDrafts = false): Promise<TaskView[]> {
   const query = includeDrafts ? '?includeDrafts=true' : ''
@@ -44,22 +44,5 @@ export function patchTaskGoal(
   return apiSend<TaskGoalView>(`/api/projects/${projectId}/tasks/${taskId}/goals/${goalId}`, {
     method: 'PATCH',
     body,
-  })
-}
-
-export function addLearningRecord(
-  projectId: number,
-  taskId: number,
-  note: string,
-): Promise<LearningRecordView> {
-  return apiSend<LearningRecordView>(`/api/projects/${projectId}/tasks/${taskId}/records`, {
-    method: 'POST',
-    body: { note },
-  })
-}
-
-export function createTaskDraft(projectId: number, findingId: number): Promise<GeneratedTask> {
-  return apiSend<GeneratedTask>(`/api/projects/${projectId}/findings/${findingId}/task-draft`, {
-    method: 'POST',
   })
 }

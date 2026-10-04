@@ -1,6 +1,19 @@
 export type Lang = 'en' | 'ko'
 
 export const en: Record<string, string> = {
+  'workspace.nav.overview': 'Overview',
+  'workspace.nav.features': 'Feature locations',
+  'workspace.nav.code': 'Code',
+  'workspace.nav.analysis': 'Analysis',
+  'workspace.question.overview': 'What does this repository do?',
+  'workspace.question.features': 'Where is this feature implemented?',
+  'workspace.question.code': 'What is the source evidence?',
+  'workspace.question.analysis': 'What should I inspect together?',
+  'workspace.tools': 'More tools',
+  'home.status': 'Status',
+  'home.analyzedAt': 'Last analyzed',
+  'home.notAnalyzed': 'Not analyzed',
+
   // ── common ──────────────────────────────────────────────────────────────
   'common.loading': 'Loading…',
   'common.requestFailed': 'Request failed.',
@@ -10,7 +23,7 @@ export const en: Record<string, string> = {
   'sidebar.projects': 'Projects',
   'sidebar.projectsLoading': 'Loading projects…',
   'sidebar.areas': 'Areas',
-  'sidebar.noProject': 'No connected projects. Import a GitHub repository from the Import Wizard.',
+  'sidebar.noProject': 'No projects yet. Import a local folder or GitHub repository.',
   'sidebar.areasHint': 'Analysis areas appear here after importing a repository.',
   'sidebar.areasLoading': 'Loading areas…',
   'sidebar.areasNotReady': 'Areas appear here once analysis finishes.',
@@ -19,14 +32,14 @@ export const en: Record<string, string> = {
 
   // ── home ────────────────────────────────────────────────────────────────
   'home.title': 'Projects',
-  'home.description': 'View imported repositories’ areas, analysis status, and recent history.',
+  'home.description': 'Open a repository overview, find feature locations, and verify the source evidence.',
   'home.import': 'Import repository',
   'home.loading': 'Loading projects…',
   'home.loadError': 'Could not load the project list.',
-  'home.loginPrompt': 'Connect your GitHub account to import and analyze repositories.',
-  'home.login': 'Connect GitHub',
+  'home.loginPrompt': 'Choose a local folder or connect GitHub to analyze a repository.',
+  'home.login': 'Choose a repository',
   'home.emptyTitle': 'Projects appear here once connected',
-  'home.emptyDesc': 'Import a GitHub repository to see its areas, technologies, and recent commits.',
+  'home.emptyDesc': 'Choose a local folder or GitHub repository. Review the import, then open the analysis overview.',
   'home.analyzing': 'Analyzing…',
   'home.areas': 'Areas',
   'home.tech': 'Tech',
@@ -44,7 +57,7 @@ export const en: Record<string, string> = {
   'projects.analyzedAt': 'Analyzed',
   'projects.areas': 'Areas',
   'projects.emptyTitle': 'No connected projects yet',
-  'projects.emptyDesc': 'Import a GitHub repository from the Import Wizard to get started.',
+  'projects.emptyDesc': 'Import a local folder or GitHub repository to get started.',
   'projects.import': 'Import repository',
 
   // ── workspace ───────────────────────────────────────────────────────────
@@ -184,15 +197,6 @@ export const en: Record<string, string> = {
   'history.loadingDiff': 'Loading diff…',
   'history.merged': 'merged',
 
-  // ── growth ──────────────────────────────────────────────────────────────
-  'growth.desc': 'Report on learning records and task progress.',
-  'growth.subtitle': 'Static aggregates of learning records and task state.',
-  'growth.loading': 'Loading report…',
-  'growth.learningRecords': 'Learning records',
-  'growth.weeklyLabel': 'Weekly',
-  'growth.noWeekly': 'No weekly records.',
-  'growth.recentLabel': 'Recent learning',
-  'growth.noRecent': 'No learning records.',
 
   // ── notes ───────────────────────────────────────────────────────────────
   'notes.noProject': 'Write markdown notes for an imported project.',
@@ -217,7 +221,7 @@ export const en: Record<string, string> = {
   'playground.filterPlaceholder': 'Path filter',
   'playground.filterLabel': 'File filter',
   'playground.filesLabel': 'Playground files',
-  'playground.hint': 'Hypothesis snippets are sent as text only. Cloned code is never built or executed.',
+  'playground.hint': 'Hypothesis snippets are saved locally. Prepare and approve AI requests separately in the assistant panel.',
   'playground.snippetLabel': 'Hypothesis snippet',
   'playground.questionLabel': 'Question',
   'playground.ask': 'Ask',
@@ -249,10 +253,6 @@ export const en: Record<string, string> = {
   'tasks.approveDraft': 'Approve draft',
   'tasks.checklist': 'Checklist',
   'tasks.noGoals': 'No goals.',
-  'tasks.learningRecords': 'Learning records',
-  'tasks.recordPlaceholder': 'What did you learn?',
-  'tasks.record': 'Record',
-  'tasks.recordLabel': 'Learning record',
 
   // ── analysis ────────────────────────────────────────────────────────────
   'analysis.desc': 'Review findings per area and the impact (reverse dependencies) of a selected node.',
@@ -376,8 +376,6 @@ export const en: Record<string, string> = {
   'ai.qq.prReviewQ': 'Explain the risks of this PR change.',
   'ai.qq.explainHypothesis': 'Explain hypothesis',
   'ai.qq.explainHypothesisQ': 'What could this hypothetical change break?',
-  'ai.qq.learningSummary': 'Learning summary',
-  'ai.qq.learningSummaryQ': 'Explain recent learning records linked to the code.',
 
   // ── settings ────────────────────────────────────────────────────────────
   'settings.title': 'Settings',
@@ -478,6 +476,19 @@ export const en: Record<string, string> = {
 }
 
 export const ko: Record<string, string> = {
+  'workspace.nav.overview': '개요',
+  'workspace.nav.features': '기능 위치',
+  'workspace.nav.code': '코드',
+  'workspace.nav.analysis': '분석',
+  'workspace.question.overview': '어떤 레포인가요?',
+  'workspace.question.features': '이 기능은 어디에 있나요?',
+  'workspace.question.code': '근거 코드는 무엇인가요?',
+  'workspace.question.analysis': '함께 확인할 코드는 무엇인가요?',
+  'workspace.tools': '더 보기',
+  'home.status': '상태',
+  'home.analyzedAt': '최근 분석',
+  'home.notAnalyzed': '분석 전',
+
   'common.loading': '불러오는 중…',
   'common.requestFailed': '요청에 실패했습니다.',
 
@@ -485,7 +496,7 @@ export const ko: Record<string, string> = {
   'sidebar.projects': '프로젝트',
   'sidebar.projectsLoading': '프로젝트를 불러오는 중…',
   'sidebar.areas': '영역',
-  'sidebar.noProject': '연결된 프로젝트가 없습니다. Import Wizard에서 GitHub 저장소를 가져올 수 있습니다.',
+  'sidebar.noProject': '프로젝트가 없습니다. 로컬 폴더나 GitHub 저장소를 가져오세요.',
   'sidebar.areasHint': 'Analysis Areas는 저장소를 import한 뒤 이곳에 표시됩니다.',
   'sidebar.areasLoading': '영역을 불러오는 중…',
   'sidebar.areasNotReady': '분석이 끝나면 영역이 여기에 표시됩니다.',
@@ -493,14 +504,14 @@ export const ko: Record<string, string> = {
   'sidebar.areasEmpty': '감지된 영역이 없습니다.',
 
   'home.title': 'Projects',
-  'home.description': '가져온 저장소의 영역·분석 상태·최근 이력을 봅니다.',
+  'home.description': '레포 개요에서 주요 구성과 기능 위치를 확인하고 근거 코드로 이동하세요.',
   'home.import': 'Import repository',
   'home.loading': '프로젝트를 불러오는 중…',
   'home.loadError': '프로젝트 목록을 불러오지 못했습니다.',
-  'home.loginPrompt': 'GitHub 계정을 연결하면 저장소를 가져와 분석할 수 있습니다.',
-  'home.login': 'GitHub 연결',
+  'home.loginPrompt': '로컬 폴더를 선택하거나 GitHub를 연결해 레포를 분석하세요.',
+  'home.login': '레포 선택',
   'home.emptyTitle': '프로젝트를 연결하면 여기에 표시됩니다',
-  'home.emptyDesc': 'GitHub 저장소를 import하면 영역·기술·최근 커밋이 카드로 나타납니다.',
+  'home.emptyDesc': '로컬 폴더 또는 GitHub 레포를 선택하세요. 가져오기 내용을 확인하면 분석 후 개요로 이동합니다.',
   'home.analyzing': '분석 중',
   'home.areas': '영역',
   'home.tech': '기술',
@@ -518,7 +529,7 @@ export const ko: Record<string, string> = {
   'projects.analyzedAt': '분석 시각',
   'projects.areas': '영역',
   'projects.emptyTitle': '아직 연결된 프로젝트가 없습니다',
-  'projects.emptyDesc': 'Import Wizard에서 GitHub 저장소를 가져오면 시작할 수 있습니다.',
+  'projects.emptyDesc': '로컬 폴더나 GitHub 저장소를 가져오면 시작할 수 있습니다.',
   'projects.import': 'Import repository',
 
   'workspace.checking': '세션을 확인하는 중…',
@@ -647,14 +658,6 @@ export const ko: Record<string, string> = {
   'history.loadingDiff': 'diff를 불러오는 중…',
   'history.merged': 'merged',
 
-  'growth.desc': '학습 기록과 Task 진행을 리포트로 봅니다.',
-  'growth.subtitle': '학습 기록과 Task 상태를 정적 집계합니다.',
-  'growth.loading': '리포트를 불러오는 중…',
-  'growth.learningRecords': '학습 기록',
-  'growth.weeklyLabel': '주간',
-  'growth.noWeekly': '주간 기록이 없습니다.',
-  'growth.recentLabel': '최근 학습',
-  'growth.noRecent': '학습 기록이 없습니다.',
 
   'notes.noProject': 'import한 프로젝트에서 마크다운 노트를 작성합니다.',
   'notes.new': '새 노트',
@@ -677,7 +680,7 @@ export const ko: Record<string, string> = {
   'playground.filterPlaceholder': '경로 필터',
   'playground.filterLabel': '파일 필터',
   'playground.filesLabel': 'Playground 파일',
-  'playground.hint': '가설 스니펫은 텍스트로만 전달됩니다. clone 코드는 빌드하거나 실행하지 않습니다.',
+  'playground.hint': '가설 스니펫은 로컬에 저장됩니다. clone 코드는 빌드하거나 실행하지 않습니다.',
   'playground.snippetLabel': '가설 스니펫',
   'playground.questionLabel': '질문',
   'playground.ask': '질문하기',
@@ -707,10 +710,6 @@ export const ko: Record<string, string> = {
   'tasks.approveDraft': '초안 승인',
   'tasks.checklist': '체크리스트',
   'tasks.noGoals': '목표가 없습니다.',
-  'tasks.learningRecords': '학습 기록',
-  'tasks.recordPlaceholder': '배운 점',
-  'tasks.record': '기록',
-  'tasks.recordLabel': '학습 기록',
 
   'analysis.desc': '영역별 findings와 선택한 노드의 Impact(역방향 의존)를 확인합니다.',
   'analysis.all': '전체',
@@ -830,8 +829,6 @@ export const ko: Record<string, string> = {
   'ai.qq.prReviewQ': '이 PR 변경의 위험을 설명해줘',
   'ai.qq.explainHypothesis': '가설 설명',
   'ai.qq.explainHypothesisQ': '이 가설 변경이 무엇을 깨뜨릴 수 있어?',
-  'ai.qq.learningSummary': '학습 요약',
-  'ai.qq.learningSummaryQ': '최근 학습 기록을 코드와 연결해 설명해줘',
 
   'settings.title': '설정',
   'settings.aiProvider': 'AI Provider',

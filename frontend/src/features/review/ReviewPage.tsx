@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { generatePullReview, getPullReview } from '../../api/review'
+import { getPullReview } from '../../api/review'
 import { listPulls } from '../../api/history'
 import { parseEvidenceRef } from '../../api/ai'
 import { ApiError } from '../../api/client'
 import type { PullRequest, ReviewView } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
+import { useUiStore } from '../../stores/uiStore'
 import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { codeLocationSearch, queryError } from '../code/codeLocation'
@@ -16,7 +17,6 @@ export default function ReviewPage() {
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null)
 
   const pullsQuery = useQuery({
@@ -42,12 +42,6 @@ export default function ReviewPage() {
       ? null
       : (reviewQuery.data ?? null)
 
-  const generateMutation = useMutation({
-    mutationFn: () => generatePullReview(projectId!, pullNumber!),
-    onSuccess: async (created) => {
-      await queryClient.setQueryData(['pull-review', projectId, pullNumber], created)
-    },
-  })
 
   if (projectId == null) {
     return <EmptyState title="Review" description={t('review.desc')} />
@@ -58,13 +52,6 @@ export default function ReviewPage() {
     reviewQuery.error instanceof ApiError && reviewQuery.error.status === 404
       ? null
       : queryError(reviewQuery.error)
-  const generateError =
-    generateMutation.error instanceof ApiError && generateMutation.error.status === 503
-      ? t('review.aiDisabled')
-      : queryError(generateMutation.error)
-  const generateAiDisabled =
-    generateMutation.error instanceof ApiError && generateMutation.error.status === 503
-
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
       <section className="flex w-72 shrink-0 flex-col border-r border-line">
@@ -113,11 +100,7 @@ export default function ReviewPage() {
             review={review}
             loading={reviewQuery.isLoading}
             error={reviewError}
-            generateError={generateError}
-            generateAiDisabled={generateAiDisabled}
-            generating={generateMutation.isPending}
-            onGenerate={() => generateMutation.mutate()}
-            onOpenSettings={() => navigate('/settings')}
+            onOpenAssistant={() => useUiStore.setState({ aiPanelOpen: true, pendingIntent: 'EXPLAIN', focusedNode: null, focusedFindingId: null, focusedNoteId: null, focusedTaskId: null, focusedFile: review?.comments.find((comment) => comment.filePath)?.filePath ?? null, focusedCommitSha: null })}
             onOpenEvidence={(path, line) =>
               navigate(`/projects/${projectId}/code${codeLocationSearch(path, line)}`)
             }
@@ -133,22 +116,14 @@ function ReviewDetail({
   review,
   loading,
   error,
-  generateError,
-  generateAiDisabled,
-  generating,
-  onGenerate,
-  onOpenSettings,
+  onOpenAssistant,
   onOpenEvidence,
 }: {
   pull: PullRequest
   review: ReviewView | null
   loading: boolean
   error: string | null
-  generateError: string | null
-  generateAiDisabled: boolean
-  generating: boolean
-  onGenerate: () => void
-  onOpenSettings: () => void
+  onOpenAssistant: () => void
   onOpenEvidence: (path: string, line: number | null) => void
 }) {
   const t = useT()
@@ -163,29 +138,15 @@ function ReviewDetail({
         </div>
         <button
           type="button"
-          onClick={onGenerate}
-          disabled={generating}
+          onClick={onOpenAssistant}
           className="rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
         >
-          {review ? t('review.regenerate') : t('review.generate')}
+          AI 패널에서 근거 검토
         </button>
       </div>
+      <p className="mt-3 text-xs text-ink-muted">저장된 리뷰는 아래에서 확인할 수 있습니다. 새 AI 설명은 패널에서 질문과 선택한 코드의 프롬프트·비용을 확인하고 승인하세요. PR 전체를 자동 전송하지 않습니다.</p>
       {pull.body && (
         <p className="mt-3 whitespace-pre-wrap text-[13px] text-ink-muted">{pull.body}</p>
-      )}
-      {generateError && (
-        <div role="alert" className="mt-3 text-[12px] text-danger">
-          <p>{generateError}</p>
-          {generateAiDisabled && (
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              className="mt-1 text-accent hover:underline"
-            >
-              {t('ai.openSettings')}
-            </button>
-          )}
-        </div>
       )}
       {error && (
         <p role="alert" className="mt-3 text-[12px] text-danger">

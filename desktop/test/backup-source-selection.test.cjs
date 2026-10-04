@@ -23,10 +23,10 @@ function row(table, changes = {}) {
   const definition = REVIEWED_SCHEMA.tables.find(t => t.name === table);
   for (const c of definition.columns.filter(c => POLICY.columnsFor(table).includes(c.name))) {
     values[c.name] = c.nullable ? null : c.type === 'bigint' ? '1' : c.type === 'integer' ? 1 : c.type === 'timestamptz' ? STAMP
-      : c.type === 'uuid' ? UUID : c.type.startsWith('char(') ? 'a'.repeat(Number(c.type.slice(5, -1))) : 'synthetic';
+      : c.type === 'boolean' ? false : c.type === 'uuid' ? UUID : c.type.startsWith('char(') ? 'a'.repeat(Number(c.type.slice(5, -1))) : 'synthetic';
   }
   const defaults = { projects: { id: P, current_snapshot_id: S, source_type: 'LOCAL' }, snapshots: { id: S, project_id: P, commit_sha: A, status: 'READY', source_contract_version: 0 },
-    files: { snapshot_id: S, path: 'src/main.ts', size: '3', content_hash: git(Buffer.from('abc')) },
+    files: { snapshot_id: S, path: 'src/main.ts', size: '3', content_hash: git(Buffer.from('abc')), analysis_status: 'LEGACY_UNMEASURED' },
     commits: { project_id: P, sha: B }, branches: { project_id: P, name: 'main', head_sha: C },
     source_blobs: { project_id: P, sha256: sha(Buffer.from('abc')), byte_size: '3', key_id: 'a'.repeat(32) },
     source_manifests: { project_id: P, snapshot_id: S, source_kind: 'LOCAL', file_count: 1, byte_size: '3', sealed_at: STAMP },

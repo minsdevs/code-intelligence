@@ -51,6 +51,11 @@ public class GithubCredential {
     protected GithubCredential() {}
 
     public GithubCredential(Long userId, CredentialKind kind, EncryptedToken token, String scopes) {
+        this(userId, kind, token, scopes, null);
+    }
+
+    public GithubCredential(Long userId, CredentialKind kind, EncryptedToken token, String scopes, Instant expiresAt) {
+        this.expiresAt = expiresAt;
         this.userId = userId;
         this.kind = kind;
         this.scopes = scopes;
@@ -58,8 +63,23 @@ public class GithubCredential {
     }
 
     public void updateToken(EncryptedToken token, String scopes) {
+        updateToken(token, scopes, null);
+    }
+
+    public void updateToken(EncryptedToken token, String scopes, Instant expiresAt) {
+        this.expiresAt = expiresAt;
         this.scopes = scopes;
         applyToken(token);
+    }
+
+    public String reauthenticationReason(Instant now) {
+        if (kind == CredentialKind.OAUTH && expiresAt == null) return "EXPIRY_UNKNOWN";
+        if (expiresAt != null && !now.isBefore(expiresAt)) return "TOKEN_EXPIRED";
+        return null;
+    }
+
+    public Instant getExpiresAt() {
+        return expiresAt;
     }
 
     private void applyToken(EncryptedToken token) {

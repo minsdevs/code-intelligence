@@ -376,7 +376,7 @@ public class ContextRetrievalService {
     private void appendTaskStructured(List<ContextBlock> blocks, int[] used, int budget, long projectId, long taskId) {
         jdbc.sql("""
                         select type, title, description, status from tasks
-                        where project_id = :projectId and id = :id
+                        where project_id = :projectId and id = :id and type <> 'LEARNING'
                         """)
                 .param("projectId", projectId)
                 .param("id", taskId)
@@ -394,7 +394,7 @@ public class ContextRetrievalService {
         jdbc.sql("""
                         select g.content from task_goals g
                         join tasks t on t.id = g.task_id
-                        where t.project_id = :projectId and t.id = :id
+                        where t.project_id = :projectId and t.id = :id and t.type <> 'LEARNING'
                         order by g.seq limit 8
                         """)
                 .param("projectId", projectId)

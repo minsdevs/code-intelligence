@@ -1,6 +1,7 @@
 {
   "name": "code-intelligence-desktop",
   "version": "0.1.0",
+  "githubNativeClientId": "Iv23licOyolwwPyDe1JY",
   "private": true,
   "description": "Code Intelligence desktop runtime",
   "main": "src/main.cjs",

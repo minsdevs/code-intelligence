@@ -11,7 +11,7 @@ import NotesTab from '../features/notes/NotesTab'
 import TasksTab from '../features/tasks/TasksTab'
 import ReviewTab from '../features/review/ReviewTab'
 import PlaygroundTab from '../features/playground/PlaygroundTab'
-import GrowthTab from '../features/growth/GrowthTab'
+import RepositoryOverviewPage from '../features/projects/RepositoryOverviewPage'
 import ProjectsPage from '../features/projects/ProjectsPage'
 import ProjectWorkspacePage from '../features/projects/ProjectWorkspacePage'
 import WorkspaceTabPage from '../features/projects/WorkspaceTabPage'
@@ -32,11 +32,14 @@ export const routes: RouteObject[] = [
         path: 'projects/:projectId',
         element: <ProjectWorkspacePage />,
         children: [
-          { index: true, element: <Navigate to="features" replace /> },
+          { index: true, element: <Navigate to="overview" replace /> },
+          { path: 'growth', element: <Navigate to="../overview" replace /> },
           ...workspaceTabs.map((tab) => ({
             path: tab.path,
             element:
-              tab.path === 'history' ? (
+              tab.path === 'overview' ? (
+                <RepositoryOverviewPage />
+              ) : tab.path === 'history' ? (
                 <HistoryPage />
               ) : tab.path === 'code' ? (
                 <CodeTab />
@@ -56,8 +59,6 @@ export const routes: RouteObject[] = [
                 <ReviewTab />
               ) : tab.path === 'playground' ? (
                 <PlaygroundTab />
-              ) : tab.path === 'growth' ? (
-                <GrowthTab />
               ) : (
                 <WorkspaceTabPage tab={tab} />
               ),

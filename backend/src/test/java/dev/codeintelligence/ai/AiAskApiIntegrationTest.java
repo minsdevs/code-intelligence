@@ -88,8 +88,18 @@ class AiAskApiIntegrationTest {
         long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
         long userId = jdbcTemplate.queryForObject("select user_id from projects where id = ?", Long.class, projectId);
         transactions.executeWithoutResult(status -> {
-            usageService.chat(
-                    userId, projectId, mockAIProvider, "test", new AIProvider.ChatRequest("system", "question", true));
+            usageService.chatApproved(
+                    userId,
+                    projectId,
+                    mockAIProvider,
+                    new AiRequestPlanService.Approved(
+                            "test",
+                            1,
+                            "question",
+                            AiIntent.EXPLAIN,
+                            null,
+                            new AIProvider.ChatRequest("system", "question", true),
+                            null));
             status.setRollbackOnly();
         });
         assertThat(jdbcTemplate.queryForObject(
@@ -100,21 +110,21 @@ class AiAskApiIntegrationTest {
     }
 
     @Test
-    void fileSummaryCountsOnceAndCacheHitDoesNotSpendAgain() throws Exception {
+    void missingFileSummaryIsDeferredWithoutSpending() throws Exception {
         ResponseCookie session = loginWithPat();
         long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
         long userId = jdbcTemplate.queryForObject("select user_id from projects where id = ?", Long.class, projectId);
         long snapshotId = jdbcTemplate.queryForObject(
                 "select current_snapshot_id from projects where id = ?", Long.class, projectId);
         assertThat(summaryService.ensureFileSummary(userId, snapshotId, "src/App.java", "class App {}"))
-                .isPresent();
+                .isEmpty();
         assertThat(summaryService.ensureFileSummary(userId, snapshotId, "src/App.java", "class App {}"))
-                .isPresent();
+                .isEmpty();
         assertThat(jdbcTemplate.queryForObject(
-                        "select sum(prompt_tokens + completion_tokens) from ai_usage_logs where project_id = ? and purpose = 'summary'",
+                        "select count(*) from ai_usage_logs where project_id = ? and purpose = 'summary'",
                         Long.class,
                         projectId))
-                .isEqualTo(20L);
+                .isZero();
     }
 
     @Test
@@ -248,7 +258,7 @@ class AiAskApiIntegrationTest {
                 projectId);
         long taskId = jdbcTemplate.queryForObject("""
                 insert into tasks (project_id, type, title, description, status, origin)
-                values (?, 'LEARNING', 'Read App', 'open src/App.java', 'OPEN', 'USER')
+                values (?, 'REVIEW', 'Read App', 'open src/App.java', 'OPEN', 'USER')
                 returning id
                 """, Long.class, projectId);
         postAsk(
@@ -268,16 +278,25 @@ class AiAskApiIntegrationTest {
                 .contains("FOCUS_TASK:")
                 .contains("Read App")
                 .contains("RELATED_NOTE: Auth notes");
+
+        jdbcTemplate.update("update tasks set type = 'LEARNING' where id = ?", taskId);
+        jdbcTemplate.update(
+                "insert into task_goals (task_id, seq, content) values (?, 1, 'Retired learning goal')", taskId);
+        postAsk(session, projectId, Map.of("question", "Explain source evidence", "focusedTaskId", taskId));
+        assertThat(mockAIProvider.lastUser()).doesNotContain("FOCUS_TASK:", "Read App", "Retired learning goal");
+        assertThat(jdbcTemplate.queryForObject(
+                        "select content from task_goals where task_id = ?", String.class, taskId))
+                .isEqualTo("Retired learning goal");
     }
 
     @Test
-    void semanticSearchDoesNotMixEmbeddingModels() throws Exception {
+    void unapprovedSemanticSearchDoesNotGenerateQueryEmbeddings() throws Exception {
         ResponseCookie session = loginWithPat();
         long projectId = seedOwnedProject(session, "src/App.java", "class App {}\n");
         long userId = jdbcTemplate.queryForObject("select id from users where login = 'octocat'", Long.class);
         long snapshotId = jdbcTemplate.queryForObject(
                 "select current_snapshot_id from projects where id = ?", Long.class, projectId);
-        String vector = SummaryService.toVectorLiteral(mockAIProvider.embed("query"));
+        String vector = SummaryService.toVectorLiteral(new float[1536]);
         jdbcTemplate.update("""
                 insert into summaries
                     (snapshot_id, subject_type, subject_id, level, content, embedding, model, embedding_model)
@@ -287,7 +306,7 @@ class AiAskApiIntegrationTest {
 
         List<String> results = summaryService.similar(userId, snapshotId, "query", 5);
 
-        assertThat(results).contains("compatible summary").doesNotContain("incompatible summary");
+        assertThat(results).isEmpty();
     }
 
     @Test

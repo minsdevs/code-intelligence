@@ -37,9 +37,11 @@ import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
 import dev.codeintelligence.analysis.core.EdgeConfidence;
+import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import dev.codeintelligence.analysis.core.FileInventory;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphEdgeType;
+import dev.codeintelligence.analysis.core.GraphIdentityGuard;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeType;
 import dev.codeintelligence.analysis.core.InventoriedFile;
@@ -90,6 +92,8 @@ public class JavaAnalyzer implements CodeAnalyzer {
             } catch (Exception e) {
                 log.warn("Skipping Java file {}: {}", file.path(), e.toString());
                 collector.evidences.add(parseFailure(file, e, ctx.clonePath()));
+                collector.outcomes.put(
+                        file.path(), new FileAnalysisOutcome(file.path(), "FAILED", "JAVA_PARSE_FAILED"));
             }
         }
         for (ParsedUnit unit : units) {
@@ -100,6 +104,12 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
         for (ParsedUnit unit : units) {
             visitCalls(unit, collector);
+            collector.outcomes.put(
+                    unit.file.path(),
+                    new FileAnalysisOutcome(
+                            unit.file.path(),
+                            collector.unresolvedFiles.contains(unit.file.path()) ? "PARTIAL" : "SUCCESS",
+                            collector.unresolvedFiles.contains(unit.file.path()) ? "UNRESOLVED_CALLS" : "JAVA_PARSED"));
         }
         return collector.toResult();
     }
@@ -392,6 +402,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
             collector.edge(callerKey, targetKey, GraphEdgeType.CALLS, EdgeConfidence.CONFIRMED);
             return;
         }
+        collector.unresolvedFiles.add(filePath);
         String methodName = call.getNameAsString();
         List<String> argTypes = argumentTypes(call, cu, pkg);
         Optional<String> receiver = receiverType(call, enclosingFqcn, cu, pkg);
@@ -667,13 +678,23 @@ public class JavaAnalyzer implements CodeAnalyzer {
 
     private static final class Collector {
         private final Map<String, GraphNodeDraft> nodes = new LinkedHashMap<>();
+        private final List<GraphNodeDraft> identityCandidates = new ArrayList<>();
         private final List<GraphEdgeDraft> edges = new ArrayList<>();
         private final List<AnalyzerEvidence> evidences = new ArrayList<>();
+        private final Map<String, FileAnalysisOutcome> outcomes = new LinkedHashMap<>();
+        private final Set<String> unresolvedFiles = new java.util.HashSet<>();
         private final Set<String> projectTypes = new java.util.LinkedHashSet<>();
         private final Map<String, String> projectMethods = new LinkedHashMap<>();
 
         void put(GraphNodeDraft node) {
             GraphNodeDraft existing = nodes.get(node.naturalKey());
+            if (existing != null
+                    && !"PACKAGE".equals(node.nodeType())
+                    && existing.filePath() != null
+                    && node.filePath() != null
+                    && existing.lineStart() != null
+                    && node.lineStart() != null
+                    && !existing.filePath().equals(node.filePath())) identityCandidates.add(node);
             if (existing == null || isRicher(node, existing)) {
                 nodes.put(node.naturalKey(), node);
             }
@@ -706,7 +727,10 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
 
         AnalysisResult toResult() {
-            return new AnalysisResult(List.copyOf(nodes.values()), List.copyOf(edges), List.copyOf(evidences));
+            List<GraphNodeDraft> all = new ArrayList<>(nodes.values());
+            all.addAll(identityCandidates);
+            return GraphIdentityGuard.sanitize(new AnalysisResult(
+                    all, List.copyOf(edges), List.copyOf(evidences), List.copyOf(outcomes.values())));
         }
     }
 

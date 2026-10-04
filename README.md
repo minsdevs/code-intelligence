@@ -2,6 +2,8 @@
 
 # Code Intelligence
 
+Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
+
 Current audit: [2026-10-02 release assessment](docs/release-audit-2026-10-02.md).
 Follow-up implementation and verification: [integrated results](docs/audit/execution-results-2026-10-02.md),
 [current execution status](docs/audit/execution-status-2026-10-02.md), and
@@ -21,12 +23,20 @@ gated x64 NSIS configuration. Windows native storage/runtime and installation re
 The earlier [backup/restore](docs/audit/backup-restore-integration-2026-10-03.md) and
 [cost integration](docs/audit/strict-ai-cost-integration-2026-10-03.md) records are preserved.
 
-A personal workspace that analyzes an entire GitHub repository, automatically
-discovers the technical areas that make up the project (Backend, Frontend,
-Database, Infrastructure, DevOps, Security, Testing, AI, …), and lets you
-explore its features, architecture, call flows, dependencies, history, design
-rationale, and alternatives — with an evidence-grounded, context-aware AI
-assistant.
+A macOS Apple Silicon analysis tool for understanding an unfamiliar repository,
+finding where a feature is implemented, and identifying code to check before a change.
+Start with a repository overview and searchable structured results, then explore a
+selected file or symbol's relationships and source retained for that analysis snapshot.
+Static relations are evidence-backed candidates, not proof of runtime behavior or absence
+of impact. Core exploration works without AI.
+
+Current product direction and implementation: [PRD](docs/multilanguage-plan-2026-10-02/01-prd.md)
+and [stages A–G](docs/multilanguage-plan-2026-10-02/11-first-implementation.md).
+Learning progress, growth reports and learning assignments are removed from product paths; existing
+user records and historical migrations are preserved. Existing source encryption,
+backup/recovery, local import approval and AI request approval/cost controls are reused.
+Mind maps, broader languages, model subscription integrations and monetization are follow-ups.
+Windows work is deferred. Local app completion does not imply signed distribution.
 
 > **Historical RC record / internal testing.**
 > Phase 1–5 functionality is present, and the current RC adds local-folder
@@ -69,8 +79,8 @@ not a signed/notarized production distribution or an auto-update channel.
 | Frontend | React 19, TypeScript (strict), Vite, Tailwind CSS v4, TanStack Query, Zustand, React Flow |
 | Analyzer sidecar (Phase 2) | NestJS, ts-morph (TypeScript Compiler API), tree-sitter |
 | AI (Phase 3) | Provider-abstracted (OpenAI / Gemini), pgvector embeddings, evidence-grounded assistant |
-| Learning (Phase 4) | Notes with code refs, tasks + AI DRAFT approval, FTS/`pg_trgm`/vector hybrid search |
-| Advanced (Phase 5) | PR review (static findings + AI), playground (no clone execution), growth reports, static what-if |
+| Analysis records | Notes with code refs, review tasks, FTS/`pg_trgm`/vector hybrid search |
+| Advanced (Phase 5) | PR review (static findings + AI), playground (no clone execution), static what-if |
 
 ## Getting started
 
@@ -414,12 +424,19 @@ docker compose up -d
 (cd frontend && npm ci && npm run dev)
 ```
 
-AI is optional. Native GitHub OAuth requires the public `GITHUB_NATIVE_CLIENT_ID` at
-desktop/backend launch and device flow enabled on that registered GitHub OAuth App.
+AI is optional. Native GitHub OAuth requires a public client ID and device flow enabled
+on the registered application. This is an application identifier, not a GitHub username.
+For desktop builds, set electron-builder `extraMetadata.githubNativeClientId` to the
+registered public ID so Finder launches work without shell configuration. Development
+can override it with `GITHUB_NATIVE_CLIENT_ID`. Missing or malformed configuration
+disables GitHub login while leaving local analysis available; never put secrets in build metadata.
 The app displays a device code and opens GitHub’s verification page only on explicit user
 action. Polling is attempt/owner-bound, obeys GitHub’s interval and `slow_down`, and stops
 on cancellation or expiry. No client secret is bundled and no local HTTP OAuth callback
-server is used. PAT login remains a secondary path. Real-account consent and live AI
+server is used. Settings provides connection, account switching and disconnection while
+preserving local analysis. PAT login remains a secondary path. Production GitHub App
+installation selection, read-only permissions and token renewal remain separate gates.
+Real-account consent and live AI
 provider calls are separate, explicitly approved checks; device-flow regressions do not
 prove either. `TOKEN_ENC_KEY` is always required by the backend. Set
 `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040` and
@@ -665,8 +682,8 @@ available or used for this local verification.
 | 1 — Repository Intelligence Core | GitHub OAuth, import & clone, project-area detection, Java AST analysis, code explorer, architecture view, history |
 | 2 — Cross-domain Intelligence | TypeScript analyzer, FE↔BE↔DB↔Infra linking, flows, findings, impact analysis |
 | 3 — AI | Context-aware assistant, why/alternative analysis, evidence-grounded answers |
-| 4 — Learning & Productivity | Notes, tasks, AI learning-task generation, unified search |
-| 5 — Advanced | PR review, playground, growth reports, what-if simulator |
+| 4 — Analysis support | Notes, analysis tasks, manual verification checklists, unified search |
+| 5 — Advanced | PR review, playground, what-if simulator |
 
 This table describes implemented phase scope, not the current RC release gate.
 

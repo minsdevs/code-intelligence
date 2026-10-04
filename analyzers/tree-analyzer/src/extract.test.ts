@@ -140,3 +140,21 @@ describe('extract', () => {
     })
   })
 })
+
+
+describe('per-file outcomes', () => {
+  it('distinguishes complete parser runs, recovered syntax, and script-only extraction', () => {
+    const result = extract([
+      { path: 'empty.py', content: '' },
+      { path: 'broken.py', content: 'def broken(:' },
+      { path: 'View.vue', content: '<template><div /></template>' },
+      { path: 'unsupported.rs', content: 'fn main() {}' },
+    ])
+    expect(result.fileOutcomes).toEqual([
+      { path: 'empty.py', status: 'SUCCESS', reason: 'PYTHON_PARSED' },
+      { path: 'broken.py', status: 'PARTIAL', reason: 'RECOVERED_SYNTAX_ERRORS' },
+      { path: 'View.vue', status: 'PARTIAL', reason: 'SCRIPT_ONLY_EXTRACTION' },
+      { path: 'unsupported.rs', status: 'UNSUPPORTED', reason: 'SOURCE_LANGUAGE_UNSUPPORTED' },
+    ])
+  })
+})

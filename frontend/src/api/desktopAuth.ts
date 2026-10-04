@@ -3,6 +3,7 @@ import { apiGet, apiSend } from './client'
 export type GithubConnection = {
   identityType: string
   connected: boolean
+  reauthenticationReason?: 'TOKEN_EXPIRED' | 'EXPIRY_UNKNOWN' | 'CREDENTIAL_MISSING' | null
   githubId: number | null
   oauthAvailable: boolean
   githubRevocationUrl: string | null

@@ -6,6 +6,7 @@ declare module 'tree-sitter' {
   }
   export interface SyntaxNode {
     type: string
+    hasError: boolean
     childCount: number
     namedChildren: SyntaxNode[]
     children: SyntaxNode[]

@@ -335,6 +335,7 @@ async function main(target) {
     installationAcceptance: { status: 'BLOCKED', code: 'SIGNING_AND_NOTARIZATION_UNAVAILABLE' },
     status: 'RUNNING', phase: 'fresh-source-copy', checks: [] };
   const save = () => fs.writeFileSync(path.join(artifacts, 'acceptance.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
+  if (target === 'macos') report.macOSVersion = run('/usr/bin/sw_vers', ['-productVersion'], context.sourceRoot).trim();
   save();
   try {
     const owned = fs.mkdtempSync(path.join(context.tempRoot, 'native-acceptance-private-'));
@@ -390,6 +391,31 @@ async function main(target) {
     assert.equal(manifest.platform, 'darwin'); assert.equal(manifest.arch, 'arm64');
     report.runtimeManifestSha256 = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
     report.checks.push('current-source-runtime-stage');
+
+    report.phase = 'validation-app-package'; save();
+    const desktop = path.join(source, 'desktop');
+    const builder = createRequire(path.join(desktop, 'package.json')).resolve('electron-builder/cli.js');
+    run(process.execPath, [builder, '--mac', 'dir', '--arm64', '--publish', 'never',
+      '--config.mac.identity=-', '--config.mac.notarize=false',
+      '--config.productName=Code Intelligence Validation',
+      '--config.appId=dev.codeintelligence.desktop.validation',
+      '--config.extraMetadata.name=code-intelligence-validation',
+      '--config.extraMetadata.productName=Code Intelligence Validation',
+      '--config.directories.output=dist-validation'], desktop, env, { buildDiagnostics: true, sourceRoot: source });
+    report.appBundle = path.join(desktop, 'dist-validation', 'mac-arm64', 'Code Intelligence Validation.app');
+    assert.ok(fs.statSync(report.appBundle).isDirectory());
+    if (context.kind === 'isolated-macos-host') {
+      // Retain the bundle beside the allowed checkout, never in shared desktop/dist.
+      // The real run below must use this exact retained executable and runtime.
+      const retained = fs.mkdtempSync(path.join(context.sourceRoot, '.native-product-'));
+      fs.chmodSync(retained, 0o700);
+      const destination = path.join(retained, 'Code Intelligence Validation.app');
+      fs.cpSync(report.appBundle, destination, { recursive: true, force: false, errorOnExist: true,
+        verbatimSymlinks: true, preserveTimestamps: true });
+      run('/usr/bin/codesign', ['--verify', '--strict', '--deep', destination], desktop, env);
+      report.appBundle = destination;
+    }
+    report.checks.push('actual-arm64-validation-app-packaged');
 
     report.phase = 'real-electron-safe-storage-restart'; save();
     const { runProduct } = require('./native-acceptance-electron.cjs');

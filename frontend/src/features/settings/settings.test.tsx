@@ -9,6 +9,11 @@ import type { RuntimeStatus } from '../../desktop'
 import { I18nProvider } from '../../lib/i18n'
 import SettingsPage from './SettingsPage'
 
+let accountLogin = 'fixture-user'
+let githubIdentityType = 'LOCAL_LINKED'
+let reauthenticationReason: string | null = null
+let oauthAvailable = true
+let initiallyConnected = true
 let modelRequests = 0
 let requests: Array<{ path: string; method: string; body?: unknown }> = []
 let aiSettings: AiSettingView | null
@@ -88,6 +93,11 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 beforeEach(() => {
   window.localStorage.clear()
+  accountLogin = 'fixture-user'
+  githubIdentityType = 'LOCAL_LINKED'
+  reauthenticationReason = null
+  oauthAvailable = true
+  initiallyConnected = true
   modelRequests = 0
   requests = []
   aiSettings = { provider: 'openai', model: 'gpt-4o-mini', keyMasked: 'sk-a…abcd', keySet: true, state: 'ENABLED', activeRequests: 0 }
@@ -146,13 +156,15 @@ beforeEach(() => {
             maxContextTokens: 8000,
           })))
       }
+      if (path === '/api/auth/me') return jsonResponse({ authenticated: true, login: accountLogin, name: 'Fixture', avatarUrl: null, credentialKind: 'OAUTH', oauthAvailable })
       if (path === '/api/auth/github/connection') {
-        const disconnected = requests.some((request) => request.path === path && request.method === 'DELETE')
+        const disconnected = !initiallyConnected || requests.some((request) => request.path === path && request.method === 'DELETE')
         return jsonResponse({
-          identityType: disconnected ? 'LOCAL' : 'LOCAL_LINKED',
-          connected: !disconnected,
+          identityType: disconnected ? 'LOCAL' : githubIdentityType,
+          connected: !disconnected && !reauthenticationReason,
+          reauthenticationReason: disconnected ? null : reauthenticationReason,
           githubId: disconnected ? null : 42,
-          oauthAvailable: true,
+          oauthAvailable,
           githubRevocationUrl: 'https://github.com/settings/applications',
         })
       }
@@ -186,6 +198,54 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '연결 해제 확인' }))
 
     await waitFor(() => expect(requests.some((request) => request.method === 'DELETE')).toBe(true))
+  })
+
+  it('uses the linked GitHub ID instead of treating a local profile login as a GitHub username', async () => {
+    accountLogin = 'local'
+    renderSettings()
+    expect(await screen.findByText('GitHub ID 42')).toBeInTheDocument()
+    expect(screen.queryByText('@local')).not.toBeInTheDocument()
+  })
+
+  it('retains the username for a GitHub-only identity', async () => {
+    githubIdentityType = 'GITHUB'
+    renderSettings()
+    expect(await screen.findByText('@fixture-user')).toBeInTheDocument()
+  })
+
+  it('offers reauthentication and disconnect for an expired linked account', async () => {
+    reauthenticationReason = 'TOKEN_EXPIRED'
+    renderSettings()
+    expect(await screen.findByText(/GitHub 연결이 만료되었습니다/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /GitHub로 계속/ })).toHaveAttribute('href', '/oauth2/authorization/github')
+    expect(screen.getByRole('button', { name: '로컬 GitHub credential 연결 해제' })).toBeEnabled()
+    expect(screen.getByRole('link', { name: '계정 설정' })).toHaveTextContent('재인증 필요')
+  })
+
+  it('offers login after a confirmed account switch and preserves local data', async () => {
+    renderSettings()
+    expect(await screen.findByText('GitHub ID 42')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '계정 전환' }))
+    expect(screen.getByText(/계정을 전환하려면 현재 GitHub 연결/)).toBeInTheDocument()
+    expect(requests.some((request) => request.method === 'DELETE')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '취소' }))
+    expect(requests.some((request) => request.method === 'DELETE')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '계정 전환' }))
+    fireEvent.click(screen.getByRole('button', { name: '연결 해제 확인' }))
+    expect(await screen.findByText(/이전 연결을 해제했습니다/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /GitHub로 계속/ })).toHaveAttribute('href', '/oauth2/authorization/github')
+    expect(requests.filter((request) => request.method === 'DELETE').map((request) => request.path)).toEqual(['/api/auth/github/connection'])
+    expect(screen.getByRole('link', { name: '계정 설정' })).toHaveTextContent('로컬 모드')
+  })
+
+  it('explains unavailable OAuth while retaining local mode and an account entry point', async () => {
+    initiallyConnected = false
+    oauthAvailable = false
+    renderSettings()
+    expect(await screen.findByText(/GitHub OAuth가 이 앱에 설정되지 않아/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /GitHub로 계속/ })).toBeDisabled()
+    expect(screen.getByRole('link', { name: '계정 설정' })).toHaveTextContent('로컬 모드')
+    expect(requests.some((request) => request.path.includes('/native/start'))).toBe(false)
   })
 
   it('shows provider status and the stored key', async () => {

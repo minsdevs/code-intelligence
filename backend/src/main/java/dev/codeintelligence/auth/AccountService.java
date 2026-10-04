@@ -2,6 +2,9 @@ package dev.codeintelligence.auth;
 
 import dev.codeintelligence.common.security.CredentialKind;
 import dev.codeintelligence.github.GithubUserInfo;
+import java.time.Clock;
+import java.time.Instant;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,11 +14,22 @@ public class AccountService {
     private final UserAccountRepository userAccountRepository;
     private final GithubCredentialRepository githubCredentialRepository;
     private final TokenCryptoService tokenCryptoService;
+    private final Clock clock;
 
+    @Autowired
     public AccountService(
             UserAccountRepository userAccountRepository,
             GithubCredentialRepository githubCredentialRepository,
             TokenCryptoService tokenCryptoService) {
+        this(userAccountRepository, githubCredentialRepository, tokenCryptoService, Clock.systemUTC());
+    }
+
+    AccountService(
+            UserAccountRepository userAccountRepository,
+            GithubCredentialRepository githubCredentialRepository,
+            TokenCryptoService tokenCryptoService,
+            Clock clock) {
+        this.clock = clock;
         this.userAccountRepository = userAccountRepository;
         this.githubCredentialRepository = githubCredentialRepository;
         this.tokenCryptoService = tokenCryptoService;
@@ -23,6 +37,12 @@ public class AccountService {
 
     @Transactional
     public UserAccount upsertUserWithCredential(GithubUserInfo profile, CredentialKind kind, String rawToken) {
+        return upsertUserWithCredential(profile, kind, rawToken, null);
+    }
+
+    @Transactional
+    public UserAccount upsertUserWithCredential(
+            GithubUserInfo profile, CredentialKind kind, String rawToken, Instant expiresAt) {
         UserAccount user = userAccountRepository
                 .findByGithubId(profile.id())
                 .map(existing -> {
@@ -36,9 +56,9 @@ public class AccountService {
         githubCredentialRepository
                 .findByUserIdAndKind(user.getId(), kind)
                 .ifPresentOrElse(
-                        credential -> credential.updateToken(encrypted, profile.scopes()),
+                        credential -> credential.updateToken(encrypted, profile.scopes(), expiresAt),
                         () -> githubCredentialRepository.save(
-                                new GithubCredential(user.getId(), kind, encrypted, profile.scopes())));
+                                new GithubCredential(user.getId(), kind, encrypted, profile.scopes(), expiresAt)));
         return user;
     }
 
@@ -51,6 +71,12 @@ public class AccountService {
 
     @Transactional
     public UserAccount linkGithub(long userId, GithubUserInfo profile, CredentialKind kind, String rawToken) {
+        return linkGithub(userId, profile, kind, rawToken, null);
+    }
+
+    @Transactional
+    public UserAccount linkGithub(
+            long userId, GithubUserInfo profile, CredentialKind kind, String rawToken, Instant expiresAt) {
         UserAccount user = userAccountRepository.findById(userId).orElseThrow();
         userAccountRepository.findByGithubId(profile.id()).ifPresent(existing -> {
             if (!existing.getId().equals(user.getId())) {
@@ -58,7 +84,7 @@ public class AccountService {
             }
         });
         user.linkGithub(profile.id(), profile.login(), profile.name(), profile.avatarUrl());
-        storeCredential(user.getId(), profile, kind, rawToken);
+        storeCredential(user.getId(), profile, kind, rawToken, expiresAt);
         return user;
     }
 
@@ -72,25 +98,39 @@ public class AccountService {
 
     public AccountStatus status(long userId) {
         UserAccount user = userAccountRepository.findById(userId).orElseThrow();
-        boolean connected = user.getGithubId() != null
-                && (githubCredentialRepository
-                                .findByUserIdAndKind(userId, CredentialKind.OAUTH)
-                                .isPresent()
-                        || githubCredentialRepository
-                                .findByUserIdAndKind(userId, CredentialKind.PAT)
-                                .isPresent());
-        return new AccountStatus(user.getIdentityType(), connected, user.getGithubId());
+        boolean linked = user.getGithubId() != null;
+        var credential = githubCredentialRepository
+                .findByUserIdAndKind(userId, CredentialKind.OAUTH)
+                .or(() -> githubCredentialRepository.findByUserIdAndKind(userId, CredentialKind.PAT));
+        String reason = !linked
+                ? null
+                : credential.isEmpty()
+                        ? "CREDENTIAL_MISSING"
+                        : credential.get().reauthenticationReason(clock.instant());
+        boolean connected = linked && credential.isPresent() && reason == null;
+        return new AccountStatus(
+                user.getIdentityType(),
+                connected,
+                user.getGithubId(),
+                reason,
+                connected ? credential.get().getKind() : null);
     }
 
-    private void storeCredential(long userId, GithubUserInfo profile, CredentialKind kind, String rawToken) {
+    private void storeCredential(
+            long userId, GithubUserInfo profile, CredentialKind kind, String rawToken, Instant expiresAt) {
         EncryptedToken encrypted = tokenCryptoService.encrypt(rawToken);
         githubCredentialRepository
                 .findByUserIdAndKind(userId, kind)
                 .ifPresentOrElse(
-                        credential -> credential.updateToken(encrypted, profile.scopes()),
+                        credential -> credential.updateToken(encrypted, profile.scopes(), expiresAt),
                         () -> githubCredentialRepository.save(
-                                new GithubCredential(userId, kind, encrypted, profile.scopes())));
+                                new GithubCredential(userId, kind, encrypted, profile.scopes(), expiresAt)));
     }
 
-    public record AccountStatus(String identityType, boolean githubConnected, Long githubId) {}
+    public record AccountStatus(
+            String identityType,
+            boolean githubConnected,
+            Long githubId,
+            String reauthenticationReason,
+            CredentialKind credentialKind) {}
 }

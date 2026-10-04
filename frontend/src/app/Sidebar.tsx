@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, useMatch } from 'react-router-dom'
+import { getGithubConnection } from '../api/desktopAuth'
 import { ApiError } from '../api/client'
 import { listProjects } from '../api/projects'
 import { listAreas, updateAreaSelections } from '../api/areas'
@@ -50,6 +51,12 @@ export default function Sidebar() {
     queryKey: ['projects'],
     queryFn: listProjects,
   })
+
+  const accountQuery = useQuery({ queryKey: ['github-connection'], queryFn: getGithubConnection, retry: false })
+  const accountLabel = accountQuery.isPending ? '계정 확인 중'
+    : accountQuery.isError ? '계정 상태 확인 필요'
+      : accountQuery.data.reauthenticationReason ? 'GitHub 재인증 필요'
+      : accountQuery.data.connected ? `GitHub 연결됨 · ID ${accountQuery.data.githubId}` : '로컬 모드 · GitHub 로그인'
 
   const areas = areasQuery.data
   const projects = projectsQuery.data ?? []
@@ -185,6 +192,10 @@ export default function Sidebar() {
         </div>
       </div>
 
+      <NavLink to="/settings#github-account" aria-label="계정 설정" title={accountLabel} className="mx-2 mb-2 flex shrink-0 items-center gap-2 rounded-md border border-line px-2.5 py-2 text-[12px] text-ink-muted hover:bg-surface-2">
+        <SlidersIcon className="shrink-0" />
+        <span className={collapsed ? 'sr-only' : 'truncate'}>{accountLabel}</span>
+      </NavLink>
       <div className={`${collapsed ? 'sr-only' : 'shrink-0 border-t border-line px-4 py-2.5'} font-mono text-[10px] tracking-wide text-ink-faint`}>
         {versionLabel}
       </div>

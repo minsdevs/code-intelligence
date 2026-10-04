@@ -59,7 +59,7 @@ class TaskDraftApiIntegrationTest {
     private JsonMapper jsonMapper;
 
     @Test
-    void findingDraftStaysHiddenUntilApproved() throws Exception {
+    void retiredGeneratorDoesNotCreateTasksAndStoredAnalysisDraftRemainsUsable() throws Exception {
         ResponseCookie session = loginWithPat();
         long projectId = seedOwnedProject("src/App.java", "class App {}\n");
         long snapshotId = jdbcTemplate.queryForObject(
@@ -69,29 +69,25 @@ class TaskDraftApiIntegrationTest {
                 values (?, 'UNMATCHED_API_CALL', 'HIGH', 'Unmatched GET /api/missing', 'No backend endpoint')
                 returning id
                 """, Long.class, snapshotId);
-        Map<String, Object> draft = jsonMapper.readValue(
-                send(
-                        session,
-                        "POST",
-                        "/api/projects/" + projectId + "/findings/" + findingId + "/task-draft",
-                        Map.of(),
-                        HttpStatus.CREATED),
-                Map.class);
-        assertThat(draft.get("status")).isEqualTo("DRAFT");
-        assertThat(draft.get("origin")).isEqualTo("AI");
-        assertThat(draft.get("type")).isEqualTo("LEARNING");
-        assertThat(draft.get("title")).isEqualTo("Review unmatched API call");
+        send(
+                session,
+                "POST",
+                "/api/projects/" + projectId + "/findings/" + findingId + "/task-draft",
+                Map.of(),
+                HttpStatus.NOT_FOUND);
+        long storedTaskId = jdbcTemplate.queryForObject("""
+                insert into tasks (project_id, type, title, description, status, origin, source_finding_id)
+                values (?, 'REVIEW', 'Review unmatched API call', 'Retained analysis draft', 'DRAFT', 'AI', ?) returning id
+                """, Long.class, projectId, findingId);
         assertThat(jdbcTemplate.queryForObject(
-                        "select sum(prompt_tokens + completion_tokens) from ai_usage_logs where project_id = ? and purpose = 'task'",
-                        Long.class,
-                        projectId))
-                .isEqualTo(20L);
+                        "select count(*) from ai_usage_logs where project_id = ?", Long.class, projectId))
+                .isZero();
 
         List<Map<String, Object>> listed = jsonMapper.readValue(
                 send(session, "GET", "/api/projects/" + projectId + "/tasks", null, HttpStatus.OK), List.class);
         assertThat(listed).extracting(row -> row.get("title")).doesNotContain("Review unmatched API call");
 
-        Number taskId = (Number) draft.get("id");
+        Number taskId = storedTaskId;
         Map<String, Object> approved = jsonMapper.readValue(
                 send(
                         session,

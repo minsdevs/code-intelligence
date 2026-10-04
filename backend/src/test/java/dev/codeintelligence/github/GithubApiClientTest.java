@@ -110,4 +110,74 @@ class GithubApiClientTest {
         assertThat(page.hasNext()).isTrue();
         assertThat(page.items()).containsExactly(new GithubBranchSummary("main", "abc123", true));
     }
+
+    @Test
+    void installationsArePagedAndDoNotFetchRepositoriesUntilAnInstallationIsSelected() {
+        server.expect(requestTo(BASE_URL + "/user/installations?per_page=100&page=1"))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer synthetic-user-token"))
+                .andRespond(withSuccess("""
+                    {"total_count":2,"installations":[{"id":81,"account":{"login":"team"},
+                     "app_slug":"code-intelligence","repository_selection":"selected","suspended_at":null},
+                     {"id":82,"account":{"login":"paused"},"suspended_at":"2026-10-01T00:00:00Z"}]}
+                    """, MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.LINK, "<https://untrusted.invalid/no-follow>; rel=\"next\""));
+        var page = client.listUserInstallations("synthetic-user-token", -1, 999);
+        assertThat(page.hasNext()).isTrue();
+        assertThat(page.items()).hasSize(2);
+        assertThat(page.items().get(0).accountLogin()).isEqualTo("team");
+        assertThat(page.items().get(0).repositorySelection()).isEqualTo("selected");
+        assertThat(page.items().get(1).suspended()).isTrue();
+        server.verify();
+    }
+
+    @Test
+    void selectedInstallationUsesOnlyItsFixedRepositoryEndpointAndPreservesNextPage() {
+        server.expect(requestTo(BASE_URL + "/user/installations/81/repositories?per_page=30&page=2"))
+                .andRespond(withSuccess("""
+                    {"total_count":31,"repositories":[{"name":"private-repo","full_name":"team/private-repo",
+                     "private":true,"default_branch":"main","owner":{"login":"team"}}]}
+                    """, MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.LINK, "<ignored>; rel=\"next\""));
+        var page = client.listInstallationRepos("synthetic-user-token", 81, 2, 30);
+        assertThat(page.items()).extracting(GithubRepoSummary::fullName).containsExactly("team/private-repo");
+        assertThat(page.hasNext()).isTrue();
+        assertThatThrownBy(() -> client.listInstallationRepos("unused", 0, 1, 30))
+                .isInstanceOf(IllegalArgumentException.class);
+        server.verify();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {401, 403, 404, 429})
+    void installationFailuresAreTypedAndNeverFallBackToUserRepos(int status) {
+        server.expect(requestTo(BASE_URL + "/user/installations?per_page=30&page=1"))
+                .andRespond(withStatus(HttpStatus.valueOf(status)));
+        Class<? extends Throwable> expected = status == 401
+                ? InvalidGithubTokenException.class
+                : status == 429 ? GithubRateLimitException.class : GithubRepositoryAccessException.class;
+        assertThatThrownBy(() -> client.listUserInstallations("synthetic-user-token", 1, 30))
+                .isInstanceOf(expected);
+        server.verify();
+        server.reset();
+        server.expect(requestTo(BASE_URL + "/user/installations/81/repositories?per_page=30&page=1"))
+                .andRespond(withStatus(HttpStatus.valueOf(status)));
+        assertThatThrownBy(() -> client.listInstallationRepos("synthetic-user-token", 81, 1, 30))
+                .isInstanceOf(expected);
+        server.verify();
+    }
+
+    @Test
+    void installationRateLimit403RetainsRetryAfterAndEmptyInstallationsStayEmpty() {
+        server.expect(requestTo(BASE_URL + "/user/installations?per_page=30&page=1"))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).header(HttpHeaders.RETRY_AFTER, "45"));
+        assertThatThrownBy(() -> client.listUserInstallations("synthetic-user-token", 1, 30))
+                .isInstanceOfSatisfying(
+                        GithubRateLimitException.class,
+                        error -> assertThat(error.retryAfter()).isEqualTo(java.time.Duration.ofSeconds(45)));
+        server.verify();
+        server.reset();
+        server.expect(requestTo(BASE_URL + "/user/installations?per_page=30&page=2"))
+                .andRespond(withSuccess("{\"total_count\":0,\"installations\":[]}", MediaType.APPLICATION_JSON));
+        assertThat(client.listUserInstallations("synthetic-user-token", 2, 30).items())
+                .isEmpty();
+    }
 }

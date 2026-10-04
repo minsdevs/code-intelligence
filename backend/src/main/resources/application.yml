@@ -79,7 +79,6 @@ app:
       client-id: ${GITHUB_NATIVE_CLIENT_ID:}
       device-code-uri: ${GITHUB_DEVICE_CODE_URI:https://github.com/login/device/code}
       token-uri: ${GITHUB_TOKEN_URI:https://github.com/login/oauth/access_token}
-      scope: ${GITHUB_NATIVE_SCOPE:read:user user:email repo}
       attempt-ttl-seconds: ${GITHUB_OAUTH_ATTEMPT_TTL_SECONDS:300}
   ts-analyzer:
     base-url: ${TS_ANALYZER_BASE_URL:}

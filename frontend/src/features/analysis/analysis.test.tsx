@@ -144,7 +144,7 @@ function installFetch() {
       return jsonResponse(
         {
           id: 4,
-          type: 'LEARNING',
+          type: 'REVIEW',
           title: 'Review unmatched API call',
           description: 'Confirm',
           status: 'DRAFT',
@@ -211,7 +211,7 @@ describe('AnalysisPage', () => {
     expect(await screen.findByText('Unmatched GET /api/missing')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'HIGH' })).toBeInTheDocument()
     expect(await screen.findByText('HomePage.load')).toBeInTheDocument()
-    expect(screen.getByText(/score 9/)).toBeInTheDocument()
+    expect(screen.getByText(/정적 관계 기반 참고 점수 9/)).toBeInTheDocument()
   })
 
   it('opens the AI panel with FINDING intent from a finding', async () => {
@@ -261,33 +261,14 @@ describe('AnalysisPage', () => {
     })
   })
 
-  it('creates a learning-task draft from a finding', async () => {
-    const { router } = renderAnalysis()
-    await screen.findByText('Unmatched GET /api/missing')
-    fireEvent.click(screen.getByRole('button', { name: '초안 생성' }))
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/projects/7/tasks')
-    })
-  })
-
-  it('opens Settings when task draft generation needs AI configuration', async () => {
-    draftStatus = 503
-    const { router } = renderAnalysis()
-
-    await screen.findByText('Unmatched GET /api/missing')
-    fireEvent.click(screen.getByRole('button', { name: '초안 생성' }))
-    fireEvent.click(await screen.findByRole('button', { name: '설정 열기' }))
-
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
-  })
-
-  it('runs a static what-if explanation from impact', async () => {
+  it('offers approved explanations without automatic task generation or what-if provider calls', async () => {
     renderAnalysis()
-    await screen.findByText('HomePage.load')
-    fireEvent.click(screen.getByRole('button', { name: 'What-if' }))
-    expect(
-      await screen.findByText('Changing TodosPage would break HomePage.load.'),
-    ).toBeInTheDocument()
-    expect(screen.getByText('HomePage.load calls TodosPage.')).toBeInTheDocument()
+    await screen.findByText('정적 관계 기반 참고 점수 9')
+    expect(screen.queryByRole('button', { name: 'Task 초안 만들기' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'AI 패널에서 영향 근거 확인' }))
+    expect(useUiStore.getState().aiPanelOpen).toBe(true)
+    expect(useUiStore.getState().pendingIntent).toBe('EXPLAIN')
+    expect(useUiStore.getState().focusedNode?.id).toBe(21)
+    expect(fetchMock.mock.calls.some(([input]) => /task-draft|what-if/.test(requestUrl(input).pathname))).toBe(false)
   })
 })

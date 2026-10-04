@@ -31,9 +31,10 @@ export function judgeFinding(
   })
 }
 
-export function getImpact(projectId: number, nodeId: number, depth?: number): Promise<ImpactView> {
+export function getImpact(projectId: number, nodeId: number, depth?: number, snapshotId?: number | null): Promise<ImpactView> {
   const params = new URLSearchParams({ nodeId: String(nodeId) })
   if (depth != null) params.set('depth', String(depth))
+  if (snapshotId != null) params.set('snapshotId', String(snapshotId))
   return apiGet<ImpactView>(`/api/projects/${projectId}/impact?${params.toString()}`)
 }
 

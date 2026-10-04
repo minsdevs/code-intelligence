@@ -80,32 +80,84 @@ public class CoverageService {
 
     @Transactional(readOnly = true)
     public CoverageReport getReport(long projectId, long userId) {
+        return getReport(projectId, userId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public CoverageReport getReport(long projectId, long userId, Long requestedSnapshotId) {
         Project project =
                 projectRepository.findByIdAndUserId(projectId, userId).orElseThrow(ProjectNotFoundException::new);
-        Long snapshotId = project.getCurrentSnapshotId();
+        Long snapshotId = requestedSnapshotId != null ? requestedSnapshotId : project.getCurrentSnapshotId();
         if (snapshotId == null) {
             throw new ProjectNotFoundException();
         }
+        boolean owned = jdbc.sql("select exists(select 1 from snapshots where id=:sid and project_id=:pid)")
+                .param("sid", snapshotId)
+                .param("pid", projectId)
+                .query(Boolean.class)
+                .single();
+        if (!owned) throw new dev.codeintelligence.analysis.core.SnapshotNotFoundException();
         return buildReport(projectId, snapshotId);
     }
 
     @Transactional(readOnly = true)
     public CoverageReport buildReport(long projectId, long snapshotId) {
         List<CoverageReport.AnalyzerStatus> analyzerStatuses = computeAnalyzerStatuses(projectId, snapshotId);
+        CoverageReport.OutcomeSummary outcomes = computeOutcomes(snapshotId);
         return new CoverageReport(
                 computeFileCoverage(projectId, snapshotId),
-                computeLanguageInventory(snapshotId),
+                computeLanguageInventory(snapshotId, outcomes != null),
                 // The exclusion policy for a past snapshot was not persisted.
                 List.of(),
                 analyzerStatuses,
                 new CoverageReport.PartialResultInfo(
-                        false, false, false, CoverageReport.COMPLETENESS_UNKNOWN, "UNKNOWN"),
+                        false,
+                        false,
+                        false,
+                        outcomes == null
+                                ? CoverageReport.COMPLETENESS_UNKNOWN
+                                : "Recorded parser outcomes do not establish complete semantic, call, or framework coverage.",
+                        "UNKNOWN"),
                 computeRetryableIssues(analyzerStatuses),
                 // No capability was verified by these inventory rows, regardless of language.
                 List.of(),
-                CoverageReport.LEGACY_UNMEASURED,
+                outcomes == null ? CoverageReport.LEGACY_UNMEASURED : "PER_FILE_RECORDED",
                 CoverageReport.SUPPORT_UNVERIFIED,
-                readLocalImportSummary(projectId, snapshotId));
+                readLocalImportSummary(projectId, snapshotId),
+                snapshotId,
+                outcomes);
+    }
+
+    private CoverageReport.OutcomeSummary computeOutcomes(long snapshotId) {
+        return jdbc.sql("""
+                select m.discovered_files, m.excluded_for_count+m.excluded_for_size+m.excluded_binary as excluded_files,
+                       m.excluded_submodules,
+                       count(f.id) filter (where f.analysis_targeted) as targeted,
+                       count(f.id) filter (where f.analysis_status='SUCCESS') as successful,
+                       count(f.id) filter (where f.analysis_status='PARTIAL') as partial,
+                       count(f.id) filter (where f.analysis_status='FAILED') as failed,
+                       count(f.id) filter (where f.analysis_status='UNSUPPORTED') as unsupported,
+                       count(f.id) filter (where f.analysis_status in ('UNMEASURED','LEGACY_UNMEASURED')) as unmeasured,
+                       count(f.id) filter (where f.analysis_status='TARGETED') as pending
+                from snapshot_inventory_measurements m left join files f on f.snapshot_id=m.snapshot_id
+                where m.snapshot_id=:sid
+                group by m.snapshot_id, m.discovered_files, m.excluded_for_count, m.excluded_for_size,
+                         m.excluded_binary, m.excluded_submodules
+                """)
+                .param("sid", snapshotId)
+                .query((rs, n) -> new CoverageReport.OutcomeSummary(
+                        rs.getInt("discovered_files"),
+                        rs.getInt("targeted"),
+                        rs.getInt("successful"),
+                        rs.getInt("partial"),
+                        rs.getInt("failed"),
+                        rs.getInt("excluded_files"),
+                        rs.getInt("unsupported"),
+                        rs.getInt("unmeasured"),
+                        rs.getInt("pending"),
+                        rs.getInt("excluded_submodules")))
+                .optional()
+                .orElse(null);
     }
 
     private CoverageReport.LocalImportSummary readLocalImportSummary(long projectId, long snapshotId) {
@@ -174,6 +226,16 @@ public class CoverageService {
                 .param("sid", snapshotId)
                 .query(Integer.class)
                 .single();
+        List<int[]> measured = jdbc.sql(
+                        "select excluded_for_count,excluded_for_size,excluded_binary from snapshot_inventory_measurements where snapshot_id=:sid")
+                .param("sid", snapshotId)
+                .query((rs, n) -> new int[] {rs.getInt(1), rs.getInt(2), rs.getInt(3)})
+                .list();
+        if (!measured.isEmpty()) {
+            int[] counts = measured.getFirst();
+            return new CoverageReport.FileCoverage(
+                    inventoriedFiles, null, counts[0], counts[1], counts[2], inventoriedFiles);
+        }
         Integer skippedForCount = recordedInventorySkipCount(projectId, snapshotId, "max-files");
         Integer skippedForSize = recordedInventorySkipCount(projectId, snapshotId, "max-file-size");
         return new CoverageReport.FileCoverage(
@@ -203,15 +265,22 @@ public class CoverageService {
         }
     }
 
-    private List<CoverageReport.LanguageCoverage> computeLanguageInventory(long snapshotId) {
+    private List<CoverageReport.LanguageCoverage> computeLanguageInventory(long snapshotId, boolean measured) {
         return jdbc.sql("""
-                        select coalesce(language, 'unknown') as lang, count(*) as cnt
+                        select coalesce(language, 'unknown') as lang, count(*) as cnt,
+                               count(*) filter(where analysis_status='SUCCESS') as successful,
+                               count(*) filter(where analysis_status='FAILED') as failed
                         from files where snapshot_id = :sid
                         group by coalesce(language, 'unknown') order by cnt desc, lang
                         """)
                 .param("sid", snapshotId)
                 .query((rs, rowNum) -> new CoverageReport.LanguageCoverage(
-                        rs.getString("lang"), rs.getInt("cnt"), null, null, null, rs.getInt("cnt")))
+                        rs.getString("lang"),
+                        rs.getInt("cnt"),
+                        measured ? rs.getInt("successful") : null,
+                        null,
+                        measured ? rs.getInt("failed") : null,
+                        rs.getInt("cnt")))
                 .list();
     }
 

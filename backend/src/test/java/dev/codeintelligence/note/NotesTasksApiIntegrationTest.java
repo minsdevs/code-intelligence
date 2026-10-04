@@ -122,7 +122,7 @@ class NotesTasksApiIntegrationTest {
 
         jdbcTemplate.update("""
                 insert into tasks (project_id, type, title, description, status, origin)
-                values (?, 'LEARNING', 'Hidden draft', '', 'DRAFT', 'AI')
+                values (?, 'REVIEW', 'Hidden draft', '', 'DRAFT', 'AI')
                 """, projectId);
         List<Map<String, Object>> listed = jsonMapper.readValue(
                 send(session, "GET", "/api/projects/" + projectId + "/tasks", null, HttpStatus.OK), List.class);

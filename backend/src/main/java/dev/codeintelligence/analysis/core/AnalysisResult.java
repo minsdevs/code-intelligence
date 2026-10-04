@@ -2,7 +2,15 @@ package dev.codeintelligence.analysis.core;
 
 import java.util.List;
 
-public record AnalysisResult(List<GraphNodeDraft> nodes, List<GraphEdgeDraft> edges, List<AnalyzerEvidence> evidences) {
+public record AnalysisResult(
+        List<GraphNodeDraft> nodes,
+        List<GraphEdgeDraft> edges,
+        List<AnalyzerEvidence> evidences,
+        List<FileAnalysisOutcome> fileOutcomes) {
+
+    public AnalysisResult(List<GraphNodeDraft> nodes, List<GraphEdgeDraft> edges, List<AnalyzerEvidence> evidences) {
+        this(nodes, edges, evidences, List.of());
+    }
 
     public static final AnalysisResult EMPTY = new AnalysisResult(List.of(), List.of(), List.of());
 
@@ -10,5 +18,6 @@ public record AnalysisResult(List<GraphNodeDraft> nodes, List<GraphEdgeDraft> ed
         nodes = nodes == null ? List.of() : List.copyOf(nodes);
         edges = edges == null ? List.of() : List.copyOf(edges);
         evidences = evidences == null ? List.of() : List.copyOf(evidences);
+        fileOutcomes = fileOutcomes == null ? List.of() : List.copyOf(fileOutcomes);
     }
 }

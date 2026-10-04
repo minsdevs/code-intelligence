@@ -103,9 +103,8 @@ public class AssistantService {
         AiRequestPlanService.Approved approved = plans.consume(projectId, userId, request, provider);
         long snapshotId = approved.snapshotId();
         ContextRetrievalService.AskContext ctx = approved.context();
-        AIProvider.ChatResponse raw = plans.desktop()
-                ? plans.execute(approved)
-                : usage.chat(userId, projectId, provider, approved.intent().name(), approved.payload());
+        AIProvider.ChatResponse raw =
+                plans.desktop() ? plans.execute(approved) : usage.chatApproved(userId, projectId, provider, approved);
         AIProvider.ChatResponse validated = validator.validate(projectId, snapshotId, raw);
         return transactions.execute(status -> {
             long conversationId = resolveConversation(projectId, snapshotId, userId, request.conversationId());

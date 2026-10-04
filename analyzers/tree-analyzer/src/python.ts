@@ -5,6 +5,7 @@ const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options'
 const ROUTER_RECEIVERS = new Set(['app', 'router', 'api', 'bp', 'blueprint', 'routes'])
 
 export function extractPython(file: AnalyzeFile, localPaths: Set<string>): {
+  hasErrors: boolean
   endpoints: EndpointHit[]
   symbols: SymbolHit[]
   entities: EntityHit[]
@@ -37,7 +38,7 @@ export function extractPython(file: AnalyzeFile, localPaths: Set<string>): {
       extractDjangoUrls(child, content, file.path, endpoints)
     }
   }
-  return { endpoints, symbols, entities, imports }
+  return { endpoints, symbols, entities, imports, hasErrors: root.hasError }
 }
 
 function extractDecorated(

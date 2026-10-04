@@ -74,16 +74,6 @@ public class TaskController {
         return taskService.patchGoal(projectId, user.userId(), taskId, goalId, body);
     }
 
-    @PostMapping("/{taskId}/records")
-    @ResponseStatus(HttpStatus.CREATED)
-    public TaskService.LearningRecordView addRecord(
-            @PathVariable long projectId,
-            @PathVariable long taskId,
-            @RequestBody TaskService.LearningNote body,
-            @AuthenticationPrincipal AuthenticatedUser user) {
-        return taskService.addRecord(projectId, user.userId(), taskId, body);
-    }
-
     @DeleteMapping("/{taskId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(

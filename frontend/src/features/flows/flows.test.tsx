@@ -59,6 +59,7 @@ function installFetch() {
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
     const url = requestUrl(input)
     const path = url.pathname
+    if (path === '/api/projects/7') return jsonResponse({ id: 7, name: 'test', currentSnapshot: { id: 100, status: 'DONE' } })
     if (path === '/api/projects/7/flows') {
       const kind = url.searchParams.get('kind')
       return jsonResponse(kind ? summaries.filter((flow) => flow.kind === kind) : summaries)

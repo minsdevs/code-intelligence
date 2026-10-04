@@ -1,11 +1,8 @@
 import { useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getImpact, listFindings, runWhatIf } from '../../api/analysis'
-import { createTaskDraft } from '../../api/tasks'
+import { getImpact, listFindings } from '../../api/analysis'
 import { listGraphNodes } from '../../api/graph'
-import { parseEvidenceRef } from '../../api/ai'
-import { ApiError } from '../../api/client'
 import type { FindingView } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
 import { CoveragePanel } from './CoveragePanel'
@@ -34,8 +31,6 @@ export default function AnalysisPage() {
   const [nodeQuery, setNodeQuery] = useState('')
   const [nodeId, setNodeId] = useState<number | null>(null)
   const [depth, setDepth] = useState(5)
-  const [draftMessage, setDraftMessage] = useState<string | null>(null)
-  const [whatIfError, setWhatIfError] = useState<string | null>(null)
 
   const findingsQuery = useQuery({
     queryKey: ['findings', projectId, severity, includeHidden],
@@ -63,32 +58,6 @@ export default function AnalysisPage() {
     enabled: projectId != null && impactNodeId != null,
   })
 
-  const draftMutation = useMutation({
-    mutationFn: () => createTaskDraft(projectId!, activeFinding!.id),
-    onSuccess: () => {
-      navigate(`/projects/${projectId}/tasks`)
-    },
-    onError: (error) => {
-      const message =
-        error instanceof ApiError && error.status === 503
-          ? t('analysis.draftAiDisabled')
-          : (queryError(error) ?? t('analysis.draftFailed'))
-      setDraftMessage(message)
-    },
-  })
-
-  const whatIfMutation = useMutation({
-    mutationFn: () => runWhatIf(projectId!, { nodeId: impactNodeId!, depth }),
-    onError: (error) => {
-      const message =
-        error instanceof ApiError && error.status === 503
-          ? t('analysis.whatIfAiDisabled')
-          : (queryError(error) ?? t('analysis.whatIfFailed'))
-      setWhatIfError(message)
-    },
-    onSuccess: () => setWhatIfError(null),
-  })
-
   if (projectId == null) {
     return (
       <EmptyState title="Analysis" description={t('analysis.desc')} />
@@ -97,8 +66,6 @@ export default function AnalysisPage() {
 
   const findingsError = queryError(findingsQuery.error)
   const impactError = queryError(impactQuery.error)
-  const draftAiDisabled = draftMutation.error instanceof ApiError && draftMutation.error.status === 503
-  const whatIfAiDisabled = whatIfMutation.error instanceof ApiError && whatIfMutation.error.status === 503
 
   function selectFinding(finding: FindingView) {
     setSelectedFindingId(finding.id)
@@ -216,7 +183,7 @@ export default function AnalysisPage() {
                   type="button"
                   onClick={() =>
                     navigate(
-                      `/projects/${projectId}/code${codeLocationSearch(evidence.filePath!, evidence.lineStart)}`,
+                      `/projects/${projectId}/code${codeLocationSearch(evidence.filePath!, evidence.lineStart, { snapshotId: evidence.snapshotId, evidenceId: evidence.evidenceId, versioned: true })}`,
                     )
                   }
                   className="mt-2 block font-mono text-[12px] text-accent hover:underline"
@@ -242,31 +209,6 @@ export default function AnalysisPage() {
             >
               {t('analysis.verifyAi')}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDraftMessage(null)
-                draftMutation.mutate()
-              }}
-              disabled={draftMutation.isPending}
-              className="ml-2 mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
-            >
-              {t('analysis.createDraft')}
-            </button>
-            {draftMessage && (
-              <div role="alert" className="mt-2 text-[12px] text-danger">
-                <p>{draftMessage}</p>
-                {draftAiDisabled && (
-                  <button
-                    type="button"
-                    onClick={() => navigate('/settings')}
-                    className="mt-1 text-accent hover:underline"
-                  >
-                    {t('ai.openSettings')}
-                  </button>
-                )}
-              </div>
-            )}
           </div>
         )}
       </section>
@@ -274,6 +216,7 @@ export default function AnalysisPage() {
       <aside className="flex w-[24rem] shrink-0 flex-col bg-surface-1" aria-label="Impact">
         <div className="border-b border-line px-4 py-3">
           <h2 className="text-[13px] font-semibold text-ink">Impact</h2>
+          <p className="mt-2 text-xs text-ink-muted">정적 관계의 검토 후보입니다. 실제 실행 영향은 미확인이고 관계 미발견은 영향 없음이 아닙니다.</p>
           <label className="mt-2 block text-[12px] text-ink-muted">
             {t('analysis.nodeSearch')}
             <input
@@ -342,7 +285,7 @@ export default function AnalysisPage() {
               >
                 {impactQuery.data.riskLevel}
               </span>
-              <span className="text-[13px] text-ink-muted">score {impactQuery.data.riskScore}</span>
+              <span className="text-[13px] text-ink-muted">정적 관계 기반 참고 점수 {impactQuery.data.riskScore}</span>
             </p>
             {impactQuery.data.dependents.length === 0 ? (
               <p className="mt-3 text-[13px] text-ink-muted">{t('analysis.noReverseDeps')}</p>
@@ -355,7 +298,7 @@ export default function AnalysisPage() {
                         type="button"
                         onClick={() =>
                           navigate(
-                            `/projects/${projectId}/code${codeLocationSearch(dep.filePath!, dep.line)}`,
+                            `/projects/${projectId}/code${codeLocationSearch(dep.filePath!, dep.line, { snapshotId: impactQuery.data?.resolvedSnapshotId, versioned: true })}`,
                           )
                         }
                         className="w-full rounded-md px-1 py-1 text-left hover:bg-surface-2"
@@ -381,60 +324,19 @@ export default function AnalysisPage() {
             <button
               type="button"
               onClick={() => {
-                setWhatIfError(null)
-                whatIfMutation.mutate()
+                useUiStore.setState({
+                  aiPanelOpen: true, pendingIntent: 'EXPLAIN', focusedFindingId: null,
+                  focusedFile: null, focusedCommitSha: null, focusedNoteId: null, focusedTaskId: null,
+                  focusedNode: impactNodeId == null ? null : {
+                    id: impactNodeId, name: `Node #${impactNodeId}`, nodeType: 'NODE', filePath: null, lineStart: null,
+                  },
+                })
               }}
-              disabled={whatIfMutation.isPending}
-              className="mt-4 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
+              className="mt-4 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink"
             >
-              {t('analysis.whatIf')}
+              AI 패널에서 영향 근거 확인
             </button>
-            {whatIfError && (
-              <div role="alert" className="mt-2 text-[12px] text-danger">
-                <p>{whatIfError}</p>
-                {whatIfAiDisabled && (
-                  <button
-                    type="button"
-                    onClick={() => navigate('/settings')}
-                    className="mt-1 text-accent hover:underline"
-                  >
-                    {t('ai.openSettings')}
-                  </button>
-                )}
-              </div>
-            )}
-            {whatIfMutation.data && (
-              <div className="mt-3 border-t border-line pt-3">
-                <h3 className="text-[12px] font-semibold text-ink">What-if</h3>
-                <p className="mt-1 text-[13px] text-ink">{whatIfMutation.data.explanation}</p>
-                <ul aria-label="What-if claims" className="mt-2 space-y-1">
-                  {whatIfMutation.data.claims.map((claim, index) => (
-                    <li key={`${claim.text}-${index}`}>
-                      <span className="font-mono text-[11px] text-ok">{claim.confidence}</span>
-                      <p className="text-[12px] text-ink">{claim.text}</p>
-                      {claim.evidence.map((ref) => {
-                        const parsed = parseEvidenceRef(ref)
-                        if (!parsed) return null
-                        return (
-                          <button
-                            key={ref}
-                            type="button"
-                            onClick={() =>
-                              navigate(
-                                `/projects/${projectId}/code${codeLocationSearch(parsed.path, parsed.line)}`,
-                              )
-                            }
-                            className="mr-2 font-mono text-[11px] text-accent hover:underline"
-                          >
-                            {parsed.path}:{parsed.line}
-                          </button>
-                        )
-                      })}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <p className="mt-2 text-xs text-ink-muted">질문을 입력하고 컨텍스트·프롬프트·비용을 확인한 뒤 승인하세요. 버튼만으로 AI 요청을 보내지 않습니다.</p>
           </div>
         )}
       </aside>

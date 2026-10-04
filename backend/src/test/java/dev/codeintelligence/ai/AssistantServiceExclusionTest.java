@@ -83,9 +83,11 @@ class AssistantServiceExclusionTest {
         when(mockProvider.model()).thenReturn("gpt-4o-mini");
         var providerResponse = new AIProvider.ChatResponse("{}", List.of(), "explanation", List.of(), 10, 5);
         when(mockProvider.chat(any())).thenReturn(providerResponse);
-        when(usage.chat(anyLong(), anyLong(), any(), anyString(), any())).thenAnswer(invocation -> {
+        when(usage.chatApproved(anyLong(), anyLong(), any(), any())).thenAnswer(invocation -> {
             AIProvider provider = invocation.getArgument(2);
-            return provider.chat(invocation.getArgument(4));
+            return provider.chat(invocation
+                    .getArgument(3, AiRequestPlanService.Approved.class)
+                    .payload());
         });
         when(validator.validate(anyLong(), anyLong(), any())).thenReturn(providerResponse);
         when(validator.collectRefs(any())).thenReturn(Set.of());

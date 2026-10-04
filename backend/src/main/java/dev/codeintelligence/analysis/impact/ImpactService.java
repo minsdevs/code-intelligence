@@ -23,7 +23,12 @@ public class ImpactService {
             int depth, String edgeType, String nodeType, long nodeId, String name, String filePath, Integer line) {}
 
     public record ImpactView(
-            long nodeId, int depth, int riskScore, String riskLevel, List<ImpactNodeView> dependents) {}
+            long nodeId,
+            int depth,
+            int riskScore,
+            String riskLevel,
+            List<ImpactNodeView> dependents,
+            long resolvedSnapshotId) {}
 
     private final ProjectRepository projectRepository;
     private final SnapshotRepository snapshotRepository;
@@ -61,8 +66,8 @@ public class ImpactService {
                         )
                         select w.depth, w.edge_type, n.node_type, n.id, n.name, f.path as file_path, n.line_start
                         from walk w
-                        join graph_nodes n on n.id = w.source_node_id
-                        left join files f on f.id = n.file_id
+                        join graph_nodes n on n.id = w.source_node_id and n.snapshot_id = :snapshotId
+                        left join files f on f.id = n.file_id and f.snapshot_id = :snapshotId
                         order by w.depth, n.natural_key
                         """)
                 .param("snapshotId", resolved)
@@ -82,7 +87,7 @@ public class ImpactService {
             score += weight(dependent.nodeType());
         }
         String level = score >= 20 ? "HIGH" : score >= 8 ? "MEDIUM" : "LOW";
-        return new ImpactView(nodeId, resolvedDepth, score, level, dependents);
+        return new ImpactView(nodeId, resolvedDepth, score, level, dependents, resolved);
     }
 
     private static int weight(String nodeType) {

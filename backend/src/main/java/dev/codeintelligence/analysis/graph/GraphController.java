@@ -18,6 +18,14 @@ public class GraphController {
         this.graphService = graphService;
     }
 
+    @GetMapping("/{projectId}/graph/overview")
+    public GraphService.GraphOverview overview(
+            @PathVariable long projectId,
+            @RequestParam(required = false) Long snapshotId,
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        return graphService.overview(projectId, user.userId(), snapshotId);
+    }
+
     @GetMapping("/{projectId}/graph/nodes")
     public GraphService.GraphNodePage nodes(
             @PathVariable long projectId,
@@ -25,11 +33,14 @@ public class GraphController {
             @RequestParam(required = false) String area,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String path,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String category,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) Long snapshotId,
             @AuthenticationPrincipal AuthenticatedUser user) {
-        return graphService.listNodes(projectId, user.userId(), snapshotId, type, area, q, path, page, size);
+        return graphService.listNodes(
+                projectId, user.userId(), snapshotId, type, area, q, path, page, size, sort, category);
     }
 
     @GetMapping("/{projectId}/graph/nodes/{nodeId}")

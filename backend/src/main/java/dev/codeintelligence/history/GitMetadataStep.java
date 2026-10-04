@@ -5,11 +5,13 @@ import dev.codeintelligence.evidence.EvidenceKind;
 import dev.codeintelligence.evidence.EvidenceService;
 import dev.codeintelligence.evidence.EvidenceSubjects;
 import dev.codeintelligence.evidence.NewEvidence;
+import dev.codeintelligence.github.GithubPullRequestsPermissionException;
 import dev.codeintelligence.github.GithubTokenProvider;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import dev.codeintelligence.project.Project;
 import dev.codeintelligence.project.ProjectRepository;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -62,30 +64,41 @@ public class GitMetadataStep implements JobStep {
         GitMetadataScan scan = scanner.scan(ctx.clonePath(), analysisProperties.maxCommits());
         ctx.updateProgress(40);
         store.replaceCloneMetadata(ctx.projectId(), scan);
-        recordTruncationWarning(ctx.projectId(), snapshotId, scan.omittedCommitCount());
         ctx.updateProgress(70);
-        collectPulls(project);
+        boolean pullsUnavailable = false;
+        try {
+            collectPulls(project);
+        } catch (GithubPullRequestsPermissionException missingPermission) {
+            pullsUnavailable = true;
+        }
+        recordWarnings(ctx.projectId(), snapshotId, scan.omittedCommitCount(), pullsUnavailable);
         ctx.updateProgress(100);
     }
 
-    private void recordTruncationWarning(long projectId, long snapshotId, int omitted) {
-        if (omitted <= 0) {
-            evidenceService.deleteLinked(EvidenceSubjects.GIT_METADATA, snapshotId);
-            return;
-        }
-        evidenceService.replaceLinked(
-                projectId,
-                EvidenceSubjects.GIT_METADATA,
-                snapshotId,
-                List.of(new NewEvidence(
-                        EvidenceKind.CONFIG,
-                        null,
-                        null,
-                        null,
-                        "Truncated to app.analysis.max-commits; omitted " + omitted + " older commits.")));
+    private void recordWarnings(long projectId, long snapshotId, int omitted, boolean pullsUnavailable) {
+        List<NewEvidence> warnings = new ArrayList<>();
+        if (omitted > 0)
+            warnings.add(new NewEvidence(
+                    EvidenceKind.CONFIG,
+                    null,
+                    null,
+                    null,
+                    "Truncated to app.analysis.max-commits; omitted " + omitted + " older commits."));
+        if (pullsUnavailable)
+            warnings.add(
+                    new NewEvidence(
+                            EvidenceKind.CONFIG,
+                            null,
+                            null,
+                            null,
+                            "PR_METADATA_PERMISSION_DENIED: Pull request metadata was not collected because GitHub did not grant "
+                                    + "pull-request access. Source and clone history analysis continue; any previously saved PR metadata is unchanged and was not refreshed."));
+        if (warnings.isEmpty()) evidenceService.deleteLinked(EvidenceSubjects.GIT_METADATA, snapshotId);
+        else evidenceService.replaceLinked(projectId, EvidenceSubjects.GIT_METADATA, snapshotId, List.copyOf(warnings));
     }
 
     private void collectPulls(Project project) {
+        if (!"GITHUB".equals(project.getSourceType())) return;
         String token = tokenProvider.findToken(project.getUserId()).orElse(null);
         if (token == null) {
             return;

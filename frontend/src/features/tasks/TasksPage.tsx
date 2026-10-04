@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import {
-  addLearningRecord,
   approveTask,
   createTask,
   listTasks,
@@ -15,7 +14,7 @@ import { parseProjectId } from '../../lib/projectId'
 import { useUiStore } from '../../stores/uiStore'
 import { queryError } from '../code/codeLocation'
 
-const TYPES: TaskType[] = ['DEVELOPMENT', 'LEARNING', 'REVIEW', 'RESEARCH', 'REFACTORING']
+const TYPES: TaskType[] = ['DEVELOPMENT', 'REVIEW', 'RESEARCH', 'REFACTORING']
 
 export default function TasksPage() {
   const t = useT()
@@ -26,7 +25,6 @@ export default function TasksPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [newTitle, setNewTitle] = useState('')
   const [newType, setNewType] = useState<TaskType>('DEVELOPMENT')
-  const [recordNote, setRecordNote] = useState('')
 
   const listQuery = useQuery({
     queryKey: ['tasks', projectId],
@@ -69,13 +67,6 @@ export default function TasksPage() {
     },
   })
 
-  const recordMutation = useMutation({
-    mutationFn: () => addLearningRecord(projectId!, active!.id, recordNote),
-    onSuccess: async () => {
-      setRecordNote('')
-      await queryClient.invalidateQueries({ queryKey: ['tasks', projectId] })
-    },
-  })
 
   const listError = queryError(listQuery.error)
   const grouped = groupTasks(tasks)
@@ -212,36 +203,6 @@ export default function TasksPage() {
                 ))}
               </ul>
             )}
-            <h4 className="mt-5 text-[12px] font-semibold text-ink">{t('tasks.learningRecords')}</h4>
-            <ul className="mt-2 space-y-1">
-              {active.records.map((record) => (
-                <li key={record.id} className="text-[13px] text-ink-muted">
-                  {record.note}
-                </li>
-              ))}
-            </ul>
-            <form
-              className="mt-2 flex gap-2"
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (recordNote.trim()) recordMutation.mutate()
-              }}
-            >
-              <input
-                aria-label={t('tasks.recordLabel')}
-                value={recordNote}
-                onChange={(event) => setRecordNote(event.target.value)}
-                placeholder={t('tasks.recordPlaceholder')}
-                className="min-w-0 flex-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-[13px] text-ink"
-              />
-              <button
-                type="submit"
-                disabled={!recordNote.trim() || recordMutation.isPending}
-                className="rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink disabled:opacity-60"
-              >
-                {t('tasks.record')}
-              </button>
-            </form>
           </>
         )}
       </section>

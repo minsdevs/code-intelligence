@@ -37,6 +37,7 @@ public class GithubNativeOAuthService {
     private final RestClient restClient;
     private final Clock clock;
     private final Map<UUID, Attempt> attempts = new ConcurrentHashMap<>();
+    private final Map<Long, ConnectionGeneration> connections = new ConcurrentHashMap<>();
 
     @Autowired
     public GithubNativeOAuthService(
@@ -65,9 +66,14 @@ public class GithubNativeOAuthService {
             throw new GithubNativeOAuthUnavailableException();
         }
         cleanupExpired();
+        ConnectionGeneration connection = connection(userId);
+        long generation;
+        synchronized (connection) {
+            generation = ++connection.value;
+        }
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("client_id", properties.clientId());
-        form.add("scope", properties.scope());
+        // GitHub App permissions come from its installation; never request OAuth App repo scopes.
         DeviceResponse response;
         Instant requestedAt = clock.instant();
         try {
@@ -83,7 +89,7 @@ public class GithubNativeOAuthService {
             throw new GithubNativeOAuthUnavailableException("GitHub device authorization is temporarily unavailable.");
         }
         if (response != null && "device_flow_disabled".equals(response.error())) {
-            throw new GithubNativeOAuthUnavailableException("Enable device flow for the configured GitHub OAuth app.");
+            throw new GithubNativeOAuthUnavailableException("Enable device flow for the configured GitHub App.");
         }
         if (response == null
                 || StringUtils.hasText(response.error())
@@ -105,9 +111,14 @@ public class GithubNativeOAuthService {
                     "GitHub device authorization expired before it could start.");
         }
         UUID id = UUID.randomUUID();
-        Attempt attempt =
-                new Attempt(id, userId, response.deviceCode(), expiresAt, response.interval(), clock.instant());
-        attempts.put(id, attempt);
+        Attempt attempt = new Attempt(
+                id, userId, generation, response.deviceCode(), expiresAt, response.interval(), clock.instant());
+        synchronized (connection) {
+            if (connection.value != generation) {
+                throw new GithubNativeOAuthUnavailableException("GitHub connection changed. Start a new login.");
+            }
+            attempts.put(id, attempt);
+        }
         return new StartResult(id, VERIFICATION_URI, response.userCode(), expiresAt, attempt.intervalSeconds);
     }
 
@@ -126,13 +137,28 @@ public class GithubNativeOAuthService {
         }
         // Provider I/O must not hold the cancellation lock. Recheck before publishing credentials.
         try {
+            Instant exchangeStartedAt = clock.instant();
             TokenResponse response = exchange(deviceCode);
+            Instant tokenExpiresAt = null;
             GithubUserInfo profile = null;
             boolean authorized = response != null
                     && !StringUtils.hasText(response.error())
                     && StringUtils.hasText(response.accessToken())
                     && "bearer".equalsIgnoreCase(response.tokenType());
             if (authorized) {
+                if (response.expiresIn() == null || response.expiresIn() <= 0 || response.expiresIn() > 28800) {
+                    synchronized (attempt) {
+                        if (attempt.status == Status.WAITING)
+                            finish(
+                                    attempt,
+                                    Status.FAILED,
+                                    "GitHub App token expiration must be enabled. Reconnect after checking the app settings.");
+                    }
+                    return statusResult(attempt);
+                }
+                tokenExpiresAt = exchangeStartedAt.plusSeconds(response.expiresIn());
+                if (!clock.instant().isBefore(tokenExpiresAt))
+                    throw new IllegalStateException("Expired GitHub token response");
                 synchronized (attempt) {
                     expireIfNeeded(attempt);
                     if (attempt.status != Status.WAITING) {
@@ -145,9 +171,22 @@ public class GithubNativeOAuthService {
                 expireIfNeeded(attempt);
                 if (attempt.status == Status.WAITING) {
                     if (authorized) {
-                        accountService.linkGithub(
-                                attempt.userId, profile, CredentialKind.OAUTH, response.accessToken());
-                        finish(attempt, Status.CONNECTED, "GitHub account connected.");
+                        // Disconnect and credential publication share a short per-user lock;
+                        // provider I/O never holds it. Older attempts cannot reconnect the account.
+                        synchronized (connection(attempt.userId)) {
+                            expireIfNeeded(attempt);
+                            if (attempt.status == Status.WAITING) {
+                                if (!clock.instant().isBefore(tokenExpiresAt))
+                                    throw new IllegalStateException("Expired GitHub token response");
+                                accountService.linkGithub(
+                                        attempt.userId,
+                                        profile,
+                                        CredentialKind.OAUTH,
+                                        response.accessToken(),
+                                        tokenExpiresAt);
+                                finish(attempt, Status.CONNECTED, "GitHub account connected.");
+                            }
+                        }
                     } else {
                         applyProviderError(attempt, response);
                     }
@@ -202,6 +241,18 @@ public class GithubNativeOAuthService {
         }
     }
 
+    public void disconnect(long userId) {
+        ConnectionGeneration connection = connection(userId);
+        synchronized (connection) {
+            connection.value++;
+            accountService.disconnectGithub(userId);
+        }
+    }
+
+    private ConnectionGeneration connection(long userId) {
+        return connections.computeIfAbsent(userId, ignored -> new ConnectionGeneration());
+    }
+
     public boolean configured() {
         return properties.configured();
     }
@@ -241,7 +292,7 @@ public class GithubNativeOAuthService {
                 finish(attempt, Status.EXPIRED, "GitHub login expired. Start a new login.");
             case "access_denied" -> finish(attempt, Status.DENIED, "GitHub authorization was denied.");
             case "device_flow_disabled" ->
-                finish(attempt, Status.FAILED, "Enable device flow for the configured GitHub OAuth app.");
+                finish(attempt, Status.FAILED, "Enable device flow for the configured GitHub App.");
             case "incorrect_client_credentials" ->
                 finish(attempt, Status.FAILED, "The configured GitHub OAuth client ID is invalid.");
             default -> finish(attempt, Status.FAILED, FAILED_MESSAGE);
@@ -257,6 +308,9 @@ public class GithubNativeOAuthService {
     }
 
     private void expireIfNeeded(Attempt attempt) {
+        if (attempt.status == Status.WAITING && connection(attempt.userId).value != attempt.generation) {
+            finish(attempt, Status.CANCELLED, "GitHub connection changed. Start a new login.");
+        }
         if (attempt.status == Status.WAITING && !clock.instant().isBefore(attempt.expiresAt)) {
             finish(attempt, Status.EXPIRED, "GitHub login expired. Start a new login.");
         }
@@ -315,12 +369,18 @@ public class GithubNativeOAuthService {
     private record TokenResponse(
             @JsonProperty("access_token") String accessToken,
             @JsonProperty("token_type") String tokenType,
+            @JsonProperty("expires_in") Long expiresIn,
             String error,
             Integer interval) {}
+
+    private static final class ConnectionGeneration {
+        private volatile long value;
+    }
 
     private static final class Attempt {
         private final UUID id;
         private final long userId;
+        private final long generation;
         private String deviceCode;
         private final Instant expiresAt;
         private Status status = Status.WAITING;
@@ -329,9 +389,17 @@ public class GithubNativeOAuthService {
         private Instant nextPollAt;
         private boolean polling;
 
-        private Attempt(UUID id, long userId, String deviceCode, Instant expiresAt, int intervalSeconds, Instant now) {
+        private Attempt(
+                UUID id,
+                long userId,
+                long generation,
+                String deviceCode,
+                Instant expiresAt,
+                int intervalSeconds,
+                Instant now) {
             this.id = id;
             this.userId = userId;
+            this.generation = generation;
             this.deviceCode = deviceCode;
             this.expiresAt = expiresAt;
             this.intervalSeconds = intervalSeconds;

@@ -14,7 +14,7 @@ const { createDesktopBackupRuntime, BackupRuntimeError } = require('../src/backu
 const { createBackupPayload, readBackupPayload } = require('../src/backup-payload.cjs');
 const { encryptFile, decryptFile } = require('../src/backup-archive.cjs');
 const { createBackupRecoveryRecords } = require('../src/backup-recovery-records.cjs');
-const { createBackupExportPolicy, REVIEWED_SCHEMA } = require('../src/backup-export-policy.cjs');
+const { createBackupExportPolicy, upgradeV26FileRow, REVIEWED_SCHEMA, REVIEWED_V26_SCHEMA } = require('../src/backup-export-policy.cjs');
 const { createMaintenanceVerifier } = require('../src/backup-cost-state.cjs');
 
 const POLICY = createBackupExportPolicy(REVIEWED_SCHEMA);
@@ -36,7 +36,7 @@ async function regular(file, value) { await fs.writeFile(file, value, { mode: 0o
 function row(table, changes) {
   const values = {};
   for (const c of REVIEWED_SCHEMA.tables.find(t => t.name === table).columns.filter(c => POLICY.columnsFor(table).includes(c.name))) {
-    values[c.name] = c.nullable ? null : c.type === 'bigint' ? '1' : c.type === 'integer' ? 1 : c.type === 'timestamptz' ? STAMP
+    values[c.name] = c.name === 'analysis_status' ? 'LEGACY_UNMEASURED' : c.type === 'boolean' ? false : c.nullable ? null : c.type === 'bigint' ? '1' : c.type === 'integer' ? 1 : c.type === 'timestamptz' ? STAMP
       : c.type === 'uuid' ? UUID : c.type.startsWith('char(') ? 'a'.repeat(Number(c.type.slice(5, -1))) : 'synthetic';
   }
   return POLICY.projectRow(table, Object.assign(values, changes));
@@ -253,10 +253,12 @@ async function fixture(t) {
     async openStage(name) { await step('stage.open', name); assert.equal(name, preparedStage.stageDatabase);
       return { async initializeStaging() { await step('stage.initialize'); },
         async loadRows(value) { await step('stage.load'); loadedRows = []; for await (const row of value.rows) loadedRows.push(row);
-          assert.deepEqual(value.expected, summary(loadedRows)); assert.equal(value.liveOwnerUserId, OWNER);
+          const legacy = value.expected.schema.migrations.length === 26;
+          assert.deepEqual(value.expected, legacy ? v26Summary(loadedRows) : summary(loadedRows)); assert.equal(value.liveOwnerUserId, OWNER);
           assert.deepEqual(value.liveSequenceHighWater, exportedSummary.sequenceHighWater);
           assert.deepEqual(value.livePreferenceRevisionHighWater, exportedSummary.preferenceRevisionHighWater);
-          stagedData = knownData.find(data => canonical(data.rows) === canonical(loadedRows)); assert.ok(stagedData); await value.writeAccounting(); },
+          const restoredRows = legacy ? loadedRows.map(row => row.table === 'files' ? upgradeV26FileRow(row.values) : row) : loadedRows;
+          stagedData = knownData.find(data => canonical(data.rows) === canonical(restoredRows)); assert.ok(stagedData); await value.writeAccounting(); },
         async close() { await step('stage.close'); } }; },
     async sourceWorker() { await step('worker.open'); return {
       async exportProject(argument) { const { reposRoot, projectId, selection, writeRecord } = argument; await step('worker.export', argument);
@@ -330,6 +332,23 @@ async function fixture(t) {
       const destinationPath = path.join(dir, 'archive.cibackup');
       await encryptFile({ sourceRoot: payloadRoot, sourcePath: path.join(payloadRoot, 'payload.bin'), destinationRoot: dir, destinationPath, installationId: INSTALL, keyProvider });
       return destinationPath;
+    },
+    async legacyArchive(data = dataset()) {
+      knownData.push(data);
+      const rows = copy(data.rows).map(row => {
+        if (row.table === 'files') for (const key of ['analysis_status', 'analysis_reason', 'analysis_targeted']) delete row.values[key];
+        return row;
+      });
+      const records = [{ kind: 'HEADER', format: 'code-intelligence-backup-payload', version: 1,
+        installationSha256: sha(INSTALL), minimumVersion: BUILD }, ...rows.map(row => ({ kind: 'ROW', row })),
+      { kind: 'DATABASE', summary: v26Summary(rows) }, ...data.records];
+      records.push({ kind: 'FOOTER', rowCount: rows.length, sourceCount: data.sources.length + data.vaults.length,
+        recordsSha256: sha(Buffer.concat(records.map(frame))) });
+      const dir = await privateDir(path.join(root, `legacy-${crypto.randomUUID()}`));
+      await regular(path.join(dir, 'payload.bin'), Buffer.concat(records.map(frame)));
+      const destinationPath = path.join(dir, 'archive.cibackup');
+      await encryptFile({ sourceRoot: dir, sourcePath: path.join(dir, 'payload.bin'), destinationRoot: dir, destinationPath,
+        installationId: INSTALL, keyProvider }); return destinationPath;
     },
     async untypedArchive() {
       const data = dataset(); const bad = copy(data.rows); bad[0].values.local_key = 'credential-sentinel';
@@ -1098,4 +1117,33 @@ test('review regression accepts an already removed registered payload only under
   const completed = await f.recordState(); assert.equal(completed.active, null);
   assert.equal(completed.completed.at(-1).transactionId, record.transactionId);
   assert.deepEqual(await payloadFiles(root), []); assert.equal(f.state.aiOff, true); await f.intact();
+});
+
+function v26Summary(rows) {
+  const result = summary(rows); result.schema = REVIEWED_V26_SCHEMA;
+  delete result.tableCounts.snapshot_inventory_measurements; delete result.tableSha256.snapshot_inventory_measurements;
+  return result;
+}
+test('V26 encrypted archive restores retained sources without mutating the selected archive', async t => {
+  const f = await fixture(t); const archive = await f.legacyArchive(); const before = await fs.readFile(archive);
+  assert.equal((await f.runtime.restore(archive)).restored, true);
+  assert.equal(f.databaseImage, 'restored'); assert.deepEqual(await fs.readFile(archive), before);
+  assert.ok(f.loadedRows.some(row => row.table === 'files' && !Object.hasOwn(row.values, 'analysis_status')));
+  assert.equal(f.state.aiOff, true);
+});
+test('completed V26 restore recovery compares upgraded hashes while keeping original payload identity', async t => {
+  const f = await fixture(t); const archive = await f.legacyArchive();
+  const recordsRoot = path.join(f.userData, 'backup-maintenance'); let injected = false;
+  const unlink = fs.unlink;
+  t.mock.method(fs, 'unlink', async file => {
+    if (!injected && String(file) === path.join(recordsRoot, 'active.enc')) {
+      injected = true; throw new Error('synthetic-private marker unlink interruption');
+    }
+    return unlink(file);
+  });
+  await rejects(f.runtime.restore(archive)); assert.equal(injected, true); assert.equal(f.databaseImage, 'restored');
+  const receipt = copy(f.state.maintenanceReceipt); await f.reopen(true);
+  assert.deepEqual(await f.runtime.recover(), { recovered: true, outcome: 'VERIFIED_RESTORED' });
+  assert.deepEqual(f.state.maintenanceReceipt, receipt); assert.equal(f.state.aiOff, true);
+  assert.equal((await f.recordState()).active, null);
 });

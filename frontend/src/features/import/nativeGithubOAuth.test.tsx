@@ -169,3 +169,14 @@ it('does not surface a stale browser-launch failure over a new authorization att
   expect(screen.queryByText('Previous browser launch failed')).not.toBeInTheDocument()
   expect(screen.getByLabelText('GitHub device code')).toHaveTextContent(start.userCode)
 })
+
+it.each(['DENIED', 'EXPIRED', 'FAILED'] as const)('ends %s authorization without connecting and permits another attempt', async (result) => {
+  vi.mocked(pollNativeGithubOAuth).mockResolvedValue(status(result))
+  const { onConnected } = mount()
+  await begin()
+  await advance(5_000)
+  expect(screen.getByRole('alert')).toHaveTextContent(result)
+  expect(screen.queryByLabelText('GitHub device code')).not.toBeInTheDocument()
+  expect(onConnected).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: /GitHub/ })).toBeEnabled()
+})

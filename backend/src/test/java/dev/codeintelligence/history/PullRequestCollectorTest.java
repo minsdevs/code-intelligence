@@ -12,6 +12,7 @@ import dev.codeintelligence.common.AnalysisProperties;
 import dev.codeintelligence.common.Sleeper;
 import dev.codeintelligence.github.GithubApiClient;
 import dev.codeintelligence.github.GithubProperties;
+import dev.codeintelligence.github.GithubPullRequestsPermissionException;
 import dev.codeintelligence.github.GithubRateLimitException;
 import java.time.Duration;
 import java.time.Instant;
@@ -150,6 +151,65 @@ class PullRequestCollectorTest {
         assertThat(fetch.pulls().get(1).number()).isEqualTo(1);
         assertThat(fetch.pulls().get(1).mergedAt()).isEqualTo(Instant.parse("2026-02-01T00:00:00Z"));
         fixture.server.verify();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(
+            strings = {"Resource not accessible by integration", "Resource not accessible by personal access token"})
+    void explicitPermissionDenialIsOptionalAndNeverRetried(String message) {
+        RecordingSleeper sleeper = new RecordingSleeper();
+        CollectorFixture fixture = collector(sleeper, 2);
+        fixture.server
+                .expect(requestTo(PULLS_PAGE_1))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"" + message + "\"}"));
+        assertThatThrownBy(() -> fixture.collector.fetchAll("tok", "octocat", "hello", "existing-etag"))
+                .isInstanceOf(GithubPullRequestsPermissionException.class);
+        assertThat(sleeper.sleeps).isEmpty();
+        fixture.server.verify();
+    }
+
+    @Test
+    void partialPaginationCannotPublishAnIncompletePullList() {
+        CollectorFixture fixture = collector(new RecordingSleeper(), 0);
+        fixture.server
+                .expect(requestTo(PULLS_PAGE_1))
+                .andRespond(withSuccess("[{\"number\":1}]", MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.LINK, "<ignored>; rel=\"next\""));
+        fixture.server
+                .expect(requestTo(PULLS_PAGE_2))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN)
+                        .body("{\"message\":\"Resource not accessible by integration\"}"));
+        assertThatThrownBy(() -> fixture.collector.fetchAll("tok", "octocat", "hello", null))
+                .isInstanceOf(GithubPullRequestsPermissionException.class);
+        fixture.server.verify();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {401, 403, 429})
+    void authenticationGenericForbiddenAndRateLimitsRemainFatal(int status) {
+        CollectorFixture fixture = collector(new RecordingSleeper(), 0);
+        String message =
+                status == 403 ? "Organization SSO authorization required" : "Resource not accessible by integration";
+        fixture.server
+                .expect(requestTo(PULLS_PAGE_1))
+                .andRespond(withStatus(HttpStatus.valueOf(status)).body("{\"message\":\"" + message + "\"}"));
+        assertThatThrownBy(() -> fixture.collector.fetchAll("tok", "octocat", "hello", null))
+                .isNotInstanceOf(GithubPullRequestsPermissionException.class);
+        fixture.server.verify();
+    }
+
+    @Test
+    void transportFailureIsNeverOptional() {
+        CollectorFixture fixture = collector(new RecordingSleeper(), 0);
+        fixture.server
+                .expect(requestTo(PULLS_PAGE_1))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withException(
+                        new java.io.IOException("synthetic network failure")));
+        assertThatThrownBy(() -> fixture.collector.fetchAll("tok", "octocat", "hello", null))
+                .isInstanceOf(org.springframework.web.client.RestClientException.class)
+                .isNotInstanceOf(GithubPullRequestsPermissionException.class);
     }
 
     private static CollectorFixture collector(Sleeper sleeper, int retries) {

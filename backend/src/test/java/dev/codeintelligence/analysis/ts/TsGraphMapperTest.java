@@ -33,6 +33,49 @@ class TsGraphMapperTest {
     }
 
     @Test
+    void sameNamedComponentsKeepApiCallsInTheirOwnFileAndRouteRequiresImportEvidence() {
+        var response = new TsAnalyzeDtos.Response(
+                List.of(new TsAnalyzeDtos.RouteHit("/items", "Page", "app/router.tsx", 1, 1)),
+                List.of(
+                        new TsAnalyzeDtos.SymbolHit("Page", "COMPONENT", "app/Page.tsx", 1, 8),
+                        new TsAnalyzeDtos.SymbolHit("Page", "COMPONENT", "admin/Page.tsx", 1, 8)),
+                null,
+                null,
+                List.of(new TsAnalyzeDtos.ApiCallHit("GET", "/admin", "admin/Page.tsx", 3, "Page")),
+                List.of(new TsAnalyzeDtos.ImportHit("app/router.tsx", "app/Page.tsx", "Page", "Page", false)),
+                null,
+                null,
+                null,
+                null,
+                null);
+        var result = TsGraphMapper.toGraph(response);
+        assertThat(result.nodes())
+                .filteredOn(node -> node.naturalKey().equals(NaturalKeys.component("app/Page.tsx", "Page")))
+                .allMatch(node -> !node.metadata().containsKey("apiCalls"));
+        assertThat(result.nodes())
+                .filteredOn(node -> node.naturalKey().equals(NaturalKeys.component("admin/Page.tsx", "Page")))
+                .allMatch(node -> node.metadata().containsKey("apiCalls"));
+        assertThat(result.edges())
+                .filteredOn(edge -> edge.sourceNaturalKey().equals(NaturalKeys.route("/items")))
+                .extracting(edge -> edge.targetNaturalKey())
+                .containsExactly(NaturalKeys.component("app/Page.tsx", "Page"));
+        var withoutImports = new TsAnalyzeDtos.Response(
+                response.routes(),
+                response.components(),
+                null,
+                null,
+                response.apiCalls(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        assertThat(TsGraphMapper.toGraph(withoutImports).edges())
+                .noneMatch(edge -> edge.sourceNaturalKey().equals(NaturalKeys.route("/items")));
+    }
+
+    @Test
     void mapsSemanticEdgesWithSourceEvidenceAndUncertainty() {
         String controllerKey = "ts:src/users.controller.ts#UsersController";
         String methodKey = controllerKey + ".list";

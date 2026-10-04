@@ -2,7 +2,6 @@ export const WIZARD_STEPS = [
   { id: 'connect', label: 'Connect' },
   { id: 'repo', label: 'Repository' },
   { id: 'progress', label: 'Progress' },
-  { id: 'areas', label: 'Areas' },
 ] as const
 
 export type WizardStepId = (typeof WIZARD_STEPS)[number]['id']

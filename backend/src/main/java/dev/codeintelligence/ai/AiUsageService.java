@@ -21,9 +21,22 @@ public class AiUsageService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public AIProvider.ChatResponse chat(
             long userId, long projectId, AIProvider provider, String purpose, AIProvider.ChatRequest request) {
+        throw new AiRequestPlanRequiredException();
+    }
+
+    /** Legacy feature actions must stop before retrieval, embeddings or writes. */
+    public void requireRequestPlan() {
+        throw new AiRequestPlanRequiredException();
+    }
+
+    /** Called only after the exact request plan has been consumed by AssistantService. */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    AIProvider.ChatResponse chatApproved(
+            long userId, long projectId, AIProvider provider, AiRequestPlanService.Approved approved) {
+        if (approved == null) throw new AiRequestPlanRequiredException();
         enforceBudget(userId);
-        AIProvider.ChatResponse response = provider.chat(request);
-        log(userId, projectId, provider, purpose, response);
+        AIProvider.ChatResponse response = provider.chat(approved.payload());
+        log(userId, projectId, provider, approved.intent().name(), response);
         return response;
     }
 

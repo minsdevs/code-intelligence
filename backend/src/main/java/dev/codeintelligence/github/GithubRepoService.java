@@ -21,6 +21,10 @@ public class GithubRepoService {
         String token = tokenProvider.requireToken(userId);
         GithubRepoPage repoPage = githubApiClient.listUserRepos(token, page, perPage);
 
+        return filterPage(repoPage, q);
+    }
+
+    private GithubRepoPage filterPage(GithubRepoPage repoPage, String q) {
         if (!StringUtils.hasText(q)) {
             return repoPage;
         }
@@ -30,6 +34,20 @@ public class GithubRepoService {
                         && repo.fullName().toLowerCase(Locale.ROOT).contains(needle))
                 .toList();
         return new GithubRepoPage(filtered, repoPage.hasNext());
+    }
+
+    public GithubApiClient.InstallationPage listInstallations(long userId, int page, int perPage) {
+        return githubApiClient.listUserInstallations(tokenProvider.requireToken(userId), page, perPage);
+    }
+
+    public GithubRepoPage listInstallationRepos(long userId, long installationId, int page, int perPage, String q) {
+        if (installationId <= 0)
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "Installation ID must be positive");
+        return filterPage(
+                githubApiClient.listInstallationRepos(
+                        tokenProvider.requireToken(userId), installationId, page, perPage),
+                q);
     }
 
     public GithubBranchPage listBranches(long userId, String owner, String repo, int page, int perPage) {

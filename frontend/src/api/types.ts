@@ -204,7 +204,12 @@ export type PullRequest = {
   baseSha: string | null
 }
 
+export type FileAnalysisStatus = 'LEGACY_UNMEASURED' | 'UNMEASURED' | 'TARGETED' | 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'UNSUPPORTED'
+
 export type FileListItem = {
+  analysisStatus?: FileAnalysisStatus
+  analysisReason?: string | null
+  analysisTargeted?: boolean
   resolvedSnapshotId?: number
   path: string
   language: string | null
@@ -236,6 +241,7 @@ export type GraphNodeSummary = {
 }
 
 export type GraphNodePage = {
+  resolvedSnapshotId?: number
   items: GraphNodeSummary[]
   page: number
   size: number
@@ -250,11 +256,14 @@ export type GraphEvidenceView = {
 }
 
 export type GraphNodeDetail = GraphNodeSummary & {
+  resolvedSnapshotId?: number
   metadata: Record<string, unknown>
   evidences: GraphEvidenceView[]
 }
 
 export type GraphRelation = {
+  sourceNodeId?: number
+  targetNodeId?: number
   depth: number
   direction: string
   edgeType: string
@@ -263,6 +272,8 @@ export type GraphRelation = {
 }
 
 export type GraphRelationsResponse = {
+  resolvedSnapshotId?: number
+  truncated?: boolean
   nodeId: number
   direction: string
   depth: number
@@ -349,6 +360,7 @@ export type FlowStepView = {
 }
 
 export type FlowDetail = {
+  resolvedSnapshotId?: number
   id: number
   name: string
   kind: string
@@ -459,6 +471,7 @@ export type ImpactNodeView = {
 }
 
 export type ImpactView = {
+  resolvedSnapshotId?: number
   nodeId: number
   depth: number
   riskScore: number
@@ -564,7 +577,7 @@ export type NoteView = {
   references: NoteRefView[]
 }
 
-export type TaskType = 'DEVELOPMENT' | 'LEARNING' | 'REVIEW' | 'RESEARCH' | 'REFACTORING'
+export type TaskType = 'DEVELOPMENT' | 'REVIEW' | 'RESEARCH' | 'REFACTORING'
 
 export type TaskStatus = 'DRAFT' | 'OPEN' | 'DONE' | 'CANCELLED'
 
@@ -577,12 +590,6 @@ export type TaskGoalView = {
   done: boolean
 }
 
-export type LearningRecordView = {
-  id: number
-  note: string
-  createdAt: string
-}
-
 export type TaskView = {
   id: number
   type: TaskType
@@ -593,18 +600,6 @@ export type TaskView = {
   sourceFindingId: number | null
   updatedAt: string
   goals: TaskGoalView[]
-  records: LearningRecordView[]
-}
-
-export type GeneratedTask = {
-  id: number
-  type: TaskType
-  title: string
-  description: string
-  status: TaskStatus
-  origin: TaskOrigin
-  sourceFindingId: number | null
-  goals: string[]
 }
 
 export type SearchHit = {
@@ -661,37 +656,6 @@ export type PlaygroundSessionView = {
   lastExplanation: string | null
   lastClaims: AiClaim[]
   updatedAt: string
-}
-
-export type GrowthTypeCounts = {
-  type: string
-  open: number
-  done: number
-  draft: number
-  cancelled: number
-}
-
-export type GrowthWeeklyBucket = {
-  weekStart: string
-  learningRecords: number
-  tasksDone: number
-}
-
-export type GrowthRecentRecord = {
-  taskId: number
-  taskTitle: string
-  note: string
-  createdAt: string
-}
-
-export type GrowthView = {
-  notesCount: number
-  learningRecords: number
-  findingsOpen: number
-  findingsDismissed: number
-  tasksByType: GrowthTypeCounts[]
-  weekly: GrowthWeeklyBucket[]
-  recentRecords: GrowthRecentRecord[]
 }
 
 export type WhatIfView = {
@@ -771,9 +735,24 @@ export type LocalImportSummary = {
   excludedEntriesByReason: Partial<Record<LocalImportExclusionReason, number>>
 }
 
+export type CoverageOutcomes = {
+  discoveredFiles: number
+  targetedFiles: number
+  successfulFiles: number
+  partialFiles: number
+  failedFiles: number
+  excludedFiles: number
+  unsupportedFiles: number
+  unmeasuredFiles: number
+  pendingFiles: number
+  excludedSubmodules: number
+}
+
 export type CoverageReport = {
+  snapshotId?: number | null
+  outcomes?: CoverageOutcomes | null
   /** Missing on old responses must be treated as unmeasured. */
-  measurementStatus?: 'LEGACY_UNMEASURED'
+  measurementStatus?: 'LEGACY_UNMEASURED' | 'PER_FILE_RECORDED'
   /** Inventory and parser presence do not verify public capability support. */
   supportStatus?: 'UNVERIFIED'
   /** Missing, malformed, or conflicting import evidence remains unavailable, never inferred zero. */
@@ -824,4 +803,10 @@ export type AiPreviewResponse = {
   maskedSecrets: number
   localOnly: boolean
   copyablePrompt: string
+}
+
+export type GraphOverview = {
+  resolvedSnapshotId: number
+  nodeCounts: Record<string, number>
+  edgeCounts: Record<string, number>
 }

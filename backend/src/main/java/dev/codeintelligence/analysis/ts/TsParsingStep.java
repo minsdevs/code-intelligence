@@ -1,6 +1,7 @@
 package dev.codeintelligence.analysis.ts;
 
 import dev.codeintelligence.analysis.core.AnalysisResult;
+import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import dev.codeintelligence.analysis.core.InvalidFilePathException;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.SafeRelativePath;
@@ -55,29 +56,75 @@ public class TsParsingStep implements JobStep {
     public void run(JobContext ctx) {
         long snapshotId =
                 ctx.snapshotId().orElseThrow(() -> new IllegalStateException("no snapshot attached to the job"));
+        List<InventoriedFile> files = loadTsFiles(snapshotId);
         if (!client.enabled()) {
+            recordAll(snapshotId, files, "UNMEASURED", "ANALYZER_DISABLED");
             ctx.updateProgress(100);
             return;
         }
         ctx.updateProgress(10);
-        List<InventoriedFile> files = loadTsFiles(snapshotId);
         if (files.isEmpty()) {
             ctx.updateProgress(100);
             return;
         }
-        client.health();
+        recordAll(snapshotId, files, "TARGETED", "PARSER_STARTED");
+        try {
+            client.health();
+        } catch (RuntimeException failure) {
+            recordAll(snapshotId, files, "FAILED", "ANALYZER_UNAVAILABLE");
+            throw failure;
+        }
         ctx.updateProgress(20);
-        List<TsAnalyzeDtos.FilePayload> payloads = readPayloads(ctx.clonePath(), files);
+        List<TsAnalyzeDtos.FilePayload> payloads;
+        try {
+            payloads = readPayloads(ctx.clonePath(), files, snapshotId);
+        } catch (TsAnalyzerException failure) {
+            recordAll(snapshotId, files, "UNMEASURED", "PROJECT_REQUEST_LIMIT");
+            throw failure;
+        }
         if (payloads.isEmpty()) {
             ctx.updateProgress(100);
             return;
         }
         // The analyzer resolves project-wide imports, DI and route prefixes. Independent
         // batches silently change their meaning; reject oversized projects before sending.
-        TsAnalyzeDtos.Response response = client.analyze(new TsAnalyzeDtos.Request(payloads));
+        TsAnalyzeDtos.Response response;
+        try {
+            response = client.analyze(new TsAnalyzeDtos.Request(payloads));
+        } catch (RuntimeException failure) {
+            var submitted =
+                    payloads.stream().map(TsAnalyzeDtos.FilePayload::path).collect(java.util.stream.Collectors.toSet());
+            recordAll(
+                    snapshotId,
+                    files.stream().filter(f -> submitted.contains(f.path())).toList(),
+                    "FAILED",
+                    failure instanceof TsSyntaxInputException ? "PROJECT_SYNTAX_REJECTED" : "ANALYZER_REQUEST_FAILED");
+            throw failure;
+        }
         AnalysisResult result = TsGraphMapper.toGraph(response);
         persistence.persist(ctx.projectId(), snapshotId, result);
+        FileAnalysisOutcome.recordResponse(
+                jdbc,
+                snapshotId,
+                payloads.stream()
+                        .map(TsAnalyzeDtos.FilePayload::path)
+                        .filter(TsParsingStep::isPrimarySource)
+                        .toList(),
+                result.fileOutcomes());
         ctx.updateProgress(100);
+    }
+
+    private static boolean isPrimarySource(String path) {
+        return path.toLowerCase(Locale.ROOT).matches(".*\\.(?:[cm]?ts|tsx|[cm]?js|jsx)$");
+    }
+
+    private void recordAll(long snapshotId, List<InventoriedFile> files, String status, String reason) {
+        for (InventoriedFile file : files) recordOne(snapshotId, file, status, reason);
+    }
+
+    private void recordOne(long snapshotId, InventoriedFile file, String status, String reason) {
+        if (!isPrimarySource(file.path())) return;
+        FileAnalysisOutcome.record(jdbc, snapshotId, file.path(), status, reason);
     }
 
     private List<InventoriedFile> loadTsFiles(long snapshotId) {
@@ -99,16 +146,18 @@ public class TsParsingStep implements JobStep {
                 .toList();
     }
 
-    private List<TsAnalyzeDtos.FilePayload> readPayloads(Path clonePath, List<InventoriedFile> files) {
+    private List<TsAnalyzeDtos.FilePayload> readPayloads(Path clonePath, List<InventoriedFile> files, long snapshotId) {
         List<TsAnalyzeDtos.FilePayload> payloads = new ArrayList<>();
         TsRequestBudget budget = new TsRequestBudget();
         for (InventoriedFile file : files) {
             if (file.size() > analysisProperties.maxFileSize()) {
+                recordOne(snapshotId, file, "UNMEASURED", "SOURCE_SIZE_LIMIT");
                 continue;
             }
             try {
                 Path resolved = SafeRelativePath.resolve(clonePath, file.path());
                 if (!Files.isRegularFile(resolved)) {
+                    recordOne(snapshotId, file, "FAILED", "SOURCE_UNAVAILABLE");
                     continue;
                 }
                 String content = Files.readString(resolved, StandardCharsets.UTF_8);
@@ -116,6 +165,7 @@ public class TsParsingStep implements JobStep {
                 budget.add(payload);
                 payloads.add(payload);
             } catch (InvalidFilePathException | IOException e) {
+                recordOne(snapshotId, file, "FAILED", "SOURCE_READ_FAILED");
                 log.warn("Skipping TS file {}: {}", file.path(), e.toString());
             }
         }
@@ -136,6 +186,8 @@ public class TsParsingStep implements JobStep {
                 || path.endsWith(".tsx")
                 || path.endsWith(".mts")
                 || path.endsWith(".cts")
+                || path.endsWith(".mjs")
+                || path.endsWith(".cjs")
                 || path.endsWith(".js")
                 || path.endsWith(".jsx")
                 || path.endsWith(".py")
