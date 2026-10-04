@@ -208,8 +208,12 @@ Windows runtime IO is restricted to retained fixed-NTFS roots. `WI1` identities 
 volume and file ID; `WS1` states also include size, actual allocation size, last-write and
 change timestamps. Writes use bounded chunks, full-state preconditions, file flush and
 readback. Protected SID/DACL checks reject reparse points and hardlinks. Directory
-rename/unlink is not claimed power-loss durable. Safety state and folder grants use
-authenticated retained storage; missing/torn slots or enrollment markers require recovery.
+rename/unlink is not claimed power-loss durable.
+Retained directory and ancestor pins request list access so share-delete exclusion applies;
+canonical DOS paths use internal extended-length paths without accepting device paths on
+the wire. A write commit stabilizes NTFS timestamps before returning its post-close state.
+Safety state and folder grants use authenticated retained storage; missing/torn slots or
+enrollment markers require recovery.
 
 Main owns the encrypted source vault and private source broker. Java receives one bounded
 version2 JSON+EOF bootstrap for both AI and source capabilities, never environment fallback.
@@ -247,9 +251,13 @@ Mach-O staging follows actual dynamic-library load commands, not LC_ID_DYLIB ins
 identities. A real dependency edge to different-content bytes still fails the digest
 collision guard, and publication still requires a closed relocated dependency graph.
 Source URLs/hashes and relocated native closure hashes are retained in `provisioning.json`.
-Staging failures export bounded compiler/policy IDs and validated public source locations;
-raw build/runtime logs and credentials remain private. Source copying excludes build
-outputs only at package roots, preserving real source packages such as `analysis/coverage`.
+Staging failures export bounded compiler/policy IDs and validated public source locations.
+Before an unsuccessful transaction removes its incoming stage, verified Mach-O closure
+failures retain only staged-relative objects, token-relative load edges and contained RPATH
+directories. Windows test failures retain fixed error/phase enums and public source locations,
+not assertion values or messages. Raw build/runtime logs and credentials remain private.
+Source copying excludes build outputs only at package roots, preserving real source packages
+such as analysis/coverage.
 Current local transport proof covers real PostgreSQL 16 and Redis TLS/authentication,
 wrong-peer/plaintext rejection, HTTPS pinning, token rotation and callback refusal. Hosted
 whole-app results, signed installation, real OAuth and provider approval remain separate gates.
