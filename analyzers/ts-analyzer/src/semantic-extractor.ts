@@ -368,10 +368,12 @@ function collectResolvedImports(
   }
 }
 
-function createImportResolver(files: AnalyzeFile[], pathSet: Set<string>): Resolver {
+export function createImportResolver(
+  files: AnalyzeFile[], pathSet: Set<string>, { allowPackageFallback = true } = {},
+): Resolver {
   type Alias = { pattern: string; targets: string[]; baseDir: string }
   const configs: { directory: string; aliases: Alias[] | null }[] = []
-  const packages = new Map<string, string>()
+  const packages = new Map<string, string | null>()
   for (const file of files) {
     const normalizedPath = normalize(file.path)
     if (/\/(?:tsconfig|jsconfig)(?:\.[^/]+)?\.json$/i.test(`/${normalizedPath}`)) {
@@ -403,7 +405,10 @@ function createImportResolver(files: AnalyzeFile[], pathSet: Set<string>): Resol
     if (posix.basename(normalizedPath) === 'package.json') {
       try {
         const value = JSON.parse(file.content) as { name?: unknown }
-        if (typeof value.name === 'string') packages.set(value.name, posix.dirname(normalizedPath))
+        if (typeof value.name === 'string') {
+          const directory = posix.dirname(normalizedPath)
+          packages.set(value.name, packages.has(value.name) && packages.get(value.name) !== directory ? null : directory)
+        }
       } catch {
         // Invalid package metadata is analysis input, not executable configuration.
       }
@@ -443,8 +448,12 @@ function createImportResolver(files: AnalyzeFile[], pathSet: Set<string>): Resol
       // Same-directory config variants must agree; input order is not configuration selection.
       return resolutions.length > 0 && resolutions.every((value) => value === resolutions[0]) ? resolutions[0] : null
     }
+    // A conventional package/src/index guess is not proof of the package's
+    // exports/main entry. Exact binding consumers must opt out of this legacy path.
+    if (!allowPackageFallback) return null
     for (const [packageName, packageDir] of packages) {
       if (specifier !== packageName && !specifier.startsWith(`${packageName}/`)) continue
+      if (packageDir === null) return null
       const suffix = specifier === packageName ? '' : specifier.slice(packageName.length + 1)
       const candidate = normalize(posix.join(packageDir, suffix || 'src/index'))
       const resolved = resolveCandidate(candidate, pathSet)

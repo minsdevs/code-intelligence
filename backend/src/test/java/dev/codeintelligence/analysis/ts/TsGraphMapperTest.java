@@ -7,8 +7,148 @@ import dev.codeintelligence.analysis.core.NaturalKeys;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 class TsGraphMapperTest {
+
+    private static final TsAnalyzeDtos.SymbolHit SELECTED =
+            new TsAnalyzeDtos.SymbolHit("ActualPage", "COMPONENT", "ui/Page.tsx", 2, 4);
+
+    @Test
+    void acceptsAnExactResolvedDefaultReferenceWithoutUsingTheImportAliasAsAComponentName() {
+        var route = new TsAnalyzeDtos.RouteHit(
+                "/detail",
+                "Selected",
+                "ui/Router.tsx",
+                3,
+                3,
+                new TsAnalyzeDtos.ComponentResolution(
+                        "RESOLVED", new TsAnalyzeDtos.ComponentReference("ActualPage", "ui/Page.tsx", 2, 4)));
+        var result = TsGraphMapper.toGraph(routeResponse(
+                route,
+                List.of(SELECTED, new TsAnalyzeDtos.SymbolHit("Selected", "COMPONENT", "admin/Page.tsx", 1, 8)),
+                List.of()));
+        assertThat(result.edges())
+                .filteredOn(edge -> edge.sourceNaturalKey().equals("route:/detail"))
+                .extracting(edge -> edge.targetNaturalKey())
+                .containsExactly("component:ui/Page.tsx#ActualPage");
+    }
+
+    @Test
+    void unresolvedUnknownAndInconsistentReferencesNeverFallBackToLegacyNameMatching() {
+        for (var resolution : List.of(
+                new TsAnalyzeDtos.ComponentResolution("UNRESOLVED", null),
+                new TsAnalyzeDtos.ComponentResolution("FUTURE_VERSION", null),
+                new TsAnalyzeDtos.ComponentResolution("RESOLVED", null),
+                new TsAnalyzeDtos.ComponentResolution(
+                        "RESOLVED", new TsAnalyzeDtos.ComponentReference("ActualPage", "ui/Page.tsx", 1, 4)),
+                new TsAnalyzeDtos.ComponentResolution(
+                        "RESOLVED", new TsAnalyzeDtos.ComponentReference("ActualPage", "../ui/Page.tsx", 2, 4)),
+                new TsAnalyzeDtos.ComponentResolution(
+                        "RESOLVED", new TsAnalyzeDtos.ComponentReference("ActualPage", "ui/Page.tsx", 4, 2)))) {
+            var route = new TsAnalyzeDtos.RouteHit("/detail", "ActualPage", "ui/Page.tsx", 5, 5, resolution);
+            assertThat(TsGraphMapper.toGraph(routeResponse(route, List.of(SELECTED), List.of()))
+                            .edges())
+                    .as("resolution=%s", resolution)
+                    .noneMatch(edge -> edge.sourceNaturalKey().equals("route:/detail"));
+        }
+    }
+
+    @Test
+    void exactPositionCannotDisambiguateSameFileGraphKeyCollisionsOrWrongKinds() {
+        var route = new TsAnalyzeDtos.RouteHit(
+                "/detail",
+                "ActualPage",
+                "ui/Router.tsx",
+                1,
+                1,
+                new TsAnalyzeDtos.ComponentResolution(
+                        "RESOLVED", new TsAnalyzeDtos.ComponentReference("ActualPage", "ui/Page.tsx", 2, 4)));
+        for (var hits : List.of(
+                List.of(SELECTED, new TsAnalyzeDtos.SymbolHit("ActualPage", "COMPONENT", "ui/Page.tsx", 8, 12)),
+                List.of(SELECTED, SELECTED),
+                List.of(new TsAnalyzeDtos.SymbolHit("ActualPage", "HOOK", "ui/Page.tsx", 2, 4)))) {
+            assertThat(TsGraphMapper.toGraph(routeResponse(route, hits, List.of()))
+                            .edges())
+                    .noneMatch(edge -> edge.sourceNaturalKey().equals("route:/detail"));
+        }
+    }
+
+    @Test
+    void wirePresenceDistinguishesAbsentLegacyMarkerFromExplicitNullAndMalformedMarkers() {
+        var mapper = JsonMapper.builder().build();
+        String prefix =
+                "\"path\":\"/detail\",\"component\":\"ActualPage\",\"filePath\":\"ui/Page.tsx\",\"lineStart\":5,\"lineEnd\":5";
+        var legacy = mapper.readValue("{" + prefix + "}", TsAnalyzeDtos.RouteHit.class);
+        assertThat(legacy.componentResolution()).isNull();
+        assertThat(TsGraphMapper.toGraph(routeResponse(legacy, List.of(SELECTED), List.of()))
+                        .edges())
+                .anyMatch(edge -> edge.sourceNaturalKey().equals("route:/detail"));
+        for (String marker :
+                List.of("null", "false", "[]", "{}", "{\"target\":{}}", "{\"status\":\"RESOLVED\",\"target\":null}")) {
+            var route = mapper.readValue(
+                    "{" + prefix + ",\"componentResolution\":" + marker + "}", TsAnalyzeDtos.RouteHit.class);
+            assertThat(route.componentResolution()).isNotNull();
+            assertThat(TsGraphMapper.toGraph(routeResponse(route, List.of(SELECTED), List.of()))
+                            .edges())
+                    .as("marker=%s", marker)
+                    .noneMatch(edge -> edge.sourceNaturalKey().equals("route:/detail"));
+        }
+        String valid = "{" + prefix + ",\"componentResolution\":{\"status\":\"RESOLVED\",\"target\":{"
+                + "\"name\":\"ActualPage\",\"filePath\":\"ui/Page.tsx\",\"lineStart\":2,\"lineEnd\":4}}}";
+        var route = mapper.readValue(valid, TsAnalyzeDtos.RouteHit.class);
+        assertThat(route.componentResolution().target().lineStart()).isEqualTo(2);
+        assertThat(TsGraphMapper.toGraph(routeResponse(route, List.of(SELECTED), List.of()))
+                        .edges())
+                .anyMatch(edge -> edge.sourceNaturalKey().equals("route:/detail"));
+    }
+
+    @Test
+    void legacyTypeOnlyImportDoesNotAuthorizeAValueComponent() {
+        var route = new TsAnalyzeDtos.RouteHit("/detail", "Selected", "ui/Router.tsx", 1, 1);
+        var imports =
+                List.of(new TsAnalyzeDtos.ImportHit("ui/Router.tsx", "ui/Page.tsx", "Selected", "ActualPage", true));
+        assertThat(TsGraphMapper.toGraph(routeResponse(route, List.of(SELECTED), imports))
+                        .edges())
+                .noneMatch(edge -> edge.sourceNaturalKey().equals("route:/detail"));
+    }
+
+    @Test
+    void legacyDefaultNameMismatchRemainsUnlinkedWithoutExplicitDeclarationEvidence() {
+        var route = new TsAnalyzeDtos.RouteHit("/detail", "Selected", "ui/Router.tsx", 1, 1);
+        var imports =
+                List.of(new TsAnalyzeDtos.ImportHit("ui/Router.tsx", "ui/Page.tsx", "Selected", "default", false));
+        assertThat(TsGraphMapper.toGraph(routeResponse(route, List.of(SELECTED), imports))
+                        .edges())
+                .noneMatch(edge -> edge.sourceNaturalKey().equals("route:/detail"));
+    }
+
+    @Test
+    void conflictingExplicitRouteKeysCannotRetainOneOfTheirEdges() {
+        var one = new TsAnalyzeDtos.RouteHit(
+                "/detail",
+                "Selected",
+                "ui/Router.tsx",
+                1,
+                1,
+                new TsAnalyzeDtos.ComponentResolution(
+                        "RESOLVED", new TsAnalyzeDtos.ComponentReference("ActualPage", "ui/Page.tsx", 2, 4)));
+        var two = new TsAnalyzeDtos.RouteHit("/detail", "ActualPage", "ui/Router.tsx", 5, 5);
+        var result = TsGraphMapper.toGraph(new TsAnalyzeDtos.Response(
+                List.of(one, two), List.of(SELECTED), null, null, null, null, null, null, null, null, null));
+        assertThat(result.edges()).noneMatch(edge -> edge.sourceNaturalKey().equals("route:/detail"));
+        assertThat(result.nodes())
+                .filteredOn(node -> node.naturalKey().equals("route:/detail"))
+                .allMatch(node -> "UNRESOLVED".equals(node.metadata().get("componentResolution")));
+    }
+
+    private static TsAnalyzeDtos.Response routeResponse(
+            TsAnalyzeDtos.RouteHit route,
+            List<TsAnalyzeDtos.SymbolHit> components,
+            List<TsAnalyzeDtos.ImportHit> imports) {
+        return new TsAnalyzeDtos.Response(
+                List.of(route), components, null, null, null, imports, null, null, null, null, null);
+    }
 
     @Test
     void mapsRouteComponentAndApiCallMetadata() {

@@ -13,6 +13,12 @@ export type RouteHit = {
   filePath: string
   lineStart: number
   lineEnd: number
+  componentResolution?: RouteComponentResolution
+}
+
+export type RouteComponentResolution = {
+  status: 'RESOLVED' | 'UNRESOLVED'
+  target: { name: string; filePath: string; lineStart: number; lineEnd: number } | null
 }
 
 export type SymbolHit = {

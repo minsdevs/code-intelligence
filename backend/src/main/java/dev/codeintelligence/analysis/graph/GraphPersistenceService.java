@@ -66,10 +66,32 @@ public class GraphPersistenceService {
             candidates.addAll(result.nodes());
             AnalysisResult safe = GraphIdentityGuard.sanitize(
                     new AnalysisResult(candidates, result.edges(), result.evidences(), result.fileOutcomes()));
+            var refreshedRoutes = result.nodes().stream()
+                    .filter(node -> "FE_ROUTE".equals(node.nodeType())
+                            && node.metadata().containsKey("componentResolution"))
+                    .map(GraphNodeDraft::naturalKey)
+                    .collect(java.util.stream.Collectors.toSet());
+            var clearedRoutes = new java.util.HashSet<String>();
             Map<String, Long> ids = new LinkedHashMap<>();
             for (GraphNodeDraft node : safe.nodes()) {
                 Long fileId = resolveFileId(snapshotId, node.filePath());
                 long id = upsertNode(snapshotId, node, fileId);
+                if (refreshedRoutes.contains(node.naturalKey()) && clearedRoutes.add(node.naturalKey())) {
+                    // An explicit re-analysis is authoritative for this route's binding.
+                    // Remove stale structural/API propagation in the same transaction,
+                    // including when the new result is UNRESOLVED. Other snapshots and
+                    // incoming file provenance are not part of this replacement.
+                    jdbc.sql("""
+                            delete from graph_edges e using graph_nodes t
+                            where e.snapshot_id=:snapshot and e.source_node_id=:route
+                              and t.id=e.target_node_id and t.snapshot_id=:snapshot
+                              and ((e.edge_type='CONTAINS' and t.node_type='COMPONENT')
+                                or (e.edge_type='CONSUMES' and t.node_type='API_ENDPOINT'))
+                            """)
+                            .param("snapshot", snapshotId)
+                            .param("route", id)
+                            .update();
+                }
                 if (GraphIdentityGuard.ambiguous(node)) {
                     jdbc.sql(
                                     "delete from graph_edges where snapshot_id = :snapshotId and (source_node_id = :id or target_node_id = :id)")
