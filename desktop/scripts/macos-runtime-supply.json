@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "reviewedOn": "2026-10-05",
+  "minimumSystemVersion": "13.0",
+  "architecture": "arm64",
+  "sources": [
+    {
+      "id": "openssl",
+      "version": "3.5.8",
+      "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz",
+      "sha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2",
+      "checksumSource": "https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz.sha256",
+      "maxArchiveBytes": 83886080,
+      "licenseFile": "LICENSE.txt"
+    },
+    {
+      "id": "postgres",
+      "version": "16.15",
+      "url": "https://download.postgresql.org/pub/source/v16.15/postgresql-16.15.tar.bz2",
+      "sha256": "c1575341fa7bd40f5274ea465b34390f4dc64cdd0770af327005caaeb9f6b7ed",
+      "checksumSource": "https://download.postgresql.org/pub/source/v16.15/postgresql-16.15.tar.bz2.sha256",
+      "maxArchiveBytes": 41943040,
+      "licenseFile": "COPYRIGHT"
+    },
+    {
+      "id": "redis",
+      "version": "8.10.2",
+      "url": "https://download.redis.io/releases/redis-8.10.2.tar.gz",
+      "sha256": "b9ffee226b5eecdba98a679260dad764b2a4ebd90dce4ad5ac9e9f3eef9c02b3",
+      "checksumSource": "https://raw.githubusercontent.com/redis/redis-hashes/master/README",
+      "revision": "498ecd0d6d007db11ddb3aea9428552598a78622",
+      "maxArchiveBytes": 167772160,
+      "licenseFile": "LICENSE.txt"
+    },
+    {
+      "id": "pgvector",
+      "version": "0.8.7",
+      "url": "https://codeload.github.com/pgvector/pgvector/tar.gz/f37c13f68b57d2c3472b2214fbcff699d6d34876",
+      "sha256": "83d673c3b287cddbf3879f86215f043f2c2b56c69d37b2a77504910db1ed6e56",
+      "checksumSource": "observed SHA-256 of HTTPS archive at the independently resolved v0.8.7 commit; not a maintainer-signed checksum",
+      "revision": "f37c13f68b57d2c3472b2214fbcff699d6d34876",
+      "securitySource": "https://www.postgresql.org/about/news/pgvector-087-released-3392/",
+      "maxArchiveBytes": 4194304,
+      "licenseFile": "LICENSE"
+    }
+  ]
+}

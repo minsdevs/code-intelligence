@@ -1,0 +1,188 @@
+{
+  "format": 1,
+  "baseCommit": "a3522903f69444f45bea57405e3a80919cb55064",
+  "branch": "codex/github-project-recovery-20261005",
+  "implementationState": "committed-and-merged-in-original-repository",
+  "currentWorkingDirectory": "/Users/minseokchae/Dev/code-intelligence",
+  "evidenceLocation": "validation/local (historical run data; disposable services and clone removed)",
+  "releaseReadiness": "INCOMPLETE",
+  "githubBase": {
+    "repository": "minsdevs/code-intelligence",
+    "mergedPullRequest": 84,
+    "preparationHead": "279fb690d09bec0f2c243e696345e474bed0bf2c"
+  },
+  "frontend": {
+    "files": 38,
+    "tests": 370,
+    "passed": 370,
+    "failed": 0
+  },
+  "backendFocused": {
+    "scope": "focused-backend-unit",
+    "suites": [
+      {
+        "name": "dev.codeintelligence.github.GithubApiClientTest",
+        "tests": "12",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "dev.codeintelligence.history.GitMetadataPermissionTest",
+        "tests": "3",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      {
+        "name": "dev.codeintelligence.history.GitMetadataScannerTest",
+        "tests": "2",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      }
+    ],
+    "tests": 17,
+    "failures": 0,
+    "errors": 0
+  },
+  "testcontainers": {
+    "status": "NOT_VERIFIED",
+    "reason": "Docker unavailable; prior failed executions retained separately; added retention integration test compiled"
+  },
+  "syntheticIntegrationRuns": [
+    {
+      "artifact": "api-faT5EM/result.json",
+      "status": "FAIL",
+      "checks": 0,
+      "failure": "Timed out: backend startup",
+      "cleanupComplete": true
+    },
+    {
+      "artifact": "api-XtGfYA/result.json",
+      "status": "PASS",
+      "checks": 9,
+      "freshAnalyses": 2,
+      "cleanupComplete": true
+    },
+    {
+      "artifact": "browser-l94ivS/result.json",
+      "status": "PASS",
+      "checks": [
+        "fresh PostgreSQL applies V1 through V27",
+        "generic PR 403 remains a GIT_METADATA failure at 70%",
+        "duplicate import is refused without replacing the project",
+        "changed checkpoint is rejected without changing the first failed job",
+        "fresh analysis 1 passes GIT_METADATA and FINALIZE in the same project",
+        "fresh analysis 2 passes GIT_METADATA and FINALIZE in the same project",
+        "fresh analysis 3 passes GIT_METADATA and FINALIZE in the same project",
+        "the original failed job and steps survive multiple fresh analyses",
+        "legacy successful result retention still keeps exactly two READY snapshots",
+        "notes remain and no replacement project was created",
+        "optional PR permission denial is retained as evidence",
+        "browser stays on the project after recovery"
+      ],
+      "freshAnalyses": 3,
+      "originalFailureRows": 1,
+      "finalSnapshots": [
+        {
+          "id": 1,
+          "status": "ANALYZING",
+          "source_contract_version": 0
+        },
+        {
+          "id": 3,
+          "status": "READY",
+          "source_contract_version": 0
+        },
+        {
+          "id": 4,
+          "status": "READY",
+          "source_contract_version": 0
+        }
+      ],
+      "jarSha256": "25f68152e4984039d8861dd1586465438bd4665814867bdaa6ae4fc4868a6dd5",
+      "cleanupComplete": true
+    },
+    {
+      "artifact": "real-2026-10-05T08-14-38-665Z-yyvzKU/report.json",
+      "status": "PASS",
+      "passed": 30,
+      "skipped": 1,
+      "cleanupComplete": true
+    }
+  ],
+  "verificationBoundary": {
+    "database": "real PostgreSQL 16 with V1-V27 migrations and pgvector",
+    "redis": "real",
+    "backend": "production Spring JAR",
+    "browser": "Chromium",
+    "github": "loopback synthetic API and locally generated bare repository",
+    "actualUserAccount": false,
+    "installedApplication": false,
+    "schemaChanged": false,
+    "minimumOsVerified": false
+  },
+  "nativeBuild": {
+    "status": "BLOCKED",
+    "reason": "MINIMUM_OS_EXCEEDED: host PostgreSQL/libraries minos 26.0 exceed fixed target 13.0; DECLARED_MINIMUM_CHANGED prevented a separate host metadata attempt",
+    "policyRelaxed": false
+  },
+  "remotePublication": {
+    "performed": true,
+    "pullRequest": 85,
+    "commit": "4689176b7e4e56f89bc03b3d23ef3374914acd0c",
+    "mergeCommit": "7fb5ea068084bcb410d52e5e928a713896595ae6",
+    "policy": "completed-feature-commit-push-pr-merge; quota threshold retired by user"
+  },
+  "artifacts": [
+    {
+      "path": "validation/local/github-recovery-20261005/frontend-reviewed-final.json",
+      "sha256": "bf68d827d4d2f6e46b66760689ef6428be76af2830f90441dcfd25b6ac29128d"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/backend-focused-final.json",
+      "sha256": "8277b0ef2e7f187e226615e8e82a812318d1513d9334ecc4c7a0bf3120860fd3"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/api-faT5EM/result.json",
+      "sha256": "a0491a4fb2226c8358ab22a8c230717cd6cb959672cbcf0c53bb723402443a33"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/api-XtGfYA/result.json",
+      "sha256": "1fa2b02c2c08c731974f619b37ea2cfde3053af05bccdfd810ee3aac1d9e5043"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/browser-l94ivS/result.json",
+      "sha256": "01c4c2c9107b618f47a1a33c136b8ea17ea282f1ba6aa4b79cbf7df23e9ec7ad"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/browser-l94ivS/initial-failed-job.json",
+      "sha256": "96bfd0e6f0c229f9b50a10a69689ba91c1f355ff39678b4b0483879fa7ca5d18"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/browser-l94ivS/fresh-analysis-1.json",
+      "sha256": "796f0a404baa970519857c1650b30f14e597b7efccd25c02184c4d0aed6436d5"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/browser-l94ivS/fresh-analysis-2.json",
+      "sha256": "fed31f512ab1394519d72204b106252bf1cb54e926be3c369e9cba975ec201c6"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/browser-l94ivS/fresh-analysis-3.json",
+      "sha256": "210714f1576183d3d235cdda06ad892663d9d2685001e11b4e25ecea33ca0d99"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/browser-l94ivS/failed-project-recovery.png",
+      "sha256": "8026c5663308d799f28e549606f6e4c3aa9849110fd7310df27f9a0d078abac2"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/browser-l94ivS/completed-project-recovery.png",
+      "sha256": "9a6cbb523241568e3000d3f039716f90916f4c734dde5d446a825fd00fee4c45"
+    },
+    {
+      "path": "validation/local/github-recovery-20261005/real-2026-10-05T08-14-38-665Z-yyvzKU/report.json",
+      "sha256": "e88401dda5aa765ceeebca840ffd075f5e2ba57e9354f8326f44712d6071e42e"
+    }
+  ]
+}
