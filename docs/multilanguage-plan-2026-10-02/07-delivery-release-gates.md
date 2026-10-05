@@ -109,7 +109,14 @@ release 승인은 필수 gate 전부 PASS+미해결 Critical/High0+공개 지원
 
 후속 `codex/recovery-guidance-diagnostics-20261005`에서 **복구 상태별 UI 안내 분리**와 **MANIFEST 거부 조건의 고정 코드 분류**를 구현했다. 새 앱 `jXdOYk`의 `native-e5Y4sU`/`native-hnbzah`는 한영 복구 안내·버튼 차단과 두 실패 경로의 복구/추가 정상 재시작을 통과했고, `native-VCIheO`는 비호환 사전 거부/정상 복원/재시작을 통과했다. 최종 desktop236개 및 Settings44개가 통과했다. 과거 MANIFEST 실패의 근본 원인은 여전히 미확정이며 오류 코드 분류 구현을 과거 원인 해결로 기록하지 않는다. 상세 증거는 `docs/audit/recovery-guidance-diagnostics-2026-10-05.md`를 따른다.
 
-다음 단위는 **nonzero 비용원장의 중단/재개 검증 범위와 소유 프로세스 종료 경계 확인**, **기존 데이터 적용·되돌리기 조건 정리**다. 안전한 종료 소유권이 검토되지 않은 과거 숫자 PID 기반 시험을 재실행하지 않는다. 구 archive 자동 변환, 모든 강제종료/비용원장 replay, 기존 사용자 DB·locale 적용은 미완료이므로 G-RECOVERY 전체 상태를 PASS로 바꾸지 않는다. 2단계 실계정 project1에는 그 조건을 확인한 후 접근한다.
+후속 비용원장 단위는 `docs/audit/pre-release-cost-recovery-2026-10-05.md`를 따른다.
+실제 native 서비스/현재 Node 구성에서100+73=173을 백업·복원 및 STAGED/B_COMPLETED
+Node owner SIGKILL 후 같은 거래 재개까지 보존했다. 추가29로202가 된 상태의 동일
+프로세스 오류 rollback도 통과했다. native2+3개·오프라인100PASS/1의도적skip이며,
+OS Keychain/Electron UI·전원손실/guardian kill·전체 crash matrix가 아니다.
+구 archive 자동 변환, 모든 강제종료/비용원장 replay, 기존 사용자 DB·locale 적용은
+미완료이므로 G-RECOVERY 전체 상태를 PASS로 바꾸지 않는다. 2/3단계의 구현·합성
+검증은 계속하되 실계정 project1에는 기존 데이터 적용·되돌리기 조건 확인 후 접근한다.
 
 ### 최신 전체 진행표 / 보고 기준
 
@@ -121,7 +128,7 @@ release 승인은 필수 gate 전부 PASS+미해결 Critical/High0+공개 지원
 
 | 단계 | 현재 상태 | 완료 근거 또는 남은 조건 |
 | --- | --- | --- |
-| **1 데이터 복구 안정화** | **진행 중 / 여러 하위 단위 완료** | 호환성 사전 거부, 정상 복원, 두 I/O 중단 복구/재시작, 상태별 안내·시작 진단 완료. nonzero 원장·전체 crash 경계·구 DB/locale 적용 조건과 최초 시작 실패 원인 검증 잔여 |
+| **1 데이터 복구 안정화** | **자동화 하위 단위 추가 완료 / 전체 수용 미완료** | 호환성/정상복원/UI 안내·진단과173 비용원장 owner 재시작·202 same-process rollback 확인. 전체 crash·실계정 구 DB/locale 적용 조건과 최초 시작 실패 원인 검증 잔여 |
 | 2 실제 GitHub 가져오기 | 실계정 후속 검증 대기 | 복구 UI/기반 구현과 합성 경로는 존재. 기존 실패 project1의 실제 UI 재분석은1단계 사용자 프로필 적용 조건 이후 |
 | 3 인증 수명주기 | 부분 구현 / 전체 수용 미완료 | 연결/해제·만료 표시/세대 방어 등 구현. 실권한 철회·전체 수명주기·자동 refresh/rotation 잔여 |
 | 4 분석·작업 신뢰 | 부분 구현·검증 / 확대 수용 미완료 | 개요/탐색/source snapshot/파일 결과 기반 구현. 완료·취소 경합/worker crash 및 대표 corpus/독립 oracle 전체 기준 잔여 |

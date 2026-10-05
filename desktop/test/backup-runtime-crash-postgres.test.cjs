@@ -121,7 +121,7 @@ async function startOwner(root, nonce, mode, point) {
 for (const point of ['STAGED', 'B_COMPLETED']) {
   test(`opt-in real owner SIGKILL at ${point}: reap owned processes and resume the same private transaction`,
     { skip: !enabled, timeout: 720000 }, async t => {
-      const base = await fs.realpath('/tmp'), root = await fs.mkdtemp(path.join(base, 'ci-backup-resume-real-'));
+      const base = await fs.realpath(path.resolve(__dirname, '../..')), root = await fs.mkdtemp(path.join(base, '.cif-resume-'));
       await fs.chmod(root, 0o700);
       const nonce = crypto.randomBytes(32).toString('hex'), stat = await fs.lstat(root, { bigint: true });
       const claim = { version: 1, root, nonce, parentPid: process.pid, device: String(stat.dev), inode: String(stat.ino) };
@@ -153,7 +153,7 @@ for (const point of ['STAGED', 'B_COMPLETED']) {
       assert.equal(checkpoint.pendingPhase, point === 'STAGED' ? 'STAGED' : 'HEALTH_VERIFIED');
       assert.equal(checkpoint.maintenancePending, point === 'STAGED');
       assert.equal(checkpoint.healthyButBlocked, point === 'B_COMPLETED');
-      assert.equal(checkpoint.processProof.leases.filter(item => !item.stopped).length, 2);
+      assert.equal(checkpoint.processProof.leases.filter(item => !item.stopped).length, point === 'B_COMPLETED' ? 3 : 2);
       const tree = await descendantMetadata(initial.child.pid), treePids = new Set(tree.map(row => row.pid));
       assert(treePids.has(initial.child.pid));
       for (const service of checkpoint.processProof.services.filter(item => !item.stopped)) {

@@ -60,11 +60,11 @@ function costs(snapshot) {
 async function owner(config) {
   let shutdown; const lifecycle = { after(action) { assert.equal(shutdown, undefined); shutdown = action; }, diagnostic() {} };
   stage = 'FIXTURE';
+  try {
   const f = await fixture(lifecycle, { root: config.root, nonce: config.nonce, resume: config.mode === 'RESUME',
     guardedServices: true, preserve: true,
     onProcess: value => { void send({ kind: 'PROCESS', nonce: config.nonce, ...value }).catch(() => {}); },
   });
-  try {
     if (config.mode === 'INITIAL') {
       stage = 'BACKUP';
       const keyInfo = await f.keyring.info(), archive = await f.runtime.backup(f.destination);
@@ -98,7 +98,7 @@ async function owner(config) {
         assert.equal(processProof.services.some(item => item.name === 'postgres' && !item.stopped), true);
         assert.equal(processProof.services.some(item => item.name === 'redis' && !item.stopped), true);
         assert.equal(processProof.services.some(item => item.name === 'backend' && !item.stopped), point === 'B_COMPLETED');
-        assert.equal(processProof.leases.filter(item => !item.stopped).length, 2);
+        assert.equal(processProof.leases.filter(item => !item.stopped).length, point === 'B_COMPLETED' ? 3 : 2);
         const prefix = await fs.readFile(f.logPath);
         const expected = { version: 1, nonce: config.nonce, point, transactionId: value.transactionId, previous,
           current, keyInfo, markers: await markers(f), costs: costs(snapshot), processProof, pending,
@@ -171,7 +171,7 @@ async function owner(config) {
       await persist(path.join(f.root, 'resume-result.json'), report);
       f.markSuccess(); await send({ kind: 'RESULT', ...report });
     }
-  } finally { await shutdown(); }
+  } finally { await shutdown?.(); }
 }
 
 process.once('disconnect', () => { if (!intentionalDisconnect) process.exit(3); });

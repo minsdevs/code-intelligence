@@ -103,6 +103,13 @@ async function acquireNativeOwnerLock(provider, { safetyRoot, kind, installation
   let closed = false; let closeCode; let closeSignal; let releasePromise;
   let pending; let sequence = 0; let buffered = ''; let bytes = 0; let closeResolve;
   const closePromise = new Promise(resolve => { closeResolve = resolve; });
+  const stopHelper = () => {
+    if (!child || closed) return;
+    // Signalling is best effort, not exit proof. A failed signal/pipe operation
+    // must not escape an event handler or discard the live lease reservation.
+    try { child.stdin.destroy(); } catch { /* Still wait for this owned helper. */ }
+    try { child.kill('SIGKILL'); } catch { /* finish retains ownership until close. */ }
+  };
   const lose = code => {
     if (failed) return;
     failed = failure(code);
@@ -112,7 +119,7 @@ async function acquireNativeOwnerLock(provider, { safetyRoot, kind, installation
       // Only a static reason crosses this trusted callback, never an OS error or path.
       try { Promise.resolve(state.onLost(failure('LOST'))).catch(() => {}); } catch { /* remain poisoned */ }
     }
-    if (child && !closed) { child.stdin.destroy(); child.kill('SIGKILL'); }
+    stopHelper();
   };
   const assertLive = () => {
     if (failed) throw failed;
@@ -125,12 +132,13 @@ async function acquireNativeOwnerLock(provider, { safetyRoot, kind, installation
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => lose('TIMEOUT'), state.timeoutMs);
       pending = { expected, resolve, reject, timer };
-      child.stdin.write(`${command}\n`, error => { if (error) lose('PROCESS'); });
+      try { child.stdin.write(`${command}\n`, error => { if (error) lose('PROCESS'); }); }
+      catch { lose('PROCESS'); }
     });
   };
   const finish = async () => {
     if (!closed && child) {
-      child.stdin.destroy(); child.kill('SIGKILL');
+      stopHelper();
       let timer;
       await Promise.race([closePromise, new Promise((_, reject) => {
         timer = setTimeout(() => reject(failure('TERMINATION')), state.timeoutMs);
@@ -199,7 +207,7 @@ async function acquireNativeOwnerLock(provider, { safetyRoot, kind, installation
           try {
             await verifyPath(); expectedExit = true;
             await exchange(`RELEASE\t${++sequence}`, `RELEASED\t${sequence}`);
-            child.stdin.end();
+            try { child.stdin.end(); } catch { lose('PROCESS'); }
             let timer;
             await Promise.race([closePromise, new Promise((_, reject) => {
               timer = setTimeout(() => { lose('TIMEOUT'); reject(failed); }, state.timeoutMs);
