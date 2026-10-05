@@ -880,7 +880,7 @@ test('backup/restore IPC uses the native selection and stays serialized without 
   const held = deferred(), selections = [];
   const h = await harness(t, { backupProtocol: 3, selection: '/synthetic/native-selection',
     performBackup: async (_options, selected) => { selections.push(['backup', selected]); await held.promise; return 'synthetic result'; },
-    performRestore: async (_options, selected) => { selections.push(['restore', selected]); return { restored: true }; } });
+    performRestore: async (_options, selected) => { selections.push(['restore', selected]); return { restored: true, recoveryBackup: '/synthetic/checkpoint.cibackup' }; } });
   await h.start();
   const untrusted = { selected: '/synthetic/renderer-selected', verified: true, keyProvider: 'private-fake-proof' };
   const backup = h.handlers.get('data:backup')(h.rendererEvent(), untrusted);
@@ -890,9 +890,65 @@ test('backup/restore IPC uses the native selection and stays serialized without 
     assert.deepEqual(selections, [['backup', '/synthetic/native-selection']]);
     assert.equal(h.dialogs.filter(item => item.kind === 'open').length, 1);
   } finally { held.resolve(); }
-  assert.equal(await backup, 'synthetic result'); assert.deepEqual(await restore, { restored: true });
+  assert.equal(await backup, 'synthetic result'); assert.deepEqual(await restore, { restored: true, recoveryBackup: '/synthetic/checkpoint.cibackup' });
   assert.deepEqual(selections, [['backup', '/synthetic/native-selection'], ['restore', '/synthetic/native-selection']]);
   assert.equal(h.dialogs.filter(item => item.kind === 'open').length, 2);
+});
+
+test('restore IPC exposes only the fixed incompatible result after a pre-maintenance refusal', async t => {
+  const failure = Object.assign(new Error('synthetic-private-catalog-detail'), {
+    code: 'BACKUP_RUNTIME_INCOMPATIBLE', recoveryRequired: false, detail: '/synthetic/private-backup',
+  });
+  const h = await harness(t, { backupProtocol: 3, selection: '/synthetic/native-selection',
+    performRestore: async (_options, selected) => { assert.equal(selected, '/synthetic/native-selection'); throw failure; } });
+  await h.start();
+  const before = clone(h.controls.journal.snapshot()), eventsAt = h.events.length;
+  const result = await h.handlers.get('data:restore')(h.rendererEvent());
+  assert.deepEqual(clone(result), { restored: false, code: 'BACKUP_INCOMPATIBLE' });
+  assert.doesNotMatch(JSON.stringify(result), /private|detail|catalog|recoveryBackup/);
+  assert.deepEqual(clone(h.controls.journal.snapshot()), before);
+  assert.deepEqual(h.events.slice(eventsAt), ['restore.selected']);
+  const status = h.handlers.get('runtime:status')(h.rendererEvent());
+  assert.equal(status.ready, true); assert.equal(status.restoreAvailable, true); assert.equal(status.recoveryOnly, false);
+});
+
+test('restore IPC does not turn other errors or non-false recovery flags into an incompatible result', async t => {
+  let failure;
+  const h = await harness(t, { backupProtocol: 3, selection: '/synthetic/native-selection',
+    performRestore: async () => { throw failure; } });
+  await h.start();
+  for (const fields of [
+    { code: 'BACKUP_RUNTIME_INCOMPATIBLE', recoveryRequired: true },
+    { code: 'BACKUP_RUNTIME_INCOMPATIBLE' },
+    { code: 'BACKUP_RUNTIME_INCOMPATIBLE', recoveryRequired: 0 },
+    { code: 'BACKUP_RUNTIME_INCOMPATIBLE', recoveryRequired: 'false' },
+    { code: 'BACKUP_RUNTIME_RECOVERY_REQUIRED', recoveryRequired: false },
+    { code: 'BACKUP_RUNTIME_INPUT', recoveryRequired: false },
+    {},
+  ]) {
+    failure = Object.assign(new Error('synthetic-private-native-error'), fields);
+    await assert.rejects(h.handlers.get('data:restore')(h.rendererEvent()), error => error === failure);
+  }
+});
+
+test('restore IPC preserves recovery-required failure and the resulting unavailable runtime state', async t => {
+  const failure = Object.assign(new Error('synthetic-private-recovery-error'), {
+    code: 'BACKUP_RUNTIME_RECOVERY_REQUIRED', recoveryRequired: true,
+  });
+  const h = await harness(t, { backupProtocol: 3, selection: '/synthetic/native-selection',
+    performRestore: async ({ ports }) => { await ports.failure(); throw failure; } });
+  await h.start();
+  await assert.rejects(h.handlers.get('data:restore')(h.rendererEvent()), error => error === failure);
+  const status = h.handlers.get('runtime:status')(h.rendererEvent());
+  assert.equal(status.ready, false); assert.equal(status.restoreAvailable, false); assert.equal(status.recoveryOnly, true);
+});
+
+test('canceling the native restore dialog returns null without calling the backup runtime', async t => {
+  let restores = 0;
+  const h = await harness(t, { backupProtocol: 3, performRestore: async () => { restores++; } });
+  await h.start();
+  assert.equal(await h.handlers.get('data:restore')(h.rendererEvent()), null);
+  assert.equal(restores, 0); assert.equal(h.events.includes('restore.selected'), false);
 });
 
 test('normal shutdown latches, terminates all children, closes gateway/safety, then closes adapter', async t => {

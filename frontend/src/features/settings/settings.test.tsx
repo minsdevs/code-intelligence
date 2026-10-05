@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { routes } from '../../app/router'
 import { AI_PANEL_DEFAULT_WIDTH, useUiStore } from '../../stores/uiStore'
 import type { AiSettingView } from '../../api/aiSettings'
-import type { RuntimeStatus } from '../../desktop'
+import type { DesktopBridge, RuntimeStatus } from '../../desktop'
 import { I18nProvider } from '../../lib/i18n'
 import SettingsPage from './SettingsPage'
 
@@ -42,7 +42,7 @@ function installDesktopBridge(runtime: () => Promise<RuntimeStatus>) {
     platform: 'darwin', apiBaseUrl: 'http://127.0.0.1:4311', apiToken: 'synthetic-token',
     pickFolder: vi.fn(), authorizeDroppedFolder: vi.fn(), openExternal: vi.fn(),
     backup: vi.fn(() => Promise.resolve('/tmp/synthetic-backup')),
-    restore: vi.fn(() => Promise.resolve({ restored: true, recoveryBackup: '/tmp/synthetic-recovery' })),
+    restore: vi.fn<DesktopBridge['restore']>(() => Promise.resolve({ restored: true, recoveryBackup: '/tmp/synthetic-recovery' })),
     runtimeStatus: vi.fn(runtime), restartRuntime: vi.fn(runtime),
   }
   window.codeIntelligenceDesktop = bridge
@@ -285,7 +285,7 @@ describe('SettingsPage', () => {
       authorizeDroppedFolder: vi.fn(),
       openExternal: vi.fn(() => Promise.resolve()),
       backup: vi.fn(() => Promise.resolve('/tmp/backup')),
-      restore: vi.fn(() => Promise.resolve({ restored: true, recoveryBackup: '/tmp/recovery' })),
+      restore: vi.fn<DesktopBridge['restore']>(() => Promise.resolve({ restored: true, recoveryBackup: '/tmp/recovery' })),
       runtimeStatus: vi.fn(() => Promise.resolve({ ready: true, error: null, services: ['postgres'] })),
       restartRuntime: vi.fn(() => Promise.resolve({ ready: true, error: null, services: ['postgres'] })),
     }
@@ -707,5 +707,82 @@ describe('Desktop feature availability in Settings', () => {
     expect(confirm).toBeDisabled()
     fireEvent.click(confirm)
     expect(bridge.restore).not.toHaveBeenCalled()
+  })
+
+  it('shows a translated incompatible notice, removes an old recovery path and refreshes runtime status', async () => {
+    const bridge = installDesktopBridge(() => Promise.resolve({ ready: true, error: null, services: ['postgres'] }))
+    renderWithInspectableCache()
+    const restore = screen.getByRole('button', { name: '백업 복원' })
+    await waitFor(() => expect(restore).toBeEnabled())
+    fireEvent.click(restore)
+    fireEvent.click(screen.getByRole('button', { name: '복원 확인' }))
+    expect(await screen.findByText('/tmp/synthetic-recovery')).toBeInTheDocument()
+    await waitFor(() => expect(restore).toBeEnabled())
+
+    bridge.restore.mockResolvedValueOnce({ restored: false, code: 'BACKUP_INCOMPATIBLE' })
+    fireEvent.click(restore)
+    fireEvent.click(screen.getByRole('button', { name: '복원 확인' }))
+    const notice = '현재 앱과 호환되지 않는 백업이라 복원을 시작하지 않았습니다. 기존 데이터와 백업 파일은 유지됩니다. 백업을 만든 앱 버전에서 열어 확인하세요.'
+    expect(await screen.findByText(notice)).toHaveAttribute('role', 'alert')
+    expect(screen.queryByText('/tmp/synthetic-recovery')).not.toBeInTheDocument()
+    expect(screen.queryByText('Recovery 백업')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '복원 확인' })).not.toBeInTheDocument()
+    await waitFor(() => expect(restore).toBeEnabled())
+    expect(bridge.runtimeStatus).toHaveBeenCalledTimes(3)
+    expect(bridge.restore).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('button', { name: 'English' }))
+    expect(await screen.findByText('This backup is incompatible with the current app, so restoration did not start. Your existing data and backup file are preserved. Open the backup in the app version that created it to check it.')).toBeInTheDocument()
+    expect(screen.queryByText('Recovery backup')).not.toBeInTheDocument()
+  })
+
+  it('refreshes runtime after a rejected restore and blocks controls while recovering without showing native error details', async () => {
+    const ready = { ready: true, error: null, services: ['postgres'] }
+    const refreshed = deferred<RuntimeStatus>()
+    const bridge = installDesktopBridge(() => Promise.resolve(ready))
+    bridge.runtimeStatus.mockImplementationOnce(() => Promise.resolve(ready)).mockImplementationOnce(() => refreshed.promise)
+    bridge.restore.mockRejectedValueOnce(Object.assign(new Error('SENTINEL-private-native-restore-detail'), {
+      code: 'BACKUP_RUNTIME_RECOVERY_REQUIRED', recoveryRequired: true,
+    }))
+    const { client } = renderWithInspectableCache()
+    const restore = screen.getByRole('button', { name: '백업 복원' })
+    const backup = screen.getByRole('button', { name: '백업 생성' })
+    await waitFor(() => expect(restore).toBeEnabled())
+    fireEvent.click(restore)
+    fireEvent.click(screen.getByRole('button', { name: '복원 확인' }))
+    await waitFor(() => expect(bridge.runtimeStatus).toHaveBeenCalledTimes(2))
+    expect(restore).toBeDisabled()
+    expect(backup).toBeDisabled()
+    const unavailable = { ready: false, error: 'Backup or restore requires offline recovery.', services: ['postgres'],
+      backupAvailable: false, restoreAvailable: false }
+    await act(async () => { refreshed.resolve(unavailable) })
+    expect(await screen.findByText('요청에 실패했습니다.')).toBeInTheDocument()
+    expect(screen.getByText('준비되지 않음')).toBeInTheDocument()
+    expect(client.getQueryData(['desktop-runtime'])).toEqual(unavailable)
+    expect(restore).toBeDisabled()
+    expect(backup).toBeDisabled()
+    expect(document.body.textContent).not.toContain('SENTINEL-private-native-restore-detail')
+    expect(screen.queryByText(/호환되지 않는 백업이라/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Recovery 백업')).not.toBeInTheDocument()
+    expect(bridge.restore).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the prior incompatible notice when a later native restore selection is canceled', async () => {
+    const bridge = installDesktopBridge(() => Promise.resolve({ ready: true, error: null, services: ['postgres'] }))
+    bridge.restore.mockResolvedValueOnce({ restored: false, code: 'BACKUP_INCOMPATIBLE' }).mockResolvedValueOnce(null)
+    renderWithInspectableCache()
+    const restore = screen.getByRole('button', { name: '백업 복원' })
+    await waitFor(() => expect(restore).toBeEnabled())
+    fireEvent.click(restore)
+    fireEvent.click(screen.getByRole('button', { name: '복원 확인' }))
+    await screen.findByText(/호환되지 않는 백업이라/)
+    await waitFor(() => expect(restore).toBeEnabled())
+    fireEvent.click(restore)
+    fireEvent.click(screen.getByRole('button', { name: '복원 확인' }))
+    await waitFor(() => expect(bridge.runtimeStatus).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(restore).toBeEnabled())
+    expect(screen.queryByText(/호환되지 않는 백업이라/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Recovery 백업')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '복원 확인' })).not.toBeInTheDocument()
+    expect(bridge.restore).toHaveBeenCalledTimes(2)
   })
 })

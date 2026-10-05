@@ -8,6 +8,10 @@ export type RuntimeStatus = {
   restoreAvailable?: boolean
 }
 
+export type DesktopRestoreResult =
+  | { restored: true; recoveryBackup: string }
+  | { restored: false; code: 'BACKUP_INCOMPATIBLE' }
+
 export type DesktopBridge = {
   platform: string
   appVersion: string
@@ -17,7 +21,7 @@ export type DesktopBridge = {
   authorizeDroppedFolder(file: File): Promise<string | null>
   openExternal(url: string): Promise<void>
   backup(): Promise<string | null>
-  restore(): Promise<{ restored: boolean; recoveryBackup: string } | null>
+  restore(): Promise<DesktopRestoreResult | null>
   runtimeStatus(): Promise<RuntimeStatus>
   restartRuntime(): Promise<RuntimeStatus>
 }

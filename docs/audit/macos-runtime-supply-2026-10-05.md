@@ -203,3 +203,128 @@ backup matrix2개의 PostgreSQL 복사본·시험 DB·임시 legacy 소스·합�
 `validation/local/packaged-keychain/cleanup-20261005.json` 및
 `validation/local/backup-compatibility-cleanup-20261005.json`이다. 삭제된 경로가
 과거 보고서에 남아 있어도 현재 재실행할 DB나 프로필로 취급하지 않는다.
+
+## 복원 전 호환성 검사 — 원본 8d5f398 이후
+
+작업 브랜치는 `codex/restore-compatibility-preflight-20261005`다. 사용자 요청의
+배포 직전 전체 순서는 [07 §5](../multilanguage-plan-2026-10-02/07-delivery-release-gates.md)에
+정리했다. 아래 완료는 G-RECOVERY 전체나 정식 배포 완료를 뜻하지 않는다.
+
+### 구현
+
+`backup-runtime`은 인증된 백업의 copy/decrypt/전체 payload 검사 뒤, 유지보수
+시작 전에 `readRestoreIdentity()`로 소유자/catalog만 읽고 별도의 probe DB를
+만든다. `initializeStaging()`의 고정 V1–V27 migrations로 실제 V26/V27 catalog를
+계산한 뒤 `assertRestoreCompatibility()`로 비교한다. 임의 SQL이나 archive가
+제공한 DB 이름은 실행하지 않는다. 실제 loadRows도 같은 비교를 다시 하고,
+load 트랜잭션의 catalog/행/소유권/제약조건/readback·비용 비역행 검사를 유지한다.
+
+`withCompatibilityStage(callback)`는 내부 UUID·CREATE 응답과 실제 OID·owner에
+한정한 cleanup 권한을 사용한다. callback의 DB 연결 종료 후 probe 세션0과
+live/probe 식별자를 확인하고 probe만 연결금지→DROP→OID/name 부재를 확인한다.
+live·previous·failed는 삭제하지 않는다. CREATE 응답 유실/식별변경 때 추정
+삭제하지 않으며 정리 실패는 단순 호환 거부보다 우선한다. 기존 retention
+권한을 확장하지 않았다. main의 cluster mutex가 협력하는 관리 작업을 직렬화하며,
+악의적인 superuser의 check→DROP 경쟁까지 차단하는 OS 경계는 아니다.
+
+probe의 정상 종료/정리 후 live identity와 payload inode/hash를 재확인한다.
+정확한 catalog/소유자 불일치만 `BACKUP_RUNTIME_INCOMPATIBLE`로 분류하고,
+유지보수 시작 전 소유 scratch를 정리한다. main IPC는 `recoveryRequired=false`
+인 이 경우만 `{restored:false,code:'BACKUP_INCOMPATIBLE'}`로 전달한다.
+Settings는 한영 고정 안내와 정상 사용 가능한 상태를 표시하고 모든 복원 결과
+뒤 runtime을 새로 조회한다. 임의 native 오류 상세는 화면에 노출하지 않는다.
+
+ACTIVE_JOB·초기화·I/O·cleanup 오류를 호환성 불일치라고 단정하지 않는다.
+사전검사 중 실패가 있어도 이 경로 자체가 비용원장/OFF/seal을 시작하지 않는다.
+단 scratch 정체성 훼손/정리 실패는 기존 recovery-required 계약을 유지하며,
+사전검사를 통과한 뒤 실제 load에 실패하면 기존 복구 절차가 여전히 필요하다.
+전체 행/동시 AI 기록/향후 상태를 동결하거나 모든 복원 실패를 예방하는 기능은 아니다.
+
+### 검증
+
+| 층 | 실제 확인 |
+|---|---|
+| adapter/coordinator 단위 | 185 PASS/2 native opt-in SKIP. `validation/local/restore-preflight/unit-Hrcr0x/tests.tap`; 인증된 비호환 archive, 정리실패, live identity·payload 변조, 후속 정상 복원 포함 |
+| DB controller 단위 | 89 PASS/2 opt-in SKIP. 신규64 probe cases와 기존25 회귀; 응답유실·OID/owner/세션변화·동시 호출·callback 예외 보존 |
+| main IPC / Settings | main VM63 PASS, Settings DOM/mock38 PASS, TypeScript noEmit·변경 frontend ESLint 통과 |
+| 실제 PostgreSQL/TLS | `backup-compatibility-nz44fc`와 최종 `backup-compatibility-VjdhHc/report.json` 각각10/10 PASS. 소유 PG 정상종료·포트닫힘·원본 prefix/vector hash 불변 |
+| 새 packaged 앱 | 최종 `restore-preflight/native-Y6flRA/result.json` PASS, 아래 범위와 초기 실패 기록 참조 |
+
+실제 PG fixture는 V27/V26 승인과 old0.8.1-SQL/new0.8.7-binary 거부 뒤
+모든 probe DB 부재를 확인했다. 실제 `encryptFile`/payload/runtime coordinator도
+구 SQL의 users-only archive를 거부했고 gateway.begin/pause/failure/journalWrites0,
+pendingRecovery=null, archive/live OID·행·기록 불변을 확인했다. 이 standalone
+fixture의 B journal/gateway는 mock이며 실제 원장의 모든 crash 상태 시험은 아니다.
+
+새 앱은 `.native-product-wXqDvU/Code Intelligence Validation.app`다. 기존
+`yGBKOK` 앱은 보존하고 검증된 native runtime/Java 코드를 재사용했다.
+현재 frontend만 `.env`를 읽지 않는 Vite build로 다시 만들고 복사 JAR의
+`BOOT-INF/classes/static/`에 반영했다. 나머지1080 ZIP entry의 bytes와 압축방식,
+중첩 JAR의 stored 방식이 유지됨을 대조했다. 현 desktop/src로 새 패키지를
+만들고 기존 custom ad-hoc signer/manifest 검사를 통과했다. Java/C 재컴파일,
+정식서명·공증·배포는 하지 않았다. build 근거는 `build-41XPbn/build.json`이다.
+
+native 첫 `native-j08bk9`는 영문 안내 선택자 문제를 포함한 검증 단계 FAIL,
+두 번째 `native-RcDzlZ`는 거부·복원까지 확인한 뒤 도구의 종료기록 TypeError로
+FAIL이었다. 둘을 보존했다. 선택자·종료 전 ChildProcess 보관·소유경로검증을
+수정하고, 정상복원과 no-op을 구분하도록 UI 재분석을 추가했다. 제품을
+재빌드하지 않은 최종 `native-Y6flRA`에서:
+
+- 실제 UI로 분석91/snapshot1과 암호화 백업을 만든다. 새 합성 프로필의
+  backup 목적 키를 main process 안에서만 사용해 catalog hash만 다른 인증된
+  시험 archive를 생성한다. 키는 도구 결과/로그/외부 IPC로 반환하지 않는다.
+- 비호환 파일을 실제 UI/IPC에 전달하면 안내가 보이고 ready=true,
+  recoveryOnly=false이며 safety/backup-maintenance 파일목록·내용, 프로젝트 DTO,
+  API token과 두 archive가 그대로다. 실제 안내 화면을 직접 확인했다.
+- 계속 사용해 UI 재분석으로92/snapshot2를 만든 다음 정상 백업을 복원한다.
+  currentSnapshot1과 소스91·배지·Monaco URI로 되돌아오고 재시작 뒤에도 유지된다.
+  두 앱 프로세스는 exit0/signal없음으로 종료됐다.
+
+native 시험은 새 Playwright **mock-Keychain** 프로필이고 파일 picker 결과만
+단발 제어했다. 실제 DB/source/암호화/유지보수·기록은 제품 구현을 사용한다.
+이는 기존 실제 Keychain PASS와 별개의 증거이며 사용자의 실제 계정/DB/키를
+읽은 시험이 아니다. 새 앱 manifest SHA256은
+`75a6e93f77cdd4fa03f7e99e25a2555e7aace89f643ee35f4dcd28aac7e8f87b`,
+app.asar SHA256은 `2d6f591a4f8d3448004d7914820d8e653be49951431f81f4ab686ce15f09808e`다.
+
+**잔여:** 구 archive의 자동 변환은 구현하지 않았다. 같은 extension의 V26/V27
+복원과 비호환 사전 거부를 구별한다. 기존 프로필에 새 런타임을 적용하기 전
+extension·physical index·locale/ICU 및 되돌리기 조건을 확인해야 한다.
+실계정 project1, OAuth refresh/revoke, 실제 최소 OS·새 설치/업데이트,
+정식 release gates는 별도 미완료다.
+
+### 중단 작업 재개 후 최종 검토·반영
+
+사용자 재개 지시 후 현재 제품4개 파일이 `build-41XPbn/build.json`의 해시와
+일치하고 `native-Y6flRA`의 app.asar/manifest·driver가 당시 검증본과 일치함을
+다시 확인했다. 최종 제품 집중시험은 `unit-Hrcr0x/final-review.tap`의341개 중
+337 PASS/4 native opt-in SKIP, FAIL0이다. 최종 Settings는
+`unit-Hrcr0x/final-settings.json`38/38 PASS이며 TypeScript noEmit과 변경 파일
+ESLint도 통과했다. 기존 시험 기록을 이 최종 로그로 덮지 않았다.
+
+독립 검토에서 native helper의 일부 evaluate/response.json 등 외부 Promise가
+전체 deadline 밖에 있던 P2를 보완했다. 기존 perform/bounded를 재사용하고
+종료의 독립 제한시간·소유 ChildProcess·실패 기록은 유지했다. 이 수정은
+제품/번들 변경이 아니다. 수정본 SHA256
+`de803bb3f8452b2ad75f2ee64504135105346216ae2c6420f76ed944e4797b9a`로 같은
+앱을 재빌드하지 않고 새 empty fixture를 실행한
+`validation/local/restore-preflight/native-jGteM6/result.json`이 PASS다.
+백업 생성·비호환 거부·새 분석92에서 정상백업91로 복원·재시작 유지의4개 확인을
+통과했고 PID59231/60273은 각각 exit0/signal없음이다. 새 claim은
+`/private/tmp/cirp-voXvgj/desktop-run-8cbj7P/.isolated-run.json`이며 mock-Keychain
+전용이다. 이전 Y6flRA PASS와 최초 두 FAIL도 별도 보존한다.
+
+제품 검토에서 확정 차단급 결함은 발견되지 않았지만, CREATE 응답유실이나
+probe cleanup 실패에는 정체성을 추정해서 삭제하지 않는다. 해당 오류는
+INCOMPATIBLE가 아니라 일반 INPUT으로 처리되며 잔여 probe DB의 상세 진단·자동
+회수는 아직 없다. 정상 호환 거부 시험의 probe 부재를 모든 실패에 확대하지 않는다.
+사전검사 뒤 상태변경은 실제 load가 다시 검사하며, 유지보수 이후의 실패는 기존
+recovery-required 절차를 따른다. 프로세스 exit0를 모든 safety 종료 경합을
+검증한 것으로 확대하지 않는다.
+
+새 앱 검증 후 이번 build 사본과 두 확장 matrix의 종료된 PG/runtime/legacy
+source/TLS17개 경로만 삭제했다. 삭제 직전 해당 디렉터리에 열린 프로세스가
+없음을 확인했고 보고서·화면·로그·typed/encrypted payload214개 해시를 유지했다.
+`validation/local/restore-preflight/cleanup.json`에 대상과 보존 해시를 기록했다.
+관측 여유 공간은35,785,981,952→36,644,417,536 bytes였다. 기존 의존성·사용자
+DB/profile/Keychain·기존 source prefix와 두 보존 앱은 정리 대상이 아니다.

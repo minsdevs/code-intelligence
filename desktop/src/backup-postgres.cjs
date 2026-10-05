@@ -531,6 +531,31 @@ async function createBackupPostgres(options) {
     return freeze({ version: 1, schema: REVIEWED_SCHEMA, catalogSha256: initializedCatalog });
   }
 
+  async function readRestoreIdentity() {
+    if (mode !== 'export') fail('STAGING');
+    let result;
+    async function* script() { yield headerSql(installationId, true); }
+    await run(script, value => {
+      if (result) fail('INTEGRITY');
+      const catalogSha256 = validateHeader(value, migrations, true);
+      result = freeze({ ownerUserId: value.owner.ownerUserId, catalogSha256 });
+    }, true);
+    if (!result) fail('INTEGRITY');
+    return result;
+  }
+
+  // The same comparison is used by the disposable preflight and the real staging
+  // load. Only pinned migrations run in an empty database establish these hashes.
+  function assertRestoreCompatibility({ expected: supplied, liveOwnerUserId } = {}) {
+    if (closed) fail('CLOSED');
+    if (mode !== 'staging' || !initializedCatalog || stagingUsed) fail('STAGING');
+    const expected = validateSummary(supplied, { allowV26: true });
+    const legacy = expected.schema.migrations.length === 26;
+    if (expected.catalogSha256 !== (legacy ? initializedV26Catalog : initializedCatalog)) fail('SCHEMA');
+    if (!positiveId(liveOwnerUserId) || liveOwnerUserId !== expected.ownerUserId) fail('OWNER');
+    return expected;
+  }
+
   async function readSequenceHighWater() {
     if (mode !== 'export' && !stagingLoaded) fail('STAGING');
     const accepted = deferred(); let headerSeen = false, result;
@@ -612,12 +637,9 @@ async function createBackupPostgres(options) {
   async function loadRows({ rows, expected: supplied, writeAccounting, liveSequenceHighWater, liveOwnerUserId,
     livePreferenceRevisionHighWater } = {}) {
     const started = performance.now();
-    if (mode !== 'staging' || !initializedCatalog || stagingUsed) fail('STAGING');
-    const expected = validateSummary(supplied, { allowV26: true });
+    const expected = assertRestoreCompatibility({ expected: supplied, liveOwnerUserId });
     const inputPolicy = createBackupRestorePolicy(expected.schema);
     const legacy = inputPolicy.schema.migrations.length === 26;
-    if (expected.catalogSha256 !== (legacy ? initializedV26Catalog : initializedCatalog)) fail('SCHEMA');
-    if (!positiveId(liveOwnerUserId) || liveOwnerUserId !== expected.ownerUserId) fail('OWNER');
     const liveRevisions = validateRevisions(livePreferenceRevisionHighWater);
     if (!rows || typeof writeAccounting !== 'function') fail();
     const iteratorFunction = rows[Symbol.asyncIterator] || rows[Symbol.iterator];
@@ -801,7 +823,7 @@ async function createBackupPostgres(options) {
     closePromise = serial.then(() => { delete environment.PGPASSWORD; if (terminationFailed) fail('TERMINATION'); });
     return closePromise;
   }
-  return Object.freeze({ exportRows, initializeStaging, loadRows, readSequenceHighWater, readPreferenceRevisionHighWater,
+  return Object.freeze({ exportRows, initializeStaging, assertRestoreCompatibility, readRestoreIdentity, loadRows, readSequenceHighWater, readPreferenceRevisionHighWater,
     readRetainedCommitTimes, measureExport, close });
 }
 

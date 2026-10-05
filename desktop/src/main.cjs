@@ -997,7 +997,14 @@ async function restoreWithDialog() {
   assertSafetyReady();
   const selected = await dialog.showOpenDialog(mainWindow, { title: 'Choose an encrypted backup from this installation',
     properties: ['openFile'], filters: [{ name: 'Code Intelligence encrypted backup', extensions: ['cibackup'] }] });
-  return selected.canceled ? null : backupRuntime.restore(selected.filePaths[0]);
+  if (selected.canceled) return null;
+  try { return await backupRuntime.restore(selected.filePaths[0]); }
+  catch (error) {
+    if (error?.code === 'BACKUP_RUNTIME_INCOMPATIBLE' && error.recoveryRequired === false) {
+      return { restored: false, code: 'BACKUP_INCOMPATIBLE' };
+    }
+    throw error;
+  }
 }
 
 function registerIpc() {
