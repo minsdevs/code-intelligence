@@ -120,8 +120,10 @@ test('runtime manifest checks exact bytes and inventory, not only listed paths',
 });
 test('runtime manifest rejects Windows case collisions before any helper executes', async t => {
   const root = temporary(t), manifest = { format: 1, buildSequence: '1', platform: 'win32', arch: 'x64', backupProtocol: 3, ownershipProtocol: 1,
-    runtime: { cache: 'garnet-2.2.0' }, files: { 'a.dll': 'a'.repeat(64), 'A.dll': 'a'.repeat(64) } };
-  await assert.rejects(validateRuntimeManifest(root, manifest, { platform: 'win32', arch: 'x64' }), /invalid/);
+    runtime: { cache: 'garnet-2.2.0', postgresBin: 'postgres/bin', postgresLib: 'postgres/lib',
+      postgresPkgLib: 'postgres/lib', postgresShare: 'postgres/share' },
+    files: { 'a.dll': 'a'.repeat(64), 'A.dll': 'a'.repeat(64) } };
+  await assert.rejects(validateRuntimeManifest(root, manifest, { platform: 'win32', arch: 'x64' }), { code: 'RUNTIME_MANIFEST_INVALID' });
 });
 test('Windows product runner cannot be used to launch local Electron', async () => {
   await assert.rejects(runWindowsProduct({ env: { GITHUB_ACTIONS: 'false' } }), /Hosted workflow required/);

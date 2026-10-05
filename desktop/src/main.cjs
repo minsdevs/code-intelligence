@@ -34,6 +34,7 @@ const { createWindowsBoundary } = require('./windows-native-boundary.cjs');
 const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 const { writeStorageFile } = require('./windows-storage-files.cjs');
 const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
+const { RuntimeIntegrityError, integrityError, startupFailureCode } = require('./startup-diagnostics.cjs');
 const packageMetadata = require('../package.json');
 
 const children = new Map();
@@ -259,27 +260,33 @@ function assertTrustedRenderer(event) {
 }
 
 async function verifyRuntimeIntegrity() {
+  try {
   const root = runtimeRoot();
   const manifestFile = path.join(root, 'runtime-manifest.json');
-  if (!fs.existsSync(manifestFile)) {
-    throw new Error('Bundled desktop runtime is missing or incomplete. Run `npm run stage` before launching.');
+  let bytes;
+  try { bytes = await fsp.readFile(manifestFile, 'utf8'); }
+  catch (error) {
+    if (error.code === 'ENOENT') throw new RuntimeIntegrityError('RUNTIME_MANIFEST_MISSING');
+    throw error;
   }
-  const manifest = JSON.parse(await fsp.readFile(manifestFile, 'utf8'));
-  if (manifest.format !== 1 || manifest.platform !== process.platform || manifest.arch !== process.arch) {
-    throw new Error('Bundled runtime manifest does not match this platform.');
+  let manifest;
+  try { manifest = JSON.parse(bytes); } catch { throw new RuntimeIntegrityError('RUNTIME_MANIFEST_JSON'); }
+  if (!manifest || manifest.format !== 1) throw new RuntimeIntegrityError('RUNTIME_MANIFEST_INVALID');
+  if (manifest.platform !== process.platform || manifest.arch !== process.arch) {
+    throw new RuntimeIntegrityError('RUNTIME_MANIFEST_PLATFORM');
   }
   requireBuildSequence(manifest.buildSequence);
   if (manifest.backupProtocol !== undefined && manifest.backupProtocol !== 3) {
-    throw new Error('The bundled backup protocol is unsupported. Install a reviewed build.');
+    throw new RuntimeIntegrityError('RUNTIME_MANIFEST_PROTOCOL');
   }
   if (manifest.ownershipProtocol !== undefined && manifest.ownershipProtocol !== 1
       || manifest.backupProtocol === 3 && manifest.ownershipProtocol !== 1) {
-    throw new Error('The bundled recovery ownership protocol is missing or unsupported. Install a reviewed build.');
+    throw new RuntimeIntegrityError('RUNTIME_MANIFEST_PROTOCOL');
   }
   if (!manifest.runtime?.postgresBin || !manifest.runtime?.postgresLib
       || !manifest.runtime?.postgresPkgLib || !manifest.runtime?.postgresShare
       || !manifest.files || typeof manifest.files !== 'object') {
-    throw new Error('Bundled runtime manifest has no PostgreSQL layout. Re-run `npm run stage`.');
+    throw new RuntimeIntegrityError('RUNTIME_MANIFEST_PATH');
   }
   await validateRuntimeManifest(root, manifest);
   manifest.runtime = {
@@ -290,6 +297,7 @@ async function verifyRuntimeIntegrity() {
     postgresShare: assertRuntimeRelativePath(manifest.runtime.postgresShare, 'PostgreSQL share path')
   };
   return manifest;
+  } catch (error) { throw integrityError(error); }
 }
 
 function childLogPath(name) {
@@ -770,6 +778,7 @@ function publicRuntimeStatus() {
     services: [...children.keys()],
     aiOff: safetyStatus().aiOff,
     recoveryOnly: Boolean(runtime?.recoveryRequired || safetyStatus().recoveryOnly),
+    backupSupported: runtimeManifest ? runtimeManifest.backupProtocol === 3 : undefined,
     backupAvailable: Boolean(backupRuntime && runtime?.ready && !runtime?.recoveryRequired && !safetyStatus().recoveryOnly),
     restoreAvailable: Boolean(backupRuntime && runtime?.ready && !runtime?.recoveryRequired && !safetyStatus().recoveryOnly)
   };
@@ -1238,8 +1247,7 @@ async function startApplication() {
     runtime = runtime || { ready: false };
     runtime.error = error.message;
     runtime.recoveryRequired = true;
-    const code = ['EACCES', 'ENOENT', 'SAFETY_RECOVERY_REQUIRED', 'SAFETY_STORAGE_UNAVAILABLE', 'SAFETY_OWNER_LOST'].includes(error.code)
-      ? error.code : 'MAIN_STARTUP_FAILED';
+    const code = startupFailureCode(error);
     console.error('DESKTOP_STARTUP ' + startupPhase + ' FAILED ' + code);
     dialog.showErrorBox('Code Intelligence could not start', error.message);
     app.quit();

@@ -107,4 +107,25 @@ release 승인은 필수 gate 전부 PASS+미해결 Critical/High0+공개 지원
 
 현재1단계 중 사전 거부와 후속 정상 복원은 `codex/restore-compatibility-preflight-20261005`의 제품 코드·PG10항목·새 packaged 앱으로 확인했다. 최종 `native-jGteM6`는 비호환 거부 후 UI 재분석·정상 복원·재시작을 통과한 mock-Keychain fixture다. 후속 `codex/restore-interruption-recovery-20261005`는 같은 앱을 변경하지 않고 새 claim에서 실제 source rename ACK 실패→이전92 유지(`native-fbwjDc`), B 완료 후 cleanup 실패→복원91 유지(`native-CRrBPQ`)를 각각 복구와 추가 정상 재시작까지 확인했다. 종료 code0와 실제 shutdown recovery 오류 전달을 구분하며, 상세 결과·한계는 `docs/audit/restore-interruption-2026-10-05.md`를 따른다.
 
-다음 단위는 **복구 상태별 UI 안내 분리**(generic unavailable가 unchanged를 약속하는 현재 문구 수정), **최초 MANIFEST-stage 반복시작 실패 원인 분류**, 이후 소유 프로세스 경계가 증명된 강제종료/비용원장 replay 및 기존 데이터 적용·되돌리기 조건이다. 구 archive 자동 변환, 모든 강제종료/비용원장 replay, 기존 사용자 DB·locale 적용은 미완료이므로 G-RECOVERY 전체 상태를 PASS로 바꾸지 않는다. 2단계 실계정 project1에는 그 조건을 확인한 후 접근한다.
+후속 `codex/recovery-guidance-diagnostics-20261005`에서 **복구 상태별 UI 안내 분리**와 **MANIFEST 거부 조건의 고정 코드 분류**를 구현했다. 새 앱 `jXdOYk`의 `native-e5Y4sU`/`native-hnbzah`는 한영 복구 안내·버튼 차단과 두 실패 경로의 복구/추가 정상 재시작을 통과했고, `native-VCIheO`는 비호환 사전 거부/정상 복원/재시작을 통과했다. 최종 desktop236개 및 Settings44개가 통과했다. 과거 MANIFEST 실패의 근본 원인은 여전히 미확정이며 오류 코드 분류 구현을 과거 원인 해결로 기록하지 않는다. 상세 증거는 `docs/audit/recovery-guidance-diagnostics-2026-10-05.md`를 따른다.
+
+다음 단위는 **nonzero 비용원장의 중단/재개 검증 범위와 소유 프로세스 종료 경계 확인**, **기존 데이터 적용·되돌리기 조건 정리**다. 안전한 종료 소유권이 검토되지 않은 과거 숫자 PID 기반 시험을 재실행하지 않는다. 구 archive 자동 변환, 모든 강제종료/비용원장 replay, 기존 사용자 DB·locale 적용은 미완료이므로 G-RECOVERY 전체 상태를 PASS로 바꾸지 않는다. 2단계 실계정 project1에는 그 조건을 확인한 후 접근한다.
+
+### 최신 전체 진행표 / 보고 기준
+
+**현재 위치는 배포 전8단계 중1단계이며 1단계 전체 완료 전이다.** 이는 제품 기능 개발의
+1/8만 구현됐다는 뜻이 아니다. [11](11-first-implementation.md)의 A–E 제품 경로와
+개발용 F 앱 구동 기반은 이미 구현/부분 검증되었고, 아래는 각 배포 준비 단계의
+수용 기준 완료 여부다. 이후 작업 보고에도 현재 전체 단계, 이번 완료 단위, 잔여
+조건과 다음 작업을 함께 기록한다. 단순 단계 수를 개발 완료율로 환산하지 않는다.
+
+| 단계 | 현재 상태 | 완료 근거 또는 남은 조건 |
+| --- | --- | --- |
+| **1 데이터 복구 안정화** | **진행 중 / 여러 하위 단위 완료** | 호환성 사전 거부, 정상 복원, 두 I/O 중단 복구/재시작, 상태별 안내·시작 진단 완료. nonzero 원장·전체 crash 경계·구 DB/locale 적용 조건과 최초 시작 실패 원인 검증 잔여 |
+| 2 실제 GitHub 가져오기 | 실계정 후속 검증 대기 | 복구 UI/기반 구현과 합성 경로는 존재. 기존 실패 project1의 실제 UI 재분석은1단계 사용자 프로필 적용 조건 이후 |
+| 3 인증 수명주기 | 부분 구현 / 전체 수용 미완료 | 연결/해제·만료 표시/세대 방어 등 구현. 실권한 철회·전체 수명주기·자동 refresh/rotation 잔여 |
+| 4 분석·작업 신뢰 | 부분 구현·검증 / 확대 수용 미완료 | 개요/탐색/source snapshot/파일 결과 기반 구현. 완료·취소 경합/worker crash 및 대표 corpus/독립 oracle 전체 기준 잔여 |
+| 5 성능·보안·사용성 | 통합 수용 미완료 | 한 호스트 부분 측정·경계 시험만으로20회 p95/RSS, 독립 보안/비용 경합·사용자 과제 전체를 대체하지 않음 |
+| 6 새 설치·업데이트 | 별도 기기·OS·서명 조건 대기 | 개발 Mac 패키지 구동 검증 존재. 개발도구 없는 새 Mac·실제 최소 OS·signed update/rollback 미완료 |
+| 7 배포물·운영 준비 | 최종 정리 미완료 | 정확한 배포 후보의 SBOM/license/취약점·지원 범위·운영 App 공개 설치/대응 기준 확정 필요 |
+| 8 출시 최종 판정 | **No-Go / 미완료** | 필수 release gate·독립 검토·정식 서명/공증 자격/승인과 공개 승인 필요 |

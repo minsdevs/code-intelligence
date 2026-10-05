@@ -1047,7 +1047,7 @@ for (const ownershipProtocol of [undefined, 0, 2, '1', null]) {
     assert.equal(h.events.includes('secrets.load'), false); assert.equal(h.events.includes('ownerLocks.open'), false);
     assert.equal(h.children.length, 0); assert.equal(h.leaseChildren.length, 0); assert.equal(h.browser.length, 0);
     assert.equal(fs.existsSync(path.join(h.paths.userData, 'secrets.enc')), false);
-    assert.match(h.dialogs[0][1], /ownership protocol/);
+    assert.equal(h.dialogs[0][1], 'Bundled runtime manifest or inventory is invalid (RUNTIME_MANIFEST_PROTOCOL).');
   });
 }
 
@@ -1218,3 +1218,56 @@ test('a recovery directory with no pending authority reopens B normally without 
   assert.equal(h.events.includes('backup.recover'), false); assert.equal(h.children.length, 4);
   assert.deepEqual(h.controls.safetyOptions.map(value => value.recoveryMode), [true, false]);
 });
+
+test('runtime status distinguishes bundled backup support from current recovery availability', async t => {
+  const h = await harness(t, { backupProtocol: 3 }); await h.start();
+  assert.equal(h.run('publicRuntimeStatus().backupSupported'), true);
+  h.run('runtime.recoveryRequired = true; runtime.ready = false');
+  const state = h.run('publicRuntimeStatus()');
+  assert.equal(state.backupSupported, true); assert.equal(state.recoveryOnly, true);
+  assert.equal(state.backupAvailable, false); assert.equal(state.restoreAvailable, false);
+});
+
+test('a build without the backup protocol explicitly reports unsupported without a recovery claim', async t => {
+  const h = await harness(t); await h.start();
+  const state = h.run('publicRuntimeStatus()');
+  assert.equal(state.backupSupported, false); assert.equal(state.recoveryOnly, false);
+  assert.equal(state.backupAvailable, false); assert.equal(state.restoreAvailable, false);
+});
+
+for (const mode of ['missing', 'json', 'platform', 'build', 'protocol', 'layout', 'hash', 'EMFILE', 'EACCES']) {
+  test(`main classifies ${mode} manifest startup failure before opening user secrets or services`, async t => {
+    const expectedCodes = { missing: 'RUNTIME_MANIFEST_MISSING', json: 'RUNTIME_MANIFEST_JSON',
+      platform: 'RUNTIME_MANIFEST_PLATFORM', build: 'SAFETY_BUILD_SEQUENCE_INVALID', protocol: 'RUNTIME_MANIFEST_PROTOCOL',
+      layout: 'RUNTIME_MANIFEST_PATH', hash: 'RUNTIME_INVENTORY_HASH', EMFILE: 'RUNTIME_IO_EMFILE', EACCES: 'RUNTIME_IO_EACCES' };
+    const h = await harness(t, { modules: ['EMFILE', 'EACCES'].includes(mode) ? {
+      'node:fs/promises': { ...fsp, async readFile(file, ...args) {
+        if (path.basename(file) === 'runtime-manifest.json') throw Object.assign(new Error('private-sentinel /private/secrets'), { code: mode });
+        return fsp.readFile(file, ...args);
+      } },
+    } : {} });
+    const manifestFile = path.join(h.run('runtimeRoot()'), 'runtime-manifest.json');
+    const manifest = JSON.parse(await fsp.readFile(manifestFile, 'utf8'));
+    if (mode === 'missing') await fsp.unlink(manifestFile);
+    else if (mode === 'json') await fsp.writeFile(manifestFile, '{invalid-private-sentinel');
+    else {
+      if (mode === 'platform') manifest.arch = 'x64';
+      if (mode === 'build') manifest.buildSequence = '01';
+      if (mode === 'protocol') manifest.backupProtocol = 2;
+      if (mode === 'layout') manifest.runtime.postgresBin = '../private-sentinel';
+      if (mode === 'hash') manifest.files['jre/bin/java'] = 'a'.repeat(64);
+      await fsp.writeFile(manifestFile, JSON.stringify(manifest));
+    }
+    const logs = []; h.context.console = { ...console, error: line => logs.push(line) };
+    await h.start(); await h.shutdown();
+    const failureLine = logs.find(line => line.startsWith('DESKTOP_STARTUP MANIFEST FAILED '));
+    assert.equal(failureLine, 'DESKTOP_STARTUP MANIFEST FAILED ' + expectedCodes[mode]);
+    const { parseStartupLine } = require('../src/startup-diagnostics.cjs');
+    assert.deepEqual(parseStartupLine(failureLine), { phase: 'MANIFEST', state: 'FAILED', code: expectedCodes[mode] });
+    assert.equal(h.events.includes('secrets.load'), false); assert.equal(h.children.length, 0); assert.equal(h.browser.length, 0);
+    assert.equal(fs.existsSync(path.join(h.paths.userData, 'secrets.enc')), false);
+    assert.equal(h.dialogs[0][0], 'Code Intelligence could not start');
+    assert.match(h.dialogs[0][1], new RegExp(expectedCodes[mode]));
+    assert.doesNotMatch(JSON.stringify(h.dialogs) + JSON.stringify(logs), /private-sentinel|private\/secrets/);
+  });
+}

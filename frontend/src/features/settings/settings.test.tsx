@@ -673,7 +673,7 @@ describe('Desktop feature availability in Settings', () => {
     await act(async () => {
       gate.resolve({ ready: true, error: null, services: ['postgres'], backupAvailable: false, restoreAvailable: false })
     })
-    expect(await screen.findByText('이 빌드에서는 백업과 복원을 사용할 수 없습니다. 기존 데이터는 그대로 보관됩니다.')).toBeInTheDocument()
+    expect(await screen.findByText('현재 백업 또는 복원을 사용할 수 없습니다. 계속하기 전에 아래 실행 상태와 오류를 확인하세요.')).toBeInTheDocument()
     expect(backup).toBeDisabled()
     expect(restore).toBeDisabled()
     fireEvent.click(backup)
@@ -681,7 +681,7 @@ describe('Desktop feature availability in Settings', () => {
     expect(bridge.backup).not.toHaveBeenCalled()
     expect(bridge.restore).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'English' }))
-    expect(await screen.findByText('Backup and restore are unavailable in this build. Your existing data is kept unchanged.')).toBeInTheDocument()
+    expect(await screen.findByText('Backup or restore is currently unavailable. Check the runtime status and error below before continuing.')).toBeInTheDocument()
   })
 
   it('disables an already open restore confirmation on runtime error and later blocked status', async () => {
@@ -703,7 +703,7 @@ describe('Desktop feature availability in Settings', () => {
     act(() => {
       client.setQueryData(['desktop-runtime'], { ready: true, error: null, services: ['postgres'], backupAvailable: false, restoreAvailable: false })
     })
-    await screen.findByText('이 빌드에서는 백업과 복원을 사용할 수 없습니다. 기존 데이터는 그대로 보관됩니다.')
+    await screen.findByText('현재 백업 또는 복원을 사용할 수 없습니다. 계속하기 전에 아래 실행 상태와 오류를 확인하세요.')
     expect(confirm).toBeDisabled()
     fireEvent.click(confirm)
     expect(bridge.restore).not.toHaveBeenCalled()
@@ -752,7 +752,7 @@ describe('Desktop feature availability in Settings', () => {
     await waitFor(() => expect(bridge.runtimeStatus).toHaveBeenCalledTimes(2))
     expect(restore).toBeDisabled()
     expect(backup).toBeDisabled()
-    const unavailable = { ready: false, error: 'Backup or restore requires offline recovery.', services: ['postgres'],
+    const unavailable = { ready: false, error: 'Backup or restore requires offline recovery.', services: ['postgres'], recoveryOnly: true,
       backupAvailable: false, restoreAvailable: false }
     await act(async () => { refreshed.resolve(unavailable) })
     expect(await screen.findByText('요청에 실패했습니다.')).toBeInTheDocument()
@@ -763,7 +763,102 @@ describe('Desktop feature availability in Settings', () => {
     expect(document.body.textContent).not.toContain('SENTINEL-private-native-restore-detail')
     expect(screen.queryByText(/호환되지 않는 백업이라/)).not.toBeInTheDocument()
     expect(screen.queryByText('Recovery 백업')).not.toBeInTheDocument()
+    expect(screen.getByTestId('runtime-guidance')).toHaveTextContent('데이터가 이미 교체되었을 수 있으므로')
+    expect(screen.getByRole('button', { name: 'Runtime 재시작' })).toBeDisabled()
     expect(bridge.restore).toHaveBeenCalledTimes(1)
+  })
+
+  it('distinguishes explicit unsupported builds from unavailable operations without claiming preserved data', async () => {
+    const bridge = installDesktopBridge(() => Promise.resolve({ ready: true, error: null, services: [], backupSupported: false }))
+    renderWithInspectableCache()
+    expect(await screen.findByText('이 앱 빌드는 보호된 백업과 복원 기능을 지원하지 않습니다.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '백업 생성' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '백업 복원' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Runtime 재시작' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: '백업 생성' }))
+    expect(bridge.backup).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'English' }))
+    expect(await screen.findByText('This app build does not support protected backup and restore.')).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('kept unchanged')
+  })
+
+  it('gives recovery guidance precedence over contradictory ready and supported flags in both languages', async () => {
+    const bridge = installDesktopBridge(() => Promise.resolve({ ready: true, error: null, services: ['postgres'],
+      recoveryOnly: true, backupSupported: false, backupAvailable: true, restoreAvailable: true }))
+    renderWithInspectableCache()
+    expect(await screen.findByTestId('runtime-guidance')).toHaveAttribute('role', 'alert')
+    expect(screen.getByTestId('runtime-guidance')).toHaveTextContent('백업·체크포인트·복구 파일을 삭제하지 마세요')
+    expect(screen.getByTestId('runtime-guidance')).not.toHaveTextContent('지원하지 않습니다')
+    for (const name of ['백업 생성', '백업 복원', 'Runtime 재시작']) {
+      const button = screen.getByRole('button', { name })
+      expect(button).toBeDisabled()
+      fireEvent.click(button)
+    }
+    expect(bridge.restartRuntime).not.toHaveBeenCalled()
+    expect(bridge.backup).not.toHaveBeenCalled()
+    expect(bridge.restore).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'English' }))
+    expect(screen.getByTestId('runtime-guidance')).toHaveTextContent('Data may already have been replaced')
+    expect(screen.getByTestId('runtime-guidance')).toHaveTextContent('Restart runtime does not perform this recovery')
+    expect(document.body).not.toHaveTextContent('kept unchanged')
+  })
+
+  it('keeps known recovery guidance through a failed status refresh instead of clearing it with stale ready data', async () => {
+    const bridge = installDesktopBridge(() => Promise.resolve({ ready: false, error: null, services: [], recoveryOnly: true }))
+    const { client } = renderWithInspectableCache()
+    await screen.findByTestId('runtime-guidance')
+    bridge.runtimeStatus.mockRejectedValueOnce(new Error('status unavailable'))
+    await act(async () => { await client.invalidateQueries({ queryKey: ['desktop-runtime'] }) })
+    expect(screen.getByTestId('runtime-guidance')).toHaveTextContent('복구 검증이 필요합니다')
+    expect(screen.getByRole('button', { name: 'Runtime 재시작' })).toBeDisabled()
+  })
+
+  it('never describes a loading or ordinary unready runtime as an unsupported build', async () => {
+    const gate = deferred<RuntimeStatus>()
+    installDesktopBridge(() => gate.promise)
+    const { client } = renderWithInspectableCache()
+    expect(screen.queryByTestId('runtime-guidance')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Runtime 재시작' })).toBeDisabled()
+    await act(async () => { gate.resolve({ ready: false, error: null, services: [], backupSupported: true }) })
+    expect(await screen.findByTestId('runtime-guidance')).toHaveTextContent('현재 백업 또는 복원을 사용할 수 없습니다')
+    expect(document.body).not.toHaveTextContent('이 앱 빌드는 보호된 백업과 복원 기능을 지원하지 않습니다')
+    act(() => { client.setQueryData(['desktop-runtime'], { ready: true, error: null, services: [], backupSupported: true }) })
+    await waitFor(() => expect(screen.queryByTestId('runtime-guidance')).not.toBeInTheDocument())
+  })
+
+  it('refreshes status after backup failure, prevents a concurrent runtime restart, and reconciles to recovery', async () => {
+    const gate = deferred<string | null>()
+    const ready = { ready: true, error: null, services: [], backupSupported: true }
+    const bridge = installDesktopBridge(() => Promise.resolve(ready))
+    bridge.backup.mockImplementationOnce(() => gate.promise.then(() => { throw new Error('backup failed') }))
+    renderWithInspectableCache()
+    const backup = screen.getByRole('button', { name: '백업 생성' })
+    await waitFor(() => expect(backup).toBeEnabled())
+    fireEvent.click(backup)
+    expect(await screen.findByTestId('runtime-guidance')).toHaveTextContent('실행 환경 작업이 진행 중입니다')
+    const restart = screen.getByRole('button', { name: 'Runtime 재시작' })
+    expect(restart).toBeDisabled()
+    fireEvent.click(restart)
+    expect(bridge.restartRuntime).not.toHaveBeenCalled()
+    bridge.runtimeStatus.mockResolvedValueOnce({ ready: false, error: null, services: [], recoveryOnly: true })
+    await act(async () => { gate.resolve(null) })
+    await waitFor(() => expect(screen.getByTestId('runtime-guidance')).toHaveTextContent('복구 검증이 필요합니다'))
+    expect(bridge.runtimeStatus).toHaveBeenCalledTimes(2)
+    expect(restart).toBeDisabled()
+  })
+
+  it('hides an older incompatible preservation notice if later runtime state requires recovery', async () => {
+    const bridge = installDesktopBridge(() => Promise.resolve({ ready: true, error: null, services: [] }))
+    bridge.restore.mockResolvedValueOnce({ restored: false, code: 'BACKUP_INCOMPATIBLE' })
+    const { client } = renderWithInspectableCache()
+    const restore = screen.getByRole('button', { name: '백업 복원' })
+    await waitFor(() => expect(restore).toBeEnabled())
+    fireEvent.click(restore)
+    fireEvent.click(screen.getByRole('button', { name: '복원 확인' }))
+    await screen.findByText(/기존 데이터와 백업 파일은 유지됩니다/)
+    act(() => { client.setQueryData(['desktop-runtime'], { ready: false, error: null, services: [], recoveryOnly: true }) })
+    expect(await screen.findByTestId('runtime-guidance')).toHaveTextContent('복구 검증이 필요합니다')
+    expect(screen.queryByText(/기존 데이터와 백업 파일은 유지됩니다/)).not.toBeInTheDocument()
   })
 
   it('clears the prior incompatible notice when a later native restore selection is canceled', async () => {

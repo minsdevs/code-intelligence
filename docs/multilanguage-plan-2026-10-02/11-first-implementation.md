@@ -16,6 +16,12 @@
 
 ## 구현·검증 경계
 
+**최신 전체 진행 보고:** 제품 A–E 구현과 F 개발용 앱 검증을 배포 수용 완료와 구분한다.
+2026-10-05 후속 복구 안내/시작 진단은 [배포 전8단계 진행표](07-delivery-release-gates.md#최신-전체-진행표--보고-기준)의
+1단계 하위 단위다. 현재1단계 전체는 진행 중이며 실계정 후속 적용·전체 crash/원장·
+최소 OS/서명 배포를 완료로 표시하지 않는다. 상세는
+[복구 안내·진단 검증](../audit/recovery-guidance-diagnostics-2026-10-05.md)을 따른다.
+
 최신 사용자 지시에 따라 **원본 로컬 저장소 `/Users/minseokchae/Dev/code-intelligence`(CoS `/code-intelligence`)에서 기능별 브랜치를 만들어 작업한다.** Orca `main-2`와 별도 clone은 사용하지 않는다. 주요 기능의 구현·검증을 마치면 commit → push → PR → merge까지 진행하고 모든 커밋·병합 메시지에 `[skip ci]`를 붙인다. 이전의 잔여 한도 2% 원격 발행 조건은 폐기됐다. GitHub Actions와 정식 서명·공증·배포는 계속 금지하며 보호 규칙을 우회하지 않는다. 과거 `main-2` 또는 `.cos-pre-release-recovery-20261005` 경로는 당시 증거의 출처이며 현재 작업/실행 지시가 아니다. 원본 설치 앱·DB·Keychain/profile·기존 산출물과 사용자 작업을 보존하고 자동 stash/reset/clean은 하지 않는다.
 
 2026-10-05 사용자가 저장공간 확보와 다음 단계 진행을 명시했다. 원본/원격 main `a0b572a` 일치와 약36GiB 여유 공간, 8GiB 사전 검사 통과를 확인한 뒤 원본의 `codex/native-validation-20261005` 브랜치에서 native 검증을 재개했다. 기존 앱·계정 프로필과 과거 실패/성공 증거는 보존한다.

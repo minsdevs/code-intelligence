@@ -581,7 +581,7 @@ test('runtime status includes only public OFF/recovery and unavailable actions, 
     keyProvider:'private-keys', requests:['private-obligation'], installationId:'private-identity'});
     assertTrustedRenderer = () => {}; registerIpc();`);
   const result = h.handlers.get('runtime:status')({});
-  assert.deepEqual(Object.keys(result).sort(), ['aiOff', 'backupAvailable', 'error', 'ready', 'recoveryOnly', 'restoreAvailable', 'services']);
+  assert.deepEqual(Object.keys(result).sort(), ['aiOff', 'backupAvailable', 'backupSupported', 'error', 'ready', 'recoveryOnly', 'restoreAvailable', 'services']);
   assert.equal(result.aiOff, true); assert.equal(result.recoveryOnly, false);
   assert.equal(result.backupAvailable, false); assert.equal(result.restoreAvailable, false);
   assert.equal(JSON.stringify(result).includes('private-'), false);

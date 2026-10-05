@@ -4,6 +4,9 @@ export type RuntimeStatus = {
   ready: boolean
   error: string | null
   services: string[]
+  aiOff?: boolean
+  recoveryOnly?: boolean
+  backupSupported?: boolean
   backupAvailable?: boolean
   restoreAvailable?: boolean
 }
