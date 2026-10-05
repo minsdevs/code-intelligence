@@ -127,6 +127,35 @@ accuracy7·golden corpus23, TS222·tree8을 검증했다. 제품소스/오라클
 원장은 [Docker 통합 후속](../audit/docker-integration-2026-10-06.md)을 따른다.
 이 수행은 전체3·4·5단계의 검증을 진전시켰으나 정식 출시 No-Go는 유지한다.
 
+이후4단계 [React export 연결 보정](../audit/react-route-binding-2026-10-06.md)은
+default/alias의 실제선언 참조와 미해결·충돌 처리, 동일snapshot 재분석 연결철회를
+추가했다. 현재 백엔드 기본실행1646PASS/12조건부skip, TS266/266, 실제sidecar+PG11/11,
+선택검증도구122/122가 통과했다. Java/TS를 새로 빌드한 후보는 qUMAST다. 기존 독립
+oracle와 품질기준은 유지하며, 이 정적 바인딩 범위를 동적 React 전체 지원으로
+확대하지 않는다. 현재 작업은4단계 보정 및6단계 후보반영이다.
+
+qUMAST의 실제 `--analysis-only` 실행은 대표 입력·React 연결·보관 소스·재시작13개
+기록검사를 통과했다. 다만 일반 통합 실행의 종료 timeout과 대표 입력 구간의 두
+실패는 별도 보존했고 원인은 미확정이다. 분석전용 PASS로 backup/restore·safeStorage·
+삭제 시나리오를 통과 처리하지 않는다. 다음 실제 앱 작업은 이 일반 시퀀스의 실패
+원인 분류이며, 결과와 정확한 source/artifact 해시는
+[React 검증 원장](../audit/react-route-binding-validation-2026-10-06.json)을 따른다.
+
+인계 전 checkpoint: 이후 qUMAST 일반시퀀스 `product-RkDN8L`35개 검사·6회 direct app
+exit0는 통과했다. 앞선 두 실패의 원인은 아직 미확정이다. 추가 package.json
+exports/main을 무시한 src/index 추측 연결을 차단하는 마지막 수정과 TS5개/실제DB1개
+반례는 작성했지만, 재검증 요청이 도구 보안확인 단계에서 차단되어 실행하지 못했다.
+현재 qUMAST·기존266/11/1646 결과는 이 마지막 수정을 포함하지 않는다. 따라서 이번
+4단계 단위는 **마지막 보호 수정 재검증·새 후보 반영·병합 전**으로 유지한다.
+
+그 다음 [최신 후속](../audit/pre-release-continuation-2026-10-06.md)에서 마지막 보호
+수정의 TS271·실제sidecar/PG12개를 검증하고, 완료 알림 유실의 서버3개/화면11개
+실패를 재현한 뒤 수정했다. 최종 SSE19·backend1665PASS/12명시skip·frontend436·
+타입/lint·desktop/검증기212·corpus23이 통과했다. 새 후보 j5EJLB의 일반 native
+36개 기록검사와6회 COMPLETE/정상종료가 통과했고 누락 suite는 없다. 종료 오류가
+exit0에 가려지지 않도록 진단과 검증을 보강했다. 과거 두 native 실패의 원인까지
+확정한 것은 아니다. 위 미검증 checkpoint는 이 후속으로 해소된 과거 상태다.
+
 **현재 수행 위치는 통합 후보를 고정하고 8단계 출시 전 최종 판정을 기록한 시점이다.
 판정은 No-Go이며, 1–7단계의 필수 출시 수용조건이 모두 완료됐다는 뜻은 아니다.**
 중단 사이 PR92의 비용원장 복구와 PR93의 인증 갱신·소비자 권한 검증이 병합되었고,
@@ -134,8 +163,8 @@ accuracy7·golden corpus23, TS222·tree8을 검증했다. 제품소스/오라클
 이전의 ‘1단계에서 진행 중’이라는 보고 위치는 이 후속 수행으로 갱신한다.
 
 최신 후보/원장과 미검증 사유는
-[통합 후보 최종 보고](../audit/pre-release-candidate-2026-10-05.md) 및
-[검증 해시 원장](../audit/pre-release-candidate-validation-2026-10-05.json)을 따른다.
+[후속 후보 최종 보고](../audit/pre-release-continuation-2026-10-06.md) 및
+[검증 해시 원장](../audit/pre-release-continuation-validation-2026-10-06.json)을 따른다.
 제품 A–E 구현, 개발용 앱의 기능 검증, 정식 출시 수용을 구분하며 미검증 항목을
 통과로 세거나 단계 수를 개발 완료율로 환산하지 않는다. 이후 보고에도 전체 수행
 위치, 이번 완료 단위, 남은 조건과 다음 작업을 함께 기록한다.
@@ -145,8 +174,8 @@ accuracy7·golden corpus23, TS222·tree8을 검증했다. 제품소스/오라클
 | 1 데이터 복구 안정화 | 자동화 단위·후보 회귀 완료 / 전체 수용 미완료 | 173 비용원장 보존·Node owner 중단2경계,202 동일프로세스 rollback과 후보 정상/오류 복원 확인. Electron 전체 crash·전원손실·실사용 DB/locale 적용 조건·최초 시작 실패 원인 잔여 |
 | 2 실제 GitHub 가져오기 | 소비자 권한 검증 구현·회귀 완료 / 실계정 대기 | repo·clone/import·PR metadata에 revision-bound 권한과 결과 게시 검증. 기존 실패 project1의 실제 UI 재분석은 사용자 데이터 적용 조건 충족 후 |
 | 3 인증 수명주기 | refresh/CAS 구현·기본 Docker 인증통합 보완 / 실권한 수용 미완료 | 기존 JDBC6과 별도로 실제 Spring HTTP/JPA/Redis 인증13, 유지보수HTTP9 및 기본backend suite 통과. 실제 GitHub refresh/revoke/SSO와 그 전체운영경로 수용은 별도 |
-| 4 분석·작업 신뢰 | 기본backend1639PASS·실제sidecar accuracy7 보완 / 광범위 정확도·경합 미완료 | 초기9실패는 현재계약에 맞는 fixture/기대값과 runner경로로 보정;oracle/product무변경. TS222·tree8PASS. default-export route 연결 P2와 독립corpus·전체취소/중단 경합 잔여 |
-| 5 성능·보안·사용성 | Docker golden corpus23·기존 단일실행 성능기준 보완 / 전체 수용 미완료 |57개fixture, timedGradle33초/789232KiB로 기존300초/2097152KiB 이내. 보호runner 구성검사이며20회전체앱p95/RSS·독립보안·사용자 과제·전체공급망을 대체하지 않음 |
-| 6 새 설치·업데이트 | 현재 Java/frontend/desktop 후보 제작·호스트 검증 완료 / 실제 설치 수용 대기 | Imupzt ASAR/JAR/manifest readback·구동·복원·재시작 확인. 새 기기·최소 OS·정식 서명/공증·signed update/rollback 미완료 |
-| 7 배포물·운영 준비 | 후보 해시·문서·정적 component inventory·제한된 보안 조회 정리 완료 / 운영 조건 잔여 | 완전한 SBOM/라이선스 의무·브라우저/native 공급망·운영 App 외부 설치·지원 주체와 정책 확정 필요 |
+| 4 분석·작업 신뢰 | 마지막 binding/완료 알림 수정·회귀 완료 / 독립 수용 미완료 | TS271·실제sidecar12·backend1665PASS/12명시skip, SSE19·frontend436. package-entry 추측 거부·DB 완료 알림 복구와 snapshot 보존 검증. 독립corpus·모든취소/중단/재시도 간 이벤트 경합은 별도 |
+| 5 성능·보안·사용성 | corpus23·현재 후보 제한된 보안 조회 완료 / 전체 수용 미완료 |57개fixture, timedGradle36초/955424KiB; native 대표입력890파일의 단일실행 관찰.20회전체앱p95/RSS·독립보안·사용자 과제·전체공급망은 별도 |
+| 6 새 설치·업데이트 | j5EJLB 제작·일반36개 기록검사 통과 / 실기기 설치 대기 | 최신guard/SSE/종료진단 포함,750class·30분석기파일·43desktop소스 readback.6회 COMPLETE·code0. 새기기·최소OS·정식서명/업데이트와 과거 간헐실패의 원인 확정은 미완료 |
+| 7 배포물·운영 준비 | 현재 후보 해시·문서·정적 inventory·공개 좌표276개 조회 완료 / 운영 조건 잔여 | advisory일치0·미조회jar1을 구분. 완전한 SBOM/라이선스 의무·브라우저/native 공급망·운영 App 외부 설치·지원 주체와 정책 확정 필요 |
 | **8 출시 최종 판정** | **이번 후보의 No-Go 판정 기록 완료 / 출시 미승인** | 앞선 필수 gate·독립 검토·정식 서명/공증 자격과 최종 공개 승인 전 배포 금지. 미검증을 통과로 바꾸지 않음 |

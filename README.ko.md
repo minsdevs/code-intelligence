@@ -4,17 +4,27 @@
 
 2026-10-05 제품 개편: 레포 개요·분석 시점별 검색 표·선택 주변 관계·보관 소스 탐색을 구현했습니다. 학습 관리는 제거하고 기존 데이터는 보존했습니다. [현재 구현과 실제 앱 검증 범위](docs/multilanguage-plan-2026-10-02/11-first-implementation.md)에 최초 native FAIL/후속 PASS, 계정 연결 관리, 검토된 V26→V27 백업 호환성을 구분했습니다. Developer ID 서명·공증·정식 배포는 아직 완료하지 않았습니다. 아래 날짜별 감사 기록은 과거 범위를 유지합니다.
 
-최신 배포 전 작업은 [통합 후보·검증·의존성 점검·전체8단계 판정](docs/audit/pre-release-candidate-2026-10-05.md)을
+최신 배포 전 작업은 [현재 후보·검증·전체8단계 수용 잔여](docs/audit/pre-release-continuation-2026-10-06.md)을
 따릅니다. device-origin 인증 갱신의 영속 claim/CAS와 GitHub 소비자의 자격증명 revision 검증을
 구현했습니다. 합성 시험은 실계정 refresh·철회·SSO나 새 기기 설치를 인증하지 않습니다.
 후보는 로컬 ad-hoc Validation 앱이며 공개 릴리스가 아닙니다. 아래 과거 앱 경로가 아니라
 최신 보고서의 정확한 후보·격리 claim 및 증거를 사용하십시오.
 
-[Docker 통합 후속](docs/audit/docker-integration-2026-10-06.md)에서 기본 백엔드
-1,639개 통과(명시적 opt-in은 별도), 실제 분석기·DB 정확도 fixture, 유지보수 HTTP
-경계와 기존 timed corpus 기준을 검증했습니다. 제품 소스와 보존 후보는 변경하지
-않았습니다. 이전 Docker 실행 불가 조건을 해소한 것이며 실계정·독립 품질·정식
-서명 배포 조건까지 통과했다는 뜻은 아닙니다.
+[초기 Docker 통합 후속](docs/audit/docker-integration-2026-10-06.md)에서 이전 실행환경
+차단을 해소했습니다. 최신 후속은 기본 백엔드1,665개 통과/12개 명시적 제외,
+실제 분석기·PostgreSQL12개, SSE19개, corpus23개를 검증했습니다. 프런트436개와
+타입/lint, 분석기271개, desktop·검증기 선택212개도 통과했습니다. 시험 범위가
+겹치므로 고유 시험 수로 합산하지 않으며, 실계정·독립 품질·정식 서명 배포의
+수용조건은 별도입니다.
+
+[React export 연결 후속](docs/audit/react-route-binding-2026-10-06.md)에서 실제 선언에
+근거한 default/alias 화면 연결과 미해결 처리, 같은 스냅샷 재분석의 오래된 연결
+철회를 구현했습니다. 최신 후보 **j5EJLB**는 검증을 마친 패키지 entry 보호 수정,
+작업 완료 알림 복구와 고정 코드 종료 진단을 포함하며 Java와 **TypeScript 분석기
+코드를 함께 다시 빌드**했습니다. qUMAST/Imupzt의 증거는 과거 기록으로 보존합니다.
+지원 범위 밖의 동적·helper·익명·star export를 추측해 연결하지 않습니다. 정확한
+후보와 실제 앱 검증 결과는 최신 보고서를 따르며, 시험 수나 이전 후보의 통과를
+정식 출시 승인으로 확대하지 않습니다.
 
 과거 감사: [2026-10-02 출시 점검 보고서](docs/release-audit-2026-10-02.md).
 후속 구현과 검증은 [통합 결과](docs/audit/execution-results-2026-10-02.md),

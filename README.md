@@ -4,18 +4,29 @@
 
 Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
 
-Latest pre-deployment work: [candidate, validation, dependency review and eight-stage verdict](docs/audit/pre-release-candidate-2026-10-05.md).
+Latest pre-deployment work: [current candidate, validation and remaining release gates](docs/audit/pre-release-continuation-2026-10-06.md).
 The device-origin credential refresh/CAS and revision-bound GitHub consumers are implemented;
 real-account refresh/revoke/SSO and clean-machine installation are not certified by synthetic tests.
 The current candidate is a local ad-hoc Validation build, not a public release. Use the exact
 candidate/claim and evidence instructions in that report, not an old bundle path below.
 
-The [Docker integration follow-up](docs/audit/docker-integration-2026-10-06.md)
-now verifies the configured backend suite (1,639 passes; explicit opt-ins reported
-separately), actual local-analyzer fixture accuracy, maintenance HTTP isolation and
-the existing timed corpus baseline. Product source and the retained candidate are
-unchanged. This removes the earlier Docker-unavailable execution blocker, not the
-remaining real-account, independent-quality or signed-release requirements.
+The [initial Docker integration follow-up](docs/audit/docker-integration-2026-10-06.md)
+removed the earlier Docker-unavailable execution blocker. The current continuation
+verifies 1,665 backend passes with12 explicit skips,12 actual-analyzer/PostgreSQL
+cases,19 SSE cases and23 corpus cases. It also records436 frontend passes,
+TypeScript/lint checks,271 analyzer passes and212 selected desktop/runner contracts.
+Overlapping suites are not a unique-test total; real-account, independent-quality
+and signed-release acceptance remain separate.
+
+The [React export-binding follow-up](docs/audit/react-route-binding-2026-10-06.md)
+adds declaration-grounded default/alias routing, conservative unresolved results,
+and same-snapshot stale-link removal. The latest candidate `j5EJLB` contains the
+validated package-entry guard, job-completion reconciliation and fixed-code
+shutdown diagnostics, with rebuilt Java **and TypeScript analyzer code**.
+`qUMAST`/`Imupzt` and their results remain historical. Dynamic/helper/anonymous/
+star-export cases outside the supported static subset are not guessed. The latest
+report identifies the exact candidate and its native results; neither unit counts
+nor an older candidate establish production release approval.
 
 Historical audit: [2026-10-02 release assessment](docs/release-audit-2026-10-02.md).
 Follow-up implementation and verification: [integrated results](docs/audit/execution-results-2026-10-02.md),

@@ -14,6 +14,8 @@ node validation/pre-release/run-docker-integration.cjs --suite auth \
   --socket "unix://$HOME/.docker/run/docker.sock"
 node validation/pre-release/run-docker-integration.cjs --suite backend \
   --socket "unix://$HOME/.docker/run/docker.sock"
+node validation/pre-release/run-docker-integration.cjs --suite events \
+  --socket "unix://$HOME/.docker/run/docker.sock"
 node validation/pre-release/run-docker-integration.cjs --suite maintenance \
   --socket "unix://$HOME/.docker/run/docker.sock"
 node validation/pre-release/run-docker-integration.cjs --suite accuracy \
@@ -31,7 +33,9 @@ the runner only observes preexisting container IDs/states and refuses success wh
 new containers remain. It never infers ownership from a numeric PID/container diff.
 
 `maintenance` alone enables its reviewed opt-in class. `backend` preserves default
-task exclusions and explicit opt-in skips. `accuracy` starts the actual local TS
+task exclusions and explicit opt-in skips. `events` selects the SSE subscription
+and lifecycle tests: real Spring emitters/MVC framing with synthetic job/Redis
+inputs, no application DB. `accuracy` starts the actual local TS
 sidecar; ordinary backend tests may use the fixture fake. `corpus` checks the existing
 quality-baseline file and timed-Gradle RSS, not whole-app process-tree p95. Each command
 has fresh reports/JUnit; failed results are not overwritten by a successful retry.
@@ -40,6 +44,19 @@ See `docs/audit/docker-integration-2026-10-06.md` for the initial failures, fixe
 raw-count caveat and remaining real-account/independent/OS acceptance requirements.
 Tests for the new command ownership/environment contracts run with
 `node --test validation/pre-release/test/docker-integration.test.cjs`.
+
+## Frontend source regression tests
+
+```sh
+node frontend/node_modules/vitest/vitest.mjs run \
+  --config validation/pre-release/frontend-regression.config.mjs
+```
+
+This selects every frontend `src/**/*.{test,spec}.{ts,tsx}` test using the shared
+DOM configuration, without the application's Vite config, `.env` loading, dev
+proxy or entry point. Fetch and XMLHttpRequest need test doubles; the shared
+setup rejects an unstubbed call. It is not an OS network sandbox or a real browser
+acceptance run. Type checking and lint remain separate required commands.
 
 ## Nonzero cost / restore and owner-crash recovery
 
@@ -99,10 +116,13 @@ node validation/pre-release/build-candidate.cjs \
 ```
 
 This uses the original checkout's offline Gradle build and existing user Gradle
-cache/configuration, not a hermetic build home. The frontend build uses a private
-copy with no `.env` loading. Native/JRE/analyzer supply is reused only after the
-baseline inventory/signature check. The current Java classes, migrations, new
-static assets and packaged desktop sources are read back. A new app is created;
+cache/configuration, not a hermetic build home. Frontend and TypeScript analyzer
+code use private source/dependency copies with no `.env` loading. The analyzer is
+now recompiled; its staged dist is replaced as an exact file set and read back
+against the updated runtime manifest. Native/JRE and installed analyzer dependencies
+are reused only after baseline inventory/signature and analyzer package/lock
+compatibility checks. Current Java classes, migrations, static assets, analyzer
+outputs and packaged desktop sources are read back. A new app is created;
 the baseline is not changed. This is an ad-hoc directory build, never a release,
 Developer ID/notarized app, automatic update or existing-profile migration.
 
@@ -112,6 +132,32 @@ the recorded validation: `env -i HOME="$HOME" PATH=/opt/homebrew/bin:/usr/bin:/b
 LANG=C LC_ALL=C node ...`. The runner uses mock Keychain at process creation and
 owns each launched ChildProcess. Its representative-source counts/timings are
 single-input observations, not an accuracy score or20-run whole-process benchmark.
+The current runner imports synthetic React default-export/alias, parameter-shadow
+and conflicting package-entry cases through the actual UI, checks exact graph API
+targets and retained snapshot source, then verifies the graph after restart.
+Older reports cannot be counted as having executed newer assertions. The latest
+source/candidate association is in
+`docs/audit/pre-release-continuation-2026-10-06.md` and its companion JSON.
+
+The current native driver requires version1 shutdown diagnostics from the app.
+After SDK close and natural direct-child exit0, it drains stderr for at most one
+second and requires COMPLETE without an earlier FAILED record. SDK failures keep
+priority; a reported cleanup failure, incomplete diagnostics, and a pipe-drain
+timeout have separate fixed codes. At most32 phase/timing entries per launch are
+saved, never raw stderr. Markerless older candidates are unconfirmed under this
+driver; their original dated results retain the older driver's scope.
+
+Adding the exact `--analysis-only` option runs only the representative import/
+flow/source and React binding scenarios with their restarts. Reports explicitly
+list omitted backup/restore, safeStorage roundtrip and delete-persistence suites.
+The default command remains the full sequence. The qUMAST analysis-only PASS is
+not a replacement for its two retained broad-sequence failures; their causes are
+still unconfirmed. A later qUMAST full sequence passed35 checks, separately recorded.
+The omission list additionally names initial synthetic import/reanalysis,
+historical/current snapshot contracts and the post-restore/delete transition.
+The final package-entry guard and job-completion/shutdown changes are included
+in j5EJLB, whose own results are recorded separately. Do not advertise analysis-only
+mode or an older candidate as full acceptance of newer source changes.
 
 `run-integrity-diagnostic.cjs --app '<candidate>'` observes bounded read-only
 runtime-inventory failures inside one fresh Electron process. It never changes
