@@ -18,6 +18,7 @@ import dev.codeintelligence.testsupport.TestJobContext;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,11 @@ import org.springframework.util.FileSystemUtils;
 class FullstackCrossDomainGoldenTest {
 
     private static final FakeTsAnalyzer fakeTs = new FakeTsAnalyzer();
+
+    @AfterAll
+    static void closeAnalyzer() {
+        fakeTs.close();
+    }
 
     @TempDir
     static Path dataDir;

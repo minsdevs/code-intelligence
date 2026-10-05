@@ -120,6 +120,13 @@ OS Keychain/Electron UI·전원손실/guardian kill·전체 crash matrix가 아�
 
 ### 최신 전체 진행표 / 보고 기준
 
+2026-10-06 후속에서 Docker Desktop 기동과 새 Testcontainers 환경을 확인하고,
+기본 backend1639PASS(12명시적opt-in skip), 인증13·유지보수HTTP9, 실제sidecar
+accuracy7·golden corpus23, TS222·tree8을 검증했다. 제품소스/오라클/기준치는
+변경하지 않았으며 이전 Docker unavailable는 해소됐다. 상세와 새 source/evidence
+원장은 [Docker 통합 후속](../audit/docker-integration-2026-10-06.md)을 따른다.
+이 수행은 전체3·4·5단계의 검증을 진전시켰으나 정식 출시 No-Go는 유지한다.
+
 **현재 수행 위치는 통합 후보를 고정하고 8단계 출시 전 최종 판정을 기록한 시점이다.
 판정은 No-Go이며, 1–7단계의 필수 출시 수용조건이 모두 완료됐다는 뜻은 아니다.**
 중단 사이 PR92의 비용원장 복구와 PR93의 인증 갱신·소비자 권한 검증이 병합되었고,
@@ -137,9 +144,9 @@ OS Keychain/Electron UI·전원손실/guardian kill·전체 crash matrix가 아�
 | --- | --- | --- |
 | 1 데이터 복구 안정화 | 자동화 단위·후보 회귀 완료 / 전체 수용 미완료 | 173 비용원장 보존·Node owner 중단2경계,202 동일프로세스 rollback과 후보 정상/오류 복원 확인. Electron 전체 crash·전원손실·실사용 DB/locale 적용 조건·최초 시작 실패 원인 잔여 |
 | 2 실제 GitHub 가져오기 | 소비자 권한 검증 구현·회귀 완료 / 실계정 대기 | repo·clone/import·PR metadata에 revision-bound 권한과 결과 게시 검증. 기존 실패 project1의 실제 UI 재분석은 사용자 데이터 적용 조건 충족 후 |
-| 3 인증 수명주기 | refresh/CAS·single-flight 구현·격리 검증 완료 / 실권한 수용 미완료 | 영속 claim→provider→동일 revision/generation CAS, 재인증·late401/unlink 방어, 실제 JDBC6개 통과. 실제 refresh/revoke/SSO·Spring/JPA 전체 통합 잔여 |
-| 4 분석·작업 신뢰 | 통합 후보의 분석 흐름·회귀 완료 / 독립 정확도·전체 경합 미완료 | frontend425·TS222·backend선택277, 후보 import/flow/source/delete/restart 확인. 독립 corpus·취소/중단 경합·선택 tree sidecar native binding 실패 잔여 |
-| 5 성능·보안·사용성 | 측정 오류 보정·패키지 보안 패치·제한된 advisory 조회 완료 / 전체 수용 미완료 | 조회276좌표 무일치와 단일 입력 시각 측정을 전체 안전/20회 p95/RSS로 대체하지 않음. Docker corpus·독립보안·사용자 과제 필요 |
+| 3 인증 수명주기 | refresh/CAS 구현·기본 Docker 인증통합 보완 / 실권한 수용 미완료 | 기존 JDBC6과 별도로 실제 Spring HTTP/JPA/Redis 인증13, 유지보수HTTP9 및 기본backend suite 통과. 실제 GitHub refresh/revoke/SSO와 그 전체운영경로 수용은 별도 |
+| 4 분석·작업 신뢰 | 기본backend1639PASS·실제sidecar accuracy7 보완 / 광범위 정확도·경합 미완료 | 초기9실패는 현재계약에 맞는 fixture/기대값과 runner경로로 보정;oracle/product무변경. TS222·tree8PASS. default-export route 연결 P2와 독립corpus·전체취소/중단 경합 잔여 |
+| 5 성능·보안·사용성 | Docker golden corpus23·기존 단일실행 성능기준 보완 / 전체 수용 미완료 |57개fixture, timedGradle33초/789232KiB로 기존300초/2097152KiB 이내. 보호runner 구성검사이며20회전체앱p95/RSS·독립보안·사용자 과제·전체공급망을 대체하지 않음 |
 | 6 새 설치·업데이트 | 현재 Java/frontend/desktop 후보 제작·호스트 검증 완료 / 실제 설치 수용 대기 | Imupzt ASAR/JAR/manifest readback·구동·복원·재시작 확인. 새 기기·최소 OS·정식 서명/공증·signed update/rollback 미완료 |
 | 7 배포물·운영 준비 | 후보 해시·문서·정적 component inventory·제한된 보안 조회 정리 완료 / 운영 조건 잔여 | 완전한 SBOM/라이선스 의무·브라우저/native 공급망·운영 App 외부 설치·지원 주체와 정책 확정 필요 |
 | **8 출시 최종 판정** | **이번 후보의 No-Go 판정 기록 완료 / 출시 미승인** | 앞선 필수 gate·독립 검토·정식 서명/공증 자격과 최종 공개 승인 전 배포 금지. 미검증을 통과로 바꾸지 않음 |

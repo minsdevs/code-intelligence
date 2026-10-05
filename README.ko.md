@@ -10,6 +10,12 @@
 후보는 로컬 ad-hoc Validation 앱이며 공개 릴리스가 아닙니다. 아래 과거 앱 경로가 아니라
 최신 보고서의 정확한 후보·격리 claim 및 증거를 사용하십시오.
 
+[Docker 통합 후속](docs/audit/docker-integration-2026-10-06.md)에서 기본 백엔드
+1,639개 통과(명시적 opt-in은 별도), 실제 분석기·DB 정확도 fixture, 유지보수 HTTP
+경계와 기존 timed corpus 기준을 검증했습니다. 제품 소스와 보존 후보는 변경하지
+않았습니다. 이전 Docker 실행 불가 조건을 해소한 것이며 실계정·독립 품질·정식
+서명 배포 조건까지 통과했다는 뜻은 아닙니다.
+
 과거 감사: [2026-10-02 출시 점검 보고서](docs/release-audit-2026-10-02.md).
 후속 구현과 검증은 [통합 결과](docs/audit/execution-results-2026-10-02.md),
 [현재 실행 상태](docs/audit/execution-status-2026-10-02.md)와

@@ -1,0 +1,570 @@
+{
+  "format": 1,
+  "status": "PASS_SCOPED_DOCKER_FOLLOW_UP",
+  "releaseVerdict": "NO_GO",
+  "stagesAdvanced": [
+    3,
+    4,
+    5
+  ],
+  "baseCommit": "c554549f51ee13ec3d4c2216b9209cf4ec257ce5",
+  "observedAt": "2026-10-05T18:12:55.034Z",
+  "candidate": {
+    "path": ".native-product-Imupzt/Code Intelligence Validation.app",
+    "buildSequence": "1791218416622",
+    "appAsarSha256": "7317187afaa9364651dd0a289130f4b07750890731600e0695c43e37582fc6e7",
+    "runtimeManifestSha256": "61c2f787f470970f1d6451d8fc23878880fba8266c154e227eb39c38e890819f",
+    "backendJarSha256": "ad839cb5ab95a4daf756c78e849b263fdce6a705fef586d6a6962cd672a96bd2",
+    "compiledClassFiles": 746,
+    "migrations": 27,
+    "staticAssets": 120,
+    "otherJarEntriesPreserved": 1094,
+    "javaRecompiled": true,
+    "nativeRebuilt": false,
+    "signature": "AD_HOC_VALIDATION_ONLY",
+    "fullAppDigest": "NOT_MEASURED",
+    "buildEvidence": {
+      "path": "validation/local/pre-release-candidate/build-dX6t1j/result.json",
+      "sha256": "313d3649795fdd10fd547b75f1cb61f3ee6f9687279971cea6290e9cdf58a0b8"
+    },
+    "unchanged": true,
+    "rebuiltThisTurn": false
+  },
+  "runs": [
+    {
+      "name": "auth-p0eW4L",
+      "status": "PASS",
+      "evidence": {
+        "path": "validation/local/docker-integration/auth-p0eW4L/result.json",
+        "sha256": "a2401e327179f9932ccfdebcd9a103e834c80b58b152ac72b0643fe912e3d407"
+      },
+      "counts": {
+        "task": "test",
+        "tests": 13,
+        "pass": 13,
+        "fail": 0,
+        "skipped": 0,
+        "startTime": 1791222668401,
+        "endTime": 1791222682214
+      },
+      "junit": {
+        "directory": "validation/local/docker-integration/auth-p0eW4L/junit/test",
+        "files": 2,
+        "orderedFilenameAndHashDigest": "270566be5bf48bf1eae298b2b0b2773bcd33286d0b7c6458d7910fed8f7d23ae"
+      },
+      "metrics": null,
+      "qualityBaseline": null,
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": 0,
+      "sourceHashes": {
+        "backend/src/main": "d0962276630fce9e4efa8e2c2b31f72e7efae4c1cb2f9c63385077b6a6cfd4bc",
+        "backend/src/test": "0a180a6bf44239f02ef75283d72aef9b96e03bbb513dec8f73e3b9ff246af7a8"
+      },
+      "driverSha256": "d8b39950b02a2f2bded221917a681bcd502971d8295fc39e4f25362270ab5e1d",
+      "initSha256": "4f37a58f04cb407a8df43f85ea4d5d3719a6813d1409221afb9b730afdee5501"
+    },
+    {
+      "name": "backend-X4MhXz",
+      "status": "FAIL",
+      "evidence": {
+        "path": "validation/local/docker-integration/backend-X4MhXz/result.json",
+        "sha256": "878183e5b8c3f1d51058d98fcb908bff6b87dea67db0099df3a71afeae285c4b"
+      },
+      "counts": {
+        "task": "test",
+        "tests": 1649,
+        "pass": 1628,
+        "fail": 9,
+        "skipped": 12,
+        "startTime": 1791222707505,
+        "endTime": 1791222892956
+      },
+      "junit": {
+        "directory": "validation/local/docker-integration/backend-X4MhXz/junit/test",
+        "files": 125,
+        "orderedFilenameAndHashDigest": "511bf3cdcc3e2e55a3429ac1e10507e76ce5377271b424a0b3c476232f159883"
+      },
+      "metrics": null,
+      "qualityBaseline": null,
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": 0,
+      "sourceHashes": {
+        "backend/src/main": "d0962276630fce9e4efa8e2c2b31f72e7efae4c1cb2f9c63385077b6a6cfd4bc",
+        "backend/src/test": "0a180a6bf44239f02ef75283d72aef9b96e03bbb513dec8f73e3b9ff246af7a8"
+      },
+      "driverSha256": "d8b39950b02a2f2bded221917a681bcd502971d8295fc39e4f25362270ab5e1d",
+      "initSha256": "4f37a58f04cb407a8df43f85ea4d5d3719a6813d1409221afb9b730afdee5501"
+    },
+    {
+      "name": "accuracy-RNllz4",
+      "status": "PASS",
+      "evidence": {
+        "path": "validation/local/docker-integration/accuracy-RNllz4/result.json",
+        "sha256": "54cfa57603a03e66706a5c41ed89a98d91eedc20f97b134a983d121b67fa8c25"
+      },
+      "counts": {
+        "task": "accuracyTest",
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "skipped": 0,
+        "startTime": 1791223154672,
+        "endTime": 1791223171229
+      },
+      "junit": {
+        "directory": "validation/local/docker-integration/accuracy-RNllz4/junit/accuracyTest",
+        "files": 2,
+        "orderedFilenameAndHashDigest": "d377165a35df7f1a38cd1fe93ad50724416663a4ec9ae25c155c92ffafe608a0"
+      },
+      "metrics": null,
+      "qualityBaseline": null,
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": 0,
+      "sourceHashes": {
+        "backend/src/main": "d0962276630fce9e4efa8e2c2b31f72e7efae4c1cb2f9c63385077b6a6cfd4bc",
+        "backend/src/test": "0a180a6bf44239f02ef75283d72aef9b96e03bbb513dec8f73e3b9ff246af7a8"
+      },
+      "driverSha256": "5b396643fcba4c2783dd2087f18026248823f7500ef321183a48d0bab3b519c8",
+      "initSha256": "b9e5347e1daa4a1973599b05f491ce8fdeffb2cde74d27c0aa53620ee504da3e"
+    },
+    {
+      "name": "backend-is5DsD",
+      "status": "PASS_EXECUTED_WITH_EXPLICIT_SKIPS",
+      "evidence": {
+        "path": "validation/local/docker-integration/backend-is5DsD/result.json",
+        "sha256": "62d099a4af95bdefade4aba4827adf06b2ecb67f30b12b335b6e48764236eaeb"
+      },
+      "counts": {
+        "task": "test",
+        "tests": 1651,
+        "pass": 1639,
+        "fail": 0,
+        "skipped": 12,
+        "startTime": 1791223335828,
+        "endTime": 1791223521043
+      },
+      "junit": {
+        "directory": "validation/local/docker-integration/backend-is5DsD/junit/test",
+        "files": 126,
+        "orderedFilenameAndHashDigest": "9bfaaac19ddbd7e373f04361bd6a4b10fb7214d4182d4e62d8d935e85ba948fb"
+      },
+      "metrics": null,
+      "qualityBaseline": null,
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": 0,
+      "sourceHashes": {
+        "backend/src/main": "d0962276630fce9e4efa8e2c2b31f72e7efae4c1cb2f9c63385077b6a6cfd4bc",
+        "backend/src/test": "b41a6a8631f427d39ae2ecf834e94d904f082ef1ca89e116537225a0c1384e59"
+      },
+      "driverSha256": "5b396643fcba4c2783dd2087f18026248823f7500ef321183a48d0bab3b519c8",
+      "initSha256": "b9e5347e1daa4a1973599b05f491ce8fdeffb2cde74d27c0aa53620ee504da3e"
+    },
+    {
+      "name": "maintenance-zPtZq9",
+      "status": "PASS",
+      "evidence": {
+        "path": "validation/local/docker-integration/maintenance-zPtZq9/result.json",
+        "sha256": "3f2e3887295c745d88c2f57f91d11a249270fbc0716c5f7827965c424f3c393e"
+      },
+      "counts": {
+        "task": "test",
+        "tests": 9,
+        "pass": 9,
+        "fail": 0,
+        "skipped": 0,
+        "startTime": 1791223551256,
+        "endTime": 1791223561458
+      },
+      "junit": {
+        "directory": "validation/local/docker-integration/maintenance-zPtZq9/junit/test",
+        "files": 1,
+        "orderedFilenameAndHashDigest": "60e7b59028851686d81338d01fa60d80d71af5e6b399ca9b565cbf36f46d7c12"
+      },
+      "metrics": null,
+      "qualityBaseline": null,
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": 0,
+      "sourceHashes": {
+        "backend/src/main": "d0962276630fce9e4efa8e2c2b31f72e7efae4c1cb2f9c63385077b6a6cfd4bc",
+        "backend/src/test": "b41a6a8631f427d39ae2ecf834e94d904f082ef1ca89e116537225a0c1384e59"
+      },
+      "driverSha256": "76891ca4c937ed4deb0e0d1f71eb6bdb11c778653a629107c8631887f37b754d",
+      "initSha256": "2858b3c1ad856bb943f0a3ae7640fbee54385c4c62090c6e6f746378f7654d85"
+    },
+    {
+      "name": "corpus-RDWo7d",
+      "status": "FAIL",
+      "evidence": {
+        "path": "validation/local/docker-integration/corpus-RDWo7d/result.json",
+        "sha256": "52b6bbb0f2d3326751557e907ba00b4b8b721ecb4264952067fb135b8f64c773"
+      },
+      "counts": {
+        "task": "test",
+        "tests": 23,
+        "pass": 23,
+        "fail": 0,
+        "skipped": 0,
+        "startTime": 1791223576546,
+        "endTime": 1791223606145
+      },
+      "junit": {
+        "directory": "validation/local/docker-integration/corpus-RDWo7d/junit/test",
+        "files": 6,
+        "orderedFilenameAndHashDigest": "4fd7b598e8f760bf4d2e53d61f54295edb9adbf859d87cad29d2f6a02932b88f"
+      },
+      "metrics": null,
+      "qualityBaseline": {
+        "sha256": "196d3e39f8d5b236852c6a0d396ead24517e169a20ce481e1ee2a3f274da4739",
+        "version": "1",
+        "minimumFiles": 25,
+        "corpusSha256": "df876e8e62fc75199d78f1429b32baed0e8b2837b58973706aa97dc1a28626d2"
+      },
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": 0,
+      "sourceHashes": {
+        "backend/src/main": "d0962276630fce9e4efa8e2c2b31f72e7efae4c1cb2f9c63385077b6a6cfd4bc",
+        "backend/src/test": "b41a6a8631f427d39ae2ecf834e94d904f082ef1ca89e116537225a0c1384e59"
+      },
+      "driverSha256": "76891ca4c937ed4deb0e0d1f71eb6bdb11c778653a629107c8631887f37b754d",
+      "initSha256": "2858b3c1ad856bb943f0a3ae7640fbee54385c4c62090c6e6f746378f7654d85"
+    },
+    {
+      "name": "corpus-T8yhB9",
+      "status": "PASS",
+      "evidence": {
+        "path": "validation/local/docker-integration/corpus-T8yhB9/result.json",
+        "sha256": "67f374aa7a4d2a848afa8c3ab615ada4f5f8a8d7f52b96b916342aedfb34f4fe"
+      },
+      "counts": {
+        "task": "test",
+        "tests": 23,
+        "pass": 23,
+        "fail": 0,
+        "skipped": 0,
+        "startTime": 1791223694298,
+        "endTime": 1791223722858
+      },
+      "junit": {
+        "directory": "validation/local/docker-integration/corpus-T8yhB9/junit/test",
+        "files": 6,
+        "orderedFilenameAndHashDigest": "87378138454ad4599e0678b45d20ca35e6c0867e5aef502a62ff4054aa99ef19"
+      },
+      "metrics": {
+        "scope": "TIMED_GRADLE_REGRESSION",
+        "exitCode": 0,
+        "commandExitCode": 0,
+        "elapsedSeconds": 33,
+        "maxSeconds": 300,
+        "rssKiB": 789232,
+        "maxRssKiB": 2097152,
+        "failures": []
+      },
+      "qualityBaseline": {
+        "sha256": "196d3e39f8d5b236852c6a0d396ead24517e169a20ce481e1ee2a3f274da4739",
+        "version": "1",
+        "files": 57,
+        "minimumFiles": 25,
+        "corpusSha256": "df876e8e62fc75199d78f1429b32baed0e8b2837b58973706aa97dc1a28626d2"
+      },
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": 0,
+      "sourceHashes": {
+        "backend/src/main": "d0962276630fce9e4efa8e2c2b31f72e7efae4c1cb2f9c63385077b6a6cfd4bc",
+        "backend/src/test": "b41a6a8631f427d39ae2ecf834e94d904f082ef1ca89e116537225a0c1384e59"
+      },
+      "driverSha256": "7321abdbcfb707d1fc57008d153ede2517f95746fbac68f6f18c853e2977a918",
+      "initSha256": "2858b3c1ad856bb943f0a3ae7640fbee54385c4c62090c6e6f746378f7654d85"
+    },
+    {
+      "name": "accuracy-pocs6J",
+      "status": "PASS",
+      "evidence": {
+        "path": "validation/local/docker-integration/accuracy-pocs6J/result.json",
+        "sha256": "daf360f24ddfa10d16bfbc34f91efb0af12959aacfb880304e8bc4ca2566e4b1"
+      },
+      "counts": {
+        "task": "accuracyTest",
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "skipped": 0,
+        "startTime": 1791223739339,
+        "endTime": 1791223755565
+      },
+      "junit": {
+        "directory": "validation/local/docker-integration/accuracy-pocs6J/junit/accuracyTest",
+        "files": 2,
+        "orderedFilenameAndHashDigest": "5a8381538ffa1e13f8c07ac86fca43f932bb25417e58c0315d62b676afc79914"
+      },
+      "metrics": null,
+      "qualityBaseline": null,
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": 0,
+      "sourceHashes": {
+        "backend/src/main": "d0962276630fce9e4efa8e2c2b31f72e7efae4c1cb2f9c63385077b6a6cfd4bc",
+        "backend/src/test": "b41a6a8631f427d39ae2ecf834e94d904f082ef1ca89e116537225a0c1384e59"
+      },
+      "driverSha256": "7321abdbcfb707d1fc57008d153ede2517f95746fbac68f6f18c853e2977a918",
+      "initSha256": "2858b3c1ad856bb943f0a3ae7640fbee54385c4c62090c6e6f746378f7654d85"
+    }
+  ],
+  "toolContracts": {
+    "tests": 69,
+    "pass": 69,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "analyzers": {
+    "typescript": {
+      "tests": 222,
+      "pass": 222,
+      "fail": 0,
+      "pending": 0
+    },
+    "tree": {
+      "total": 8,
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    "treeDefaultLoaderPass": true,
+    "treeRepair": [
+      {
+        "package": "tree-sitter",
+        "original": "analyzers/tree-analyzer/node_modules/tree-sitter/build/Release/tree_sitter_runtime_binding.node",
+        "retained": "validation/local/docker-integration/tree-SiVMnJ/quarantine/tree-sitter.foreign.node",
+        "sha256": "d4dbe0dcf6fe46de813fe1b70799c11f9ff76ad61a2e7f870c131ba7ecee5765",
+        "linkCount": 2,
+        "otherProvenAlias": "analyzers/tree-analyzer/node_modules/tree-sitter/build/Release/obj.target/tree_sitter_runtime_binding.node",
+        "otherAliasUnchanged": true,
+        "format": "ELF_LINUX_AARCH64"
+      }
+    ]
+  },
+  "finalDocker": {
+    "daemonLeftRunning": true,
+    "preexistingContainers": 21,
+    "preexistingIdsAndStatesUnchanged": true,
+    "newContainersRemaining": 0
+  },
+  "currentSources": {
+    ".gitignore": "7deb52728b3b6f0fb455c0de763e7dc5f77cb565539c1696e69db0b1a695fcb8",
+    "backend/src/test/java/dev/codeintelligence/ai/AiDisabledApiIntegrationTest.java": "d2a8d55052d0345fb987104909f4a78d6abcd93b8cda61c0ebcfc9b251e821f3",
+    "backend/src/test/java/dev/codeintelligence/ai/AiPreviewLocalRetrievalIntegrationTest.java": "99902cf233c4e473544c490d00c4478aa09bb17bccd27eedf9c7e0fcf4ec02e2",
+    "backend/src/test/java/dev/codeintelligence/analysis/cross/FullstackCrossDomainGoldenTest.java": "711cb1f4eda3e36dd1ccedb83664426d9b82075b1e18b4f32e380ce3fa850a2f",
+    "backend/src/test/java/dev/codeintelligence/analysis/ts/FakeTsAnalyzerContractTest.java": "4d609f3e572f3061b2e7502de010e478a7c15cdbd13adc1854530490e5ee4ca8",
+    "backend/src/test/java/dev/codeintelligence/analysis/ts/ReactMiniTsParsingGoldenTest.java": "ed2e4f48d6a2dfd811b7bbba99b499a1347fccfa24c1b1918a2a7b305d643d12",
+    "backend/src/test/java/dev/codeintelligence/analysis/ts/TsParsingStepTest.java": "3ea6345450bb5b483ae1e2d4d28e2774fbfabc373acf5cfe044650b04c1e351f",
+    "backend/src/test/java/dev/codeintelligence/testsupport/FakeTsAnalyzer.java": "2b169b0a914532f3eca45bbbf2b47f506f2fe301e3ccde30d7e442bb81d95938",
+    "validation/pre-release/docker-integration.init.gradle": "2858b3c1ad856bb943f0a3ae7640fbee54385c4c62090c6e6f746378f7654d85",
+    "validation/pre-release/owned-test-process.cjs": "920bd4cab643eec3fe9c8caafc6231cc0ee679277cdaa368c6f8589ed40fa205",
+    "validation/pre-release/run-docker-integration.cjs": "7321abdbcfb707d1fc57008d153ede2517f95746fbac68f6f18c853e2977a918",
+    "validation/pre-release/test/advisory-scan.test.cjs": "d730baf88323e85680f64038f301fad4021a953e076ca09805218cd2d2fb1f01",
+    "validation/pre-release/test/build-candidate.test.cjs": "d7fc0ff2e21011e0286ad59c949e153ee8cf1776c332a39b3294917bf35d5d94",
+    "validation/pre-release/test/docker-integration.test.cjs": "a5bdd07d8fd383259a6bbb3e0e670bfedda53b0922e09ad4c17d6c7c509e135d",
+    "validation/pre-release/test/integrity-diagnostic.test.cjs": "44a68d626bd597d00ed7b7788c908ecf520963a065a0b16e8111bd7f5584b1e5",
+    "validation/pre-release/test/inventory-candidate.test.cjs": "70fd16ab7be74764efda537b0183ce341ca874646855153093d7dfb55e8cd724",
+    "validation/pre-release/test/owned-output.test.cjs": "d0bd2a19d42124d6d49ed400d215df0998539d39edc907e1bda1cae5316e12b6",
+    "validation/pre-release/test/quality-metrics-native.test.cjs": "0a6a75539ec2f45682d1c54dfb83837be451e2ecdd03b665366f89003e736ecb",
+    "validation/pre-release/test/quality-metrics.test.cjs": "d8e0157828778b23b8fa451bdb0023398c5aa4bef5c3b3ae23aab99e8c4825e6"
+  },
+  "evidence": [
+    {
+      "path": "docs/audit/pre-release-candidate-validation-2026-10-05.json",
+      "sha256": "72dc2e06061011acae1e15742ec0fae95998d5142292cfbe2e3de1946f405e87"
+    },
+    {
+      "path": "validation/local/docker-integration/auth-p0eW4L/result.json",
+      "sha256": "a2401e327179f9932ccfdebcd9a103e834c80b58b152ac72b0643fe912e3d407"
+    },
+    {
+      "path": "validation/local/docker-integration/auth-p0eW4L/gradle.log",
+      "sha256": "773c96b01afcdb8f36e6927f90b859abd01bdc67a71358336a76e27e787e9058"
+    },
+    {
+      "path": "validation/local/docker-integration/auth-p0eW4L/test-totals.json",
+      "sha256": "c398a4c4e991c5c22b66a0fbea0058eb4bee7f9e67fe7fbac32d536013654268"
+    },
+    {
+      "path": "validation/local/docker-integration/auth-p0eW4L/initial-driver.cjs",
+      "sha256": "d8b39950b02a2f2bded221917a681bcd502971d8295fc39e4f25362270ab5e1d"
+    },
+    {
+      "path": "validation/local/docker-integration/auth-p0eW4L/initial.init.gradle",
+      "sha256": "4f37a58f04cb407a8df43f85ea4d5d3719a6813d1409221afb9b730afdee5501"
+    },
+    {
+      "path": "validation/local/docker-integration/backend-X4MhXz/result.json",
+      "sha256": "878183e5b8c3f1d51058d98fcb908bff6b87dea67db0099df3a71afeae285c4b"
+    },
+    {
+      "path": "validation/local/docker-integration/backend-X4MhXz/gradle.log",
+      "sha256": "6f9dc325d051ecc79a072491d66bd147493328b4108f7821ddbc212870851f01"
+    },
+    {
+      "path": "validation/local/docker-integration/backend-X4MhXz/test-totals.json",
+      "sha256": "e6959d773a664f52059d49d298557332d85eb5ee597ff82c7b1bf0e948a2ad89"
+    },
+    {
+      "path": "validation/local/docker-integration/accuracy-RNllz4/result.json",
+      "sha256": "54cfa57603a03e66706a5c41ed89a98d91eedc20f97b134a983d121b67fa8c25"
+    },
+    {
+      "path": "validation/local/docker-integration/accuracy-RNllz4/gradle.log",
+      "sha256": "0e9d04071b398d2ac69f5b6600c00900ab3b796c5d634c6e8379918a16463d70"
+    },
+    {
+      "path": "validation/local/docker-integration/accuracy-RNllz4/accuracyTest-totals.json",
+      "sha256": "227f453353a0a8249a064c26ab89ff5c836772ba030d4e1f6570048797777543"
+    },
+    {
+      "path": "validation/local/docker-integration/accuracy-RNllz4/analyzer.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "validation/local/docker-integration/backend-is5DsD/result.json",
+      "sha256": "62d099a4af95bdefade4aba4827adf06b2ecb67f30b12b335b6e48764236eaeb"
+    },
+    {
+      "path": "validation/local/docker-integration/backend-is5DsD/gradle.log",
+      "sha256": "2575d9470a26c7422e1a8a5d8e420586b5d72899c2978a98772f054401e33ce5"
+    },
+    {
+      "path": "validation/local/docker-integration/backend-is5DsD/test-totals.json",
+      "sha256": "614ea06b7eb3a7f32beb12a8cb7c902c51589d2aef5796024cfb6db4dd9e86f9"
+    },
+    {
+      "path": "validation/local/docker-integration/backend-is5DsD/run-driver.cjs",
+      "sha256": "5b396643fcba4c2783dd2087f18026248823f7500ef321183a48d0bab3b519c8"
+    },
+    {
+      "path": "validation/local/docker-integration/backend-is5DsD/test.init.gradle",
+      "sha256": "b9e5347e1daa4a1973599b05f491ce8fdeffb2cde74d27c0aa53620ee504da3e"
+    },
+    {
+      "path": "validation/local/docker-integration/maintenance-zPtZq9/result.json",
+      "sha256": "3f2e3887295c745d88c2f57f91d11a249270fbc0716c5f7827965c424f3c393e"
+    },
+    {
+      "path": "validation/local/docker-integration/maintenance-zPtZq9/gradle.log",
+      "sha256": "4bdf8cdd970b3759fce44ead43dd4e81544a1080c0612a11a7c181e34b28b233"
+    },
+    {
+      "path": "validation/local/docker-integration/maintenance-zPtZq9/test-totals.json",
+      "sha256": "c95206e3a473602228d279a8579eb606c84bb84ea1b98b2d9894fc1815425733"
+    },
+    {
+      "path": "validation/local/docker-integration/maintenance-zPtZq9/run-driver.cjs",
+      "sha256": "76891ca4c937ed4deb0e0d1f71eb6bdb11c778653a629107c8631887f37b754d"
+    },
+    {
+      "path": "validation/local/docker-integration/maintenance-zPtZq9/test.init.gradle",
+      "sha256": "2858b3c1ad856bb943f0a3ae7640fbee54385c4c62090c6e6f746378f7654d85"
+    },
+    {
+      "path": "validation/local/docker-integration/corpus-RDWo7d/result.json",
+      "sha256": "52b6bbb0f2d3326751557e907ba00b4b8b721ecb4264952067fb135b8f64c773"
+    },
+    {
+      "path": "validation/local/docker-integration/corpus-RDWo7d/gradle.log",
+      "sha256": "f4b94ea9b8ea6adfa49ba09c843f32ce76fc437b7b02d0522214ae9c8130e279"
+    },
+    {
+      "path": "validation/local/docker-integration/corpus-RDWo7d/test-totals.json",
+      "sha256": "487c5e965c40cbd16767058938b3bb3067ebe16ae9df950e79bfc09ec4dac5cc"
+    },
+    {
+      "path": "validation/local/docker-integration/corpus-RDWo7d/run-driver.cjs",
+      "sha256": "76891ca4c937ed4deb0e0d1f71eb6bdb11c778653a629107c8631887f37b754d"
+    },
+    {
+      "path": "validation/local/docker-integration/corpus-RDWo7d/test.init.gradle",
+      "sha256": "2858b3c1ad856bb943f0a3ae7640fbee54385c4c62090c6e6f746378f7654d85"
+    },
+    {
+      "path": "validation/local/docker-integration/corpus-T8yhB9/result.json",
+      "sha256": "67f374aa7a4d2a848afa8c3ab615ada4f5f8a8d7f52b96b916342aedfb34f4fe"
+    },
+    {
+      "path": "validation/local/docker-integration/corpus-T8yhB9/gradle.log",
+      "sha256": "8a2beefe483df58a2e77977faca96d733d9c2ee521cbca76f78851314a75adb1"
+    },
+    {
+      "path": "validation/local/docker-integration/corpus-T8yhB9/test-totals.json",
+      "sha256": "8e0a8f90e12b6bccd3b67401e0a40cea76ee7f98c8d1f98408725f5e6e08b498"
+    },
+    {
+      "path": "validation/local/docker-integration/corpus-T8yhB9/run-driver.cjs",
+      "sha256": "7321abdbcfb707d1fc57008d153ede2517f95746fbac68f6f18c853e2977a918"
+    },
+    {
+      "path": "validation/local/docker-integration/corpus-T8yhB9/test.init.gradle",
+      "sha256": "2858b3c1ad856bb943f0a3ae7640fbee54385c4c62090c6e6f746378f7654d85"
+    },
+    {
+      "path": "validation/local/docker-integration/accuracy-pocs6J/result.json",
+      "sha256": "daf360f24ddfa10d16bfbc34f91efb0af12959aacfb880304e8bc4ca2566e4b1"
+    },
+    {
+      "path": "validation/local/docker-integration/accuracy-pocs6J/gradle.log",
+      "sha256": "c788b094dc42304cd5a669f96d77798dd9ecca462455cb02b06871002ac9c2f0"
+    },
+    {
+      "path": "validation/local/docker-integration/accuracy-pocs6J/accuracyTest-totals.json",
+      "sha256": "ffec08a3d70d32d0ac8c153a291e2f2119f839edcf84a125670d2136ef4b3e2d"
+    },
+    {
+      "path": "validation/local/docker-integration/accuracy-pocs6J/run-driver.cjs",
+      "sha256": "7321abdbcfb707d1fc57008d153ede2517f95746fbac68f6f18c853e2977a918"
+    },
+    {
+      "path": "validation/local/docker-integration/accuracy-pocs6J/test.init.gradle",
+      "sha256": "2858b3c1ad856bb943f0a3ae7640fbee54385c4c62090c6e6f746378f7654d85"
+    },
+    {
+      "path": "validation/local/docker-integration/accuracy-pocs6J/analyzer.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "validation/local/docker-integration/final-checks-WGjhNO/result.json",
+      "sha256": "bfb52ccfa2359cc2f02c42888a95d5baeca1acae69a385cf0b3eb90701eca36d"
+    },
+    {
+      "path": "validation/local/docker-integration/final-checks-WGjhNO/node-tests.log",
+      "sha256": "51ae1692d16913a70abac0989781bc59320b35ac2b69a02f3f3a9c9a6d8eb55b"
+    },
+    {
+      "path": "validation/local/docker-integration/ts-MEFXJu/result.json",
+      "sha256": "1a64fa52e830bc717112d064aa650431581865da90d4508445e2c248453f1d3d"
+    },
+    {
+      "path": "validation/local/docker-integration/tree-SiVMnJ/result.json",
+      "sha256": "6d646809428e6f498263cab01f739ec0015549128f88f92d9305a5c9d07803e2"
+    },
+    {
+      "path": "validation/local/docker-integration/ts-MEFXJu/tests.json",
+      "sha256": "be47a304eae459d1b8bc648948b6b4eb84f565f93d0240f3ee40d6bc8b1ef66c"
+    },
+    {
+      "path": "validation/local/docker-integration/tree-SiVMnJ/tests.json",
+      "sha256": "717c39ba20370d5af14935f57ab20715442172a28219b084016b723bf7c0658f"
+    },
+    {
+      "path": "validation/local/docker-integration/tree-Xln8d3/result.json",
+      "sha256": "d5cea171646b5b1307a3019515b21ec53c88069d945085a5301ed32405e7bcfa"
+    }
+  ],
+  "limits": [
+    "Default Gradle task exclusions/opt-ins are preserved;12 reported skipped slots are not passes",
+    "Raw XML adds a disabled parameterized method descriptor;do not sum it as an execution",
+    "Maintenance opt-in9 passed separately;JDBC6 belongs to earlier explicit run",
+    "Golden corpus/actual sidecar fixtures are not independent broad accuracy acceptance",
+    "Timed Gradle33seconds/789232KiB is not whole-app process-tree or20-run p95",
+    "Real GitHub refresh/revoke/SSO, original user profile application, all crash/power-loss and signed fresh-device release gates remain",
+    "A source-reviewed default-export route binding gap remains a separate P2, not covered by named-import oracle fixtures",
+    "Gradle loopback handshake warning cause remains unconfirmed",
+    "Original quality-gate shell wrapper was not executed;its component checks were run through isolated runner",
+    "Gradle uses existing user cache/configuration;test-worker environment isolation is not an OS network sandbox"
+  ]
+}

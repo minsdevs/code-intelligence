@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -361,14 +360,16 @@ class AiPreviewLocalRetrievalIntegrationTest {
                 "explain");
 
         assertThat(result.text()).contains("1|class NormalSnapshot {}").doesNotContain("NewLiveFile");
-        verify(previewGuardProvider).chat(any());
-        verify(previewGuardProvider, atLeastOnce()).embed(anyString());
+        assertNoProviderCallsOrUsage(fixture);
+        assertThat(summaryRows(fixture)).isEmpty();
     }
 
     @Test
-    void normalRetrievalStillUsesConfiguredSummaryAndEmbeddingPath() throws Exception {
+    void normalRetrievalReusesMatchingCacheWithoutAuthorizingSummaryOrEmbeddingCalls() throws Exception {
         Fixture fixture = fixture("class NormalAsk {}\n");
-        retrieval.retrieveStructured(
+        cache(fixture, "retained normal summary", fixture.hash(), "old-embedding");
+        List<String> before = contextRows(fixture);
+        var result = retrieval.retrieveStructured(
                 fixture.userId(),
                 fixture.projectId(),
                 fixture.snapshotId(),
@@ -376,10 +377,10 @@ class AiPreviewLocalRetrievalIntegrationTest {
                 context("src/App.java"),
                 "explain");
 
-        verify(previewGuardProvider).chat(any());
-        verify(previewGuardProvider, atLeastOnce()).embed(anyString());
+        assertThat(result.text()).contains("FILE_SUMMARY: retained normal summary");
+        assertNoProviderCallsOrUsage(fixture);
         assertThat(summaryRows(fixture)).hasSize(1);
-        assertThat(usageCount(fixture)).isEqualTo(1);
+        assertThat(contextRows(fixture)).isEqualTo(before);
     }
 
     @Test
