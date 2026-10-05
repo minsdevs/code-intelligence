@@ -21,7 +21,9 @@ if (mode === 'write') {
   for (const target of Object.values(paths)) if (!fs.statSync(target).isDirectory()) throw new Error('NATIVE_PROBE_PROFILE_MISSING');
 }
 if (context.kind !== 'github-hosted') for (const target of Object.values(paths)) privateDescendant(directory, target);
-app.setName(require('../src/isolated-run.cjs').VALIDATION_IDENTITIES.validation.name);
+// Use the same automation identity as runProduct. Validation may already hold
+// the user's real GitHub account, even when this probe has a fresh disk profile.
+app.setName(require('../src/isolated-run.cjs').VALIDATION_IDENTITIES.automation.name);
 for (const name of ['userData', 'sessionData', 'temp', 'crashDumps']) app.setPath(name, paths[name]);
 app.setAppLogsPath(paths.logs);
 const recordPhase = value => fs.writeFileSync(path.join(directory, mode + '.phase'), value, { mode: 0o600 });

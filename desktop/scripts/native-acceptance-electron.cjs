@@ -266,12 +266,22 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     return files;
   };
   const sourceContent = async (expected, snapshot) => {
+    report.sourceVerification = { snapshotId: snapshot, step: 'select-snapshot' };
     await navigate(`/projects/${projectId}/code`);
+    // Navigation and the local-job cache refresh settle independently. Select
+    // the requested historical/current result through the UI before a file click
+    // can pin the previously rendered snapshot in the URL.
+    await perform(() => page.getByRole('combobox', { name: 'Source snapshot', exact: true }).selectOption(String(snapshot)));
+    report.sourceVerification.step = 'open-file';
     await perform(() => page.getByRole('treeitem', { name: 'acceptance.ts', exact: true }).click());
+    report.sourceVerification.step = 'rendered-content';
     await perform(() => expect(page.getByTestId('code-viewer').locator('.view-lines')).toHaveText(expected.trimEnd()));
+    report.sourceVerification.step = 'snapshot-context';
     await perform(() => expect(page.getByTestId('source-context')).toContainText('Snapshot #' + snapshot));
     const model = page.getByTestId('code-viewer').locator('.monaco-editor').first();
+    report.sourceVerification.step = 'model-uri';
     await perform(() => expect(model).toHaveAttribute('data-uri', new RegExp('^snapshot://' + projectId + '/' + snapshot + '/')));
+    report.sourceVerification.step = 'verified';
   };
   const captureSizes = async label => {
     // Capture the actual Electron native window content, not a browser replay/mock.

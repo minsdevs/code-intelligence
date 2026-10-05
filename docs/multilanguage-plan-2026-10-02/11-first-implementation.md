@@ -18,7 +18,7 @@
 
 최신 사용자 지시에 따라 **원본 로컬 저장소 `/Users/minseokchae/Dev/code-intelligence`(CoS `/code-intelligence`)에서 기능별 브랜치를 만들어 작업한다.** Orca `main-2`와 별도 clone은 사용하지 않는다. 주요 기능의 구현·검증을 마치면 commit → push → PR → merge까지 진행하고 모든 커밋·병합 메시지에 `[skip ci]`를 붙인다. 이전의 잔여 한도 2% 원격 발행 조건은 폐기됐다. GitHub Actions와 정식 서명·공증·배포는 계속 금지하며 보호 규칙을 우회하지 않는다. 과거 `main-2` 또는 `.cos-pre-release-recovery-20261005` 경로는 당시 증거의 출처이며 현재 작업/실행 지시가 아니다. 원본 설치 앱·DB·Keychain/profile·기존 산출물과 사용자 작업을 보존하고 자동 stash/reset/clean은 하지 않는다.
 
-사용자의 저장공간 확보 통보 전까지 새 개발·전체 빌드·의존성 설치는 중지한다. 승인된 기존 변경의 GitHub 반영과 에이전트가 만든 중복·임시 자료 정리만 수행한다. 정리가 끝났다는 이유로 native 빌드를 자동 재개하지 않는다.
+2026-10-05 사용자가 저장공간 확보와 다음 단계 진행을 명시했다. 원본/원격 main `a0b572a` 일치와 약36GiB 여유 공간, 8GiB 사전 검사 통과를 확인한 뒤 원본의 `codex/native-validation-20261005` 브랜치에서 native 검증을 재개했다. 기존 앱·계정 프로필과 과거 실패/성공 증거는 보존한다.
 
 변경 경로와 계약에 맞춘 테스트 및 실제 화면 검증을 수행한다. 대표 Java/TS/JS fixture와 미지원/부분 실패 사례로 snapshot 일치, 동명 분리, AI OFF, 재분석·취소·재시작을 확인한다. 작은 변경마다 전체 빌드·VM·감사를 반복하지 않는다. 검증용 서비스는 소유 범위를 확인하고 종료한다. 대상 레포의 설치·스크립트는 실행하지 않는다.
 
@@ -133,14 +133,26 @@ pgvector 버전 변경 시 기존 DB와 이전 V26/V27 백업의 exact extension
 
 사용자의 명시적 정리 요청에 따라 불필요한 독립 clone과 중복 Gradle/npm 입력·host build 사본·종료된 합성 시험 DB/프로필·서비스 사본을 삭제했다. 실패/성공 보고서·화면·로그 등 182개 파일(3,286,605 bytes)은 원본 `validation/local/`로 옮기고 삭제 전후 해시를 대조했다. 원본 앱/DB/Keychain/기존 의존성은 정리 대상이 아니다. 측정된 여유 공간 증가는 3,512,872,960 bytes이며 사용 중인 시스템의 여유 공간은 변동할 수 있다. 과거 보고서의 삭제된 작업 디렉터리·DB 경로는 역사적 기록이며 재실행 대상으로 사용하지 않는다. 새 시험은 재개 승인 후 새 입력과 run을 준비한다.
 
+### 원본에서 실제 native 빌드·격리 자동화 재개
+
+사용자의 저장공간 확보 통보 뒤 고정 source 빌드·native gate·runtime stage·ad-hoc `.app` 제작을 실제로 완료했다. 실제 host는 macOS26.6.2이고 바이너리의 목표는13.0이다. 앱은 원본 `.native-product-yGBKOK/Code Intelligence Validation.app`이며 같은 앱으로 후속 시험을 진행했다. standalone Keychain probe를 `Code Intelligence Acceptance` 이름으로 맞추고 관련65개 회귀를 통과했다.
+
+첫 packaged 자동화는 재분석 후 보관 소스 화면 검사에서 FAIL이었다. 같은 앱·같은 격리 프로필의 읽기전용 재개는 current2 READY/job DONE, old1/41 및 new2/42의 본문·URI를 확인해 PASS했다. native helper에서 전달 snapshot을 콤보로 명시 선택하도록 수정한 뒤 앱 재빌드 없이 새 격리 프로필의 전체 자동화가203,433ms에 PASS(반복 시작검사 포함31개 체크 기록)했다. 최초FAIL·읽기전용재개·전체재검증은 `validation/local/native-validation-20261005/`에 각각 보존한다.
+
+새 런타임의 V27 백업·복원·복구checkpoint·구API권한폐기·재시작·대표867파일/7,571,029bytes 분석·검색·관계·5단계 흐름의 보관 소스 이동·정상 종료가 통과했다. 대표 입력의 개요까지57,414ms, 결과 SUCCESS161/PARTIAL618/UNMEASURED87/UNSUPPORTED1이다. 모두 같은 호스트/입력의 측정이며 정확도나 전체 지원률로 환산하지 않는다. 화면도 직접 확인했다.
+
+직접 Electron probe의 실제 Keychain PASS와 Playwright의 `--use-mock-keychain` 제품 자동화 PASS를 구분한다. 자동화 claim `/private/tmp/civa-j0lCXC/desktop-run-n2pYEv/.isolated-run.json`은 그 조건의 재개 증거이며 일반 `open`으로 그대로 재사용하지 않는다. 기존 Validation 프로필을 열 수 있는 단순 더블클릭도 현재 검증 범위가 아니다. 다음은 새 수동용 격리 프로필의 실제 packaged Keychain, 이전 pgvector/V26·V27 백업·locale 호환성, 이후 실계정 프로젝트 복구다. 정식 배포 준비는 미완료다. 상세 증거·빌드 fingerprint는 [런타임 후속 기록](../audit/macos-runtime-supply-2026-10-05.md)을 따른다.
+
+후속 정리에서 이번 Gradle daemon을 종료하고 중복 임시 소스/의존성·캐시·C 빌드 트리/압축파일12개 경로를 삭제했다. 앱과 검증 증거는 해시를 보존했고 약2.77GiB를 회수했다. 최종 앱, 실제 소스빌드 prefix(약64MiB), 두 자동화 프로필과 합성 입력/백업은 후속 호환성 시험을 위해 유지한다. 원본 의존성·실계정 자료를 삭제하지 않았다. `.native-product-*`는 로컬 산출물로 Git에서 제외한다.
+
 ### 다음 AI 세션에 전달할 프롬프트
 
-> Code Intelligence 정식 배포 전 준비를 이어서 수행하되 저장공간 확보 후 재개하라는 사용자 응답을 먼저 확인하라. **작업은 원본 `/Users/minseokchae/Dev/code-intelligence`(CoS `/code-intelligence`)의 기능별 브랜치에서만 한다.** Orca `main-2`와 삭제된 `.cos-pre-release-recovery-20261005`를 사용하거나 clone을 다시 만들지 마라. PR #85의 `4689176`/merge `7fb5ea0`, 런타임 준비 `695424c`와 후속 PR/merge를 실제 GitHub·git으로 확인한다. 이 문서와 두 audit 기록·01-prd.md·사용자 프롬프트를 읽고 현재 git status를 확인하라. 기존 앱/DB/profile/Keychain·사용자 코드·미추적 자료를 보존한다. 셸은 rtk, codebase-memory 그래프는 최신 소스와 교차 확인한다. 자동 stash/reset/clean, Actions, 유료 AI, 정식 서명/공증/배포는 금지다.
+> Code Intelligence 정식 배포 전 준비를 이어서 수행하라. 저장공간 확보와 재개는 사용자가 승인했으며 실제 native 빌드와 후속 자동화까지 진행했다. **작업은 원본 `/Users/minseokchae/Dev/code-intelligence`(CoS `/code-intelligence`)의 기능별 브랜치에서만 한다.** Orca `main-2`와 삭제된 `.cos-pre-release-recovery-20261005`를 사용하거나 clone을 다시 만들지 마라. PR #85/86 및 `codex/native-validation-20261005`의 후속 commit/PR/merge를 실제 GitHub·git으로 확인한다. 이 문서와 두 audit 기록·01-prd.md·사용자 프롬프트를 읽고 현재 git status를 확인하라. 기존 앱/DB/profile/Keychain·사용자 코드·미추적 자료를 보존한다. 셸은 rtk, codebase-memory 그래프는 최신 소스와 교차 확인한다. 자동 stash/reset/clean, Actions, 유료 AI, 정식 서명/공증/배포는 금지다.
 >
 > 기존 GitHub App `Code Intelligence Dev minsdevs`(App ID 5189413, 공개 Client ID `Iv23licOyolwwPyDe1JY`), 설치 167934276을 유지한다. 중복 등록·private key 생성/열람/수집/복사·번들 삽입을 하지 마라. 사용자가 명시한 전체 저장소 읽기 선택을 유지한다. 과거 실계정 로그인은 성공했지만 최초 가져오기는 GIT_METADATA에서 실패했고 이번 수정의 실계정 종단 성공과는 별개다. 기본 Validation 프로필을 과거 격리 claim과 동일시하거나 임의 복제/변경하지 마라.
 >
-> 실패 프로젝트를 삭제하지 않는 새 분석 UI와 관련 상태/경합/중복 복구, 실패 진단 보존은 현재 구현을 재사용하라. `validation/github-recovery/verify.cjs`, `README.md`와 복구 기록의 `browser-l94ivS/result.json`(12개 PASS, UI 새 분석 3회)을 먼저 확인하라. 별도 `real-pipeline.cjs`의 이전 실행 기록도 보존하라. 최종 프런트엔드 370개/백엔드 집중 단위 17개 PASS와 Testcontainers 미실행을 구분한다. GitHub 합성 fixture PASS를 실계정 project 1 완료로 해석하지 마라. 우선 적합한 native runtime 입력을 확보해야 한다. 현재 Homebrew PostgreSQL 16.15 및 관련 바이너리는 minOS 26.0이므로 저장소의 13.0 gate에서 거부된다. 기존 stage도 최신 manifest 계약에 맞지 않는다. gate를 끄거나 최소 OS를 바꿔 통과시키지 말고, 배포에 적합한 입력과 현 Mac 전용 standalone 시험을 구분하라. 과거 main-2 앱 실행 명령을 재사용하지 않는다. 실제 프로젝트는 UI에서 새 분석하여 GIT_METADATA 이후 DONE까지 확인하고 최초 FAIL·후속 PASS를 보존하라. 이후 실계정 연결/해제/재연결/철회, refresh token 저장·자동 갱신/회전, 완료·취소 경합/강제 실패, 최소 OS·새 설치/업데이트 순서로 진행한다. schema 변경이 필요하면 V27 백업 호환 계약도 검토한다.
+> 실패 프로젝트를 삭제하지 않는 새 분석 UI와 관련 상태/경합/중복 복구, 실패 진단 보존은 재구현하지 말라. GitHub 합성 fixture PASS를 실계정 project1 완료로 해석하지 마라. 고정소스 기반 macOS13 대상 runtime과 원본 `.native-product-yGBKOK/Code Intelligence Validation.app`의 제작은 완료됐다. `validation/local/native-validation-20261005/first-attempt/acceptance.json` FAIL, `read-only-snapshots.json` PASS, `second-attempt/acceptance.json` PASS를 먼저 읽어라. 두 번째는 동일 앱/새 프로필이며 앱을 재빌드하지 않았다. 현재 코드의 snapshot 명시선택 helper가 본문·배지·URI 검사를 유지함을 확인하고 이 결과를 current UI 자동갱신 증거로 확대하지 않는다. 직접 probe의 실제 Keychain과 Playwright mock-keychain을 구분하라. 다음은 새로운 수동용 격리 프로필의 실제 packaged Keychain 검증과 pgvector 버전/구 V26·V27 백업/locale 호환 fixture다. 그 이후에만 기존 실계정 프로필 적용을 판단하고 실제 project1을 UI 새 분석으로 GIT_METADATA 이후 DONE까지 확인하라. 계정 연결/해제/재연결/철회, refresh 저장·갱신·회전, 완료/취소 경합/강제실패, 실제 최소OS·새설치/업데이트는 여전히 별도 미완료다. schema 변경 시 V27 백업 계약도 검토한다.
 >
 > 주요 기능의 구현·검증이 끝날 때마다 문서를 갱신하고 원본 기능 브랜치에서 commit → push → PR → merge를 수행하라. 잔여 한도 2%를 기다리지 않는다. 모든 커밋과 병합 메시지에 `[skip ci]`를 붙이고 보호 규칙을 우회하지 않는다. Actions 금지와 필수 검사 충돌이 생기면 차단 사유를 남긴다. 기능 단위의 완료와 정식 배포 준비 전체의 완료를 구분한다.
 >
-> 최신 후속 기록 `docs/audit/macos-runtime-supply-2026-10-05.md`와 `desktop/scripts/macos-runtime-supply.md`도 읽어라. 네 가지 소스 lock과 기존 macOS13 빌더 연결·디스크/curl/다운로드 검증이 구현되어 있다. 64개 집중 시험 PASS는 source build/native 앱 PASS가 아니다. 사용자 재개 통보 후 read-only `rtk proxy node desktop/scripts/macos-runtime-supply.cjs --check .`로 공간을 재측정한다. 8GiB는 작업 공간 사전 기준이며 앱 크기가 아니다. `validation/local`에는 보존한 보고서가 있고, 정리된 과거 캐시·시험 DB·서비스 사본은 없다. 공간이 부족하면 임의 삭제나 컴파일을 하지 않는다. 이후 고정 소스 빌드·새 격리 Validation 앱과 pgvector0.8.7의 기존 DB/이전 V26·V27 백업 호환성을 검증한다. 실제 사용자 프로필을 임의 변경하거나 catalog/hash/소유권 검사를 완화하지 마라.
+> 최신 런타임 audit 및 source-supply 설명을 읽고, 추가 빌드가 필요한 경우에만 디스크 사전 검사 후 실행하라. 보존 앱과 현재 검증 기록을 우선 사용하고 host entrypoint 전체를 불필요하게 재호출해 동일 소스·의존성을 반복 빌드하지 마라. 임시 검증 출력의 현재 보존/정리 상태도 실제 파일로 확인하라. 최소OS gate, catalog/hash/소유권 검사를 완화하지 말고 자동화 mock-keychain 프로필을 일반실행 프로필로 사용하지 마라. 원본 실계정 DB·프로필·GitHub App 키는 임의 변경·열람하지 않는다.

@@ -362,7 +362,8 @@ async function main(target) {
       run(electron, [script, 'read', probe], desktop, env);
       assert.equal(fs.readFileSync(path.join(probe, 'write.phase'), 'utf8'), 'COMPLETE');
       assert.equal(fs.readFileSync(path.join(probe, 'read.phase'), 'utf8'), 'COMPLETE');
-      report.keychainIdentity = { name: 'Code Intelligence Validation', account: 'Code Intelligence Validation Key' };
+      const identity = require('../src/isolated-run.cjs').VALIDATION_IDENTITIES.automation;
+      report.keychainIdentity = { name: identity.name, account: identity.name + ' Key' };
       report.checks.push('real-macos-Keychain-safeStorage-decrypt-after-process-restart');
     }
     if (target === 'windows') {

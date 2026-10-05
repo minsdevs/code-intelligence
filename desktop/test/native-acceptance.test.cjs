@@ -333,6 +333,40 @@ test('macOS provisioning failure report bounds log reads and records source vers
 });
 
 
+test('native storage probe uses the automation identity before ready in both processes', t => {
+  const vm = require('node:vm');
+  const identities = require('../src/isolated-run.cjs').VALIDATION_IDENTITIES;
+  const contexts = require('../scripts/native-acceptance-context.cjs');
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'native-probe-identity-')));
+  fs.chmodSync(root, 0o700);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const directory = path.join(root, 'probe'); fs.mkdirSync(directory, { mode: 0o700 });
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/native-acceptance-safe-storage.cjs'), 'utf8');
+  for (const mode of ['write', 'read']) {
+    let name; const paths = {};
+    const app = {
+      setName(value) { name = value; },
+      setPath(key, value) { paths[key] = value; },
+      setAppLogsPath(value) { paths.logs = value; },
+      whenReady() {
+        assert.equal(name, identities.automation.name);
+        assert.notEqual(name, identities.validation.name);
+        assert.equal(paths.userData, path.join(directory, 'electron-profile'));
+        for (const value of Object.values(paths)) contexts.privateDescendant(directory, value);
+        // Exercise all pre-ready setup without accessing the OS credential store.
+        return { then() { return { catch() {} }; } };
+      },
+    };
+    vm.runInNewContext(source, {
+      process: { argv: ['electron', 'probe', mode, directory] },
+      require: name => name === 'electron' ? { app, safeStorage: {} }
+        : name === './native-acceptance-context.cjs' ? {
+          ...contexts, requireExecutionContext: () => ({ kind: 'isolated-macos-host', tempRoot: root }),
+        } : name === '../src/isolated-run.cjs' ? { VALIDATION_IDENTITIES: identities } : require(name),
+    });
+  }
+});
+
 test('native linker diagnostics explain reproduced Darwin test-module driver flag failure', () => {
   const { buildDiagnostics } = require('../scripts/native-acceptance.cjs');
   const result = buildDiagnostics('', [
@@ -348,4 +382,3 @@ test('native linker diagnostics explain reproduced Darwin test-module driver fla
   });
   assert.equal(JSON.stringify(result).includes('private-token'), false);
 });
-
