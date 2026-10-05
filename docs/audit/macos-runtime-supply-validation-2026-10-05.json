@@ -1,0 +1,88 @@
+{
+  "format": 1,
+  "recordedAt": "2026-10-05T08:52:31.744Z",
+  "status": "PREPARATION_VERIFIED_BUILD_BLOCKED",
+  "scope": "macos-source-lock-and-provisioning-preflight",
+  "currentWorkingDirectory": "/Users/minseokchae/Dev/code-intelligence",
+  "implementationCommit": "695424c",
+  "evidenceLocation": "validation/local (moved from the removed independent clone; hashes preserved)",
+  "sourceBuildPerformed": false,
+  "nativeAppBuilt": false,
+  "realAccountVerified": false,
+  "productionReleased": false,
+  "curlVersionObserved": "8.7.1",
+  "tests": {
+    "tests": 64,
+    "pass": 64,
+    "fail": 0,
+    "skipped": 0
+  },
+  "firstAttempt": {
+    "tests": 38,
+    "pass": 37,
+    "fail": 1,
+    "reason": "Cross-realm test argument array; retained separately"
+  },
+  "preflight": {
+    "checkedAt": "2026-10-05T08:45:24.502Z",
+    "exitCode": 1,
+    "status": "BLOCKED",
+    "code": "MAC_BUILD_DISK_SPACE",
+    "root": "/Users/minseokchae/Dev/code-intelligence/.cos-pre-release-recovery-20261005",
+    "availableBytes": "1261203456",
+    "requiredFreeBytes": "8589934592",
+    "policy": "Conservative free-space floor; not a disk reservation or measured build size.",
+    "sourceBuildPerformed": false,
+    "nativeRuntimeVerified": false,
+    "launchAllowed": false,
+    "sources": [
+      {
+        "id": "openssl",
+        "version": "3.5.8",
+        "sha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2"
+      },
+      {
+        "id": "postgres",
+        "version": "16.15",
+        "sha256": "c1575341fa7bd40f5274ea465b34390f4dc64cdd0770af327005caaeb9f6b7ed"
+      },
+      {
+        "id": "redis",
+        "version": "8.10.2",
+        "sha256": "b9ffee226b5eecdba98a679260dad764b2a4ebd90dce4ad5ac9e9f3eef9c02b3"
+      },
+      {
+        "id": "pgvector",
+        "version": "0.8.7",
+        "sha256": "83d673c3b287cddbf3879f86215f043f2c2b56c69d37b2a77504910db1ed6e56"
+      }
+    ]
+  },
+  "review": {
+    "scope": "read-only",
+    "findings": 3,
+    "allAddressedInCode": true
+  },
+  "fingerprints": {
+    "desktop/scripts/macos-runtime-supply.cjs": "769d0e76b81cf70c4ceb570ad5478f8efab54ab49bb05c2217e3646461e5ccf2",
+    "desktop/scripts/macos-runtime-supply.json": "90e7422d38166a60a1d39b18f4f9be5f68b5ac1c20844c632895ff0822eec164",
+    "desktop/scripts/macos-runtime-supply.md": "48fdef82210a912d657ba4c40aa2c93b91d7b11c1970e759f6cbdb787cfe7e2f",
+    "desktop/scripts/native-acceptance-host.cjs": "c5cf74343056b69182463daa818cc4a539e649a6f84762193dc9021a6674b969",
+    "desktop/scripts/native-acceptance-macos.sh": "aae54cc26ce9895fe5480f58bc66b53ac1ad6f3412d36d003b190ff7f55ea606",
+    "desktop/scripts/native-acceptance.cjs": "dfb4f0dd40064349e67bade53c7c707e71903e48456fe1e4f54df55bd5388055",
+    "desktop/test/macos-runtime-supply.test.cjs": "931825d3f9ae59d2a31e8441a0a46b75c866d6be2189cffdb3cf5c1c647ed4d0",
+    "validation/local/macos-supply-20261005-UFh946/targeted-first.tap": "84938cd3860e82f9ca5b48b7fe41aa91b94763ba4b2a8dd5f01d263a2676a80d",
+    "validation/local/macos-supply-20261005-UFh946/targeted-resume.tap": "b565ef33233ce9a318ed96cce74d803cc103cb45365054394a448746099db6a8",
+    "validation/local/macos-supply-20261005-UFh946/native-acceptance-regression.tap": "b200432473dc1c14b59f9bdd037234690f12c3b9889fdccd9c670bba9f7a33e3",
+    "validation/local/macos-supply-20261005-UFh946/reviewed-final.tap": "1f0975568eb8ba9fd33d4c6d2ed7a6625132bfd8af9c7ded9695b697cd8c7b2b",
+    "validation/local/macos-supply-20261005-UFh946/actual-preflight.json": "7660f01a7182144716cccf2486ab897ea71913fa58fa1f61b838576444c92773"
+  },
+  "remaining": [
+    "free working disk space",
+    "full locked source build and native gate",
+    "new isolated Validation app acceptance",
+    "pgvector extension and old-backup compatibility",
+    "real-account project recovery",
+    "minimum OS and installation/update acceptance"
+  ]
+}
