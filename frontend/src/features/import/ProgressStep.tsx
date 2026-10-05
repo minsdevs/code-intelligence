@@ -14,6 +14,8 @@ type ProgressStepProps = {
   onJobChange?: (job: JobDetail) => void
 }
 
+const RECONCILIATION_INTERVAL_MS = 3_000
+
 function isTerminal(status: JobDetail['status']): boolean {
   return status === 'DONE' || status === 'FAILED' || status === 'CANCELLED'
 }
@@ -75,6 +77,9 @@ function JobProgress({
   // Requests alone must not invalidate an in-flight stream recovery; accepted observations do.
   const observationRevision = useRef(0)
   const mutationInFlight = useRef(false)
+  const observedStatus = useRef<JobDetail['status'] | null>(null)
+  const authorizationLost = useRef(false)
+  const stopMonitoring = useRef<(() => void) | null>(null)
 
   useEffect(() => () => { lifetime.current += 1 }, [])
 
@@ -83,8 +88,18 @@ function JobProgress({
     onJobChangeRef.current = onJobChange
   }, [onDone, onJobChange])
 
+  const notifyUnauthorized = useCallback(() => {
+    if (authorizationLost.current) return
+    authorizationLost.current = true
+    observationRevision.current += 1
+    stopMonitoring.current?.()
+    onUnauthorized()
+  }, [onUnauthorized])
+
   const apply = useCallback((next: JobDetail) => {
     observationRevision.current += 1
+    observedStatus.current = next.status
+    if (isTerminal(next.status)) stopMonitoring.current?.()
     setJob(next)
     onJobChangeRef.current?.(next)
     setError(next.status === 'FAILED' ? (next.error ?? t('progress.failed')) : null)
@@ -92,71 +107,115 @@ function JobProgress({
   }, [t])
 
   useEffect(() => {
-    let cancelled = false
-    let unsubscribe: (() => void) | undefined
+    if (
+      authorizationLost.current
+      || (observedStatus.current !== null && isTerminal(observedStatus.current))
+    ) return
 
-    const recover = () => {
-      const revision = observationRevision.current
-      void getJob(jobId)
-        .then((next) => {
-          if (cancelled || revision !== observationRevision.current) return
-          apply(next)
-          if (!isTerminal(next.status)) {
-            setStreamEpoch((epoch) => epoch + 1)
-          }
-        })
-        .catch((err: unknown) => {
-          if (cancelled || revision !== observationRevision.current) return
-          if (err instanceof UnauthorizedError) {
-            onUnauthorized()
-            return
-          }
-          setError(err instanceof ApiError ? err.message : t('progress.recoverError'))
-        })
+    let stopped = false
+    let reading = false
+    let nextRecoveryAt = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let subscription: { unsubscribe?: () => void } | undefined
+
+    const closeStream = () => {
+      const current = subscription
+      // Invalidate callbacks before disposal, which may itself report a disconnect.
+      subscription = undefined
+      current?.unsubscribe?.()
     }
 
-    const start = async () => {
-      const revision = observationRevision.current
+    const stop = () => {
+      if (stopped) return
+      stopped = true
+      clearTimeout(timer)
+      timer = undefined
+      closeStream()
+    }
+
+    const schedule = () => {
+      if (stopped || reading || timer !== undefined) return
+      timer = setTimeout(() => {
+        timer = undefined
+        void reconcile()
+      }, RECONCILIATION_INTERVAL_MS)
+    }
+
+    const connect = () => {
+      if (stopped || subscription) return
+      const current: { unsubscribe?: () => void } = {}
+      subscription = current
+      let unsubscribe: (() => void) | undefined
       try {
-        const initial = await getJob(jobId)
-        if (cancelled || revision !== observationRevision.current) return
-        apply(initial)
-        if (isTerminal(initial.status)) {
-          return
-        }
         unsubscribe = subscribeJobEvents(
           jobId,
           (next) => {
-            if (cancelled) return
+            if (stopped || subscription !== current) return
             apply(next)
-            if (isTerminal(next.status)) {
-              unsubscribe?.()
-            }
           },
           () => {
-            if (!cancelled) recover()
+            if (stopped || subscription !== current) return
+            closeStream()
+            if (Date.now() >= nextRecoveryAt) void reconcile()
+            else schedule()
           },
         )
       } catch (err) {
-        if (cancelled || revision !== observationRevision.current) return
+        if (stopped || subscription !== current) return
+        subscription = undefined
+        if (err instanceof UnauthorizedError) notifyUnauthorized()
+        else setError(err instanceof ApiError ? err.message : t('progress.recoverError'))
+        return
+      }
+      // A synchronous terminal/disconnect callback can run before the disposer exists.
+      if (stopped || subscription !== current) unsubscribe?.()
+      else current.unsubscribe = unsubscribe
+    }
+
+    async function reconcile(initial = false) {
+      if (stopped || reading) return
+      if (mutationInFlight.current) {
+        schedule()
+        return
+      }
+      clearTimeout(timer)
+      timer = undefined
+      reading = true
+      const revision = observationRevision.current
+      try {
+        const next = await getJob(jobId)
+        if (stopped || revision !== observationRevision.current) return
+        apply(next)
+        connect()
+      } catch (err) {
+        if (stopped || revision !== observationRevision.current) return
         if (err instanceof UnauthorizedError) {
-          onUnauthorized()
+          notifyUnauthorized()
           return
         }
-        setError(err instanceof ApiError ? err.message : t('progress.loadError'))
+        setError(err instanceof ApiError
+          ? err.message
+          : t(initial ? 'progress.loadError' : 'progress.recoverError'))
+      } finally {
+        reading = false
+        // A stream that immediately disconnects again must not create a tight GET loop.
+        if (!initial) nextRecoveryAt = Date.now() + RECONCILIATION_INTERVAL_MS
+        // Healthy SSE does not postpone this read; a slow read never starts another poll.
+        schedule()
       }
     }
 
-    void start()
+    stopMonitoring.current = stop
+    void reconcile(true)
     return () => {
-      cancelled = true
-      unsubscribe?.()
+      stop()
+      if (stopMonitoring.current === stop) stopMonitoring.current = null
     }
-  }, [jobId, streamEpoch, onUnauthorized, t, apply])
+  }, [jobId, streamEpoch, notifyUnauthorized, t, apply])
 
   const handleRetry = async () => {
     if (
-      mutationInFlight.current
+      authorizationLost.current || mutationInFlight.current
       || retryNeedsPreview || job?.failureCode === 'LOCAL_PREVIEW_REQUIRED'
       || retryNeedsSourceFix || job?.failureCode === 'TS_SYNTAX_ERROR'
       || retryNeedsNewAnalysis || job?.failureCode === 'RETRY_SOURCE_UNVERIFIED'
@@ -165,23 +224,24 @@ function JobProgress({
     mutationInFlight.current = true
     const operationLifetime = lifetime.current
     let revision = observationRevision.current
+    let accepted = false
     setRetrying(true)
     setError(null)
     try {
       await retryJob(jobId)
-      if (operationLifetime !== lifetime.current) return
-      revision = observationRevision.current
+      if (operationLifetime !== lifetime.current || authorizationLost.current) return
+      accepted = true
+      observedStatus.current = null
+      // Only an acknowledged mutation invalidates reads of the previous attempt.
+      revision = ++observationRevision.current
       const next = await getJob(jobId)
       // A newer stream observation or remounted attempt owns the state and callbacks.
-      if (operationLifetime !== lifetime.current || revision !== observationRevision.current) return
+      if (operationLifetime !== lifetime.current || revision !== observationRevision.current || authorizationLost.current) return
       apply(next)
-      if (!isTerminal(next.status)) {
-        setStreamEpoch((epoch) => epoch + 1)
-      }
     } catch (err) {
       if (operationLifetime !== lifetime.current || revision !== observationRevision.current) return
       if (err instanceof UnauthorizedError) {
-        onUnauthorized()
+        notifyUnauthorized()
         return
       }
       if (err instanceof ApiError && err.code === 'LOCAL_PREVIEW_REQUIRED')
@@ -195,11 +255,18 @@ function JobProgress({
       if (operationLifetime === lifetime.current) {
         mutationInFlight.current = false
         setRetrying(false)
+        // The retry may have succeeded even if its follow-up read failed.
+        if (
+          accepted && !authorizationLost.current
+          && (observedStatus.current === null || !isTerminal(observedStatus.current))
+        ) {
+          setStreamEpoch((epoch) => epoch + 1)
+        }
       }
     }
   }
   const handleCancel = async () => {
-    if (mutationInFlight.current) return
+    if (authorizationLost.current || mutationInFlight.current) return
     mutationInFlight.current = true
     const operationLifetime = lifetime.current
     let revision = observationRevision.current
@@ -207,15 +274,16 @@ function JobProgress({
     setError(null)
     try {
       await cancelJob(jobId)
-      if (operationLifetime !== lifetime.current) return
-      revision = observationRevision.current
+      if (operationLifetime !== lifetime.current || authorizationLost.current) return
+      if (observedStatus.current !== null && isTerminal(observedStatus.current)) return
+      revision = ++observationRevision.current
       const next = await getJob(jobId)
-      if (operationLifetime !== lifetime.current || revision !== observationRevision.current) return
+      if (operationLifetime !== lifetime.current || revision !== observationRevision.current || authorizationLost.current) return
       apply(next)
     } catch (err) {
       if (operationLifetime !== lifetime.current || revision !== observationRevision.current) return
       if (err instanceof UnauthorizedError) {
-        onUnauthorized()
+        notifyUnauthorized()
         return
       }
       setError(err instanceof ApiError ? err.message : 'Could not cancel analysis.')

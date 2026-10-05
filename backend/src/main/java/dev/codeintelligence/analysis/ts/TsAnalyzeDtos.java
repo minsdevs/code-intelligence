@@ -1,5 +1,6 @@
 package dev.codeintelligence.analysis.ts;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,7 +30,56 @@ public final class TsAnalyzeDtos {
 
     public record Request(List<FilePayload> files) {}
 
-    public record RouteHit(String path, String component, String filePath, Integer lineStart, Integer lineEnd) {}
+    public record ComponentReference(String name, String filePath, Integer lineStart, Integer lineEnd) {}
+
+    public record ComponentResolution(String status, ComponentReference target) {}
+
+    public record RouteHit(
+            String path,
+            String component,
+            String filePath,
+            Integer lineStart,
+            Integer lineEnd,
+            ComponentResolution componentResolution) {
+        // Older analyzers/fakes and non-React routers retain their explicit legacy path.
+        public RouteHit(String path, String component, String filePath, Integer lineStart, Integer lineEnd) {
+            this(path, component, filePath, lineStart, lineEnd, null);
+        }
+
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public static RouteHit fromJson(Map<String, Object> value) {
+            ComponentResolution resolution = null;
+            if (value.containsKey("componentResolution")) {
+                // Explicit null/malformed markers are new-but-invalid, not legacy.
+                Object raw = value.get("componentResolution");
+                Map<?, ?> fields = raw instanceof Map<?, ?> map ? map : Map.of();
+                Object rawTarget = fields.get("target");
+                Map<?, ?> target = rawTarget instanceof Map<?, ?> map ? map : Map.of();
+                resolution = new ComponentResolution(
+                        text(fields.get("status")),
+                        new ComponentReference(
+                                text(target.get("name")),
+                                text(target.get("filePath")),
+                                line(target.get("lineStart")),
+                                line(target.get("lineEnd"))));
+            }
+            return new RouteHit(
+                    text(value.get("path")),
+                    text(value.get("component")),
+                    text(value.get("filePath")),
+                    line(value.get("lineStart")),
+                    line(value.get("lineEnd")),
+                    resolution);
+        }
+
+        private static String text(Object value) {
+            return value instanceof String text ? text : null;
+        }
+
+        private static Integer line(Object value) {
+            return value instanceof Integer number ? number : null;
+        }
+    }
 
     public record SymbolHit(String name, String kind, String filePath, Integer lineStart, Integer lineEnd) {}
 

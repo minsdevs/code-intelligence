@@ -1,0 +1,1081 @@
+{
+  "format": 1,
+  "status": "DEVELOPMENT_CANDIDATE_VALIDATED",
+  "releaseVerdict": "NO_GO",
+  "observedAt": "2026-10-05T20:00:09.852Z",
+  "sourceBaseCommit": "2abfa1dea9e8c5a4b40cd5adc2c9f51b8a65e733",
+  "reviewedImplementationCommit": "3ee32c56258264252f2f570c4706389b0c15b8ad",
+  "buildUsedWorkingTree": true,
+  "sourceInputsMatchPackagedCandidate": true,
+  "sourceInputs": {
+    "backend/src/main": "d963aa3e44f3d3de7fdac0adda50a90f7fc749228bd7e5e08967b1bace259c62",
+    "frontend/src": "dc7167d257754aa5030e922ed36e142ec0902a25fce66936a91eebbdbad3dcc7",
+    "desktop/src": "ab562230f730f7c039317cb992612b67d5d2bd6939f6b9e5961173de1a2839c8",
+    "analyzers/ts-analyzer/src": "e77cf40e18a9d875b97ea3f33e2f58410471317dd73fd4d28cdbfbbc9402c071",
+    "backend/build.gradle.kts": "76728d660b7fdc22b4045560026624af607306702e09125a428a26dc3d3bf0f2",
+    "backend/settings.gradle.kts": "b8b068943adeaa9b9fa7a96d5ca8f51ce68b6ae674a0302bf004769c07852711",
+    "backend/gradle/wrapper/gradle-wrapper.properties": "fc913ffa0625b544190844a506086ca0b93c4361986e820e10dd64c088257bf7",
+    "frontend/package.json": "b2ba3f52bca45caceea34f293aacfb4bb52035b373b3fe7324516918eeaccfcb",
+    "frontend/package-lock.json": "bdd68ecb2b06c743727bbd7e3dea9f89af4d238a142bfb3ddef17365e69acc46",
+    "desktop/package.json": "e804aa1b58198affbe1bfa5a5551a82cff4c5b3d960f5e51ef517b3f4d2e3fdf",
+    "desktop/package-lock.json": "644dd4fc65dbf002768ef8d9986be6cda1536883d649355ff4dc31bb0bf421b5",
+    "analyzers/ts-analyzer/package.json": "ed1fe4d2761f6fad1f42044ede75c547d0f0298415be5a8c7e79cc78859976ab",
+    "analyzers/ts-analyzer/package-lock.json": "6b7cb98446d0c770912e04a16c4308688f29e328f32aa5a13457556169a1c6a2",
+    "analyzers/ts-analyzer/tsconfig.json": "c3afae120c702362c06de2f1294ab0ac6de8273f484ae36ff2e9524e1e9d0c9f"
+  },
+  "stage": {
+    "primary": 4,
+    "related": [
+      5,
+      6,
+      7,
+      8
+    ],
+    "total": 8,
+    "mergeReady": true,
+    "lastPackageGuardValidated": true,
+    "allMandatoryReleaseConditionsPassed": false
+  },
+  "candidate": {
+    "path": ".native-product-j5EJLB/Code Intelligence Validation.app",
+    "buildSequence": "1791229598313",
+    "appAsarSha256": "31ddec1d3cc5a13fe44c68a5b76e7027e3075e8573213940b01a9bf01bc4f85d",
+    "manifestSha256": "f138415a5e390c150d2f62fb2788a81d038f03324cc30394c4d70e10bc9fb83f",
+    "backendJarSha256": "bd20db8f69443eca950ff7b886454658548bf5ccb6b40ae807148c009858bbee",
+    "wholeAppDigest": "NOT_MEASURED",
+    "javaClassFiles": 750,
+    "migrations": 27,
+    "staticEntries": 120,
+    "analyzer": {
+      "codeRebuilt": true,
+      "compiledDigest": "b736b5e1cb2a578f57521756bb938c6bdce833a017b5d0d1b0cd237f1ba5f788",
+      "files": 30,
+      "fileHashes": {
+        "analyze.controller.js": "09fdaceefe069af8950f508ec416750c9c5dafd5f1665c74ae6f3fb69f2c3cfb",
+        "analyze.controller.js.map": "f206e2254365e386f0e235dff454382a714dfa919f8ff4afc28e5c43442ffedf",
+        "analyze.service.js": "fda341b7572480c2ecfa3e50b22d6c1ac662150dfd16609e9a009acb4f81593e",
+        "analyze.service.js.map": "fb9c36f6a3eeb38acb52b460eb20f71bcccef53564153e5ea40bd8218c961bf3",
+        "analyzer-transport.js": "2f8e6b2cea1b40231ed2fabc5c7bcf5447b4c5e5df7a2c369384eaeb913e82bc",
+        "analyzer-transport.js.map": "fea5d49b260fb094131fc1504053bd3fdd1d8e37c55c05fad399e1894e76566f",
+        "app.module.js": "f80b2a0ed1fa8110bceff9fa06a23548c88003cc4cb8a0d8de96e76cc51515b4",
+        "app.module.js.map": "893ce3b624b404e4d5fa22e7a9a96d0b6e31fd229ddba8d86a5aefe78460b861",
+        "bootstrap.js": "82df4740f610749fafcb297e939a7e1cc935ea59dd418487d1db13c92516168e",
+        "bootstrap.js.map": "7cf37e5093651e620cde9bbf4312687c8f833554f766bf410df26e1263b773c7",
+        "fixtures/project-boundary.js": "b3215081f243efb887cb80487681376be81bc7a5fd180d4a867cc90991446f60",
+        "fixtures/project-boundary.js.map": "f2a19ee32f0c4b6e34d039112683c7543248fcdc44e573eea230bbc5ed1c65fc",
+        "generic-extractor.js": "a7e74f28a7e0387d820477b587bc2b9bac08e096d9915459ded886d78ed72e31",
+        "generic-extractor.js.map": "712d4f3ea46ea31f456b648d732ded0fba83d9f4794683ba708c7a3cce82d558",
+        "main.js": "10ebcbb620833e09fac9f1d05e3766d1f0e9842ef7a908f2d2073adeb80bc92b",
+        "main.js.map": "c1bac0422298f2c229782ad0293ed7c2963af9414d67136511bb119ff58ba77e",
+        "paths.js": "fea961b48b794a3567dee8e2d4e43fbf33be9614bd73f10de24a6d2c4b041bc1",
+        "paths.js.map": "f9c467b3af9bca05c19f0da09e13ab313c2f45f714ed3bc40ad3abba21384b1c",
+        "react-component-binding.js": "453f315cc701e948101d35c3af02c2d51540bc4efbc3ceeefaeb7396af91b98e",
+        "react-component-binding.js.map": "199d6feed5c0cf23cae8cf9cdeb7f17d17bb52e308790f8c386ed54958742394",
+        "semantic-extractor.js": "a84f9ecd05ed4dd74ef161fb883e07e00ee15fa1ea123236a02c7f77fbe477b1",
+        "semantic-extractor.js.map": "30a22b8e899db8880b9c5dfb43f81898c92783cf9191cbb5bc068bc59eb7c3ff",
+        "syntax-diagnostics.js": "cdbe6a313cdc283a53c400451508039ec9e0f6ce936ed5ded3d0f8e50856396f",
+        "syntax-diagnostics.js.map": "953cb9f98c9cfabe89bedb4a5c2bb0ca3f885d50108aa84568afef5b1bb809e2",
+        "ts-extractor.js": "1ddf5fbbb7cecf5eb55040b8296af80f125eb86108d3bf96c6596afd92e518e7",
+        "ts-extractor.js.map": "e946dbacd6429f366474cb8e53a60d4f0e1424d2067a07a8bdb9158eabba977e",
+        "types.js": "b0d2bc4142d0c62d43f996aaeb64f22c4889ac853f8a3765758b505d972d0149",
+        "types.js.map": "a7de897b48fe57bf54d6f84169135ff2e89e2fc95ea0a0a815761cc29a41efee",
+        "windows-protected-file.js": "91aaa242363572a34ff5467e75879571a4d419334637470489d2ab233653d121",
+        "windows-protected-file.js.map": "46359031fd71cba671aaa4ca4b1de68a3e9df8b3a865c944e3952fe63a835025"
+      }
+    },
+    "desktopSourceFiles": {
+      "ai-desktop-gateway.cjs": "838cff39af643c3e851d8fae76ca9903acabbd82aeba3bdab55daf410f35fbe1",
+      "ai-egress-bridge.cjs": "4911ce91bf77ef29ce5d8f34796b25d3bc979d98608ae94b7f6afdaa488b4a40",
+      "ai-egress-postgres.cjs": "0e19635acda66180e98ebffa02a076e2c143feab367044298cac0a4523031b48",
+      "ai-egress.cjs": "b13f2959545ca30d8baae8dd3fd8cf2b0d556b84a54ae72ab9b16b3988c7d847",
+      "ai-https-transport.cjs": "faedfb5610a60440a09286ed3ad2d594addd87918e13350a83bf951d843860d3",
+      "ai-model-contracts.cjs": "030d6b001a95776ce4e4cf2ff8e48ce2e92c17e951307a66bf30639c68fd96f3",
+      "backup-archive.cjs": "0b60d9961672c29abab03fd4fccaa3a2b02c6cd72064bb6373177fbc198d486c",
+      "backup-capacity.cjs": "f1f02c78c59d2594d052796988094de6e45408fe078047961b24dfb536398f83",
+      "backup-cost-state.cjs": "1d7070240ae7b6fbb729f73fa314ec8cb3584ff60060e095b23db3f9ba74e8c7",
+      "backup-database.cjs": "3da75fb0003bd78fc6d75399a2288656f3473f10aa4498311e497222f9be8daf",
+      "backup-export-policy.cjs": "f8a4047da67ae6ad4b4d4ea9ca6140a61a4d817786036a4bcd70ea69b7c010fb",
+      "backup-payload.cjs": "31c3d761ae08c28e86a342eee5aac3c7ea7b88aef29f10137a412a665efa42dd",
+      "backup-platform-io.cjs": "31a62b20c70d1a51cef8387f1b1351d1cf66e982867cdd8173e3c8184db155ca",
+      "backup-postgres.cjs": "4dbc95158f8c9eabc9fce237279b0408584fcbaba8b819e00fc09bf4e72a20d5",
+      "backup-product-state.cjs": "e64c13f99a3c503fc958710126abab994ed5752006a65b3c75ef6c85bc8b7492",
+      "backup-recovery-records.cjs": "36229c7d70efbd5686ce0256b2e751d2c5c052042521d68e56d5507b538e4955",
+      "backup-retention.cjs": "415d4d8f0291279bdd522d3aa5090b8293bb3a6522690f048b72112d19deae54",
+      "backup-runtime.cjs": "67c477a46768825844bb64da994e3da37df0bd67adbeeea8e7a6c8ac727ad769",
+      "backup-source-selection.cjs": "7e31b3444c15d6318692fc9824afde3750c36e7b45feac69a3998d24c5eb91c5",
+      "backup-source-swap.cjs": "55b843c23f3a665b9d7fe9d1180b46902dd036420733250e6b85298629b36070",
+      "backup-source-worker.cjs": "c170a73982074137ec330fc10387c49b5fdba5f35b660f34e6b2091f0a80dc78",
+      "backup-windows-io.cjs": "d50c2b0e3b98de63b9a7b5027081307ec751f48e4037615b4da35d3095ef8fde",
+      "backup.cjs": "80e5c7d6fca1f785c5f854d522fa17737837e6ee2670f9d477cf43b7c94e044e",
+      "isolated-run.cjs": "c374a7dbc86e738edabc78ee79da613f7909e82e8b3ff44a5a13d5c68103e9f4",
+      "main.cjs": "1211b720347b781a34e13b9bd8615bca162a3b55fe7cd521753656ffde4fb533",
+      "managed-process.cjs": "6806ffbfb818922746250d22bf5106013aabe16704f002ad99ded99bb145b6c3",
+      "native-owner-locks.cjs": "1d39d245b2e48daf9e33df8d077de56aa086cb3848c39d598fd742307ce90e0b",
+      "preload.cjs": "171a79148aa28d6c4d3adffc43abf2dfc27855aa8a7a6d52a99c288001c660b7",
+      "purpose-keyring.cjs": "ded009762b4d6e1155c6b857f5980bd53e1c6b03a477ee2e514f77253ac23b8f",
+      "runtime-manifest.cjs": "58f4b9f041b36b305eb4ceecb74435d1deb931ec399853aa27dd47abeea0d544",
+      "runtime-platform.cjs": "30c81b8031ff39abe48d76b0bd6ab036e3532e1a1827779ccc308437554704ef",
+      "safety-journal.cjs": "5f82d2390ffebeabc0e238bfcb9ffdb8cd547735a538265a7abf2bbe1c3d6e9b",
+      "safety-lifecycle.cjs": "3d8e7c12498e7992826264d6548f57a550e1afff4c451f47cfa52cc2cdc88e1e",
+      "service-transport.cjs": "aee30a9b4c8dfccd55c430f5ccd766f505149d88d45924ce58ce4331da8e8c07",
+      "source-broker.cjs": "9e5d4c971e1b1d8d209dd27949075effc9d48fcb30648c4e51c2c9c4802fc189",
+      "source-vault-windows.cjs": "20bbade78d44bf3cc0cbad0fff30efac64b466c5796403cba98e77ce030b90a2",
+      "source-vault.cjs": "49ace78302d82ca9eca690f72e9bdc81cc4a0175dc630cace0dfe859026b543a",
+      "startup-diagnostics.cjs": "7c81fa8ba4a8311d36a63f6586c39a7aff3f13b9a9f932832a83e51910be5465",
+      "windows-authenticated-state.cjs": "705918c43205c300c5ea8be3d7519d8e1dd723e1c39ead93683901b8abc972d4",
+      "windows-native-boundary.cjs": "b53703189346522bfcf9e3e1de0600394667a49d2aba1750f18db954e00881a9",
+      "windows-storage-files.cjs": "7121fe2e678a2e14063127a5f4e3bdbee5ccdf7f416d316b68ef2852a8489f8f",
+      "windows-storage.cjs": "0b8d730fb7c1fb3b27541e3aaab2ee83a9fcabd3245dbeb4233772474889c72a",
+      "windows-unix-server.cjs": "e449ac92ed95fbcb2269f19010a8b3ca545b1813d0e059c57e45708c7208d98f"
+    },
+    "baselineUnchanged": true,
+    "adHocSignatureVerifiedAfterNativeRun": true,
+    "nativeSupplyRebuilt": false
+  },
+  "validation": {
+    "analyzer": {
+      "typecheck": "PASS",
+      "tests": 271,
+      "pass": 271,
+      "scope": "Actual terminal session8884, source unchanged afterward; no raw report file was written for that invocation"
+    },
+    "backend": {
+      "status": "PASS_EXECUTED_WITH_EXPLICIT_SKIPS",
+      "task": "test",
+      "tests": 1677,
+      "pass": 1665,
+      "fail": 0,
+      "skipped": 12,
+      "startTime": 1791229137406,
+      "endTime": 1791229321005,
+      "sourcesUnchanged": true,
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": []
+    },
+    "accuracy": {
+      "status": "PASS",
+      "task": "accuracyTest",
+      "tests": 12,
+      "pass": 12,
+      "fail": 0,
+      "skipped": 0,
+      "startTime": 1791229102281,
+      "endTime": 1791229122484,
+      "sourcesUnchanged": true,
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": []
+    },
+    "events": {
+      "status": "PASS",
+      "task": "test",
+      "tests": 19,
+      "pass": 19,
+      "fail": 0,
+      "skipped": 0,
+      "startTime": 1791229018373,
+      "endTime": 1791229020486,
+      "sourcesUnchanged": true,
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": []
+    },
+    "corpus": {
+      "status": "PASS",
+      "task": "test",
+      "tests": 23,
+      "pass": 23,
+      "fail": 0,
+      "skipped": 0,
+      "startTime": 1791229336363,
+      "endTime": 1791229367451,
+      "sourcesUnchanged": true,
+      "preexistingContainersUnchanged": true,
+      "newContainersRemaining": []
+    },
+    "frontend": {
+      "allTests": {
+        "tests": 436,
+        "pass": 436,
+        "fail": 0,
+        "pending": 0
+      },
+      "allTestsOriginalRunStatus": "FAIL",
+      "originalTypecheckFailuresRetained": true,
+      "fullLintPassed": true,
+      "changedAfterAll": [
+        "frontend/src/features/import/progressReconciliation.test.tsx"
+      ],
+      "changeScope": "Test-only mock type declaration/import; runtime product unchanged",
+      "finalTypecheckAndFocused": {
+        "status": "PASS",
+        "commands": [
+          {
+            "label": "typecheck",
+            "status": 0,
+            "signal": null,
+            "errorCode": null,
+            "timedOut": false,
+            "directExitObserved": true
+          },
+          {
+            "label": "lint",
+            "status": 0,
+            "signal": null,
+            "errorCode": null,
+            "timedOut": false,
+            "directExitObserved": true
+          },
+          {
+            "label": "focused",
+            "status": 0,
+            "signal": null,
+            "errorCode": null,
+            "timedOut": false,
+            "directExitObserved": true
+          }
+        ],
+        "sources": {
+          "frontend/src/features/import/ProgressStep.tsx": "148de1d82480baa7414545ed5923291658b83f78830765e1e4ea45a0c285750a",
+          "frontend/src/features/import/progressReconciliation.test.tsx": "43e2d235a82ea72b350272c119f0672fa078b740128a6f2c68f9298c342d9111"
+        },
+        "sourcesUnchanged": true,
+        "focused": {
+          "tests": 11,
+          "pass": 11,
+          "fail": 0,
+          "pending": 0
+        },
+        "evidence": "/Users/minseokchae/Dev/code-intelligence/validation/local/pre-release-final/frontend-type-final-D3fOCC"
+      }
+    },
+    "desktopContracts": {
+      "tests": 212,
+      "pass": 212,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "subsystemStatus": "PASS",
+      "combinedOriginalRunStatus": "FAIL",
+      "otherFailure": "Frontend test typecheck failed in the combined run and was corrected in frontendFinal"
+    },
+    "corpusMetrics": {
+      "scope": "TIMED_GRADLE_REGRESSION",
+      "exitCode": 0,
+      "commandExitCode": 0,
+      "elapsedSeconds": 36,
+      "maxSeconds": 300,
+      "rssKiB": 955424,
+      "maxRssKiB": 2097152,
+      "failures": []
+    },
+    "corpusBaseline": {
+      "sha256": "196d3e39f8d5b236852c6a0d396ead24517e169a20ce481e1ee2a3f274da4739",
+      "version": "1",
+      "files": 57,
+      "minimumFiles": 25,
+      "corpusSha256": "df876e8e62fc75199d78f1429b32baed0e8b2837b58973706aa97dc1a28626d2"
+    },
+    "overlappingCountsAreNotUniqueTests": true
+  },
+  "native": {
+    "status": "PASS",
+    "analysisOnly": false,
+    "omittedSuites": [],
+    "checks": [
+      "native-app-version-ipc",
+      "native-services-ready",
+      "electron-safeStorage-api-encrypt-under-automation",
+      "first-start-three-native-window-sizes",
+      "repository-overview-three-native-window-sizes",
+      "import-default-overview-snapshot-table-filter-local-relations-without-ai",
+      "real-folder-grant-preview-import-analysis-source-navigation",
+      "project-list-three-native-window-sizes",
+      "native-app-version-ipc",
+      "native-services-ready",
+      "electron-safeStorage-api-decrypt-after-automation-restart",
+      "real-database-and-encrypted-source-persistence",
+      "real-main-quiescent-backup-and-resume",
+      "real-preview-approved-reanalysis-source-navigation",
+      "real-main-restore-db-source-and-revoke-old-api-authority",
+      "real-main-recovery-checkpoint-restores-pre-replacement-db-and-source",
+      "native-app-version-ipc",
+      "native-services-ready",
+      "restored-db-and-encrypted-source-survive-process-restart",
+      "after-delete-three-native-window-sizes",
+      "synthetic-project-delete",
+      "native-app-version-ipc",
+      "native-services-ready",
+      "deleted-project-stays-deleted-after-restart",
+      "representative-repository-three-native-window-sizes",
+      "representative-repository-confirmed-entrypoints-flow-step-to-snapshot-source",
+      "representative-repository-approved-import-overview-search-relations-snapshot-source",
+      "native-app-version-ipc",
+      "native-services-ready",
+      "representative-repository-results-survive-packaged-app-restart",
+      "packaged-default-export-route-binding-and-shadow-refusal",
+      "packaged-package-entry-heuristic-refusal",
+      "native-app-version-ipc",
+      "native-services-ready",
+      "packaged-react-route-graph-survives-restart",
+      "native-clean-shutdown"
+    ],
+    "recordedCheckCount": 36,
+    "includesRepeatedStartupChecks": true,
+    "executionElapsedMs": 230962,
+    "launchToHomeMs": [
+      15078,
+      12165,
+      13087,
+      13592,
+      13211,
+      13236
+    ],
+    "shutdownDiagnostics": {
+      "version": 1,
+      "required": true,
+      "pipeDrainTimeoutMs": 1000
+    },
+    "appExits": [
+      {
+        "sequence": 1,
+        "closedNormally": true,
+        "requestedDuring": "real-app-restart",
+        "code": 0,
+        "signal": null,
+        "elapsedMs": 2981,
+        "shutdown": {
+          "phase": "COMPLETE",
+          "state": "COMPLETE",
+          "elapsedMs": 2829
+        },
+        "shutdownTrace": [
+          {
+            "phase": "QUEUED",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "STOPPING",
+            "state": "RUNNING",
+            "elapsedMs": 1
+          },
+          {
+            "phase": "SAFETY_OFF",
+            "state": "RUNNING",
+            "elapsedMs": 3
+          },
+          {
+            "phase": "BACKEND",
+            "state": "RUNNING",
+            "elapsedMs": 55
+          },
+          {
+            "phase": "ANALYZER",
+            "state": "RUNNING",
+            "elapsedMs": 1013
+          },
+          {
+            "phase": "REDIS",
+            "state": "RUNNING",
+            "elapsedMs": 1527
+          },
+          {
+            "phase": "POSTGRES",
+            "state": "RUNNING",
+            "elapsedMs": 2088
+          },
+          {
+            "phase": "SOURCES",
+            "state": "RUNNING",
+            "elapsedMs": 2701
+          },
+          {
+            "phase": "SAFETY",
+            "state": "RUNNING",
+            "elapsedMs": 2708
+          },
+          {
+            "phase": "CONNECTIONS",
+            "state": "RUNNING",
+            "elapsedMs": 2826
+          },
+          {
+            "phase": "OWNER_LOCKS",
+            "state": "RUNNING",
+            "elapsedMs": 2827
+          },
+          {
+            "phase": "TRANSPORT",
+            "state": "RUNNING",
+            "elapsedMs": 2827
+          },
+          {
+            "phase": "STORAGE",
+            "state": "RUNNING",
+            "elapsedMs": 2828
+          },
+          {
+            "phase": "PRIVATE_IPC",
+            "state": "RUNNING",
+            "elapsedMs": 2828
+          },
+          {
+            "phase": "COMPLETE",
+            "state": "COMPLETE",
+            "elapsedMs": 2829
+          }
+        ]
+      },
+      {
+        "sequence": 2,
+        "closedNormally": true,
+        "requestedDuring": "post-restore-process-restart",
+        "code": 0,
+        "signal": null,
+        "elapsedMs": 3921,
+        "shutdown": {
+          "phase": "COMPLETE",
+          "state": "COMPLETE",
+          "elapsedMs": 3768
+        },
+        "shutdownTrace": [
+          {
+            "phase": "QUEUED",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "STOPPING",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "SAFETY_OFF",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "BACKEND",
+            "state": "RUNNING",
+            "elapsedMs": 36
+          },
+          {
+            "phase": "ANALYZER",
+            "state": "RUNNING",
+            "elapsedMs": 991
+          },
+          {
+            "phase": "REDIS",
+            "state": "RUNNING",
+            "elapsedMs": 2473
+          },
+          {
+            "phase": "POSTGRES",
+            "state": "RUNNING",
+            "elapsedMs": 3035
+          },
+          {
+            "phase": "SOURCES",
+            "state": "RUNNING",
+            "elapsedMs": 3663
+          },
+          {
+            "phase": "SAFETY",
+            "state": "RUNNING",
+            "elapsedMs": 3671
+          },
+          {
+            "phase": "CONNECTIONS",
+            "state": "RUNNING",
+            "elapsedMs": 3766
+          },
+          {
+            "phase": "OWNER_LOCKS",
+            "state": "RUNNING",
+            "elapsedMs": 3767
+          },
+          {
+            "phase": "TRANSPORT",
+            "state": "RUNNING",
+            "elapsedMs": 3767
+          },
+          {
+            "phase": "STORAGE",
+            "state": "RUNNING",
+            "elapsedMs": 3768
+          },
+          {
+            "phase": "PRIVATE_IPC",
+            "state": "RUNNING",
+            "elapsedMs": 3768
+          },
+          {
+            "phase": "COMPLETE",
+            "state": "COMPLETE",
+            "elapsedMs": 3768
+          }
+        ]
+      },
+      {
+        "sequence": 3,
+        "closedNormally": true,
+        "requestedDuring": "final-process-restart",
+        "code": 0,
+        "signal": null,
+        "elapsedMs": 2904,
+        "shutdown": {
+          "phase": "COMPLETE",
+          "state": "COMPLETE",
+          "elapsedMs": 2759
+        },
+        "shutdownTrace": [
+          {
+            "phase": "QUEUED",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "STOPPING",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "SAFETY_OFF",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "BACKEND",
+            "state": "RUNNING",
+            "elapsedMs": 48
+          },
+          {
+            "phase": "ANALYZER",
+            "state": "RUNNING",
+            "elapsedMs": 1031
+          },
+          {
+            "phase": "REDIS",
+            "state": "RUNNING",
+            "elapsedMs": 1549
+          },
+          {
+            "phase": "POSTGRES",
+            "state": "RUNNING",
+            "elapsedMs": 2123
+          },
+          {
+            "phase": "SOURCES",
+            "state": "RUNNING",
+            "elapsedMs": 2622
+          },
+          {
+            "phase": "SAFETY",
+            "state": "RUNNING",
+            "elapsedMs": 2630
+          },
+          {
+            "phase": "CONNECTIONS",
+            "state": "RUNNING",
+            "elapsedMs": 2757
+          },
+          {
+            "phase": "OWNER_LOCKS",
+            "state": "RUNNING",
+            "elapsedMs": 2758
+          },
+          {
+            "phase": "TRANSPORT",
+            "state": "RUNNING",
+            "elapsedMs": 2758
+          },
+          {
+            "phase": "STORAGE",
+            "state": "RUNNING",
+            "elapsedMs": 2759
+          },
+          {
+            "phase": "PRIVATE_IPC",
+            "state": "RUNNING",
+            "elapsedMs": 2759
+          },
+          {
+            "phase": "COMPLETE",
+            "state": "COMPLETE",
+            "elapsedMs": 2759
+          }
+        ]
+      },
+      {
+        "sequence": 4,
+        "closedNormally": true,
+        "requestedDuring": "representative-repository-restart",
+        "code": 0,
+        "signal": null,
+        "elapsedMs": 3359,
+        "shutdown": {
+          "phase": "COMPLETE",
+          "state": "COMPLETE",
+          "elapsedMs": 3209
+        },
+        "shutdownTrace": [
+          {
+            "phase": "QUEUED",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "STOPPING",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "SAFETY_OFF",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "BACKEND",
+            "state": "RUNNING",
+            "elapsedMs": 62
+          },
+          {
+            "phase": "ANALYZER",
+            "state": "RUNNING",
+            "elapsedMs": 1072
+          },
+          {
+            "phase": "REDIS",
+            "state": "RUNNING",
+            "elapsedMs": 1586
+          },
+          {
+            "phase": "POSTGRES",
+            "state": "RUNNING",
+            "elapsedMs": 2134
+          },
+          {
+            "phase": "SOURCES",
+            "state": "RUNNING",
+            "elapsedMs": 3093
+          },
+          {
+            "phase": "SAFETY",
+            "state": "RUNNING",
+            "elapsedMs": 3103
+          },
+          {
+            "phase": "CONNECTIONS",
+            "state": "RUNNING",
+            "elapsedMs": 3208
+          },
+          {
+            "phase": "OWNER_LOCKS",
+            "state": "RUNNING",
+            "elapsedMs": 3208
+          },
+          {
+            "phase": "TRANSPORT",
+            "state": "RUNNING",
+            "elapsedMs": 3208
+          },
+          {
+            "phase": "STORAGE",
+            "state": "RUNNING",
+            "elapsedMs": 3209
+          },
+          {
+            "phase": "PRIVATE_IPC",
+            "state": "RUNNING",
+            "elapsedMs": 3209
+          },
+          {
+            "phase": "COMPLETE",
+            "state": "COMPLETE",
+            "elapsedMs": 3209
+          }
+        ]
+      },
+      {
+        "sequence": 5,
+        "closedNormally": true,
+        "requestedDuring": "react-default-route-restart",
+        "code": 0,
+        "signal": null,
+        "elapsedMs": 2889,
+        "shutdown": {
+          "phase": "COMPLETE",
+          "state": "COMPLETE",
+          "elapsedMs": 2734
+        },
+        "shutdownTrace": [
+          {
+            "phase": "QUEUED",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "STOPPING",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "SAFETY_OFF",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "BACKEND",
+            "state": "RUNNING",
+            "elapsedMs": 57
+          },
+          {
+            "phase": "ANALYZER",
+            "state": "RUNNING",
+            "elapsedMs": 1036
+          },
+          {
+            "phase": "REDIS",
+            "state": "RUNNING",
+            "elapsedMs": 1543
+          },
+          {
+            "phase": "POSTGRES",
+            "state": "RUNNING",
+            "elapsedMs": 2100
+          },
+          {
+            "phase": "SOURCES",
+            "state": "RUNNING",
+            "elapsedMs": 2616
+          },
+          {
+            "phase": "SAFETY",
+            "state": "RUNNING",
+            "elapsedMs": 2621
+          },
+          {
+            "phase": "CONNECTIONS",
+            "state": "RUNNING",
+            "elapsedMs": 2732
+          },
+          {
+            "phase": "OWNER_LOCKS",
+            "state": "RUNNING",
+            "elapsedMs": 2733
+          },
+          {
+            "phase": "TRANSPORT",
+            "state": "RUNNING",
+            "elapsedMs": 2733
+          },
+          {
+            "phase": "STORAGE",
+            "state": "RUNNING",
+            "elapsedMs": 2734
+          },
+          {
+            "phase": "PRIVATE_IPC",
+            "state": "RUNNING",
+            "elapsedMs": 2734
+          },
+          {
+            "phase": "COMPLETE",
+            "state": "COMPLETE",
+            "elapsedMs": 2734
+          }
+        ]
+      },
+      {
+        "sequence": 6,
+        "closedNormally": true,
+        "requestedDuring": "native-clean-shutdown",
+        "code": 0,
+        "signal": null,
+        "elapsedMs": 3473,
+        "shutdown": {
+          "phase": "COMPLETE",
+          "state": "COMPLETE",
+          "elapsedMs": 3326
+        },
+        "shutdownTrace": [
+          {
+            "phase": "QUEUED",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "STOPPING",
+            "state": "RUNNING",
+            "elapsedMs": 0
+          },
+          {
+            "phase": "SAFETY_OFF",
+            "state": "RUNNING",
+            "elapsedMs": 1
+          },
+          {
+            "phase": "BACKEND",
+            "state": "RUNNING",
+            "elapsedMs": 85
+          },
+          {
+            "phase": "ANALYZER",
+            "state": "RUNNING",
+            "elapsedMs": 1592
+          },
+          {
+            "phase": "REDIS",
+            "state": "RUNNING",
+            "elapsedMs": 2089
+          },
+          {
+            "phase": "POSTGRES",
+            "state": "RUNNING",
+            "elapsedMs": 2697
+          },
+          {
+            "phase": "SOURCES",
+            "state": "RUNNING",
+            "elapsedMs": 3209
+          },
+          {
+            "phase": "SAFETY",
+            "state": "RUNNING",
+            "elapsedMs": 3214
+          },
+          {
+            "phase": "CONNECTIONS",
+            "state": "RUNNING",
+            "elapsedMs": 3324
+          },
+          {
+            "phase": "OWNER_LOCKS",
+            "state": "RUNNING",
+            "elapsedMs": 3324
+          },
+          {
+            "phase": "TRANSPORT",
+            "state": "RUNNING",
+            "elapsedMs": 3325
+          },
+          {
+            "phase": "STORAGE",
+            "state": "RUNNING",
+            "elapsedMs": 3326
+          },
+          {
+            "phase": "PRIVATE_IPC",
+            "state": "RUNNING",
+            "elapsedMs": 3326
+          },
+          {
+            "phase": "COMPLETE",
+            "state": "COMPLETE",
+            "elapsedMs": 3326
+          }
+        ]
+      }
+    ],
+    "representativeRepository": {
+      "scope": "filtered current Code Intelligence desktop/frontend/backend/TypeScript analyzer source; no dependency install or repository scripts executed",
+      "sourceFiles": 972,
+      "sourceSha256": "1be51319af49a71370949edf76009441b912c9561cf5b0c012991752fc655f59",
+      "localImport": {
+        "schemaVersion": 1,
+        "policyVersion": "local-ingest-v1",
+        "acceptedFiles": 890,
+        "bytesRead": 8060334,
+        "excludedEntriesByReason": {
+          "SECRET_CONTENT": 80,
+          "BINARY": 1,
+          "GENERATED_DIRECTORY": 1
+        }
+      },
+      "importToOverviewMs": 60167,
+      "projectId": 2,
+      "snapshotId": 3,
+      "fileOutcomes": {
+        "UNMEASURED": 87,
+        "PARTIAL": 638,
+        "SUCCESS": 164,
+        "UNSUPPORTED": 1
+      },
+      "entrypointCount": 108,
+      "fileSearchRenderMs": 12,
+      "relationRenderMs": 1137,
+      "flowEvidence": {
+        "flowCount": 102,
+        "selectedFlowId": 8,
+        "stepCount": 5,
+        "sourceSnapshotId": 3
+      }
+    },
+    "reactRouteBinding": {
+      "projectId": 3,
+      "snapshotId": 4,
+      "routeTargets": {
+        "route:/chosen": [
+          "component:chosen.tsx#ActualPage"
+        ],
+        "route:/package": [],
+        "route:/shadow": []
+      },
+      "retainedSourceVerified": true,
+      "scope": "real packaged UI import, graph API and snapshot source; default alias positive, parameter-shadow and conflicting package-entry negatives"
+    },
+    "productRunnerSha256": "8a8e89884ee9e3e506b8a36164b097e73183eb5390d5859a3bcba1324b520cf0",
+    "wrapperSha256": "5f2d01bad8efa8cd8fc72101d05ab469ccb7529b3d6ba7db9c7b3df7a0465963",
+    "mockKeychain": true,
+    "realKeychain": false,
+    "realAccount": false,
+    "manualScreenshotReview": false,
+    "independentProcessTreeForensics": false
+  },
+  "dependencyReview": {
+    "status": "NO_MATCHES_IN_QUERIED_COORDINATES",
+    "provider": "OSV",
+    "observedAt": "2026-10-05T19:49:17.495Z",
+    "coordinates": 276,
+    "advisoryCount": 0,
+    "packagesWithAdvisories": 0,
+    "omitted": [
+      {
+        "kind": "jar",
+        "fileName": "spring-boot-jarmode-tools-4.1.0.jar",
+        "reason": "NO_HASH_MATCHED_RESOLVED_COORDINATES"
+      }
+    ],
+    "hashMatchedResolvedJars": 152,
+    "resolvedArtifacts": 169,
+    "runtimeFilesVerified": 5128,
+    "sourceSent": false,
+    "credentialsSent": false,
+    "completeSbom": false,
+    "coverageLimits": [
+      "Observed npm manifests and exclusively filename+SHA256-matched Gradle runtime artifacts",
+      "Root application packages excluded; unmatched and ambiguous coordinates excluded",
+      "Native dependencies, JRE, Electron/Chromium/Node and bundled browser transitives are outside this query set",
+      "No finding is not proof of safety, reachability or complete advisory coverage"
+    ]
+  },
+  "reviews": {
+    "frontend": {
+      "role": "independent read-only worker",
+      "scope": "ProgressStep and two response/reconciliation regression files",
+      "remainingBlockingFindings": 0
+    },
+    "nativeShutdown": {
+      "role": "independent read-only worker",
+      "scope": "composed shutdown validation, actual call chain and close regression cases",
+      "initialBlockingFinding": "Cleanup FAILED could pass with direct exit0",
+      "correctedAndRechecked": true,
+      "remainingBlockingFindings": 0
+    },
+    "workerExecutedTests": false
+  },
+  "preservedHistory": {
+    "reactCheckpoint": "docs/audit/react-route-binding-validation-2026-10-06.json",
+    "oldNativeFailures": [
+      "validation/local/pre-release-final/product-q6v3EP/result.json",
+      "validation/local/pre-release-final/product-29qfSB/result.json"
+    ],
+    "oldNativeFailureRootCauses": "UNCONFIRMED",
+    "newRaceDoesNotProveHistoricalRootCause": true,
+    "oldFullPass": "validation/local/pre-release-final/product-RkDN8L/result.json",
+    "oldCandidate": "qUMAST before final guard/SSE/shutdown changes",
+    "redRunsRetained": [
+      "eventsRed",
+      "frontendRed"
+    ]
+  },
+  "evidence": {
+    "build": {
+      "path": "validation/local/pre-release-candidate/build-BRdHCE/result.json",
+      "sha256": "105cc318fa8bcd14b876214abd22726a8fbf1012abbb014a9b99668437d56779",
+      "originalStatus": "PACKAGED_NOT_RELEASED"
+    },
+    "native": {
+      "path": "validation/local/pre-release-final/product-h78Ocm/result.json",
+      "sha256": "d2dfa998ebd3230d9c9fca925d7de86b28a88ab97b202b49274409c1d6ba4934",
+      "originalStatus": "PASS"
+    },
+    "backend": {
+      "path": "validation/local/docker-integration/backend-gTRPPH/result.json",
+      "sha256": "817a40278d6fc558de2262b3e8d5fa1fdc88f56f171a202026fca05d149e2f9a",
+      "originalStatus": "PASS_EXECUTED_WITH_EXPLICIT_SKIPS"
+    },
+    "accuracy": {
+      "path": "validation/local/docker-integration/accuracy-rKjsxz/result.json",
+      "sha256": "5176c151f1cac78eb974933dbab00da8f423dfb3f92b8d16f0c8973efba241ef",
+      "originalStatus": "PASS"
+    },
+    "events": {
+      "path": "validation/local/docker-integration/events-kVcbwO/result.json",
+      "sha256": "9479fdc1c24d11e36df9625eeee319437ecef88694a71c5c19316e767adf1982",
+      "originalStatus": "PASS"
+    },
+    "corpus": {
+      "path": "validation/local/docker-integration/corpus-f3mT7I/result.json",
+      "sha256": "907fd1182ff82b1479a277fb383dfc9beaf6956dcf1dbaefb49b0c151b71c381",
+      "originalStatus": "PASS"
+    },
+    "frontendAll": {
+      "path": "validation/local/pre-release-final/frontend-final-LTOWvk/result.json",
+      "sha256": "0198cb0da9e14aea4ee41a5afed6426a52b04b8661bd244f97819fffe21be62c",
+      "originalStatus": "FAIL"
+    },
+    "frontendFinal": {
+      "path": "validation/local/pre-release-final/frontend-type-final-D3fOCC/result.json",
+      "sha256": "10c5ac97bda8236e6d48f758a82883f86544d1a411b1a61db09bdd03c6f49f6f",
+      "originalStatus": "PASS"
+    },
+    "contracts": {
+      "path": "validation/local/pre-release-final/continuation-checks-dKnuib/result.json",
+      "sha256": "11d58a3f84522f1d2272e0a2725d412bf42e2b771a6ff7b2cc02c429a94dec7d",
+      "originalStatus": "FAIL"
+    },
+    "eventsRed": {
+      "path": "validation/local/docker-integration/events-BLvyIG/result.json",
+      "sha256": "03dc99c606ff3ad9dd420141bbbd8aab088f00b65a1541316e24ea0a4a7716e0",
+      "originalStatus": "FAIL"
+    },
+    "frontendRed": {
+      "path": "validation/local/pre-release-final/events-ui-red-ORcJXE/result.json",
+      "sha256": "0966f41e24d7ce7556043f83eed2b7a53116f1c9618a0ea49555e97207598ec5",
+      "originalStatus": null
+    },
+    "inventory": {
+      "path": "validation/local/pre-release-final/inventory-continuation-20261006.json",
+      "sha256": "3bf667e23c912070b759d337c302c5a9487395f7fc7792070a49e31be06179f5",
+      "originalStatus": "OBSERVED_WITH_LIMITATIONS"
+    },
+    "advisory": {
+      "path": "validation/local/pre-release-final/advisory-continuation-20261006.json",
+      "sha256": "948258467967ee299ba7b7d5486b2c6a290eaf5fd1f932b964b827006f1e7068",
+      "originalStatus": "NO_MATCHES_IN_QUERIED_COORDINATES"
+    },
+    "runtime": {
+      "path": "validation/local/pre-release-final/runtime-continuation-20261006.json",
+      "sha256": "10950d7948583a4db9a0054018942dc381159e7f56fc1aa440d720098b0b2a92",
+      "originalStatus": "RESOLVED_GRADLE_RUNTIME_ARTIFACTS"
+    }
+  },
+  "publication": {
+    "kind": "REVIEWED_SOURCE_ONLY",
+    "skipCiRequired": true,
+    "formalSigning": false,
+    "notarization": false,
+    "publicRelease": false,
+    "localReceipt": "validation/local/pre-release-final/publication-continuation-20261006.json"
+  },
+  "remainingAcceptance": [
+    "Existing real GitHub project reanalysis and refresh/revoke/SSO",
+    "Existing user DB/extension/locale compatibility and rollback",
+    "Full crash/power-loss/replay matrix",
+    "Independent corpus, whole-app20-run p95/RSS, security and user-task acceptance",
+    "Clean-machine/minimum-OS/signed update acceptance",
+    "Complete SBOM/licenses and external GitHub App/support/privacy decisions",
+    "Developer ID/notarization and final public release approval"
+  ]
+}

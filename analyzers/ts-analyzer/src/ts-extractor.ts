@@ -4,6 +4,7 @@ import { isTsJs } from './paths'
 import { extractGeneric } from './generic-extractor'
 import { extractSemanticGraph } from './semantic-extractor'
 import { assertParseable } from './syntax-diagnostics'
+import { createReactComponentResolver } from './react-component-binding'
 
 const HTTP_METHODS: Record<string, true> = {
   GET: true,
@@ -56,17 +57,26 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
     inputSources: new Set(sourceFiles),
     globalFetchShadowed: sourceFiles.some(hasGlobalFetchBinding),
   }
+  const componentDeclarations = new Map<Node, SymbolHit>()
+  for (const source of sourceFiles) {
+    collectDeclarations(source, source.getFilePath().replace(/^\//, ''), components, hooks, stores, componentDeclarations)
+  }
+  const resolveComponent = createReactComponentResolver(sourceFiles, files, componentDeclarations)
   for (const source of sourceFiles) {
     const filePath = source.getFilePath().replace(/^\//, '')
-    collectRoutes(source, filePath, routes)
+    collectRoutes(source, filePath, routes, resolveComponent)
     collectVueRouter(source, filePath, routes)
     collectFileBasedRoutes(source, filePath, routes, endpoints, symbols)
-    collectDeclarations(source, filePath, components, hooks, stores)
     collectApiCalls(source, filePath, apiCalls, httpBindings)
   }
   symbols.push(...extractGeneric(files))
   const semantic = extractSemanticGraph(project, files)
   endpoints.push(...semantic.endpoints)
+  const routeCounts = new Map<string, number>()
+  for (const route of routes) routeCounts.set(route.path, (routeCounts.get(route.path) ?? 0) + 1)
+  for (const route of routes) if (route.componentResolution && routeCounts.get(route.path)! > 1) {
+    route.componentResolution = { status: 'UNRESOLVED', target: null }
+  }
 
   const unresolvedFiles = new Set(semantic.unresolvedCalls.map((call) => call.filePath))
   return {
@@ -96,7 +106,7 @@ function scriptKind(path: string): ts.ScriptKind {
   return ts.ScriptKind.TS
 }
 
-function collectRoutes(source: SourceFile, filePath: string, routes: RouteHit[]): void {
+function collectRoutes(source: SourceFile, filePath: string, routes: RouteHit[], resolveComponent: ReturnType<typeof createReactComponentResolver>): void {
   source.forEachDescendant((node) => {
     if (!Node.isJsxOpeningElement(node) && !Node.isJsxSelfClosingElement(node)) {
       return
@@ -123,6 +133,11 @@ function collectRoutes(source: SourceFile, filePath: string, routes: RouteHit[])
       filePath,
       lineStart: node.getStartLineNumber(),
       lineEnd: node.getEndLineNumber(),
+      // A later spread or duplicate element may replace the observed JSX value.
+      componentResolution: node.getAttributes().some(Node.isJsxSpreadAttribute)
+        || node.getAttributes().filter(attribute => Node.isJsxAttribute(attribute) && attribute.getNameNode().getText() === 'element').length !== 1
+        ? { status: 'UNRESOLVED', target: null }
+        : resolveComponent(elementAttr && Node.isJsxAttribute(elementAttr) ? elementAttr.getInitializer() : undefined),
     })
   })
 }
@@ -367,6 +382,7 @@ function collectDeclarations(
   components: SymbolHit[],
   hooks: SymbolHit[],
   stores: SymbolHit[],
+  componentDeclarations: Map<Node, SymbolHit>,
 ): void {
   source.forEachDescendant((node) => {
     if (Node.isFunctionDeclaration(node) || Node.isFunctionExpression(node) || Node.isArrowFunction(node)) {
@@ -381,7 +397,9 @@ function collectDeclarations(
         return
       }
       if (isPascalCase(name) && containsJsx(node)) {
-        components.push({ name, kind: 'COMPONENT', filePath, lineStart: start, lineEnd: end })
+        const hit: SymbolHit = { name, kind: 'COMPONENT', filePath, lineStart: start, lineEnd: end }
+        components.push(hit)
+        componentDeclarations.set(node, hit)
       }
     }
     if (Node.isCallExpression(node) && isImportedStoreFactory(node, source)) {

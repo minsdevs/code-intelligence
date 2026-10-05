@@ -8,7 +8,9 @@ import dev.codeintelligence.analysis.core.GraphEdgeType;
 import dev.codeintelligence.analysis.core.GraphIdentityGuard;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeType;
+import dev.codeintelligence.analysis.core.InvalidFilePathException;
 import dev.codeintelligence.analysis.core.NaturalKeys;
+import dev.codeintelligence.analysis.core.SafeRelativePath;
 import dev.codeintelligence.analysis.graph.AreaPathTagger;
 import dev.codeintelligence.evidence.EvidenceKind;
 import java.util.ArrayList;
@@ -73,6 +75,14 @@ final class TsGraphMapper {
         for (TsAnalyzeDtos.SymbolHit store : response.stores()) {
             addSymbol(nodes, edges, evidences, store, GraphNodeType.STORE, null);
         }
+        var routeCounts = response.routes().stream()
+                .filter(route -> route.path() != null && !route.path().isBlank())
+                .collect(java.util.stream.Collectors.groupingBy(
+                        route -> NaturalKeys.route(route.path()), java.util.stream.Collectors.counting()));
+        var explicitRoutes = response.routes().stream()
+                .filter(route -> route.componentResolution() != null && route.path() != null)
+                .map(route -> NaturalKeys.route(route.path()))
+                .collect(java.util.stream.Collectors.toSet());
         for (TsAnalyzeDtos.RouteHit route : response.routes()) {
             if (route.path() == null || route.path().isBlank()) {
                 continue;
@@ -82,6 +92,14 @@ final class TsGraphMapper {
             metadata.put("path", route.path());
             if (route.component() != null) {
                 metadata.put("componentKey", route.component());
+            }
+            boolean conflictingRoute = explicitRoutes.contains(key) && routeCounts.getOrDefault(key, 0L) != 1;
+            if (route.componentResolution() != null || conflictingRoute) {
+                metadata.put(
+                        "componentResolution",
+                        conflictingRoute || resolvedRouteComponent(response, route.componentResolution()) == null
+                                ? "UNRESOLVED"
+                                : "RESOLVED");
             }
             nodes.add(new GraphNodeDraft(
                     GraphNodeType.FE_ROUTE.name(),
@@ -97,8 +115,10 @@ final class TsGraphMapper {
                 edges.add(GraphEdgeDraft.of(
                         NaturalKeys.file(route.filePath()), key, GraphEdgeType.CONTAINS, EdgeConfidence.CONFIRMED));
             }
-            if (route.component() != null && route.filePath() != null) {
-                TsAnalyzeDtos.SymbolHit component = routeComponent(response, route.component(), route.filePath());
+            if (!conflictingRoute && route.component() != null && route.filePath() != null) {
+                TsAnalyzeDtos.SymbolHit component = route.componentResolution() == null
+                        ? routeComponent(response, route.component(), route.filePath())
+                        : resolvedRouteComponent(response, route.componentResolution());
                 if (component != null) {
                     String componentKey = NaturalKeys.component(component.filePath(), component.name());
                     edges.add(GraphEdgeDraft.of(key, componentKey, GraphEdgeType.CONTAINS, EdgeConfidence.LIKELY));
@@ -276,6 +296,39 @@ final class TsGraphMapper {
         return (filePath == null ? "" : filePath) + "#" + name;
     }
 
+    private static TsAnalyzeDtos.SymbolHit resolvedRouteComponent(
+            TsAnalyzeDtos.Response response, TsAnalyzeDtos.ComponentResolution resolution) {
+        // An explicit unresolved/invalid response must never fall back to name matching.
+        var target = resolution.target();
+        if (!"RESOLVED".equals(resolution.status())
+                || target == null
+                || target.name() == null
+                || target.name().isBlank()
+                || target.filePath() == null
+                || target.lineStart() == null
+                || target.lineStart() < 1
+                || target.lineEnd() == null
+                || target.lineEnd() < target.lineStart()) return null;
+        try {
+            if (!target.filePath().equals(SafeRelativePath.normalize(target.filePath()))) return null;
+        } catch (InvalidFilePathException | IllegalArgumentException invalid) {
+            return null;
+        }
+        var candidates = response.components().stream()
+                .filter(hit ->
+                        target.name().equals(hit.name()) && target.filePath().equals(hit.filePath()))
+                .toList();
+        // Graph keys omit scope/line. Two declarations in the same file cannot be
+        // disambiguated merely by matching the requested position of one of them.
+        if (candidates.size() != 1) return null;
+        var hit = candidates.getFirst();
+        return "COMPONENT".equals(hit.kind())
+                        && target.lineStart().equals(hit.lineStart())
+                        && target.lineEnd().equals(hit.lineEnd())
+                ? hit
+                : null;
+    }
+
     private static TsAnalyzeDtos.SymbolHit routeComponent(
             TsAnalyzeDtos.Response response, String name, String routeFile) {
         var local = response.components().stream()
@@ -285,7 +338,9 @@ final class TsGraphMapper {
         if (!local.isEmpty()) return null;
         // A name alone does not identify a module. Follow only an observed import binding.
         var imported = response.imports().stream()
-                .filter(hit -> routeFile.equals(hit.fromPath()) && name.equals(hit.imported()))
+                .filter(hit -> routeFile.equals(hit.fromPath())
+                        && name.equals(hit.imported())
+                        && !Boolean.TRUE.equals(hit.typeOnly()))
                 .flatMap(binding -> response.components().stream()
                         .filter(hit -> binding.toPath() != null
                                 && binding.toPath().equals(hit.filePath())

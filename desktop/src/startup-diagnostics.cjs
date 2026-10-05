@@ -27,6 +27,8 @@ const startupCodes = new Set(['EACCES', 'ENOENT', 'SAFETY_RECOVERY_REQUIRED',
   'SAFETY_STORAGE_UNAVAILABLE', 'SAFETY_OWNER_LOST', 'MAIN_STARTUP_FAILED', ...INTEGRITY_CODES]);
 const phases = new Set(['MANIFEST', 'PROFILE', 'CREDENTIALS', 'PRIVATE_IPC', 'TLS', 'OWNER_LOCKS',
   'SAFETY', 'GATEWAY', 'BACKUP', 'AUTHORIZED_ROOTS', 'POSTGRES', 'CACHE_AND_ANALYZER', 'BACKEND', 'WINDOW', 'READY']);
+const shutdownPhases = new Set(['QUEUED', 'STOPPING', 'SAFETY_OFF', 'BACKEND', 'ANALYZER', 'REDIS',
+  'POSTGRES', 'SOURCES', 'SAFETY', 'CONNECTIONS', 'OWNER_LOCKS', 'TRANSPORT', 'STORAGE', 'PRIVATE_IPC', 'COMPLETE']);
 
 class RuntimeIntegrityError extends Error {
   constructor(code) {
@@ -66,4 +68,15 @@ function parseStartupLine(line) {
   return null;
 }
 
-module.exports = Object.freeze({ RuntimeIntegrityError, integrityError, startupFailureCode, parseStartupLine, INTEGRITY_CODES });
+function parseShutdownLine(line) {
+  if (typeof line !== 'string' || line.length > 256) return null;
+  const parts = line.split(' ');
+  if (parts[0] !== 'DESKTOP_SHUTDOWN' || !shutdownPhases.has(parts[1])) return null;
+  if (parts.length === 2) return { phase: parts[1], state: parts[1] === 'COMPLETE' ? 'COMPLETE' : 'RUNNING' };
+  if (parts.length === 4 && parts[1] !== 'COMPLETE' && parts[2] === 'FAILED' && parts[3] === 'SAFETY_RECOVERY_REQUIRED') {
+    return { phase: parts[1], state: 'FAILED', code: 'SAFETY_RECOVERY_REQUIRED' };
+  }
+  return null;
+}
+
+module.exports = Object.freeze({ RuntimeIntegrityError, integrityError, startupFailureCode, parseStartupLine, parseShutdownLine, INTEGRITY_CODES });

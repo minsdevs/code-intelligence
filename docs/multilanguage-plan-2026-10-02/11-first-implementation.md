@@ -22,13 +22,21 @@
 [배포 전8단계 진행표](07-delivery-release-gates.md#최신-전체-진행표--보고-기준)의
 최종 후보 판정까지 기록했으며 **정식 출시는 No-Go**다. 실제 계정·전체 crash/원장·
 독립 정확도/성능/사용성·최소 OS/서명 등의 수용 잔여를 완료로 표시하지 않는다.
-상세는 [통합 후보·최종 검증](../audit/pre-release-candidate-2026-10-05.md)을 따른다.
+상세는 [최신 통합 후보·검증](../audit/pre-release-continuation-2026-10-06.md)을 따른다.
 
 2026-10-06 [Docker 통합 후속](../audit/docker-integration-2026-10-06.md)은 이전 실행환경
 차단을 해소하고 기본 backend1639PASS·명시opt-in skip 분리, 실제 인증13/유지보수9,
 정확도fixture7/golden23 및 분석기TS222/tree8을 확인했다. 제품 소스와 보존 후보는
-변경하지 않았고, source검토에서 드러난 default-export route 연결 후보는 다음
-제품 보정 단위로 남긴다. 전체 출시의 독립·실기기·실계정 조건은 별개다.
+변경하지 않았다. 이때 source검토에서 드러난 default-export route 연결은 이후
+[React export 바인딩 후속](../audit/react-route-binding-2026-10-06.md)에서 실제선언
+참조·미해결 차단·후속 API전파·재분석 연결철회로 보완했다. 새 후보 qUMAST는 Java와
+TS분석기를 함께 반영한 당시 후보이며 전체 출시의 독립·실기기·실계정 조건은 여전히 별개다.
+
+최신 후속은 마지막 package-entry 보호 수정을 TS271·실제sidecar/PG12개로 검증하고,
+완료 알림 유실을 실제 반례로 재현해 서버 구독 순서와 화면 재조회를 보정했다.
+SSE19·backend1665PASS/12명시skip·frontend436·타입/lint·선택desktop212·corpus23을
+확인하고 새 후보 j5EJLB를 만들었다. 종료 FAILED를 exit0으로 정상 처리하지 않는
+진단 검증도 포함한다. 정확한 후보·native 결과·남은 수용조건은 위 최신 원장을 따른다.
 
 최신 사용자 지시에 따라 **원본 로컬 저장소 `/Users/minseokchae/Dev/code-intelligence`(CoS `/code-intelligence`)에서 기능별 브랜치를 만들어 작업한다.** Orca `main-2`와 별도 clone은 사용하지 않는다. 주요 기능의 구현·검증을 마치면 commit → push → PR → merge까지 진행하고 모든 커밋·병합 메시지에 `[skip ci]`를 붙인다. 이전의 잔여 한도 2% 원격 발행 조건은 폐기됐다. GitHub Actions와 정식 서명·공증·배포는 계속 금지하며 보호 규칙을 우회하지 않는다. 과거 `main-2` 또는 `.cos-pre-release-recovery-20261005` 경로는 당시 증거의 출처이며 현재 작업/실행 지시가 아니다. 원본 설치 앱·DB·Keychain/profile·기존 산출물과 사용자 작업을 보존하고 자동 stash/reset/clean은 하지 않는다.
 

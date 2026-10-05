@@ -84,7 +84,11 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 // Explicit opt-in gate: requires installed frontend dependencies and local Playwright Chromium.
-tasks.test { exclude("**/SnapshotSourceContractIntegrationTest.class") }
+tasks.test {
+    exclude("**/SnapshotSourceContractIntegrationTest.class")
+    // Needs the real sidecar supplied by accuracyTest, never an in-process analyzer fake.
+    exclude("**/ReactRouteBindingIntegrationTest.class")
+}
 val buildSnapshotSourceFrontend by tasks.registering(Exec::class) {
     description = "Builds the real UI before snapshot source integration tests."
     workingDir(layout.projectDirectory.dir("../frontend"))

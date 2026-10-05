@@ -109,36 +109,25 @@ public class CrossDomainStep implements JobStep {
             }
         }
         List<Route> routes = jdbc.sql("""
-                        select n.natural_key, r.component_key
+                        select n.natural_key, min(c.natural_key) as component_key
                         from frontend_routes r
-                        join graph_nodes n on n.id = r.node_id
+                        join graph_nodes n on n.id = r.node_id and n.snapshot_id=r.snapshot_id and n.node_type='FE_ROUTE'
+                        join graph_edges e on e.source_node_id=n.id and e.snapshot_id=r.snapshot_id and e.edge_type='CONTAINS'
+                        join graph_nodes c on c.id=e.target_node_id and c.snapshot_id=r.snapshot_id and c.node_type='COMPONENT'
                         where r.snapshot_id = :snapshotId
+                          and (not jsonb_exists(n.metadata,'componentResolution') or n.metadata->>'componentResolution'='RESOLVED')
+                        group by n.id,n.natural_key
+                        having count(distinct c.id)=1
                         """)
                 .param("snapshotId", snapshotId)
                 .query((rs, rowNum) -> new Route(rs.getString("natural_key"), rs.getString("component_key")))
                 .list();
-        Map<String, String> componentKeys = new LinkedHashMap<>();
-        jdbc.sql("""
-                        select name, natural_key from graph_nodes
-                        where snapshot_id = :snapshotId and node_type = 'COMPONENT'
-                        """)
-                .param("snapshotId", snapshotId)
-                .query((rs, rowNum) -> {
-                    componentKeys.put(rs.getString("name"), rs.getString("natural_key"));
-                    return 0;
-                })
-                .list();
+        // Propagate only through the selected snapshot's unique structural edge.
+        // The display/import alias in component_key is not a global component ID.
         for (Route route : routes) {
-            if (route.componentKey() == null) {
-                continue;
-            }
-            String componentNatural = componentKeys.get(route.componentKey());
-            if (componentNatural == null) {
-                continue;
-            }
             for (GraphEdgeDraft edge : List.copyOf(edges)) {
                 if (GraphEdgeType.CONSUMES.name().equals(edge.edgeType())
-                        && componentNatural.equals(edge.sourceNaturalKey())) {
+                        && route.componentKey().equals(edge.sourceNaturalKey())) {
                     edges.add(GraphEdgeDraft.of(
                             route.naturalKey(),
                             edge.targetNaturalKey(),

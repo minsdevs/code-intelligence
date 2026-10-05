@@ -14,7 +14,9 @@ const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).d
 
 async function main(argv = process.argv.slice(2)) {
   assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64');
-  assert.deepEqual([argv.length, argv[0]], [2, '--app']); validateLocalEnvironment(process.env, process.execArgv); process.umask(0o077);
+  assert(argv[0] === '--app' && (argv.length === 2 || (argv.length === 3 && argv[2] === '--analysis-only')));
+  const analysisOnly = argv.length === 3;
+  validateLocalEnvironment(process.env, process.execArgv); process.umask(0o077);
   const repo = fs.realpathSync(path.resolve(__dirname, '../..')), app = fs.realpathSync(argv[1]);
   assert.equal(path.dirname(path.dirname(app)), repo); assert.equal(path.basename(app), 'Code Intelligence Validation.app');
   assert.match(path.basename(path.dirname(app)), /^\.native-product-[A-Za-z0-9]+$/);
@@ -39,7 +41,10 @@ async function main(argv = process.argv.slice(2)) {
     assert.equal(now.ino, workIdentity.ino); assert.equal(now.dev, workIdentity.dev); assert.equal(fs.realpathSync(source), source); } },
     path.join(repo, 'frontend/node_modules'), path.join(source, 'frontend/node_modules'));
   const artifacts = path.join(temp, 'artifacts'); fs.mkdirSync(artifacts, { mode: 0o700 });
-  const report = { format: 1, status: 'RUNNING', scope: 'current-candidate existing native product runner',
+  const report = { format: 1, status: 'RUNNING', scope: analysisOnly ? 'current-candidate analysis-only native runner' : 'current-candidate existing native product runner',
+    analysisOnly, omittedSuites: analysisOnly ? ['backup-restore', 'safeStorage-roundtrip', 'delete-persistence',
+      'initial-synthetic-import-reanalysis', 'historical-current-snapshot-contracts',
+      'post-restore-delete-before-representative-transition'] : [],
     appBundle: app, manifestSha256: hash(manifestFile), appAsarSha256: hash(path.join(app, 'Contents/Resources/app.asar')),
     driverSha256: hash(__filename), productRunnerSha256: hash(path.join(repo, 'desktop/scripts/native-acceptance-electron.cjs')),
     sourceCopy: copied, checks: [], mockKeychain: true, realAccount: false, realKeychain: false, control, work: root, artifacts };

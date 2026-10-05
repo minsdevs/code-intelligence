@@ -4,7 +4,8 @@ export default {
   server: { middlewareMode: true, ws: false, watch: null },
   oxc: { jsx: { runtime: 'automatic' } },
   test: {
-    include: ['src/features/import/syntaxFailure.test.tsx', 'src/features/import/localPreviewRequired.test.tsx', 'src/features/import/progressCancellation.test.tsx'],
+    include: ['src/features/import/syntaxFailure.test.tsx', 'src/features/import/localPreviewRequired.test.tsx', 'src/features/import/progressCancellation.test.tsx',
+      'src/features/import/progressResponses.test.tsx', 'src/features/import/progressReconciliation.test.tsx'],
     environment: 'jsdom',
     environmentOptions: { jsdom: { runScripts: 'outside-only' } },
     setupFiles: ['./src/test/setup.ts', './src/test/no-network.ts'],
