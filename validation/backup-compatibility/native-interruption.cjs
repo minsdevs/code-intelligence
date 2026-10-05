@@ -59,7 +59,9 @@ async function main(argv) {
   async function launch(recover = false) {
     phase(recover ? 'launch-restricted-recovery' : 'launch-normal'); plan.assertIdentity();
     app = await _electron.launch({ executablePath: path.join(bundle, 'Contents/MacOS/Code Intelligence Validation'),
-      args: ['--isolated-run-claim=' + plan.claimFile], env: launchEnvironment(process.env), cwd: root, timeout: deadline.limit(90000) });
+      // Synthetic-only driver: apply the Keychain mode before Electron starts,
+      // rather than relying solely on a later Playwright loader switch.
+      args: ['--use-mock-keychain', '--isolated-run-claim=' + plan.claimFile], env: launchEnvironment(process.env), cwd: root, timeout: deadline.limit(90000) });
     applicationOwner = captureOwnedApplication(app);
     const child = applicationOwner.process(), sequence = ++launchSequence, nonce = crypto.randomBytes(16).toString('hex');
     report.launches.push({ sequence, pid: child.pid, recover }); save();

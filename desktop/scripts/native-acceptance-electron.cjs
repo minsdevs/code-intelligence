@@ -133,6 +133,9 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   if (validationPlan) assert.deepEqual(fs.readdirSync(expectedUserData), [], 'Fresh validation profile required');
   else assert.equal(fs.existsSync(expectedUserData), false, 'A fresh disposable application profile is required');
   const launchArguments = packaged ? [] : [desktop];
+  // This product runner always creates a fresh synthetic automation profile.
+  // Apply its mock Keychain mode at spawn, not only later in the SDK loader.
+  launchArguments.push('--use-mock-keychain');
   if (validationPlan) launchArguments.push('--isolated-run-claim=' + validationPlan.claimFile);
   if (validationPlan) report.validationClaim = validationPlan.claimFile;
   const synthetic = path.join(owned, 'native-synthetic-project');
@@ -143,7 +146,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   fs.writeFileSync(sourceFile, first, { flag: 'wx', mode: 0o600 });
   const secret = crypto.randomBytes(32).toString('hex');
   const cipherPath = path.join(owned, 'safestorage-probe.enc');
-  let app, page, userData, projectId, snapshotId, stopObserving;
+  let app, ownedApplication, page, userData, projectId, snapshotId, stopObserving;
   let pageErrors = 0;
   const step = (name, action, timeoutMs = 30000) => {
     phase(name);
@@ -155,8 +158,11 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     const startupEnds = launchStarted + 90000;
     phase('electron-launch');
     app = await electron.launch({ executablePath, args: launchArguments, cwd: desktop, env, timeout: deadline.limit(90000) });
+    const launched = app, ownedChild = app.process();
+    ownedApplication = { process: () => ownedChild,
+      close: () => ownedChild.exitCode !== null || ownedChild.signalCode !== null ? Promise.resolve() : launched.close() };
     delete report.startup;
-    stopObserving = observeStartup(app.process(), report, () => phase(report.phase));
+    stopObserving = observeStartup(ownedChild, report, () => phase(report.phase));
     phase('electron-first-window');
     const remaining = Math.floor(startupEnds - performance.now());
     if (remaining <= 0) throw new Error('NATIVE_STARTUP_TIMEOUT');
@@ -189,7 +195,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   };
   const close = async () => {
     if (!app) return;
-    const current = app; app = null;
+    const current = ownedApplication; app = null; ownedApplication = null;
     phase('native-clean-shutdown');
     try { await closeOwnedApplication(current); }
     finally { stopObserving?.(); stopObserving = null; }

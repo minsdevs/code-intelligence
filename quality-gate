@@ -11,6 +11,12 @@ if [[ -n "${QUALITY_BASELINE_UPDATE:-}" ]]; then
   echo "[FAIL] automatic baseline updates are forbidden; edit quality-baseline.env explicitly for review" >&2
   exit 1
 fi
+TIME_PLATFORM="$(uname -s)"
+case "$TIME_PLATFORM" in
+  Darwin) TIME_ARGS=(-l) ;;
+  Linux) TIME_ARGS=(-v) ;;
+  *) echo "[FAIL] unsupported time measurement platform" >&2; exit 1 ;;
+esac
 if ! docker info >/dev/null 2>&1; then
   echo "[FAIL] Docker daemon is required for the database-backed quality corpus" >&2
   exit 1
@@ -31,6 +37,7 @@ trap cleanup EXIT
 START="$(date +%s)"
 
 GRADLE_ARGS=(
+  --offline
   test
   --tests '*.FixtureGoldenTest'
   --tests '*.SpringMiniGraphGoldenTest'
@@ -40,24 +47,21 @@ GRADLE_ARGS=(
   --tests '*.ConfigAnalyzersGoldenTest'
 )
 
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  /usr/bin/time -l "$ROOT/backend/gradlew" -p "$ROOT/backend" "${GRADLE_ARGS[@]}" 2> >(tee "$TIME_LOG" >&2)
-  RSS_KB="$(awk '/maximum resident set size/ {print int($1 / 1024)}' "$TIME_LOG" | tail -1)"
-else
-  /usr/bin/time -v "$ROOT/backend/gradlew" -p "$ROOT/backend" "${GRADLE_ARGS[@]}" 2> >(tee "$TIME_LOG" >&2)
-  RSS_KB="$(awk -F: '/Maximum resident set size/ {gsub(/ /, "", $2); print $2}' "$TIME_LOG" | tail -1)"
-fi
+# Capture stderr directly: process-substitution tee can still be writing when read.
+# Pin time's labels to English; this remains one Gradle invocation, not process-tree G-PERF.
+RUN_STATUS=0
+LC_ALL=C /usr/bin/time "${TIME_ARGS[@]}" "$ROOT/backend/gradlew" -p "$ROOT/backend" "${GRADLE_ARGS[@]}" 2> "$TIME_LOG" || RUN_STATUS=$?
 ELAPSED=$(( $(date +%s) - START ))
-RSS_KB="${RSS_KB:-0}"
-
-if (( ELAPSED > MAX_BACKEND_SECONDS )); then
-  echo "[FAIL] backend corpus took ${ELAPSED}s (limit ${MAX_BACKEND_SECONDS}s)" >&2
-  exit 1
-fi
-if (( RSS_KB > MAX_BACKEND_RSS_KB )); then
-  echo "[FAIL] backend corpus used ${RSS_KB}KB RSS (limit ${MAX_BACKEND_RSS_KB}KB)" >&2
-  exit 1
-fi
+LOG_STATUS=0
+cat "$TIME_LOG" >&2 || LOG_STATUS=$?
+METRICS_STATUS=0
+RSS_KB="$(node "$ROOT/validation/pre-release/quality-metrics.cjs" \
+  "$TIME_PLATFORM" "$TIME_LOG" "$RUN_STATUS" "$ELAPSED" \
+  "$MAX_BACKEND_SECONDS" "$MAX_BACKEND_RSS_KB")" || METRICS_STATUS=$?
+# Keep the original command failure even if parsing, Node or log replay also failed.
+if (( RUN_STATUS != 0 )); then exit "$RUN_STATUS"; fi
+if (( LOG_STATUS != 0 )); then exit "$LOG_STATUS"; fi
+if (( METRICS_STATUS != 0 )); then exit "$METRICS_STATUS"; fi
 
 for analyzer in ts-analyzer tree-analyzer; do
   (
@@ -68,5 +72,5 @@ for analyzer in ts-analyzer tree-analyzer; do
   )
 done
 
-printf '[PASS] quality baseline v%s: corpus=%s files, backend=%ss, max-rss=%sKB\n' \
+printf '[PASS] quality baseline v%s: corpus=%s files, backend=%ss, timed-gradle-rss=%sKiB\n' \
   "$QUALITY_BASELINE_VERSION" "$CORPUS_FILES" "$ELAPSED" "$RSS_KB"

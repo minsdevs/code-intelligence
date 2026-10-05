@@ -155,3 +155,27 @@ test('startup diagnostic vocabulary rejects arbitrary values, suffixes, fields a
   expected('RUNTIME_INTEGRITY_FAILED')(diagnostics.integrityError(hostile));
   expected('RUNTIME_INTEGRITY_FAILED')(new diagnostics.RuntimeIntegrityError('private-sentinel'));
 });
+
+test('finite stream/argument/abort diagnostics retain a cause category without exporting raw details', () => {
+  for (const [input, output] of Object.entries({ EBADF: 'RUNTIME_IO_EBADF', EINTR: 'RUNTIME_IO_EINTR',
+    EAGAIN: 'RUNTIME_IO_EAGAIN', ECANCELED: 'RUNTIME_IO_ECANCELED', ERR_STREAM_PREMATURE_CLOSE: 'RUNTIME_STREAM_CLOSED',
+    ERR_STREAM_DESTROYED: 'RUNTIME_STREAM_DESTROYED', ABORT_ERR: 'RUNTIME_OPERATION_ABORTED',
+    ERR_INVALID_ARG_TYPE: 'RUNTIME_NODE_ARGUMENT', ERR_INVALID_ARG_VALUE: 'RUNTIME_NODE_ARGUMENT',
+    ERR_OUT_OF_RANGE: 'RUNTIME_NODE_RANGE', ERR_INVALID_STATE: 'RUNTIME_NODE_STATE' })) {
+    const error = Object.assign(new Error('private-sentinel-path and value'), { code: input });
+    const safe = diagnostics.integrityError(error); expected(output)(safe);
+    assert.equal(diagnostics.parseStartupLine('DESKTOP_STARTUP MANIFEST FAILED ' + safe.code).code, output);
+  }
+  expected('RUNTIME_JS_TYPE_ERROR')(diagnostics.integrityError(new TypeError('private-sentinel')));
+  expected('RUNTIME_JS_RANGE_ERROR')(diagnostics.integrityError(new RangeError('private-sentinel')));
+  expected('RUNTIME_INTEGRITY_FAILED')(diagnostics.integrityError({ code: 'ERR_STREAM_PRIVATE_SENTINEL' }));
+});
+
+test('throwing prototype traps cannot escape the fixed integrity error boundary', () => {
+  for (const trapped of [new Proxy({}, { getPrototypeOf() { throw new Error('private-prototype'); } }),
+    new Proxy({}, { get() { throw new Error('private-getter'); }, getPrototypeOf() { throw new Error('private-prototype'); } })]) {
+    const result = diagnostics.integrityError(trapped);
+    expected('RUNTIME_INTEGRITY_FAILED')(result);
+    assert.doesNotMatch(JSON.stringify(result), /private/);
+  }
+});

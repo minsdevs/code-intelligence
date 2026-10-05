@@ -1,0 +1,585 @@
+{
+  "format": 1,
+  "status": "DEVELOPMENT_CANDIDATE_VERIFIED_WITH_OPEN_RELEASE_GATES",
+  "releaseVerdict": "NO_GO",
+  "publicReleaseAuthorized": false,
+  "publicReleasePerformed": false,
+  "observedAt": "2026-10-05T17:14:51.753Z",
+  "baseCommit": "8f84b9c7b3125cd23c8f668945259cb1361a2323",
+  "integrationCommits": {
+    "costRecovery": "9d77a70c51550e256a1a73e7c3b3e87ce01b832a",
+    "credentialLifecycle": "8f84b9c7b3125cd23c8f668945259cb1361a2323"
+  },
+  "process": {
+    "assessmentStage": 8,
+    "totalStages": 8,
+    "allMandatoryAcceptancePassed": false,
+    "explanation": "Implementation and scoped validation progressed across stages1-7; final candidate NO_GO does not mean all earlier gates passed."
+  },
+  "candidate": {
+    "path": ".native-product-Imupzt/Code Intelligence Validation.app",
+    "buildSequence": "1791218416622",
+    "appAsarSha256": "7317187afaa9364651dd0a289130f4b07750890731600e0695c43e37582fc6e7",
+    "runtimeManifestSha256": "61c2f787f470970f1d6451d8fc23878880fba8266c154e227eb39c38e890819f",
+    "backendJarSha256": "ad839cb5ab95a4daf756c78e849b263fdce6a705fef586d6a6962cd672a96bd2",
+    "compiledClassFiles": 746,
+    "migrations": 27,
+    "staticAssets": 120,
+    "otherJarEntriesPreserved": 1094,
+    "javaRecompiled": true,
+    "nativeRebuilt": false,
+    "signature": "AD_HOC_VALIDATION_ONLY",
+    "fullAppDigest": "NOT_MEASURED",
+    "buildEvidence": {
+      "path": "validation/local/pre-release-candidate/build-dX6t1j/result.json",
+      "sha256": "313d3649795fdd10fd547b75f1cb61f3ee6f9687279971cea6290e9cdf58a0b8"
+    }
+  },
+  "sources": {
+    "candidateInputs": {
+      "backend/src/main": "d0962276630fce9e4efa8e2c2b31f72e7efae4c1cb2f9c63385077b6a6cfd4bc",
+      "frontend/src": "bd60b6e3332847edb8a0343b0c8e79b4bc84870e3982e1fb60f8cf67c39f83e2",
+      "desktop/src": "7f7880dcc108945acd33b2fde2791a55540a53425a11fad9bf36fc62be664cc7",
+      "backend/build.gradle.kts": "45047060d5513416bab40babf6b1fbd1976593da7352e3d2530e65bdf9e478d2",
+      "backend/settings.gradle.kts": "b8b068943adeaa9b9fa7a96d5ca8f51ce68b6ae674a0302bf004769c07852711",
+      "backend/gradle/wrapper/gradle-wrapper.properties": "fc913ffa0625b544190844a506086ca0b93c4361986e820e10dd64c088257bf7",
+      "frontend/package.json": "b2ba3f52bca45caceea34f293aacfb4bb52035b373b3fe7324516918eeaccfcb",
+      "frontend/package-lock.json": "bdd68ecb2b06c743727bbd7e3dea9f89af4d238a142bfb3ddef17365e69acc46",
+      "desktop/package.json": "e804aa1b58198affbe1bfa5a5551a82cff4c5b3d960f5e51ef517b3f4d2e3fdf",
+      "desktop/package-lock.json": "644dd4fc65dbf002768ef8d9986be6cda1536883d649355ff4dc31bb0bf421b5"
+    },
+    "desktopFileCount": 43,
+    "sourceEvidence": {
+      "path": "validation/local/pre-release-final/resume-92dOec/source-candidate-check.json",
+      "sha256": "626873a6e30d73d81129c4701c24f1d7ba1dcd48b5f61360a11e2ffb79f014c5"
+    },
+    "currentValidationTools": {
+      "backend/build.gradle.kts": "45047060d5513416bab40babf6b1fbd1976593da7352e3d2530e65bdf9e478d2",
+      "desktop/scripts/native-acceptance-electron.cjs": "9a25987fb537da8ce65ac7e50941b355b930cf3ef1ab8ad16481d11f9e9e223c",
+      "desktop/src/startup-diagnostics.cjs": "092024547e0938b917ee4753cfd7f67e1caa6fbd71761b08aa82a35a9ea2e89a",
+      "desktop/test/backup-interruption-hooks.test.cjs": "2743453613519c09a3b385aa2342328330023a77521f747560ac4ea548c94a49",
+      "desktop/test/main-runtime-gateway.test.cjs": "8348cd25b19e79d972fac4c63b32c1fcf4d376238289f8e8721122332c93390b",
+      "desktop/test/native-acceptance.test.cjs": "f2580dd3866cddc9489abb390e7d1b895c54b958c5b839b5cc4e57346ed4963c",
+      "desktop/test/runtime-manifest.test.cjs": "da3bb7009adbb3efc1295b6db7ba0f0ad7c22159c88430b4977b9b2dee421b6d",
+      "desktop/test/runtime-platform.test.cjs": "d3d1772cb6e7a5cb62909788ad601b3bf1c6174441618758323350928fe25224",
+      "desktop/test/runtime.test.cjs": "14779f6a8dd0e830d1a6f2368693008d6756b1c2ae65424367f6e808b36bfaf0",
+      "desktop/test/windows-runtime-supply.test.cjs": "b3f926130ba14cf936d03f9e031bdaab9d0c20875fa1c89d58eb294e975e61cc",
+      "quality-gate": "258b811d48735371077873a0a73516665c14d4431602c714b01c4dd4e209714f",
+      "validation/backup-compatibility/native-interruption.cjs": "add4b685ea24ca06fcd702a8db9f7fcbe31f3afe371bed901769b84bac958159",
+      "validation/backup-compatibility/native-preflight.cjs": "2445050206ddf607b58dd0b36c793f01233d5c31b54c32d77f90f6de2470ac8c",
+      "validation/pre-release/build-candidate.cjs": "c77870f28d96f4017200ad0985fca7f48b08bf46652ed4f693a7841e991f64c4",
+      "validation/pre-release/inventory-candidate.cjs": "68492c0bae615856ddadab7c0a4f853249e817035e643a7c04ee6b5e449c9d19",
+      "validation/pre-release/owned-output.cjs": "8b0597d7588599ae72476c5120080c350bf80da257541758c1beaf23969fa1ea",
+      "validation/pre-release/quality-metrics.cjs": "46633cfbe93846386915aa32597274f916e3fba0bd1d8e5f6f7446dffd495881",
+      "validation/pre-release/replace-candidate-static.py": "bdb7c590678c2dbfd816c2cf80344182054b39276278ab2baefe912b53f17fc6",
+      "validation/pre-release/run-auth-store.cjs": "29080a9726854361bae434fbaef512c98db6d75d0d727657693f78cb75168835",
+      "validation/pre-release/run-cost-recovery.cjs": "d5c6c0df6cbcf8ecc66a3e97afae3515fdfff8456839f830a0095212e1f49df1",
+      "validation/pre-release/run-integrity-diagnostic.cjs": "2d6b73997e292900da5bb94e51a147c05d26e02e165ae2fc0a4625ceae7e54d2",
+      "validation/pre-release/run-product-candidate.cjs": "6ca3f7baf92e4a012113dd35f99764f472d7008680c0ceebb16babcff7707b29",
+      "validation/pre-release/runtime-inventory.init.gradle": "69c95ae7c6404e51b2d4464d07691c5bf35634987aa60259733bf1d6886250d1",
+      "validation/pre-release/scan-candidate-advisories.cjs": "97a0a28689d47b28d4691085c69c5e19d728538b81bf62136be3ada6f64b0500",
+      "validation/pre-release/test/advisory-scan.test.cjs": "d730baf88323e85680f64038f301fad4021a953e076ca09805218cd2d2fb1f01",
+      "validation/pre-release/test/build-candidate.test.cjs": "d7fc0ff2e21011e0286ad59c949e153ee8cf1776c332a39b3294917bf35d5d94",
+      "validation/pre-release/test/candidate-static.test.py": "f5c89ecc1a00663e8789069840d3231fb5d4c63b146378dc18645ba9d2359479",
+      "validation/pre-release/test/integrity-diagnostic.test.cjs": "44a68d626bd597d00ed7b7788c908ecf520963a065a0b16e8111bd7f5584b1e5",
+      "validation/pre-release/test/inventory-candidate.test.cjs": "70fd16ab7be74764efda537b0183ce341ca874646855153093d7dfb55e8cd724",
+      "validation/pre-release/test/owned-output.test.cjs": "d0bd2a19d42124d6d49ed400d215df0998539d39edc907e1bda1cae5316e12b6",
+      "validation/pre-release/test/quality-metrics-native.test.cjs": "0a6a75539ec2f45682d1c54dfb83837be451e2ecdd03b665366f89003e736ecb",
+      "validation/pre-release/test/quality-metrics.test.cjs": "d8e0157828778b23b8fa451bdb0023398c5aa4bef5c3b3ae23aab99e8c4825e6"
+    }
+  },
+  "verification": {
+    "resumedJavaScript": {
+      "tests": 293,
+      "pass": 293,
+      "fail": 0,
+      "skip": 0,
+      "scope": "EXPLICIT_VALIDATION_AND_DESKTOP_SELECTION",
+      "execution": {
+        "path": "validation/local/pre-release-final/resume-92dOec/checks.json",
+        "sha256": "ae73d2958f97306726a4d7a95d711aa6b50a3bf76dbd60131e61a1cc42b2e77c"
+      }
+    },
+    "python": {
+      "tests": 4,
+      "pass": 4,
+      "scope": "SYNTHETIC_ARCHIVE_AND_OUTPUT_CONTRACTS"
+    },
+    "retainedRawEvidenceReverified": {
+      "backend": {
+        "tests": 277,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suites": 16,
+        "scope": "SELECTED_16_SUITES_NOT_FULL_DOCKER_INTEGRATION"
+      },
+      "frontend": {
+        "tests": 425,
+        "pass": 425,
+        "fail": 0,
+        "pending": 0,
+        "scope": "ALL_CONFIGURED_DOM_API_TESTS"
+      },
+      "typescriptAnalyzer": {
+        "tests": 222,
+        "pass": 222,
+        "files": 6
+      },
+      "jdbc": {
+        "tests": 6,
+        "pass": 6,
+        "realPostgres": true,
+        "realGithub": false,
+        "scope": "INDEPENDENT_JDBC_CAS_NOT_FULL_SPRING_JPA"
+      },
+      "rawCheck": {
+        "path": "validation/local/pre-release-final/resume-92dOec/raw-junit-check.json",
+        "sha256": "12417fe67af2395071b113cd6417f76562c9139e989e9749669ee3eb5b6be49f"
+      }
+    }
+  },
+  "native": [
+    {
+      "evidence": {
+        "path": "validation/local/pre-release-final/product-i4Asap/result.json",
+        "sha256": "fbd17f12409768672d2b4a8f269fcd380dad1e5ad02acd86a27e31efdd60e46d"
+      },
+      "kind": "PACKAGED_FULL_PRODUCT_RUN",
+      "status": "PASS",
+      "checkCount": 31,
+      "checkCountIncludesRepeatedStartupAssertions": true,
+      "mockKeychain": true,
+      "realAccount": false,
+      "launchObservations": 5,
+      "executionElapsedMs": 217041,
+      "representativeInput": {
+        "copiedFiles": 965,
+        "copySha256": "184c342ce7f029e01b11283d2f07f27d8060da27b06ef6a870f7277a104cc161",
+        "acceptedFiles": 883,
+        "bytes": 7940986,
+        "outcomes": {
+          "UNMEASURED": 87,
+          "PARTIAL": 631,
+          "SUCCESS": 164,
+          "UNSUPPORTED": 1
+        },
+        "importToOverviewMs": 61212,
+        "searchMs": 13,
+        "relationMs": 1131,
+        "performanceScope": "ONE_INPUT_ONE_HOST_ONE_RUN_NOT_P95_OR_PROCESS_TREE_RSS"
+      }
+    },
+    {
+      "evidence": {
+        "path": "validation/local/restore-preflight/native-YvrmAt/result.json",
+        "sha256": "cb0b203fceb731819ce6df11f0bfa2c280246119e97ea9beba5831501f444fba"
+      },
+      "kind": "COMPATIBILITY_PREFLIGHT",
+      "status": "PASS",
+      "checkCount": 4,
+      "mockKeychain": true,
+      "realAccount": false,
+      "exits": [
+        {
+          "code": 0,
+          "signal": null
+        },
+        {
+          "code": 0,
+          "signal": null
+        }
+      ]
+    },
+    {
+      "evidence": {
+        "path": "validation/local/restore-interruption/native-EjUHjk/result.json",
+        "sha256": "98261d01e9075ba19cde05233e5919d0b08e4cc5fb44e94358b0442658671659"
+      },
+      "kind": "AFTER_SOURCE_RENAME",
+      "status": "PASS",
+      "checkCount": 6,
+      "mockKeychain": true,
+      "realAccount": false,
+      "exits": [
+        {
+          "code": 0,
+          "signal": null,
+          "cleanShutdownObserved": false,
+          "shutdownRecoveryNotice": true
+        },
+        {
+          "code": 0,
+          "signal": null,
+          "cleanShutdownObserved": true,
+          "shutdownRecoveryNotice": false
+        },
+        {
+          "code": 0,
+          "signal": null,
+          "cleanShutdownObserved": true,
+          "shutdownRecoveryNotice": false
+        }
+      ]
+    },
+    {
+      "evidence": {
+        "path": "validation/local/restore-interruption/native-GPHJHz/result.json",
+        "sha256": "95bcc5f1e194d93f1539860d3cd84ec82af651e36450222d505d0655d63d6292"
+      },
+      "kind": "BEFORE_COMPLETED_CLEANUP",
+      "status": "PASS",
+      "checkCount": 6,
+      "mockKeychain": true,
+      "realAccount": false,
+      "exits": [
+        {
+          "code": 0,
+          "signal": null,
+          "cleanShutdownObserved": true,
+          "shutdownRecoveryNotice": false
+        },
+        {
+          "code": 0,
+          "signal": null,
+          "cleanShutdownObserved": true,
+          "shutdownRecoveryNotice": false
+        },
+        {
+          "code": 0,
+          "signal": null,
+          "cleanShutdownObserved": true,
+          "shutdownRecoveryNotice": false
+        }
+      ]
+    },
+    {
+      "evidence": {
+        "path": "validation/local/pre-release-final/integrity-evHspy/result.json",
+        "sha256": "5d4d8ee9f0fcf9a736c9dc67a02e66b2ba755aa3c5b3f16132150249319b0b21"
+      },
+      "kind": "SINGLE_ELECTRON_PROCESS_INVENTORY_REPETITION",
+      "status": "PASS",
+      "completed": 20,
+      "failures": 0,
+      "traces": 0,
+      "launches": 1,
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "mockKeychain": true,
+      "realAccount": false,
+      "artifactIdentityUnchanged": true,
+      "scope": "20_READ_ONLY_VALIDATIONS_NOT_20_STARTUPS_OR_ORIGINAL_ROOT_CAUSE_RESOLUTION"
+    }
+  ],
+  "advisories": {
+    "priorMatchedAdvisories": 19,
+    "priorPackagesWithAdvisories": 9,
+    "matchedJars": 152,
+    "confirmedCoordinates": 276,
+    "advisoryMatches": 0,
+    "status": "NO_MATCHES_IN_QUERIED_COORDINATES",
+    "observedAt": "2026-10-05T17:07:06.351Z",
+    "finishedAt": "2026-10-05T17:07:11.785Z",
+    "omitted": [
+      {
+        "kind": "jar",
+        "fileName": "spring-boot-jarmode-tools-4.1.0.jar",
+        "reason": "NO_HASH_MATCHED_RESOLVED_COORDINATES"
+      }
+    ],
+    "scannerSourceSha256": "97a0a28689d47b28d4691085c69c5e19d728538b81bf62136be3ada6f64b0500",
+    "currentReport": {
+      "path": "validation/local/pre-release-final/advisory-Imupzt-resume-20261006.json",
+      "sha256": "8b0e6498edf6712ca9b1c5bd6f2edecf99c4f4dc3a1973968a020f6f59ae68d9"
+    },
+    "completeSbom": false,
+    "wholeProductSecurityApproval": false,
+    "disclosure": "Selected names/versions were checked against anonymous public registries, then confirmed coordinates were queried at OSV; no source, paths, keys or JAR content sent",
+    "coverageLimits": [
+      "Observed npm manifests and exclusively filename+SHA256-matched Gradle runtime artifacts",
+      "Root application packages excluded; unmatched and ambiguous coordinates excluded",
+      "Native dependencies, JRE, Electron/Chromium/Node and bundled browser transitives are outside this query set",
+      "No finding is not proof of safety, reachability or complete advisory coverage"
+    ]
+  },
+  "retainedCostEvidence": {
+    "evidence": {
+      "path": "docs/audit/pre-release-cost-validation-2026-10-05.json",
+      "sha256": "ff4cb03d474440068fe9df0a820b929ed2c37d49edcee1f2782e64c5fe9cd509"
+    },
+    "restartLiabilityMicroUsd": "173",
+    "sameProcessRollbackLiabilityMicroUsd": "202",
+    "providerCalls": 0,
+    "scope": "CURRENT_NODE_COMPONENTS_AND_PREVIOUS_VERIFIED_NATIVE_SUPPLY_NOT_ELECTRON_CRASH_ACCEPTANCE"
+  },
+  "remainingConditions": [
+    {
+      "id": "INTEGRATION",
+      "status": "BLOCKED_ENVIRONMENT",
+      "requirement": "Docker-backed production Spring/JPA and quality corpus execution with retained artifacts",
+      "observed": {
+        "available": false,
+        "exit": 1,
+        "signal": null,
+        "errorCode": null,
+        "serverVersion": null
+      }
+    },
+    {
+      "id": "REAL_ACCOUNT",
+      "status": "NOT_VERIFIED",
+      "requirement": "Original-data compatibility/rollback conditions, explicit real-account project1 import and refresh/revoke/SSO acceptance; no key inspection or guessed credentials"
+    },
+    {
+      "id": "RECOVERY",
+      "status": "PARTIAL",
+      "requirement": "Complete Electron ownership/crash/power-loss and retained-source matrix; 173 Node-owner restart and 202 same-process rollback are not substitutes"
+    },
+    {
+      "id": "INDEPENDENT_QUALITY",
+      "status": "NOT_VERIFIED",
+      "requirement": "Approved independent corpus/false-positive oracle, full cancel/delete races, 20-run process-tree performance, security and real-user UX acceptance"
+    },
+    {
+      "id": "OPTIONAL_TREE",
+      "status": "FAILED_NOT_PACKAGED",
+      "requirement": "Resolve existing optional tree-sitter native binding failure before claiming this sidecar tested/supported"
+    },
+    {
+      "id": "NATIVE_RELEASE",
+      "status": "BLOCKED_EXTERNAL_AND_ACCEPTANCE",
+      "requirement": "Clean-machine/minimum-OS and signed install/update/rollback; Developer ID/notary credentials and authorization; no public release in this task"
+    },
+    {
+      "id": "OPERATIONS",
+      "status": "PARTIAL",
+      "requirement": "Complete dependency graph/SBOM, native/browser advisory and redistribution obligations, external GitHub App installation scope and verified private security/support process"
+    },
+    {
+      "id": "INTERMITTENT_STARTUP",
+      "status": "UNRESOLVED_CAUSE",
+      "requirement": "Retain earlier CREDENTIALS/MANIFEST failures and obtain root-cause/reproduction evidence; subsequent successful runs do not rewrite earlier failures"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/audit/pre-release-cost-validation-2026-10-05.json",
+      "sha256": "ff4cb03d474440068fe9df0a820b929ed2c37d49edcee1f2782e64c5fe9cd509"
+    },
+    {
+      "path": "docs/audit/pre-release-github-lifecycle-validation-2026-10-05.json",
+      "sha256": "2521c5383433a5c3e488a38f80ba091f6f63285114e13e7810ebf4223ec3a000"
+    },
+    {
+      "path": "validation/local/pre-release-auth/auth-store-nox56E/junit.xml",
+      "sha256": "e07892cf837eadb2c5834656f61ac4ce0c9fa6669ef30e0df0e740093073dde0"
+    },
+    {
+      "path": "validation/local/pre-release-auth/auth-store-nox56E/result.json",
+      "sha256": "f77a53bdecc6bc4d4511def6c9ce28c04041499f1cc758fbd2ae72b80289a9ee"
+    },
+    {
+      "path": "validation/local/pre-release-candidate/build-dX6t1j/result.json",
+      "sha256": "313d3649795fdd10fd547b75f1cb61f3ee6f9687279971cea6290e9cdf58a0b8"
+    },
+    {
+      "path": "validation/local/pre-release-cost/crash-IlKwEq/result.json",
+      "sha256": "b98bf474c81fe98df010a0ab0dc888fc4795f8237fbd3658cb7c8b06fb18df0a"
+    },
+    {
+      "path": "validation/local/pre-release-cost/normal-jIoJSg/result.json",
+      "sha256": "e27948a81fe1d87bb38382d1ec47feab6894cf6bb794501e308867028baea932"
+    },
+    {
+      "path": "validation/local/pre-release-final/advisory-Imupzt-final.json",
+      "sha256": "e908507be7fe19337e7e64619e5a1a42f164db057af2d043e197dc2a7d7e66a5"
+    },
+    {
+      "path": "validation/local/pre-release-final/advisory-Imupzt-resume-20261006.json",
+      "sha256": "8b0e6498edf6712ca9b1c5bd6f2edecf99c4f4dc3a1973968a020f6f59ae68d9"
+    },
+    {
+      "path": "validation/local/pre-release-final/advisory-Imupzt.json",
+      "sha256": "f7e6043c4d36f5ffc9e9e626ffe8126854ac6cc04a23c3ef03d7517dbc793882"
+    },
+    {
+      "path": "validation/local/pre-release-final/advisory-VOL4tM-expanded.json",
+      "sha256": "6059d060f7ac1b9ad8cafc5716eeecc3b966643fa0da7ebdb1e847a52967c2d2"
+    },
+    {
+      "path": "validation/local/pre-release-final/advisory-VOL4tM.json",
+      "sha256": "ebc5bf8cb56e218aee5abdbb2307d03e6a9294317e3910113f647053ec7d02fa"
+    },
+    {
+      "path": "validation/local/pre-release-final/dependency-resolution-online.log",
+      "sha256": "71b91a9da0494aa448168e9c44640b110a78388509cf646d735c060c81e7eb40"
+    },
+    {
+      "path": "validation/local/pre-release-final/docker-check.json",
+      "sha256": "e585ca0fe4389db43bb77f90fa5eb34df14d4f26ac2406fe57bf5638a8ada6c4"
+    },
+    {
+      "path": "validation/local/pre-release-final/frontend-all.json",
+      "sha256": "f7f591be91ce37aeeb2d42f5054f2315ca7ac12a9eb2622440df13d3c8c7ab93"
+    },
+    {
+      "path": "validation/local/pre-release-final/integrity-evHspy/result.json",
+      "sha256": "5d4d8ee9f0fcf9a736c9dc67a02e66b2ba755aa3c5b3f16132150249319b0b21"
+    },
+    {
+      "path": "validation/local/pre-release-final/inventory-Imupzt-final.json",
+      "sha256": "a2f670cd973549438d5f819a2c5c51444ad2720fb30f81ed878fc4d46363bfdc"
+    },
+    {
+      "path": "validation/local/pre-release-final/inventory-VOL4tM.json",
+      "sha256": "49c541dc82187cd222dda3ab8989409f6cd9b6d89667750a9cd46cb244e8de78"
+    },
+    {
+      "path": "validation/local/pre-release-final/product-i4Asap/result.json",
+      "sha256": "fbd17f12409768672d2b4a8f269fcd380dad1e5ad02acd86a27e31efdd60e46d"
+    },
+    {
+      "path": "validation/local/pre-release-final/quality-gate-attempt.log",
+      "sha256": "1cb4f2fd51c1a1f2853482558874611748023a4f18039dfb4d54c6dde62b9789"
+    },
+    {
+      "path": "validation/local/pre-release-final/resume-92dOec/checks.json",
+      "sha256": "ae73d2958f97306726a4d7a95d711aa6b50a3bf76dbd60131e61a1cc42b2e77c"
+    },
+    {
+      "path": "validation/local/pre-release-final/resume-92dOec/javascript.log",
+      "sha256": "3b2fb2e85747113e2258fe896e6067521d8e0d80156bd598f4d7a10505e161a1"
+    },
+    {
+      "path": "validation/local/pre-release-final/resume-92dOec/python.log",
+      "sha256": "4a160235c0add54f7a5997815d0e01a072210439de4899c702c94dd3cd814662"
+    },
+    {
+      "path": "validation/local/pre-release-final/resume-92dOec/raw-junit-check.json",
+      "sha256": "12417fe67af2395071b113cd6417f76562c9139e989e9749669ee3eb5b6be49f"
+    },
+    {
+      "path": "validation/local/pre-release-final/resume-92dOec/source-candidate-check.json",
+      "sha256": "626873a6e30d73d81129c4701c24f1d7ba1dcd48b5f61360a11e2ffb79f014c5"
+    },
+    {
+      "path": "validation/local/pre-release-final/runtime-resolved-security-patched.json",
+      "sha256": "c19e2336caf93942106f6894b7cfb918918fa1eca78ce9bb13ed1730b0cb1e9c"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-backend-summary.json",
+      "sha256": "a8da7f04d041c5d6fb06c62e7cc99bde237ca798f8374c0d4b7cce2c5b16c3d9"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-backend.log",
+      "sha256": "8eb50e7b50bc30a4a2da1df69f6aaba0f780fc61f97b94d73f1dadd3408339c2"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.analysis.accuracy.SemanticOracleTest.xml",
+      "sha256": "2b44a75615ed4f29bf589ab8e982ee489fc08eb31b9890e27c0add3574da35ab"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.ArchitectureTest.xml",
+      "sha256": "b71233c3a8c570fbbf4e5cc2d179bbad4b73a76f79ee1ab6b00bf2a71f4873d1"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.auth.DesktopAuthenticationFilterTest.xml",
+      "sha256": "8a324bf20177e379b8805719dc86267903b78ad4324c7fde88312538e0ddff20"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.auth.GithubCredentialExpiryTest.xml",
+      "sha256": "4fd83f61988af442eefd6ea5054c045912fbbd6267281fecdc0d5aeb01acc5b7"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.auth.GithubDeviceCredentialCodecTest.xml",
+      "sha256": "990d8d7c3c1e79bbe75bb2b45ffaa3dd5960196032c7cf40da35e1311bacf4f6"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.auth.GithubNativeOAuthServiceTest.xml",
+      "sha256": "23ac49a800eea3ea4ce1d58e359bfff2a56655ddb3039dc54deacae5e841c0c5"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.auth.GithubTokenLifecycleTest.xml",
+      "sha256": "e6764a7957e4c67b75b98b178b48931670bb4dff7364562b8142cd1e03bc52e8"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.auth.PatAuthServiceTest.xml",
+      "sha256": "e838aceee7333e3371feec6fb07de99c50d0af236e8a37bff80b1ce0566e539f"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.auth.PatLoginRateLimitFilterTest.xml",
+      "sha256": "68d98484cf2b5dcb9fead79eaacea775cf2f8cf0c3d2f90f2547ad0795015b55"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.common.config.DesktopRequestSecurityTest.xml",
+      "sha256": "989b322be6fe39f3db0963bc2b03ce9d3bb6a81b3b3f1197ebcf17b97ae017ab"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.github.GithubApiClientTest.xml",
+      "sha256": "3a2a04536ca91366609e7f46625f5c3e97dc67f32eebf4d0d3d7c7395de37fec"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.github.GithubRepoCredentialLeaseTest.xml",
+      "sha256": "e2a8d9c260dc13904061db21305055f32f140967b38e37e2e0b87c1d9201dc56"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.history.GitMetadataPermissionTest.xml",
+      "sha256": "967322794d8996d949369d4ee75a9e9742d1e137aead5e4e5a6c08b4272891f9"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.history.PullRequestCollectorTest.xml",
+      "sha256": "22a14e1e3b1e62a85c766b7f78eda2142e22dfe54cad7f29c0a6eb1aa9357abd"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.job.JobServiceRetryTest.xml",
+      "sha256": "21350b338ca0f7b1f729a19f2b6d0ce146e8f09b8366f73f2a0594039429d58a"
+    },
+    {
+      "path": "validation/local/pre-release-final/security-patched-junit/TEST-dev.codeintelligence.project.ImportCredentialLeaseTest.xml",
+      "sha256": "1760bb42530b11fdfae7ec31d0c32dd10c3e364d68fec43423c0d98c1bf88ab1"
+    },
+    {
+      "path": "validation/local/pre-release-final/tree-analyzer-tests.log",
+      "sha256": "6bc4b80da2dabdb559f761aead6dabad2eb425c46423fe102b9e615de6068b09"
+    },
+    {
+      "path": "validation/local/pre-release-final/tree-analyzer-types.log",
+      "sha256": "0110c4afab717c6aa9b203e0cce7f7a7d6bcc095346eee32078367493b82780d"
+    },
+    {
+      "path": "validation/local/pre-release-final/ts-analyzer-tests.log",
+      "sha256": "722044aca1dfb331ca3a531cf5ff54be52339c68b7529bb146c1e5579d54b4b0"
+    },
+    {
+      "path": "validation/local/pre-release-final/ts-analyzer-types.log",
+      "sha256": "ad789d5d37c17dd962b3572e0caba8a0a9559e17ed2de62641110640fe29da79"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-EjUHjk/result.json",
+      "sha256": "98261d01e9075ba19cde05233e5919d0b08e4cc5fb44e94358b0442658671659"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-GPHJHz/result.json",
+      "sha256": "95bcc5f1e194d93f1539860d3cd84ec82af651e36450222d505d0655d63d6292"
+    },
+    {
+      "path": "validation/local/restore-preflight/native-YvrmAt/result.json",
+      "sha256": "cb0b203fceb731819ce6df11f0bfa2c280246119e97ea9beba5831501f444fba"
+    }
+  ],
+  "changesAfterLastNativeRun": "Only scanner input validation/tests and documentation/consolidation; no packaged product source changes or repeated candidate build.",
+  "prohibitedActionsPerformed": {
+    "realUserProfileMutation": false,
+    "privateKeyInspection": false,
+    "paidAI": false,
+    "githubActions": false,
+    "formalSigning": false,
+    "notarization": false,
+    "publicDeployment": false
+  },
+  "finalizedAt": "2026-10-05T17:18:38.468Z",
+  "changesAfterLastProductRun": "Scanner input validation/tests and documentation/consolidation only; packaged product source is unchanged. Final diagnostic was run on the same candidate in a new synthetic claim; no candidate rebuild."
+}

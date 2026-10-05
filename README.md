@@ -4,7 +4,13 @@
 
 Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
 
-Current audit: [2026-10-02 release assessment](docs/release-audit-2026-10-02.md).
+Latest pre-deployment work: [candidate, validation, dependency review and eight-stage verdict](docs/audit/pre-release-candidate-2026-10-05.md).
+The device-origin credential refresh/CAS and revision-bound GitHub consumers are implemented;
+real-account refresh/revoke/SSO and clean-machine installation are not certified by synthetic tests.
+The current candidate is a local ad-hoc Validation build, not a public release. Use the exact
+candidate/claim and evidence instructions in that report, not an old bundle path below.
+
+Historical audit: [2026-10-02 release assessment](docs/release-audit-2026-10-02.md).
 Follow-up implementation and verification: [integrated results](docs/audit/execution-results-2026-10-02.md),
 [current execution status](docs/audit/execution-status-2026-10-02.md), and
 [independent review findings](docs/audit/execution-review-2026-10-02.md).
@@ -139,19 +145,20 @@ fresh private userData, sessionData, logs, temporary, crash, home and output pat
 It rejects symlinks, claimed run reuse and overlap with this checkout's stage/dist
 and the conventional app-data location. It does not inspect runtime contents,
 build a bundle, change staging outputs, start services or access credentials.
-Success reports `PREPARED_BLOCKED` and `launchAllowed: false`; the JSON is diagnostic
-and cannot resume or authorize a run. Existing runs are never reused or removed.
+Success reports `PREPARED`, `launchAllowed: true` and the path of the newly created
+claim. A later launch uses `--isolated-run-claim <claimFile>`; opening that exact
+claim validates its identity and roots, and permits restart of that isolated run.
+Preparation itself does not launch Electron, prove native credentials work, or
+certify runtime integrity. It never adopts or deletes another claim.
 
-Electron recognizes the same flags before its single-instance lock, also checks its
-actual userData/sessionData and packaged resources, and exits before initialization.
-Launch remains blocked by `CREDENTIAL_STORE_UNVERIFIED` and
-`SERVICE_ENDPOINT_OWNERSHIP_UNPROVEN`: changing paths does not isolate the macOS
-Keychain, and a free port or health response does not prove service ownership.
-There is no environment-variable bypass. These filesystem checks are not an OS
-sandbox against concurrent changes by the same user. Native Windows validation is
-pending; this POSIX preparation path refuses Windows. Full desktop flow validation
-still requires a separately approved credential-store boundary and authenticated
-connections to owned services.
+Electron opens the claim before its single-instance lock, then validates the
+runtime, credentials and owned authenticated service connections during startup.
+Actual helper ownership and TLS/capability checks are required; free ports and
+health responses alone are not authority. The synthetic automation runners use
+mock Keychain and fresh claims explicitly; their results do not certify the real
+macOS credential store. These filesystem checks are not an OS sandbox against
+hostile concurrent same-user renames. This POSIX preparation path refuses Windows;
+the separate Windows storage and release gates remain independent.
 
 Independent code builds use a clean committed source snapshot and their own writable
 work copy, dependency copies, HOME, temporary directories and caches:
@@ -210,9 +217,9 @@ not authentication exceptions. Session and CSRF cookies are Secure in the deskto
 Certificates are regenerated on each full application launch and are valid for one year;
 they are removed only after owned children stop. They are never long-term OS trust anchors.
 
-External GitHub redirects use a separate, narrowly bounded HTTP loopback callback;
-only validated callback parameters are forwarded to the pinned HTTPS backend. That
-bridge is not a generic HTTP API listener and does not solve the OAuth provider limitation below.
+Native GitHub authentication uses device flow and has no HTTP loopback callback
+server. Browser-profile OAuth remains a separate web redirect path. Do not reuse
+browser callback instructions or OAuth client secrets in the native bundle.
 
 Windows runtime IO is restricted to retained fixed-NTFS roots. `WI1` identities bind the
 volume and file ID; `WS1` states also include size, actual allocation size, last-write and
@@ -435,7 +442,12 @@ action. Polling is attempt/owner-bound, obeys GitHub’s interval and `slow_down
 on cancellation or expiry. No client secret is bundled and no local HTTP OAuth callback
 server is used. Settings provides connection, account switching and disconnection while
 preserving local analysis. PAT login remains a secondary path. Production GitHub App
-installation selection, read-only permissions and token renewal remain separate gates.
+installation selection and read-only permissions remain subject to real-account validation.
+Device-origin access/refresh pairs are encrypted with owner binding; refresh first
+commits a token-free claim and publishes only the same revision/generation after
+provider identity verification. An ambiguous interrupted refresh requires login
+again instead of replaying stored refresh material. This implemented contract and
+its isolated tests do not establish a real GitHub refresh/revocation/SSO pass.
 Real-account consent and live AI
 provider calls are separate, explicitly approved checks; device-flow regressions do not
 prove either. `TOKEN_ENC_KEY` is always required by the backend. Set
@@ -488,7 +500,8 @@ analysis-only fixture manifests pin Vitest 4.1.11 without installing the fixture
 or adding lockfiles. Fresh isolated frontend/TS/tree dependency audits reported
 zero vulnerabilities; that is not a repository-wide or release acceptance claim.
 
-Desktop build tooling still includes http-cache-semantics 4.2.0 through
+Historical observation before the downloader-adapter replacement: desktop build
+tooling included http-cache-semantics 4.2.0 through
 app-builder-lib → @electron/get 3.1.0 → got → cacheable-request.
 GHSA-ch52-4w7c-c8xp still reports no patched version. The newly published 4.3.0 was
 also exercised directly: a security-zeroed shared response containing Set-Cookie was
@@ -498,7 +511,10 @@ The chain is development-only. Two actual downloads through the locked @electron
 GotDownloader, with different synthetic user cookies and max-stale, made two origin
 requests and returned distinct fresh artifacts: default download caching did not expose
 the policy bug in that scenario. This does not prove every configured build path safe.
-No alert suppression or unsupported claim of a repository-wide clean audit is made.
+No alert suppression or unsupported claim of a repository-wide clean audit was made.
+The current downloader-adapter path is described in the packaging section above;
+the candidate report records the later limited package-coordinate advisory scan.
+This historical observation is not a statement that the old downloader still ships.
 
 The patched frontend production build was exercised in an owned Chrome instance
 at 980×700, 1280×800 and 1440×900. [Results and seven screenshots](validation/ui-layout/2026-10-04/results.json)
@@ -654,10 +670,12 @@ and blockers in [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md).
 | Linux native package | Not verified |
 | Production hosted deployment | Deployment-specific; no release workflow is included |
 
-The only follow-up deployment sequence is: Developer ID signing → notarization
+After the internal and operational requirements in the current eight-stage verdict
+are satisfied, the signed distribution sequence is Developer ID signing → notarization
 → staple/Gatekeeper validation → fresh-machine backup/restore/OAuth acceptance
-→ release. Developer ID/notary credentials and real OAuth credentials were not
-available or used for this local verification.
+→ final release approval. Signing alone cannot clear the pending integration,
+accuracy, performance, security or user-acceptance gates. Developer ID/notary
+credentials were not used for this local candidate verification.
 
 ## Troubleshooting
 
@@ -668,9 +686,11 @@ available or used for this local verification.
 - TypeScript features are unavailable: start `ts-analyzer` and set
   `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040`. Python/Go/Vue/Svelte parsing
   additionally requires `tree-analyzer` and its base URL.
-- AI is disabled: configure a supported environment key or open Settings and
-  save a provider key. Model lists and connection checks require network access
-  to the selected provider.
+- Desktop AI is disabled: save a supported key in Settings, set the default-zero
+  spending limits and explicitly activate the budget. Each request still needs its
+  own reviewed approval. Desktop OFF/missing-key states never use an environment
+  key. Browser development configuration is a separate path; check the displayed
+  availability reason rather than assuming a successful key save enables requests.
 - AI requests fail after enabling a key: verify the selected model, provider
   quota, outbound network policy, and the provider's current API terms.
 

@@ -4,7 +4,13 @@
 
 2026-10-05 제품 개편: 레포 개요·분석 시점별 검색 표·선택 주변 관계·보관 소스 탐색을 구현했습니다. 학습 관리는 제거하고 기존 데이터는 보존했습니다. [현재 구현과 실제 앱 검증 범위](docs/multilanguage-plan-2026-10-02/11-first-implementation.md)에 최초 native FAIL/후속 PASS, 계정 연결 관리, 검토된 V26→V27 백업 호환성을 구분했습니다. Developer ID 서명·공증·정식 배포는 아직 완료하지 않았습니다. 아래 날짜별 감사 기록은 과거 범위를 유지합니다.
 
-현재 감사: [2026-10-02 출시 점검 보고서](docs/release-audit-2026-10-02.md).
+최신 배포 전 작업은 [통합 후보·검증·의존성 점검·전체8단계 판정](docs/audit/pre-release-candidate-2026-10-05.md)을
+따릅니다. device-origin 인증 갱신의 영속 claim/CAS와 GitHub 소비자의 자격증명 revision 검증을
+구현했습니다. 합성 시험은 실계정 refresh·철회·SSO나 새 기기 설치를 인증하지 않습니다.
+후보는 로컬 ad-hoc Validation 앱이며 공개 릴리스가 아닙니다. 아래 과거 앱 경로가 아니라
+최신 보고서의 정확한 후보·격리 claim 및 증거를 사용하십시오.
+
+과거 감사: [2026-10-02 출시 점검 보고서](docs/release-audit-2026-10-02.md).
 후속 구현과 검증은 [통합 결과](docs/audit/execution-results-2026-10-02.md),
 [현재 실행 상태](docs/audit/execution-status-2026-10-02.md)와
 [독립 리뷰 기록](docs/audit/execution-review-2026-10-02.md)을 참조하십시오.
@@ -131,7 +137,7 @@ Electron의 `app.getPath('logs')`를 사용하므로 macOS에서는 app-data 밖
 같습니다.
 
 ```bash
-(cd desktop && npm run stage && npm run pack:mac)
+(cd desktop && npm run pack:mac)
 open "desktop/dist/mac-arm64/Code Intelligence.app"
 ```
 
@@ -163,7 +169,11 @@ electron-builder의 `extraMetadata.githubNativeClientId`에 공개 ID를 넣어 
 선택할 때 GitHub 인증 페이지를 엽니다. 대기 간격·거절·만료·취소를 처리하며 client secret이나
 로컬 HTTP OAuth callback 서버를 사용하지 않습니다. 설정에서 연결·계정 전환·연결 해제를
 제공하고, 연결 해제는 로컬 분석 기록을 삭제하지 않습니다. PAT login은 보조 경로입니다.
-운영 GitHub App의 선택 저장소·읽기 권한·토큰 갱신과 실제 계정 인증은 별도 검증 대상입니다.
+운영 GitHub App의 선택 저장소·읽기 권한과 실제 계정 인증은 별도 검증 대상입니다.
+device-origin access/refresh 쌍은 소유자에 결합하여 암호화하며, 갱신 요청 전에 token 없는
+영속 claim을 저장합니다. 같은 revision·연결 세대·GitHub identity가 확인된 결과만 게시하고,
+갱신 도중 결과가 불명확해지면 refresh material을 재전송하지 않고 재로그인을 요구합니다.
+이 구현과 격리 검증을 실제 GitHub refresh·권한 철회·SSO 통과로 확대하지 않습니다.
 현재 device-flow 테스트를 운영 OAuth 완료로 해석하지 않습니다. 백엔드에는 항상
 `TOKEN_ENC_KEY`가 필요합니다. sidecar를
 활성화하려면 `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040`과
@@ -191,7 +201,7 @@ electron-builder의 `extraMetadata.githubNativeClientId`에 공개 ID를 넣어 
 
 # Desktop syntax 및 local macOS staging/package 검사
 (cd desktop && npm test && node --check src/main.cjs && node --check src/preload.cjs)
-(cd desktop && npm run stage && npm run pack:mac)
+(cd desktop && npm run pack:mac)
 ```
 
 CI는 모든 pull request에서 backend, frontend, TypeScript analyzer와 tree-sitter
@@ -335,10 +345,11 @@ AI 컨텍스트를 구성하기 전에 secret을 마스킹하지만, 사용자�
 | Linux 네이티브 패키지 | 검증하지 않음 |
 | 프로덕션 호스팅 배포 | 배포별로 다름; 릴리스 워크플로가 포함되지 않음 |
 
-후속 배포 순서는 Developer ID 서명 → notarization → staple/Gatekeeper 검증
-→ fresh-machine backup/restore/OAuth acceptance → release 순서로만 진행합니다.
-이번 로컬 검증에는 Developer ID/notary credential과 실제 OAuth credential을
-사용할 수 없었고, 사용하지도 않았습니다.
+최신8단계 판정에 남은 내부 검증·운영 조건을 충족한 뒤 Developer ID 서명 →
+notarization → staple/Gatekeeper 검증 → 새 기기 backup/restore/OAuth 수용 →
+최종 공개 승인 순서로 진행합니다. 서명만으로 통합·정확도·성능·보안·사용자 검증의
+미완료 조건이 해소되지는 않습니다. 이번 후보 검증에서 Developer ID/notary 자격은
+사용하지 않았습니다.
 
 ## 문제 해결
 
@@ -349,9 +360,11 @@ AI 컨텍스트를 구성하기 전에 secret을 마스킹하지만, 사용자�
 - TypeScript 기능을 사용할 수 없는 경우: `ts-analyzer`를 시작하고
   `TS_ANALYZER_BASE_URL=http://127.0.0.1:3040`을 설정하십시오. Python/Go/Vue/Svelte
   parsing에는 `tree-analyzer`와 해당 base URL도 필요합니다.
-- AI가 비활성화된 경우: 지원되는 환경 키를 설정하거나 Settings를 열어 provider
-  키를 저장하십시오. 모델 목록과 연결 검사에는 선택한 provider로의 네트워크
-  접근이 필요합니다.
+- 데스크톱 AI가 비활성화된 경우: Settings에서 지원되는 키를 저장하고 기본값0인
+  지출 한도를 정한 뒤 예산을 별도로 활성화하십시오. 각 요청에는 별도의 검토·승인이
+  필요합니다. 데스크톱 OFF·키 없음 상태는 환경 키로 전환하지 않습니다. 브라우저
+  개발 설정과 구분하고, 키 저장만으로 요청이 켜졌다고 가정하지 말고 표시된 사유를
+  확인하십시오.
 - 키를 활성화한 후 AI 요청이 실패하는 경우: 선택한 모델, provider quota,
   outbound 네트워크 정책과 provider의 현재 API 약관을 확인하십시오.
 
