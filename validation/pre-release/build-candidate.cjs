@@ -1,8 +1,8 @@
 'use strict';
 
 // Explicit offline development-candidate build, not a release or updater.
-// Native/JRE/analyzer supply comes from a verified retained Validation bundle;
-// backend is rebuilt offline and its current classes/migrations are read back.
+// Native/JRE and analyzer dependencies come from a verified retained bundle;
+// backend AND analyzer code are rebuilt offline and read back, not reused stale.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -22,6 +22,33 @@ function argumentsForCandidate(argv) {
   assert.equal(argv[3].match(/^[1-9][0-9]{0,18}$/)?.[0], argv[3]);
   assert(BigInt(argv[3]) <= 9223372036854775807n);
   return { app: argv[1], buildSequence: argv[3] };
+}
+
+function replaceAnalyzerBuild(plan, runtime, compiled, manifest) {
+  plan.assertIdentity();
+  const ownedDirectory = directory => {
+    assert(directory.startsWith(plan.workRoot + path.sep));
+    assert.equal(fs.realpathSync(directory), directory);
+    const stat = fs.lstatSync(directory); assert(stat.isDirectory() && !stat.isSymbolicLink());
+  };
+  ownedDirectory(runtime); ownedDirectory(compiled);
+  const target = path.join(runtime, 'ts-analyzer/dist'), previous = path.join(plan.workRoot, 'previous-analyzer-dist');
+  ownedDirectory(path.dirname(target)); ownedDirectory(target);
+  try { fs.lstatSync(previous); assert.fail('PREVIOUS_ANALYZER_OUTPUT_EXISTS'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const built = dependencyInventory(compiled);
+  assert(built.entries.length > 0 && built.entries.length < 1000);
+  assert(built.entries.every(entry => !entry.link && (entry.directory || /\.js(?:\.map)?$/.test(entry.path))));
+  assert(built.entries.some(entry => entry.path === 'main.js' && entry.sha256));
+  const files = { ...manifest.files };
+  for (const name of Object.keys(files)) if (name.startsWith('ts-analyzer/dist/')) delete files[name];
+  for (const entry of built.entries) if (entry.sha256) files['ts-analyzer/dist/' + entry.path] = entry.sha256;
+  // Retain the old *staged copy*, never mutate the baseline app or reuse stale JS.
+  fs.renameSync(target, previous);
+  const copied = copyPrivateTree(plan, compiled, target);
+  assert.equal(copied.sha256, built.sha256);
+  return { manifest: { ...manifest, files }, evidence: { codeRebuilt: true,
+    compiledDigest: built.sha256, files: built.entries.filter(entry => entry.sha256).length,
+    fileHashes: Object.fromEntries(built.entries.filter(entry => entry.sha256).map(entry => [entry.path, entry.sha256])) } };
 }
 async function main(argv = process.argv.slice(2)) {
   const options = argumentsForCandidate(argv);
@@ -44,9 +71,10 @@ async function main(argv = process.argv.slice(2)) {
     const now = fs.lstatSync(work); assert(now.isDirectory() && !now.isSymbolicLink());
     assert.equal(now.dev, identity.dev); assert.equal(now.ino, identity.ino); assert.equal(fs.realpathSync(work), work);
   } };
-  const sourceRoots = ['backend/src/main', 'frontend/src', 'desktop/src'];
+  const sourceRoots = ['backend/src/main', 'frontend/src', 'desktop/src', 'analyzers/ts-analyzer/src'];
   const buildInputs = ['backend/build.gradle.kts', 'backend/settings.gradle.kts', 'backend/gradle/wrapper/gradle-wrapper.properties',
-    'frontend/package.json', 'frontend/package-lock.json', 'desktop/package.json', 'desktop/package-lock.json'];
+    'frontend/package.json', 'frontend/package-lock.json', 'desktop/package.json', 'desktop/package-lock.json',
+    'analyzers/ts-analyzer/package.json', 'analyzers/ts-analyzer/package-lock.json', 'analyzers/ts-analyzer/tsconfig.json'];
   const sourceDigests = () => Object.fromEntries([
     ...sourceRoots.map(name => [name, dependencyInventory(path.join(repo, name)).sha256]),
     ...buildInputs.map(name => [name, hash(path.join(repo, name))]),
@@ -75,10 +103,12 @@ async function main(argv = process.argv.slice(2)) {
     const jars = fs.readdirSync(path.join(repo, 'backend/build/libs')).filter(n => n.endsWith('.jar') && !n.endsWith('-plain.jar'));
     assert.equal(jars.length, 1);
     const originalJar = path.join(repo, 'backend/build/libs', jars[0]); report.compiledJarSha256 = hash(originalJar);
-    const frontend = path.join(work, 'frontend'), desktop = path.join(work, 'desktop');
+    const frontend = path.join(work, 'frontend'), desktop = path.join(work, 'desktop'), analyzer = path.join(work, 'analyzers/ts-analyzer');
     for (const dir of [frontend, desktop, path.join(work, 'home'), path.join(work, 'tmp'), path.join(work, 'cache')]) fs.mkdirSync(dir, { mode: 0o700 });
+    fs.mkdirSync(analyzer, { recursive: true, mode: 0o700 });
     for (const [component, entries] of [['frontend', ['src', 'public', 'index.html', 'package.json', 'package-lock.json']],
-      ['desktop', ['src', 'scripts', 'build', 'package.json', 'package-lock.json']]]) {
+      ['desktop', ['src', 'scripts', 'build', 'package.json', 'package-lock.json']],
+      ['analyzers/ts-analyzer', ['src', 'package.json', 'package-lock.json', 'tsconfig.json']]]) {
       for (const entry of entries) {
         const from = path.join(repo, component, entry); if (!fs.existsSync(from)) { assert.equal(entry, 'public'); continue; }
         fs.cpSync(from, path.join(work, component, entry), { recursive: true, force: false, errorOnExist: true });
@@ -93,6 +123,8 @@ async function main(argv = process.argv.slice(2)) {
     await build({ root: frontend, configFile: false, envDir: false, plugins: [react(), tailwind()],
       build: { outDir: path.join(frontend, 'dist'), emptyOutDir: false } });
     report.frontendBuilt = true; save();
+    run(process.execPath, [path.join(analyzer, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], analyzer, 'analyzer-build',
+      { ...fixedEnv, HOME: path.join(work, 'home'), TMPDIR: path.join(work, 'tmp') }, 120000);
     const stage = path.join(desktop, 'stage/runtime'); fs.mkdirSync(path.dirname(stage), { mode: 0o700 });
     fs.cpSync(originalRuntime, stage, { recursive: true, force: false, errorOnExist: true });
     await validateRuntimeManifest(stage, originalManifest);
@@ -104,8 +136,14 @@ async function main(argv = process.argv.slice(2)) {
     assert.equal(hash(originalJar), report.compiledJarSha256); fs.renameSync(temporaryJar, targetJar); report.jar = readback;
     for (const name of fs.readdirSync(path.join(repo, 'backend/src/main/resources/db/migration')))
       assert.equal(hash(path.join(repo, 'backend/src/main/resources/db/migration', name)), hash(path.join(stage, 'backend/backup-migrations', name)));
-    const manifest = { ...originalManifest, buildSequence: options.buildSequence,
-      files: { ...originalManifest.files, 'backend/code-intelligence.jar': hash(targetJar) } };
+    // Code changed, dependencies did not: reject an incompatible retained supply
+    // instead of silently combining a new lockfile with old installed packages.
+    for (const name of ['package.json', 'package-lock.json'])
+      assert.equal(hash(path.join(analyzer, name)), hash(path.join(stage, 'ts-analyzer', name)), 'ANALYZER_DEPENDENCY_INPUT_CHANGED');
+    const replacement = replaceAnalyzerBuild(plan, stage, path.join(analyzer, 'dist'), originalManifest);
+    report.analyzer = replacement.evidence;
+    const manifest = { ...replacement.manifest, buildSequence: options.buildSequence,
+      files: { ...replacement.manifest.files, 'backend/code-intelligence.jar': hash(targetJar) } };
     fs.writeFileSync(path.join(stage, 'runtime-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
     await validateRuntimeManifest(stage, manifest);
     const retained = fs.mkdtempSync(path.join(repo, '.native-product-')); report.retained = retained; save();
@@ -128,6 +166,8 @@ async function main(argv = process.argv.slice(2)) {
     const appRuntime = path.join(app, 'Contents/Resources/runtime'), finalManifestFile = path.join(appRuntime, 'runtime-manifest.json');
     await validateRuntimeManifest(appRuntime, JSON.parse(fs.readFileSync(finalManifestFile)));
     assert.equal(hash(path.join(appRuntime, 'backend/code-intelligence.jar')), readback.candidateJarSha256);
+    for (const [name, expected] of Object.entries(report.analyzer.fileHashes))
+      assert.equal(hash(path.join(appRuntime, 'ts-analyzer/dist', name)), expected);
     execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { stdio: 'pipe', timeout: 30000 });
     assert.deepEqual(sourceDigests(), report.sources);
     assert.equal(hash(originalManifestFile), report.baselineHashes.manifest);
@@ -138,5 +178,5 @@ async function main(argv = process.argv.slice(2)) {
     return report;
   } catch (error) { report.status = 'FAIL'; report.failure = error.code || error.name; save(); throw error; }
 }
-module.exports = { argumentsForCandidate, main };
+module.exports = { argumentsForCandidate, replaceAnalyzerBuild, main };
 if (require.main === module) main().catch(error => { console.error(error.code || error.name); process.exitCode = 1; });

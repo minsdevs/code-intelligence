@@ -60,10 +60,19 @@ let restartTimer;
 let restartAttempts = 0;
 let runtimeOperation = Promise.resolve();
 let startupPhase = 'MANIFEST';
+let shutdownPhase = 'QUEUED';
 let isolatedPlan;
 function noteStartup(phase) {
   startupPhase = phase;
   console.error('DESKTOP_STARTUP ' + phase);
+}
+function noteShutdown(phase) {
+  if (!quitting) return;
+  shutdownPhase = phase;
+  console.error('DESKTOP_SHUTDOWN ' + phase);
+}
+function noteShutdownFailure() {
+  if (quitting) console.error('DESKTOP_SHUTDOWN ' + shutdownPhase + ' FAILED SAFETY_RECOVERY_REQUIRED');
 }
 
 // Dialogs, backup, restore and restart must never mutate the same runtime concurrently.
@@ -679,16 +688,19 @@ async function stopRuntime({ keepDatabase = false } = {}) {
   let failure;
   // Even on a latch failure, stop every child. A restart must propagate that failure.
   if (safetyLifecycle) {
+    noteShutdown('SAFETY_OFF');
     try {
       if (bootRecovery) await safetyLifecycle.latch('RESTART_RECONCILIATION');
       else await latchSafety('RESTART_RECONCILIATION');
-    } catch (error) { failure = error; }
+    } catch (error) { failure = error; noteShutdownFailure(); }
   }
   for (const name of ['backend', 'ts-analyzer', 'redis', ...(keepDatabase ? [] : ['postgres'])]) {
-    try { await stopChild(name); } catch (error) { failure ||= error; }
+    noteShutdown({ backend: 'BACKEND', 'ts-analyzer': 'ANALYZER', redis: 'REDIS', postgres: 'POSTGRES' }[name]);
+    try { await stopChild(name); } catch (error) { failure ||= error; noteShutdownFailure(); }
   }
   if (!children.has('backend') && !children.has('ts-analyzer')) {
-    try { await closeProductionSources(); } catch (error) { failure ||= error; }
+    noteShutdown('SOURCES');
+    try { await closeProductionSources(); } catch (error) { failure ||= error; noteShutdownFailure(); }
   }
   runtime.ready = false;
   if (failure) throw failure;
@@ -742,20 +754,28 @@ function shutdownRuntime() {
   if (shutdownPromise) return shutdownPromise;
   quitting = true;
   stopping = true;
+  noteShutdown('QUEUED');
   clearTimeout(restartTimer);
   restartTimer = null;
   // Startup and maintenance share this queue, so shutdown cannot close a half-published handle.
   shutdownPromise = withRuntimeOperation(async () => {
+    noteShutdown('STOPPING');
     let failure;
     try { await stopRuntime(); } catch (error) { failure = error; }
     // Unconfirmed children or source drain retain the same safety ownership.
     if (children.size === 0 && !sourceBroker && !sourceVault) {
-      try { await safetyLifecycle?.close(); } catch (error) { failure ||= error; }
-      try { await aiPostgres?.close(); } catch (error) { failure ||= error; }
-      try { await ownerLocks?.close(); } catch (error) { failure ||= error; }
-      try { await runtime?.transport?.close(); } catch (error) { failure ||= error; }
-      try { await runtime?.storage?.close(); } catch (error) { failure ||= error; }
+      noteShutdown('SAFETY');
+      try { await safetyLifecycle?.close(); } catch (error) { failure ||= error; noteShutdownFailure(); }
+      noteShutdown('CONNECTIONS');
+      try { await aiPostgres?.close(); } catch (error) { failure ||= error; noteShutdownFailure(); }
+      noteShutdown('OWNER_LOCKS');
+      try { await ownerLocks?.close(); } catch (error) { failure ||= error; noteShutdownFailure(); }
+      noteShutdown('TRANSPORT');
+      try { await runtime?.transport?.close(); } catch (error) { failure ||= error; noteShutdownFailure(); }
+      noteShutdown('STORAGE');
+      try { await runtime?.storage?.close(); } catch (error) { failure ||= error; noteShutdownFailure(); }
       if (runtime?.ipcRoot) {
+        noteShutdown('PRIVATE_IPC');
         try { if (runtime.windowsBoundary) {
           await runtime.ipcStorage.close();
           runtime.windowsBoundary.removeDirectory(runtime.ipcRoot, runtime.ipcIdentity);
@@ -763,10 +783,11 @@ function shutdownRuntime() {
           const actual = await fsp.lstat(runtime.ipcRoot);
           if (actual.dev !== runtime.ipcIdentity.dev || actual.ino !== runtime.ipcIdentity.ino) throw new Error('IPC root changed.');
           await fsp.rmdir(runtime.ipcRoot);
-        } } catch (error) { failure ||= error; }
+        } } catch (error) { failure ||= error; noteShutdownFailure(); }
       }
     }
     if (failure) throw new SafetyLifecycleError('SAFETY_RECOVERY_REQUIRED');
+    noteShutdown('COMPLETE');
   });
   return shutdownPromise;
 }
@@ -1265,6 +1286,7 @@ app.on('before-quit', (event) => {
     shutdownComplete = true;
     app.quit();
   }, () => {
+    noteShutdownFailure();
     dialog.showErrorBox('Code Intelligence shutdown requires recovery',
       'Desktop safety state could not be closed cleanly. No safety state or lock was reset.');
     if (children.size === 0 && !sourceBroker && !sourceVault) { shutdownComplete = true; app.quit(); }

@@ -17,6 +17,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const suites = Object.freeze({
   auth: ['test', '--tests', 'dev.codeintelligence.AuthIntegrationTest', '--tests', 'dev.codeintelligence.OAuthEnabledIntegrationTest'],
   backend: ['test'],
+  events: ['test', '--tests', 'dev.codeintelligence.job.JobSse*Test'],
   maintenance: ['test', '--tests', 'dev.codeintelligence.maintenance.MaintenanceApiIntegrationTest'],
   accuracy: ['accuracyTest'],
   corpus: ['test', ...['FixtureGoldenTest', 'SpringMiniGraphGoldenTest', 'SpringMiniEndpointsFeaturesGoldenTest',

@@ -19,10 +19,10 @@ public class JobEventsController {
         this.broadcaster = broadcaster;
     }
 
-    /** The ownership lookup doubles as the initial snapshot sent right after connect (위험 R6). */
+    /** Authorize before registration, then reload after registration to close the lost-event window. */
     @GetMapping(value = "/api/jobs/{jobId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter events(@PathVariable long jobId, @AuthenticationPrincipal AuthenticatedUser user) {
-        JobDetailResponse snapshot = jobService.getOwnedJob(jobId, user.userId());
-        return broadcaster.subscribe(jobId, snapshot);
+        jobService.getOwnedJob(jobId, user.userId());
+        return broadcaster.subscribeAfterOwnership(jobId, () -> jobService.getOwnedJob(jobId, user.userId()));
     }
 }

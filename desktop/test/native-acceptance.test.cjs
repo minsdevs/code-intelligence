@@ -288,6 +288,41 @@ test('startup evidence accepts fragmented static records but no raw details or o
   stop(); child.stderr.end();
 });
 
+test('shutdown observation records bounded phase timings and preserves the first failure', () => {
+  const { PassThrough } = require('node:stream');
+  const { observeStartup } = require('../scripts/native-acceptance-electron.cjs');
+  const child = { stderr: new PassThrough() }, report = {}; let now = 100;
+  const stop = observeStartup(child, report, () => {}, () => now);
+  child.stderr.write('DESKTOP_SHUT'); child.stderr.write('DOWN QUEUED\r\n');
+  now = 124; child.stderr.write('DESKTOP_SHUTDOWN BACKEND\n');
+  now = 135; child.stderr.write('DESKTOP_SHUTDOWN BACKEND FAILED SAFETY_RECOVERY_REQUIRED\n');
+  now = 145; child.stderr.write('DESKTOP_SHUTDOWN REDIS\nDESKTOP_SHUTDOWN COMPLETE\n');
+  assert.deepEqual(report.shutdown, { phase: 'BACKEND', state: 'FAILED', code: 'SAFETY_RECOVERY_REQUIRED', elapsedMs: 35 });
+  assert.deepEqual(report.shutdownTrace.map(row => row.elapsedMs), [0, 24, 35, 45, 45]);
+  for (let index = 0; index < 100; index++) child.stderr.write('DESKTOP_SHUTDOWN REDIS\n');
+  assert.equal(report.shutdownTrace.length, 32);
+  assert.equal(report.shutdown.phase, 'BACKEND');
+  stop(); assert.equal(child.stderr.listenerCount('data'), 0); child.stderr.end();
+});
+
+test('shutdown diagnostics cannot persist arbitrary error text, paths or oversize prefixes', () => {
+  const { PassThrough } = require('node:stream');
+  const { parseShutdownLine } = require('../src/startup-diagnostics.cjs');
+  const { observeStartup } = require('../scripts/native-acceptance-electron.cjs');
+  const child = { stderr: new PassThrough() }, report = {};
+  const stop = observeStartup(child, report, () => {}, () => 1);
+  for (const line of ['DESKTOP_SHUTDOWN /Users/private', 'DESKTOP_SHUTDOWN BACKEND private-token',
+    'DESKTOP_SHUTDOWN BACKEND FAILED private-token', 'DESKTOP_SHUTDOWN COMPLETE FAILED SAFETY_RECOVERY_REQUIRED',
+    'DESKTOP_SHUTDOWN BACKEND FAILED SAFETY_RECOVERY_REQUIRED /Users/private', 'x'.repeat(1024) + 'DESKTOP_SHUTDOWN COMPLETE']) {
+    assert.equal(parseShutdownLine(line), null); child.stderr.write(line + '\n');
+  }
+  assert.deepEqual(report, {});
+  child.stderr.write('DESKTOP_SHUTDOWN COMPLETE\n');
+  assert.deepEqual(report.shutdown, { phase: 'COMPLETE', state: 'COMPLETE', elapsedMs: 0 });
+  assert.doesNotMatch(JSON.stringify(report), /private|token/);
+  stop(); child.stderr.end();
+});
+
 test('Windows policy evidence keeps public binary identity but rejects private or injected fields', () => {
   const { buildDiagnostics } = require('../scripts/native-acceptance.cjs');
   const { parsePe } = require('../scripts/windows-pe-policy.cjs');

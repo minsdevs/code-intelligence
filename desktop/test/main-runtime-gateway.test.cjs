@@ -953,6 +953,7 @@ test('canceling the native restore dialog returns null without calling the backu
 
 test('normal shutdown latches, terminates all children, closes gateway/safety, then closes adapter', async t => {
   const h = await harness(t); await h.start(); const at = h.events.length;
+  const logs = []; h.context.console = { ...console, error: line => logs.push(line) };
   const first = h.shutdown(); assert.equal(first, h.shutdown()); await first;
   const events = h.events.slice(at); const latch = events.indexOf('gateway.latch');
   const kills = events.map((v, i) => v.startsWith('kill.') ? i : -1).filter(i => i >= 0);
@@ -960,6 +961,11 @@ test('normal shutdown latches, terminates all children, closes gateway/safety, t
   assert.ok(events.indexOf('gateway.close') > Math.max(...kills));
   assert.ok(events.indexOf('gateway.closed') < events.indexOf('adapter.close'));
   assert.equal(h.run('children.size'), 0); assert.equal(h.logHandles.size, 0);
+  const { parseShutdownLine } = require('../src/startup-diagnostics.cjs');
+  const trace = logs.map(parseShutdownLine).filter(Boolean);
+  assert.deepEqual(trace.map(row => row.phase), ['QUEUED', 'STOPPING', 'SAFETY_OFF', 'BACKEND', 'ANALYZER', 'REDIS',
+    'POSTGRES', 'SOURCES', 'SAFETY', 'CONNECTIONS', 'OWNER_LOCKS', 'TRANSPORT', 'STORAGE', 'PRIVATE_IPC', 'COMPLETE']);
+  assert.equal(trace.at(-1).state, 'COMPLETE');
 });
 
 for (const phase of ['adapterFailure', 'gatewayFailure']) test(`startup ${phase} is closed and never launches a child/window`, async t => {
@@ -1130,6 +1136,7 @@ for (const early of ['exit', 'failure', 'rejection']) {
 
 test('guardian error without a cleanup acknowledgement keeps child and B ownership through failed shutdown', async t => {
   const h = await harness(t, { backupProtocol: 3 }); await h.start();
+  const logs = []; h.context.console = { ...console, error: line => logs.push(line) };
   const backend = h.guardians.find(value => path.basename(value.command) === 'java').child;
   backend.killMode = 'noExit'; backend.failure = new Error('synthetic guardian SIGKILL'); backend.emit('error', backend.failure);
   assert.equal(h.run('runtime.ready'), false); assert.equal(h.run('runtime.recoveryRequired'), true);
@@ -1138,6 +1145,12 @@ test('guardian error without a cleanup acknowledgement keeps child and B ownersh
   assert.equal(h.run("children.has('backend')"), true); assert.equal(backend.exitCode, null); assert.equal(backend.signalCode, null);
   assert.equal(h.events.includes('safety.close'), false); assert.equal(h.events.includes('adapter.close'), false);
   assert.equal(h.events.some(value => value.startsWith('lease.release.')), false);
+  const { parseShutdownLine } = require('../src/startup-diagnostics.cjs');
+  const trace = logs.map(parseShutdownLine).filter(Boolean);
+  assert.deepEqual(trace.find(row => row.state === 'FAILED'),
+    { phase: 'BACKEND', state: 'FAILED', code: 'SAFETY_RECOVERY_REQUIRED' });
+  assert.equal(trace.some(row => row.state === 'COMPLETE'), false);
+  assert.doesNotMatch(JSON.stringify(logs), /synthetic guardian|SIGKILL/);
 });
 
 test('interrupted recovery permits only origin-checked PostgreSQL until verified completion and normal B reopen', async t => {

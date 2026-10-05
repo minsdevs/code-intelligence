@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
-const { parseStartupLine } = require('../src/startup-diagnostics.cjs');
+const { parseStartupLine, parseShutdownLine } = require('../src/startup-diagnostics.cjs');
 
 function bounded(operation, timeoutMs, code) {
   let timer;
@@ -36,6 +36,33 @@ async function closeOwnedApplication(current, { timeoutMs = 30000, killGraceMs =
   } finally { child.removeListener('exit', onExit); }
 }
 
+async function closeValidatedApplication(current, report, options = {}) {
+  // Keep SDK/owned-process failures primary. A later exit0 cannot erase them.
+  await closeOwnedApplication(current, options);
+  const stream = current.process().stderr;
+  if (!stream) throw new Error('NATIVE_SHUTDOWN_UNCONFIRMED');
+  const timeoutMs = options.diagnosticTimeoutMs ?? 1000;
+  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 1000);
+  let finished, onError, drainFailure, pipeFailed = Boolean(stream.errored);
+  const ended = new Promise(resolve => {
+    finished = resolve;
+    onError = () => { pipeFailed = true; resolve(); };
+    stream.once('end', finished); stream.once('close', finished); stream.once('error', onError);
+    if (stream.readableEnded || stream.destroyed || stream.errored) resolve();
+  });
+  try { await bounded(ended, timeoutMs, 'NATIVE_SHUTDOWN_DIAGNOSTIC_TIMEOUT'); }
+  catch (error) { drainFailure = error; }
+  finally {
+    stream.off('end', finished); stream.off('close', finished); stream.off('error', onError);
+  }
+  // A cleanup failure may be followed by a recovery dialog and a natural exit0.
+  // Drain stderr first so a buffered FAILED cannot arrive after the gate passes.
+  if (report.shutdown?.state === 'FAILED') throw new Error('NATIVE_SHUTDOWN_RECOVERY_REQUIRED');
+  if (drainFailure) throw drainFailure;
+  if (pipeFailed || !stream.readableEnded || report.shutdown?.state !== 'COMPLETE'
+    || report.shutdown.phase !== 'COMPLETE') throw new Error('NATIVE_SHUTDOWN_UNCONFIRMED');
+}
+
 function createDeadline(timeoutMs = 540000, now = () => performance.now()) {
   assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 540000);
   const expires = now() + timeoutMs;
@@ -55,13 +82,22 @@ function createDeadline(timeoutMs = 540000, now = () => performance.now()) {
   } };
 }
 
-function observeStartup(child, report, save) {
-  let line = '', dropping = false;
+function observeStartup(child, report, save, now = () => performance.now()) {
+  let line = '', dropping = false, shutdownStarted;
   const data = bytes => {
     for (const character of bytes.toString('utf8')) {
       if (character === '\n') {
         const value = dropping ? null : parseStartupLine(line.replace(/\r$/, ''));
         if (value && report.startup?.state !== 'FAILED') { report.startup = value; save(); }
+        const shutdown = dropping ? null : parseShutdownLine(line.replace(/\r$/, ''));
+        if (shutdown) {
+          shutdownStarted ??= now();
+          const entry = { ...shutdown, elapsedMs: Math.max(0, Math.round(now() - shutdownStarted)) };
+          report.shutdownTrace ??= [];
+          if (report.shutdownTrace.length < 32) report.shutdownTrace.push(entry);
+          if (report.shutdown?.state !== 'FAILED') report.shutdown = entry;
+          save();
+        }
         line = ''; dropping = false;
       } else if (!dropping) {
         if (line.length === 256) { line = ''; dropping = true; } else line += character;
@@ -102,6 +138,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   const deadline = createDeadline();
   const perform = (action, timeoutMs, code) => deadline.run(action, timeoutMs, code);
   report.executionLimitMs = 600000;
+  report.shutdownDiagnostics = { version: 1, required: true, pipeDrainTimeoutMs: 1000 };
   const executionStarted = performance.now();
   const frontendRequire = createRequire(path.join(source, 'frontend', 'package.json'));
   const { _electron: electron } = frontendRequire('playwright');
@@ -162,6 +199,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     ownedApplication = { process: () => ownedChild,
       close: () => ownedChild.exitCode !== null || ownedChild.signalCode !== null ? Promise.resolve() : launched.close() };
     delete report.startup;
+    delete report.shutdown; delete report.shutdownTrace;
     stopObserving = observeStartup(ownedChild, report, () => phase(report.phase));
     phase('electron-first-window');
     const remaining = Math.floor(startupEnds - performance.now());
@@ -195,10 +233,25 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   };
   const close = async () => {
     if (!app) return;
-    const current = ownedApplication; app = null; ownedApplication = null;
+    const current = ownedApplication, child = current.process(); app = null; ownedApplication = null;
+    const exit = { sequence: (report.appExits?.length ?? 0) + 1, closedNormally: false, requestedDuring: report.phase };
+    const closeStarted = performance.now();
     phase('native-clean-shutdown');
-    try { await closeOwnedApplication(current); }
-    finally { stopObserving?.(); stopObserving = null; }
+    try { await closeValidatedApplication(current, report); exit.closedNormally = true; }
+    catch (error) {
+      let message; try { message = error?.message; } catch { /* Diagnostic getters are not evidence. */ }
+      exit.failure = ['NATIVE_ELECTRON_CLOSE_TIMEOUT', 'NATIVE_ELECTRON_EXIT_TIMEOUT', 'NATIVE_ELECTRON_UNCLEAN_EXIT',
+        'NATIVE_SHUTDOWN_RECOVERY_REQUIRED', 'NATIVE_SHUTDOWN_UNCONFIRMED', 'NATIVE_SHUTDOWN_DIAGNOSTIC_TIMEOUT'].includes(message)
+        ? message : 'NATIVE_CLOSE_FAILED';
+      throw error;
+    } finally {
+      exit.code = child.exitCode; exit.signal = child.signalCode;
+      exit.elapsedMs = Math.round(performance.now() - closeStarted);
+      exit.shutdown = report.shutdown ?? null;
+      exit.shutdownTrace = report.shutdownTrace ?? [];
+      report.appExits ??= []; report.appExits.push(exit);
+      stopObserving?.(); stopObserving = null; phase('native-clean-shutdown');
+    }
   };
   const api = async (route, method = 'GET', body) => {
     const result = await perform(() => page.evaluate(async ({ route, method, body }) => {
@@ -228,7 +281,12 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     while (Date.now() < deadline) {
       const job = await api(`/api/jobs/${id}`);
       if (job.status === 'DONE') return;
-      assert.ok(!['FAILED', 'CANCELLED'].includes(job.status), 'Real analysis did not complete');
+      if (['FAILED', 'CANCELLED'].includes(job.status)) {
+        const publicCode = value => typeof value === 'string' && /^[A-Z_]{1,80}$/.test(value) ? value : null;
+        report.failedAnalysis = { status: job.status, failureCode: publicCode(job.failureCode),
+          steps: Array.isArray(job.steps) ? job.steps.slice(0,50).map(s => ({ key: publicCode(s.stepKey), status: publicCode(s.status) })) : [] };
+        throw new Error('NATIVE_ANALYSIS_FAILED');
+      }
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     throw new Error('NATIVE_ANALYSIS_TIMEOUT');
@@ -385,12 +443,15 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     return selectedArchive(path.join(recovery, created[0], 'checkpoint.cibackup'), [recovery]);
   };
   const importFolder = async folder => {
+    report.importStage = 'NAVIGATE';
+    report.importHttp = {};
     await navigate('/import');
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
     await perform(() => expect(picker).toBeVisible());
     const bounds = await perform(() => picker.boundingBox()); assert.ok(bounds);
     const cdp = await perform(() => page.context().newCDPSession(page));
     let dragFailure;
+    report.importStage = 'AUTHORIZE_DRAG';
     try {
       // Chromium supplies the real on-disk File via its native drag protocol.
       // The unmodified UI calls preload -> folder:authorize -> the real folder policy.
@@ -403,24 +464,30 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       try { await bounded(cdp.detach(), 5000, 'NATIVE_CDP_CLOSE_TIMEOUT'); }
       catch (error) { if (!dragFailure) throw error; }
     }
+    report.importStage = 'PREVIEW';
     const [previewResponse] = await perform(() => Promise.all([
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local/preview' && response.request().method() === 'POST', { timeout: deadline.limit() }),
       page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click(),
     ]));
+    report.importHttp = { preview: previewResponse.status() };
     assert.ok(previewResponse.ok());
     const preview = await perform(() => previewResponse.json());
     await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
     const firstResultStarted = performance.now();
+    report.importStage = 'APPROVE';
     const [created] = await perform(() => Promise.all([
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local' && response.request().method() === 'POST', { timeout: deadline.limit() }),
       page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click(),
     ]));
+    report.importHttp.created = created.status();
     assert.ok(created.ok());
+    report.importStage = 'JOB_CREATED';
     return { result: await perform(() => created.json()), firstResultStarted, localImport: preview.localImport };
   };
   let failure;
   try {
     phase('real-app-first-start'); await launch();
+    if (report.analysisOnly !== true) {
     const cipher = await step('native-safe-storage-encrypt', () => app.evaluate(({ safeStorage }, secret) => {
       if (!safeStorage.isEncryptionAvailable()) throw new Error('NATIVE_SAFE_STORAGE_UNAVAILABLE');
       return safeStorage.encryptString(secret).toString('base64');
@@ -520,14 +587,19 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     phase('final-process-restart'); await close(); await launch();
     assert.deepEqual(await api('/api/projects'), []);
     report.checks.push('deleted-project-stays-deleted-after-restart');
+    }
     phase('representative-repository-import');
     const repositorySample = path.join(owned, 'native-repository-sample');
     const copied = require('./native-acceptance.cjs').copySource(source, repositorySample);
     const larger = await importFolder(repositorySample);
     projectId = larger.result.project.id;
+    phase('representative-repository-job');
     await awaitJob(larger.result.jobId);
+    phase('representative-repository-snapshot');
     snapshotId = (await api(`/api/projects/${projectId}`)).currentSnapshot.id;
+    phase('representative-repository-overview-navigation');
     await perform(() => expect(page).toHaveURL(new RegExp('/projects/' + projectId + '/overview$')));
+    phase('representative-repository-overview-table');
     await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible());
     report.representativeRepository = {
       scope: 'filtered current Code Intelligence desktop/frontend/backend/TypeScript analyzer source; no dependency install or repository scripts executed',
@@ -591,6 +663,57 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await navigate(`/projects/${projectId}/overview`);
     await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible());
     report.checks.push('representative-repository-results-survive-packaged-app-restart');
+
+    phase('react-default-route-import');
+    const routeFolder = path.join(owned, 'native-react-route-fixture');
+    fs.mkdirSync(routeFolder, { mode: 0o700 });
+    fs.mkdirSync(path.join(routeFolder, 'pkg/src'), { recursive: true, mode: 0o700 });
+    const routeSource = 'export default function ActualPage() { return <h1>retained route source</h1> }\n';
+    for (const [name, content] of Object.entries({
+      'chosen.tsx': routeSource,
+      'foreign.tsx': 'export function Selected() { return <h1>unrelated module</h1> }\n',
+      'pkg/package.json': '{"name":"@fixture/ui","exports":"./src/Actual.tsx"}\n',
+      'pkg/src/index.tsx': 'export default function WrongPage() { return <h1>wrong package guess</h1> }\n',
+      'pkg/src/Actual.tsx': 'export default function PackagePage() { return <h1>explicit package entry</h1> }\n',
+      'router.tsx': "import { Route } from 'react-router-dom';\nimport Selected from './chosen';\n"
+        + "import PackageSelection from '@fixture/ui';\n"
+        + 'export function Router() { return <Route path="/chosen" element={<Selected/>}/> }\n'
+        + 'export function Shadow(Selected: any) { return <Route path="/shadow" element={<Selected/>}/> }\n'
+        + 'export function PackageRoute() { return <Route path="/package" element={<PackageSelection/>}/> }\n',
+    })) fs.writeFileSync(path.join(routeFolder, name), content, { flag: 'wx', mode: 0o600 });
+    const routeImport = await importFolder(routeFolder);
+    projectId = routeImport.result.project.id;
+    await awaitJob(routeImport.result.jobId);
+    snapshotId = (await api(`/api/projects/${projectId}`)).currentSnapshot.id;
+    const verifyRoutes = async () => {
+      const response = await api(`/api/projects/${projectId}/graph/nodes?type=FE_ROUTE&snapshotId=${snapshotId}`);
+      assert.equal(response.resolvedSnapshotId, snapshotId); assert.equal(response.total, 3);
+      const observed = {};
+      for (const route of response.items) {
+        const relations = await api(`/api/projects/${projectId}/graph/nodes/${route.id}/relations?direction=out&edgeType=CONTAINS&depth=1&snapshotId=${snapshotId}`);
+        assert.equal(relations.resolvedSnapshotId, snapshotId); assert.equal(relations.truncated, false);
+        observed[route.naturalKey] = relations.relations.map(relation => relation.node.naturalKey);
+      }
+      assert.deepEqual(observed, { 'route:/chosen': ['component:chosen.tsx#ActualPage'], 'route:/shadow': [], 'route:/package': [] });
+      return observed;
+    };
+    const routeTargets = await verifyRoutes();
+    await navigate(`/projects/${projectId}/code`);
+    await perform(() => page.getByRole('combobox', { name: 'Source snapshot', exact: true }).selectOption(String(snapshotId)));
+    await perform(() => page.getByRole('treeitem', { name: 'chosen.tsx', exact: true }).click());
+    await perform(() => expect(page.getByTestId('code-viewer').locator('.view-lines')).toHaveText(routeSource.trimEnd()));
+    await perform(() => expect(page.getByTestId('source-context')).toContainText('Snapshot #' + snapshotId));
+    await perform(() => expect(page.getByTestId('code-viewer').locator('.monaco-editor').first())
+      .toHaveAttribute('data-uri', new RegExp('^snapshot://' + projectId + '/' + snapshotId + '/')));
+    await perform(() => page.screenshot({ path: path.join(artifacts, 'react-route-source.png') }));
+    report.reactRouteBinding = { projectId, snapshotId, routeTargets, retainedSourceVerified: true,
+      scope: 'real packaged UI import, graph API and snapshot source; default alias positive, parameter-shadow and conflicting package-entry negatives' };
+    report.checks.push('packaged-default-export-route-binding-and-shadow-refusal');
+    report.checks.push('packaged-package-entry-heuristic-refusal');
+    phase('react-default-route-restart'); await close(); await launch();
+    assert.equal((await api(`/api/projects/${projectId}`)).currentSnapshot.id, snapshotId);
+    assert.deepEqual(await verifyRoutes(), routeTargets);
+    report.checks.push('packaged-react-route-graph-survives-restart');
     assert.equal(pageErrors, 0, 'Renderer errors occurred');
     phase('native-clean-shutdown'); await close(); report.checks.push('native-clean-shutdown');
   } catch (error) {
@@ -611,4 +734,4 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   }
   if (failure) throw failure;
 }
-module.exports = { runProduct, closeOwnedApplication, createDeadline, observeStartup, verifyRevokedAuthority };
+module.exports = { runProduct, closeOwnedApplication, closeValidatedApplication, createDeadline, observeStartup, verifyRevokedAuthority };
