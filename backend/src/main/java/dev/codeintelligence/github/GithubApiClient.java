@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +33,12 @@ public class GithubApiClient {
 
     private final RestClient restClient;
 
+    @Autowired
+    public GithubApiClient(RestClient.Builder builder, GithubProperties properties, GithubHttpClients clients) {
+        this(GithubHttpClients.bounded(builder), properties);
+    }
+
+    /** Explicit client transport used by isolated HTTP fixtures. Production uses the bounded constructor. */
     public GithubApiClient(RestClient.Builder restClientBuilder, GithubProperties properties) {
         this.restClient = restClientBuilder
                 .baseUrl(properties.baseUrl())

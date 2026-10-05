@@ -1,0 +1,127 @@
+{
+  "format": 1,
+  "status": "PASS_SCOPED_AUTH_VALIDATION",
+  "baseCommit": "9d77a70c51550e256a1a73e7c3b3e87ce01b832a",
+  "scope": "device-origin credential lifecycle and revision-bound consumers",
+  "sources": {
+    "backend/src/main/java/dev/codeintelligence/auth/AccountService.java": "5d00f22263ebc52cca39369aeffecba0dcbc7788377ddd2c9bc8d205404973ca",
+    "backend/src/main/java/dev/codeintelligence/auth/CredentialTokenProvider.java": "1e32e03b67dd5ad69c740ac0c5c6e5332b38e4ce532ffb5902e995b713dd6ba2",
+    "backend/src/main/java/dev/codeintelligence/auth/DesktopAuthenticationFilter.java": "fa5587d07631bcb374682bdd36facc78a8164ea1a0b40bd362b7531a9551d4b3",
+    "backend/src/main/java/dev/codeintelligence/auth/GithubConnectionCoordinator.java": "606ea2bd9e53993aa7b7e698dd0398130db8ee30bd25d31a23f4cac5b374b652",
+    "backend/src/main/java/dev/codeintelligence/auth/GithubCredentialStore.java": "7db6a2f88dc3552aa0acaefd2f35663cc7eb3f26b1aab8c80fcf61a13c68156e",
+    "backend/src/main/java/dev/codeintelligence/auth/GithubDeviceCredentialCodec.java": "8e0b4234fc44f082a9db57eca1153005e6e101a60d3193ed4706dd4d0d31a7c1",
+    "backend/src/main/java/dev/codeintelligence/auth/GithubNativeOAuthService.java": "ba6cf3ffde8ad21d32a00405542ce8173cfbd9bc2196888685e5d5c6cbbd58ac",
+    "backend/src/main/java/dev/codeintelligence/auth/GithubReauthenticationRequiredException.java": "e6ba7f90509d25758413f77e806edc59e1600009dafc2802da846c971c5250a5",
+    "backend/src/main/java/dev/codeintelligence/auth/GithubTokenLifecycle.java": "f915f492b5ffdd0b58ae7111b15f0aad3c2b70a1c0c29e60174c1b8ccf147819",
+    "backend/src/main/java/dev/codeintelligence/auth/PatAuthService.java": "3530c0223eedc3e26227cfaad594861a0b62c05669acdd089b8e9abf6891740d",
+    "backend/src/main/java/dev/codeintelligence/common/RecoveryActionFailure.java": "abda25e59884be978d3baa97956b2ecdc2c8b9b4c621028efd263af4f5919386",
+    "backend/src/main/java/dev/codeintelligence/common/config/SecurityConfig.java": "e56bbdba91b5da7088ab4c88b4baf51147d50b7b37a0bd17aa14dde46d8e882f",
+    "backend/src/main/java/dev/codeintelligence/github/GithubApiClient.java": "e112a18a172803e2024420a4adac873406c909fe8b40f7218650a99c7ab0b108",
+    "backend/src/main/java/dev/codeintelligence/github/GithubHttpClients.java": "ffb62d070adb733ee5aed331c1feaa5c6f5322daa6e0e94493a6349857c9ecf2",
+    "backend/src/main/java/dev/codeintelligence/github/GithubRepoService.java": "e9ea44b099acee8881e8e6483cf4275cfe8ec8d129cf8ca00aecf10c9315cc61",
+    "backend/src/main/java/dev/codeintelligence/github/GithubTokenProvider.java": "b67de07af04c3ed77fa3ee535c388c85a1446f295c24f34d7115a84d8aaae5b1",
+    "backend/src/main/java/dev/codeintelligence/github/InvalidGithubTokenException.java": "20e2cc85b0bdbf682f481914e46a0d82fa305d7cf53401c4221df64af8a40787",
+    "backend/src/main/java/dev/codeintelligence/history/GitMetadataStep.java": "1b755f89bda601516da87c3f46bdace8b14c9c5209d0aba9840a78773ab8150d",
+    "backend/src/main/java/dev/codeintelligence/history/PullRequestCollector.java": "93f0522eeaf7d312b56b8fa09466e7906313caf4112edce32927b019ca5d5bc3",
+    "backend/src/main/java/dev/codeintelligence/job/JobInputFailure.java": "46f0ced88df0a1fa4635a06d3d01a1a829b6d731d4ebe38b58608608d28bfa23",
+    "backend/src/main/java/dev/codeintelligence/job/JobWorker.java": "c0c5dcdcdba6bd1989ef54f9f9b34c460bf22c32e91b4aaedf66a7d49a8adaad",
+    "backend/src/main/java/dev/codeintelligence/project/ImportStep.java": "5af21b6dbb7dbb46af7e5a80914afb9d82b4f2583b4c2bb2fa852001c8284c65",
+    "backend/src/test/java/dev/codeintelligence/AuthIntegrationTest.java": "bb24f90453528097f18f1cafd4790d35dbf9dd43a1604146fa4a8aad39d8325e",
+    "backend/src/test/java/dev/codeintelligence/auth/DesktopAuthenticationFilterTest.java": "c046ac9a548783ce75a6f6c44f32963a69b8669f4739d1afdf4fe0c98b69b55e",
+    "backend/src/test/java/dev/codeintelligence/auth/GithubCredentialExpiryTest.java": "1fb223f2801d814e9bd2a844ac0ab0ef6cc908051f32c30f8fca8735105866ae",
+    "backend/src/test/java/dev/codeintelligence/auth/GithubCredentialStorePostgresTest.java": "5a2a70f31ae66a63786d46a7721785eae111163167a9d53fcc222cae49238b60",
+    "backend/src/test/java/dev/codeintelligence/auth/GithubDeviceCredentialCodecTest.java": "85a37c28124649051e18942f34c0311263661ef8b30066d1ea258c341e1bdc6d",
+    "backend/src/test/java/dev/codeintelligence/auth/GithubNativeOAuthServiceTest.java": "8c008f91838787bfc90bda398aebb1e37e699d86150e671c1452681ab0b42d2b",
+    "backend/src/test/java/dev/codeintelligence/auth/GithubTokenLifecycleTest.java": "aeab1adf0a9f0852c2ec18c3bdc40b00405cfb8b6d6a323e505a5f61dd70f55a",
+    "backend/src/test/java/dev/codeintelligence/auth/PatAuthServiceTest.java": "6bd5c0d713f173ea7f32b896be0ae76afbf66ad3ca7ce2805d0e83c0c2488257",
+    "backend/src/test/java/dev/codeintelligence/common/config/DesktopRequestSecurityTest.java": "19fce64fd90210a7eceefb35c89839d6642bf9c2518ac33a8a6643ea9d23c558",
+    "backend/src/test/java/dev/codeintelligence/github/GithubRepoCredentialLeaseTest.java": "68077334fb3139e2c53b38f94d6301818bf5ba791d0b9121ed98ae5b16459dd4",
+    "backend/src/test/java/dev/codeintelligence/history/GitMetadataPermissionTest.java": "9e96a5b2143e99eded76bc1b44638d2207bf35cd28789bb9166e87627ecd9548",
+    "backend/src/test/java/dev/codeintelligence/project/ImportCredentialLeaseTest.java": "1e22a430168658f954dcddc20fe42ec8a40840b8ecb4c22de137877231824441",
+    "frontend/src/api/client.test.ts": "afd65d801a7f9d1e4b6000dba1da04d0cea7de187cf3388dc61370f7af49a14c",
+    "frontend/src/api/client.ts": "e378152915d7bd2e5f979f36046bfa822b32b11658d59556eddae641f03c7edb",
+    "frontend/src/api/desktopAuth.ts": "e645cc8d60d3c7747b990f13f908f33e449b18ac8a92d9fffbca29852773d657",
+    "frontend/src/app/Sidebar.tsx": "43a701b6b509bc1b57f96bb6e3aa271f53319ad7fed8f43afe7e742d8d554496",
+    "frontend/src/features/import/ConnectStep.tsx": "b36b1e50ce8b0fcbebc428ca4762108e8552a61e5421b6865c3064ab6b8231a5",
+    "frontend/src/features/import/ProgressStep.tsx": "3d6c7565be46738c5c99b023aedf1b403873c3a301968770a39581c5356bb975",
+    "frontend/src/features/import/patCredential.test.tsx": "835fa6468f3bacd80e611e93afc546cbbf38085ec8251c7ec393972f0add87fa",
+    "frontend/src/features/import/progressResponses.test.tsx": "cd935c431b3b2c459f976355266b1829fede45bdfb21f21c209e13c675c77c74",
+    "frontend/src/features/settings/SettingsPage.tsx": "2c7f1113a72d78d7240eb1c1b7d85bce5ff63f635a1ef32750507f605a2db17b",
+    "frontend/src/features/settings/settings.test.tsx": "621bc4f7186690528d05a81fa5869994de98080c6e0860aa66e4a3b7eb770b42",
+    "frontend/src/lib/translations.ts": "9b910dbc9f661d4ae7df27d53069efc98b75a1cfbafe46eea1d69f121b4738f8",
+    "validation/pre-release/run-auth-store.cjs": "29080a9726854361bae434fbaef512c98db6d75d0d727657693f78cb75168835"
+  },
+  "tests": {
+    "backend": {
+      "tests": 277,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "suites": 16
+    },
+    "frontend": {
+      "tests": 146,
+      "pass": 146,
+      "fail": 0
+    },
+    "postgres": {
+      "tests": 6,
+      "pass": 6,
+      "fail": 0,
+      "realPostgres": true,
+      "postgresStopped": true,
+      "sourceAndBundleUnchanged": true
+    },
+    "additionalContracts": {
+      "tests": 231,
+      "pass": 231,
+      "fail": 0
+    }
+  },
+  "evidence": [
+    {
+      "path": "validation/local/pre-release-final/auth-backend-first.log",
+      "sha256": "61f11b7fb8c5fd4351f7605b209b31224870ddf5411a590336bea251001cc8d2"
+    },
+    {
+      "path": "validation/local/pre-release-final/auth-backend-summary.json",
+      "sha256": "c39b05be35209ea1758d6a03cc332baac3b5f292d8b91de1eb84b4f21c144676"
+    },
+    {
+      "path": "validation/local/pre-release-final/auth-frontend.json",
+      "sha256": "fda6cd091c437097b1d75bea6330e85bc352a5ca0e975d102c35a94e38093f7f"
+    },
+    {
+      "path": "validation/local/pre-release-final/auth-typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "validation/local/pre-release-final/auth-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "validation/local/pre-release-final/core-contracts.log",
+      "sha256": "22b7bb475f86765dc56a58c7cd420867ba096a8f405c6e2e9a76e1fe6ed51af9"
+    },
+    {
+      "path": "validation/local/pre-release-final/docker-check.json",
+      "sha256": "e585ca0fe4389db43bb77f90fa5eb34df14d4f26ac2406fe57bf5638a8ada6c4"
+    },
+    {
+      "path": "validation/local/pre-release-auth/auth-store-nox56E/result.json",
+      "sha256": "f77a53bdecc6bc4d4511def6c9ce28c04041499f1cc758fbd2ae72b80289a9ee"
+    },
+    {
+      "path": "validation/local/pre-release-auth/auth-store-nox56E/junit.xml",
+      "sha256": "e07892cf837eadb2c5834656f61ac4ce0c9fa6669ef30e0df0e740093073dde0"
+    }
+  ],
+  "limits": [
+    "Real GitHub refresh/revoke/SSO and real-account project1 not executed",
+    "HTTP/clone consumers use explicit mock transports; timeout wall-clock not measured",
+    "Real store fixture uses JDBC transaction manager, not full Spring/JPA account integration",
+    "Docker-backed suites compiled, not executed: daemon unavailable",
+    "Candidate package still must include these sources",
+    "No actual user profile/DB/Keychain/key, paid AI, Actions, formal signing or release"
+  ]
+}

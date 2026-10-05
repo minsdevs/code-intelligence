@@ -1,4 +1,4 @@
-import { useState, type DragEvent, type FormEvent } from 'react'
+import { useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { registerPat } from '../../api/auth'
 import { ApiError } from '../../api/client'
 import type { MeResponse } from '../../api/types'
@@ -18,14 +18,18 @@ export default function ConnectStep({ me, onConnected, onLocalPath }: ConnectSte
   const [token, setToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const submission = useRef(false)
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (submission.current) return
     const value = token.trim()
-    if (!value) {
+    if (!value || value.length > 4096) {
       setError(t('connect.errorEmpty'))
       return
     }
+    submission.current = true
+    setToken('')
     setSubmitting(true)
     setError(null)
     try {
@@ -33,8 +37,10 @@ export default function ConnectStep({ me, onConnected, onLocalPath }: ConnectSte
       setToken('')
       await onConnected()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('connect.errorEmpty'))
+      setError(t(err instanceof ApiError && err.code === 'GITHUB_REAUTHENTICATION_REQUIRED'
+        ? 'connect.errorRejected' : 'connect.errorFailed'))
     } finally {
+      submission.current = false
       setSubmitting(false)
     }
   }
@@ -115,6 +121,8 @@ export default function ConnectStep({ me, onConnected, onLocalPath }: ConnectSte
                 type="password"
                 name="token"
                 autoComplete="off"
+                maxLength={4096}
+                disabled={submitting}
                 value={token}
                 onChange={(event) => setToken(event.target.value)}
                 placeholder={t('connect.placeholder')}

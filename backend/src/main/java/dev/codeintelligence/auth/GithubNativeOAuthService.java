@@ -4,12 +4,14 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import dev.codeintelligence.common.security.CredentialKind;
 import dev.codeintelligence.github.GithubApiClient;
+import dev.codeintelligence.github.GithubHttpClients;
 import dev.codeintelligence.github.GithubRateLimitException;
 import dev.codeintelligence.github.GithubRepositoryAccessException;
 import dev.codeintelligence.github.GithubUserInfo;
 import dev.codeintelligence.github.InvalidGithubTokenException;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,15 +39,22 @@ public class GithubNativeOAuthService {
     private final RestClient restClient;
     private final Clock clock;
     private final Map<UUID, Attempt> attempts = new ConcurrentHashMap<>();
-    private final Map<Long, ConnectionGeneration> connections = new ConcurrentHashMap<>();
+    private final GithubConnectionCoordinator connections;
 
     @Autowired
     public GithubNativeOAuthService(
             GithubNativeOAuthProperties properties,
             GithubApiClient githubApiClient,
             AccountService accountService,
-            RestClient.Builder restClientBuilder) {
-        this(properties, githubApiClient, accountService, restClientBuilder.build(), Clock.systemUTC());
+            RestClient.Builder restClientBuilder,
+            GithubConnectionCoordinator connections) {
+        this(
+                properties,
+                githubApiClient,
+                accountService,
+                GithubHttpClients.bounded(restClientBuilder).build(),
+                Clock.systemUTC(),
+                connections);
     }
 
     GithubNativeOAuthService(
@@ -54,11 +63,22 @@ public class GithubNativeOAuthService {
             AccountService accountService,
             RestClient restClient,
             Clock clock) {
+        this(properties, githubApiClient, accountService, restClient, clock, new GithubConnectionCoordinator());
+    }
+
+    GithubNativeOAuthService(
+            GithubNativeOAuthProperties properties,
+            GithubApiClient githubApiClient,
+            AccountService accountService,
+            RestClient restClient,
+            Clock clock,
+            GithubConnectionCoordinator connections) {
         this.properties = properties;
         this.githubApiClient = githubApiClient;
         this.accountService = accountService;
         this.restClient = restClient;
         this.clock = clock;
+        this.connections = connections;
     }
 
     public StartResult start(long userId) {
@@ -66,7 +86,7 @@ public class GithubNativeOAuthService {
             throw new GithubNativeOAuthUnavailableException();
         }
         cleanupExpired();
-        ConnectionGeneration connection = connection(userId);
+        GithubConnectionCoordinator.Connection connection = connection(userId);
         long generation;
         synchronized (connection) {
             generation = ++connection.value;
@@ -137,7 +157,7 @@ public class GithubNativeOAuthService {
         }
         // Provider I/O must not hold the cancellation lock. Recheck before publishing credentials.
         try {
-            Instant exchangeStartedAt = clock.instant();
+            Instant exchangeStartedAt = clock.instant().truncatedTo(ChronoUnit.SECONDS);
             TokenResponse response = exchange(deviceCode);
             Instant tokenExpiresAt = null;
             GithubUserInfo profile = null;
@@ -157,6 +177,13 @@ public class GithubNativeOAuthService {
                     return statusResult(attempt);
                 }
                 tokenExpiresAt = exchangeStartedAt.plusSeconds(response.expiresIn());
+                if ((response.refreshToken() != null || response.refreshExpiresIn() != null)
+                        && (!StringUtils.hasText(response.refreshToken())
+                                || response.refreshExpiresIn() == null
+                                || response.refreshExpiresIn() <= 0
+                                || response.refreshExpiresIn() > 200L * 86400)) {
+                    throw new GithubReauthenticationRequiredException("CREDENTIAL_INVALID");
+                }
                 if (!clock.instant().isBefore(tokenExpiresAt))
                     throw new IllegalStateException("Expired GitHub token response");
                 synchronized (attempt) {
@@ -178,12 +205,25 @@ public class GithubNativeOAuthService {
                             if (attempt.status == Status.WAITING) {
                                 if (!clock.instant().isBefore(tokenExpiresAt))
                                     throw new IllegalStateException("Expired GitHub token response");
-                                accountService.linkGithub(
-                                        attempt.userId,
-                                        profile,
-                                        CredentialKind.OAUTH,
-                                        response.accessToken(),
-                                        tokenExpiresAt);
+                                if (response.refreshToken() != null) {
+                                    accountService.linkDeviceGithub(
+                                            attempt.userId,
+                                            profile,
+                                            properties.clientId(),
+                                            response.accessToken(),
+                                            tokenExpiresAt,
+                                            response.refreshToken(),
+                                            exchangeStartedAt.plusSeconds(response.refreshExpiresIn()));
+                                } else {
+                                    // Legacy/non-renewable responses remain access-only, never
+                                    // guessed to have device refresh material after the fact.
+                                    accountService.linkGithub(
+                                            attempt.userId,
+                                            profile,
+                                            CredentialKind.OAUTH,
+                                            response.accessToken(),
+                                            tokenExpiresAt);
+                                }
                                 finish(attempt, Status.CONNECTED, "GitHub account connected.");
                             }
                         }
@@ -242,15 +282,15 @@ public class GithubNativeOAuthService {
     }
 
     public void disconnect(long userId) {
-        ConnectionGeneration connection = connection(userId);
+        GithubConnectionCoordinator.Connection connection = connection(userId);
         synchronized (connection) {
             connection.value++;
             accountService.disconnectGithub(userId);
         }
     }
 
-    private ConnectionGeneration connection(long userId) {
-        return connections.computeIfAbsent(userId, ignored -> new ConnectionGeneration());
+    private GithubConnectionCoordinator.Connection connection(long userId) {
+        return connections.connection(userId);
     }
 
     public boolean configured() {
@@ -370,11 +410,14 @@ public class GithubNativeOAuthService {
             @JsonProperty("access_token") String accessToken,
             @JsonProperty("token_type") String tokenType,
             @JsonProperty("expires_in") Long expiresIn,
+            @JsonProperty("refresh_token") String refreshToken,
+            @JsonProperty("refresh_token_expires_in") Long refreshExpiresIn,
             String error,
-            Integer interval) {}
-
-    private static final class ConnectionGeneration {
-        private volatile long value;
+            Integer interval) {
+        @Override
+        public String toString() {
+            return "GithubDeviceTokenResponse{REDACTED}";
+        }
     }
 
     private static final class Attempt {

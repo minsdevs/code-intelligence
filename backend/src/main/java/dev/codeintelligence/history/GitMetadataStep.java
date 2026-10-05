@@ -7,6 +7,7 @@ import dev.codeintelligence.evidence.EvidenceSubjects;
 import dev.codeintelligence.evidence.NewEvidence;
 import dev.codeintelligence.github.GithubPullRequestsPermissionException;
 import dev.codeintelligence.github.GithubTokenProvider;
+import dev.codeintelligence.github.InvalidGithubTokenException;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import dev.codeintelligence.project.Project;
@@ -99,17 +100,23 @@ public class GitMetadataStep implements JobStep {
 
     private void collectPulls(Project project) {
         if (!"GITHUB".equals(project.getSourceType())) return;
-        String token = tokenProvider.findToken(project.getUserId()).orElse(null);
+        var token = tokenProvider.findCredential(project.getUserId()).orElse(null);
         if (token == null) {
             return;
         }
         String etag = store.findPullsEtag(project.getId()).orElse(null);
-        PullRequestCollector.PullsFetch fetch =
-                pullRequestCollector.fetchAll(token, project.getRepoOwner(), project.getRepoName(), etag);
-        if (fetch.notModified()) {
-            return;
+        try {
+            PullRequestCollector.PullsFetch fetch = pullRequestCollector.fetchAll(
+                    token.value(), project.getRepoOwner(), project.getRepoName(), etag, token::verify);
+            token.publish(() -> {
+                if (!fetch.notModified()) {
+                    store.upsertPulls(project.getId(), fetch.pulls());
+                    store.savePullsEtag(project.getId(), fetch.etag());
+                }
+            });
+        } catch (InvalidGithubTokenException rejected) {
+            token.reject();
+            throw rejected;
         }
-        store.upsertPulls(project.getId(), fetch.pulls());
-        store.savePullsEtag(project.getId(), fetch.etag());
     }
 }

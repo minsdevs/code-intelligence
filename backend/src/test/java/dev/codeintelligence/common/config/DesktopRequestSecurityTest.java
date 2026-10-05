@@ -6,6 +6,8 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.codeintelligence.auth.AccountService;
@@ -22,6 +24,7 @@ import jakarta.servlet.http.Cookie;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,14 +32,18 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockServletContext;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.access.AccessDeniedHandlerImpl;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.csrf.MissingCsrfTokenException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -125,7 +132,31 @@ class DesktopRequestSecurityTest {
         mvc.perform(get("/api/projects").secure(true).header(HEADER, TOKEN)).andExpect(status().isOk());
         mvc.perform(get("/assets/audit-bootstrap.js").secure(true).header(HEADER, TOKEN))
                 .andExpect(status().isOk());
-        mvc.perform(post("/api/projects").secure(true).header(HEADER, TOKEN)).andExpect(status().isForbidden());
+        TestEndpoints endpoints = context.getBean(TestEndpoints.class);
+        assertThat(endpoints.mutations.get()).isZero();
+        mvc.perform(post("/api/projects").secure(true).header(HEADER, TOKEN))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value("about:blank"))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"))
+                .andExpect(jsonPath("$.detail").value("CSRF token is missing or invalid."));
+        var mismatch = mvc.perform(post("/api/projects")
+                        .secure(true)
+                        .header(HEADER, TOKEN)
+                        .cookie(csrf)
+                        .header("X-XSRF-TOKEN", "synthetic-mismatched-csrf")
+                        .header("Origin", ORIGIN))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Forbidden"))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"))
+                .andExpect(jsonPath("$.detail").value("CSRF token is missing or invalid."))
+                .andReturn();
+        assertThat(mismatch.getResponse().getContentAsString())
+                .doesNotContain("synthetic-mismatched-csrf", csrf.getValue(), TOKEN);
+        assertThat(endpoints.mutations.get()).isZero();
         mvc.perform(post("/api/projects")
                         .secure(true)
                         .header(HEADER, TOKEN)
@@ -133,15 +164,41 @@ class DesktopRequestSecurityTest {
                         .header("X-XSRF-TOKEN", csrf.getValue())
                         .header("Origin", ORIGIN))
                 .andExpect(status().isOk());
-        mvc.perform(post("/api/projects")
+        assertThat(endpoints.mutations.get()).isEqualTo(1);
+        var crossOrigin = mvc.perform(post("/api/projects")
                         .secure(true)
                         .header(HEADER, TOKEN)
                         .cookie(csrf)
                         .header("X-XSRF-TOKEN", csrf.getValue())
                         .header("Origin", "https://evil.test"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andReturn();
+        assertThat(crossOrigin.getResponse().getContentAsString()).doesNotContain("CSRF_INVALID");
+        assertThat(endpoints.mutations.get()).isEqualTo(1);
         mvc.perform(get("/").secure(true).header(HEADER, TOKEN, TOKEN)).andExpect(status().isUnauthorized());
         mvc.perform(get("/").header(HEADER, TOKEN)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void nonCsrfAccessDenialsKeepTheDefaultResponseEvenWhenTheirMessageOrCauseMentionsCsrf() throws Exception {
+        var handler = new SecurityConfig.CsrfProblemAccessDeniedHandler();
+        for (AccessDeniedException exception : List.of(
+                new AccessDeniedException("CSRF_INVALID: upstream permission or SSO denied"),
+                new AccessDeniedException(
+                        "Wrapped denial", new MissingCsrfTokenException("synthetic-private-token")))) {
+            MockHttpServletRequest request = new MockHttpServletRequest();
+            MockHttpServletResponse expected = new MockHttpServletResponse();
+            MockHttpServletResponse actual = new MockHttpServletResponse();
+            new AccessDeniedHandlerImpl().handle(request, expected, exception);
+            handler.handle(request, actual, exception);
+
+            assertThat(actual.getStatus()).isEqualTo(403).isEqualTo(expected.getStatus());
+            assertThat(actual.getErrorMessage()).isEqualTo(expected.getErrorMessage());
+            assertThat(actual.getContentType()).isEqualTo(expected.getContentType());
+            assertThat(actual.getContentAsString())
+                    .isEqualTo(expected.getContentAsString())
+                    .doesNotContain("CSRF_INVALID", "synthetic-private-token");
+        }
     }
 
     @Test
@@ -238,6 +295,8 @@ class DesktopRequestSecurityTest {
 
     @RestController
     static class TestEndpoints {
+        private final AtomicInteger mutations = new AtomicInteger();
+
         @GetMapping({"/", "/api/projects"})
         String read() {
             return "secured";
@@ -245,6 +304,7 @@ class DesktopRequestSecurityTest {
 
         @PostMapping("/api/projects")
         String mutate() {
+            mutations.incrementAndGet();
             return "secured";
         }
     }

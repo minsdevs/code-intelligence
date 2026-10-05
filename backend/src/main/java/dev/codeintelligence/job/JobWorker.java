@@ -139,7 +139,9 @@ public class JobWorker {
         repository.markJobFailed(
                 job.id(),
                 "step '%s' failed: %s".formatted(step.stepKey(), message),
-                cause instanceof JobInputFailure inputFailure ? inputFailure.failureCode() : null);
+                cause instanceof dev.codeintelligence.common.RecoveryActionFailure inputFailure
+                        ? inputFailure.failureCode()
+                        : null);
         publisher.publish(job.id());
         return false;
     }

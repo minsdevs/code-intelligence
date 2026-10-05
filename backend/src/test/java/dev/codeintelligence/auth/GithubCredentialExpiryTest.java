@@ -1,6 +1,7 @@
 package dev.codeintelligence.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 import dev.codeintelligence.common.security.AuthenticatedUser;
@@ -25,11 +26,12 @@ class GithubCredentialExpiryTest {
 
     @Test
     void rejectsUnknownAndExpiredOauthWithoutFallingBackToPat() {
-        var provider = new CredentialTokenProvider(credentials, crypto, CLOCK);
+        var provider = provider();
         for (Instant expiry : new Instant[] {null, NOW.minusSeconds(1), NOW}) {
             when(credentials.findByUserIdAndKind(7L, CredentialKind.OAUTH))
                     .thenReturn(Optional.of(new GithubCredential(7L, CredentialKind.OAUTH, ENCRYPTED, "", expiry)));
-            assertThat(provider.findToken(7L)).isEmpty();
+            assertThatThrownBy(() -> provider.findToken(7L))
+                    .isInstanceOf(GithubReauthenticationRequiredException.class);
         }
         verify(credentials, never()).findByUserIdAndKind(7L, CredentialKind.PAT);
         verifyNoInteractions(crypto);
@@ -37,7 +39,7 @@ class GithubCredentialExpiryTest {
 
     @Test
     void preservesValidOauthAndLegacyPatTokens() {
-        var provider = new CredentialTokenProvider(credentials, crypto, CLOCK);
+        var provider = provider();
         when(crypto.decrypt(1, ENCRYPTED.nonce(), ENCRYPTED.ciphertext())).thenReturn("synthetic-token");
         when(credentials.findByUserIdAndKind(7L, CredentialKind.OAUTH))
                 .thenReturn(
@@ -98,5 +100,35 @@ class GithubCredentialExpiryTest {
         when(accounts.status(7L))
                 .thenReturn(new AccountService.AccountStatus("LOCAL_LINKED", false, 42L, "TOKEN_EXPIRED", null));
         assertThat(controller.me(principal).credentialKind()).isEqualTo("LOCAL");
+    }
+
+    private CredentialTokenProvider provider() {
+        var store = mock(GithubCredentialStore.class);
+        when(store.find(anyLong())).thenAnswer(invocation -> {
+            long id = invocation.getArgument(0);
+            return credentials
+                    .findByUserIdAndKind(id, CredentialKind.OAUTH)
+                    .or(() -> credentials.findByUserIdAndKind(id, CredentialKind.PAT))
+                    .map(c -> new GithubCredentialStore.StoredCredential(
+                            1,
+                            id,
+                            c.getKind(),
+                            c.getKeyVersion(),
+                            c.getNonce(),
+                            c.getEncryptedToken(),
+                            c.getExpiresAt(),
+                            42L));
+        });
+        var lifecycle = new GithubTokenLifecycle(
+                store,
+                mock(GithubDeviceCredentialCodec.class),
+                crypto,
+                new GithubConnectionCoordinator(),
+                new GithubNativeOAuthProperties(
+                        "fixture-client", "https://github.test/device", "https://github.test/token", "", 300),
+                mock(dev.codeintelligence.github.GithubApiClient.class),
+                org.springframework.web.client.RestClient.builder().build(),
+                CLOCK);
+        return new CredentialTokenProvider(lifecycle);
     }
 }

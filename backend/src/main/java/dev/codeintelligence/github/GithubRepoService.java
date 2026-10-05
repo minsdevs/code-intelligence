@@ -2,6 +2,7 @@ package dev.codeintelligence.github;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -18,8 +19,7 @@ public class GithubRepoService {
 
     /** q filters within the fetched page. */
     public GithubRepoPage listRepos(long userId, int page, int perPage, String q) {
-        String token = tokenProvider.requireToken(userId);
-        GithubRepoPage repoPage = githubApiClient.listUserRepos(token, page, perPage);
+        GithubRepoPage repoPage = authorized(userId, token -> githubApiClient.listUserRepos(token, page, perPage));
 
         return filterPage(repoPage, q);
     }
@@ -37,7 +37,7 @@ public class GithubRepoService {
     }
 
     public GithubApiClient.InstallationPage listInstallations(long userId, int page, int perPage) {
-        return githubApiClient.listUserInstallations(tokenProvider.requireToken(userId), page, perPage);
+        return authorized(userId, token -> githubApiClient.listUserInstallations(token, page, perPage));
     }
 
     public GithubRepoPage listInstallationRepos(long userId, long installationId, int page, int perPage, String q) {
@@ -45,13 +45,25 @@ public class GithubRepoService {
             throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.BAD_REQUEST, "Installation ID must be positive");
         return filterPage(
-                githubApiClient.listInstallationRepos(
-                        tokenProvider.requireToken(userId), installationId, page, perPage),
+                authorized(
+                        userId, token -> githubApiClient.listInstallationRepos(token, installationId, page, perPage)),
                 q);
     }
 
     public GithubBranchPage listBranches(long userId, String owner, String repo, int page, int perPage) {
-        String token = tokenProvider.requireToken(userId);
-        return githubApiClient.listRepoBranches(token, owner, repo, page, perPage);
+        return authorized(userId, token -> githubApiClient.listRepoBranches(token, owner, repo, page, perPage));
+    }
+
+    private <T> T authorized(long userId, Function<String, T> request) {
+        var token = tokenProvider.requireCredential(userId);
+        token.verify();
+        try {
+            T result = request.apply(token.value());
+            token.verify();
+            return result;
+        } catch (InvalidGithubTokenException rejected) {
+            token.reject();
+            throw rejected;
+        }
     }
 }

@@ -34,10 +34,15 @@ public class PullRequestCollector {
     }
 
     public PullsFetch fetchAll(String token, String owner, String repo, String etag) {
+        return fetchAll(token, owner, repo, etag, () -> {});
+    }
+
+    public PullsFetch fetchAll(String token, String owner, String repo, String etag, Runnable verifyCurrent) {
         int failures = 0;
         while (true) {
             try {
-                return fetchPages(token, owner, repo, etag);
+                verifyCurrent.run();
+                return fetchPages(token, owner, repo, etag, verifyCurrent);
             } catch (GithubRateLimitException ex) {
                 failures++;
                 if (failures > analysisProperties.githubRateLimitRetries()) {
@@ -53,12 +58,14 @@ public class PullRequestCollector {
         }
     }
 
-    private PullsFetch fetchPages(String token, String owner, String repo, String etag) {
+    private PullsFetch fetchPages(String token, String owner, String repo, String etag, Runnable verifyCurrent) {
         List<GithubPullSummary> all = new ArrayList<>();
         String latestEtag = etag;
         for (int page = 1; ; page++) {
             String requestEtag = page == 1 ? etag : null;
+            verifyCurrent.run();
             GithubPullsPage result = githubApiClient.listRepoPulls(token, owner, repo, page, PER_PAGE, requestEtag);
+            verifyCurrent.run();
             if (result.notModified()) {
                 return new PullsFetch(true, List.of(), result.etag() != null ? result.etag() : etag);
             }
