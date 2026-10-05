@@ -478,8 +478,18 @@ test('real isolated PostgreSQL typed export and trigger-respecting staging round
   assert(Number.isInteger(port) && port > 1024 && port <= 65535);
   const env = { PGPASSWORD: process.env.CI_BACKUP_PG_TEST_PASSWORD, PGSSLMODE: 'verify-full', PGSSLROOTCERT: process.env.PGSSLROOTCERT };
   if (process.env.CI_BACKUP_PG_TEST_LIBRARY) env.DYLD_LIBRARY_PATH = process.env.CI_BACKUP_PG_TEST_LIBRARY;
+  const clientTls = {};
+  if (process.env.CI_BACKUP_PG_TEST_CLIENT_CERT || process.env.CI_BACKUP_PG_TEST_CLIENT_KEY) {
+    for (const [key, name] of [['PGSSLCERT', 'CI_BACKUP_PG_TEST_CLIENT_CERT'], ['PGSSLKEY', 'CI_BACKUP_PG_TEST_CLIENT_KEY']]) {
+      assert(path.isAbsolute(process.env[name] || ''), 'Explicit synthetic client TLS paths required');
+      assert.equal(path.dirname(process.env[name]), path.dirname(env.PGSSLROOTCERT));
+      clientTls[key] = process.env[name];
+    }
+  }
   const options = database => ({ psqlPath, migrationRoot: awaitableRoot, installationId: INSTALLATION, mode: 'staging',
-    connection: { host: '127.0.0.1', port, user: process.env.CI_BACKUP_PG_TEST_USER, database }, env });
+    connection: { host: '127.0.0.1', port, user: process.env.CI_BACKUP_PG_TEST_USER, database }, env,
+    spawn: (file, args, childOptions) => require('node:child_process').spawn(file, args,
+      { ...childOptions, env: { ...childOptions.env, ...clientTls } }) });
   const awaitableRoot = await fs.realpath(migrationRoot);
   const source = await createBackupPostgres(options(sourceDb)), target = await createBackupPostgres(options(targetDb));
   t.after(async () => { await source.close(); await target.close(); });
@@ -487,7 +497,7 @@ test('real isolated PostgreSQL typed export and trigger-respecting staging round
   const sql = (database, text) => {
     const result = spawnSync(psqlPath, ['-X', '--no-password', '--quiet', '--tuples-only', '--no-align', '--set=ON_ERROR_STOP=1',
       '--host=127.0.0.1', `--port=${port}`, `--username=${process.env.CI_BACKUP_PG_TEST_USER}`, `--dbname=${database}`, '--file=-'],
-    { input: text, env: { ...env, PGCLIENTENCODING: 'UTF8', LC_ALL: 'C' }, encoding: 'utf8', timeout: 30_000, maxBuffer: 8 * 1024 * 1024 });
+    { input: text, env: { ...env, ...clientTls, PGCLIENTENCODING: 'UTF8', LC_ALL: 'C' }, encoding: 'utf8', timeout: 30_000, maxBuffer: 8 * 1024 * 1024 });
     assert.equal(result.status, 0, 'Synthetic fixture SQL failed; raw database output is intentionally omitted.'); return result.stdout.trim();
   };
   const text = note().values.content_md;
@@ -536,8 +546,8 @@ test('real isolated PostgreSQL typed export and trigger-respecting staging round
   assert.equal(measured.rowFrameBytes, String(rows.reduce((total, row) => total + 4 + Buffer.byteLength(canonical({ kind: 'ROW', row })), 0)));
   assert.deepEqual(await exporter.readRetainedCommitTimes({ snapshotIds: ['3'] }), { 3: null }, 'snapshot.created_at is not commit provenance');
   const approval = digest => `insert into job_local_source_inputs(job_id,project_id,approval_token_sha256,purpose,schema_version,
-    canonical_root,root_device,root_inode,policy_version,limits_sha256,manifest_sha256,selected_files,selected_bytes,approved_at)
-    values(4,2,'${'d'.repeat(64)}','INITIAL',1,'/synthetic/not-read',1,2,'fixture','${HASH}','${digest}',1,3,'${NOW}');`;
+    canonical_root,root_platform,root_identity,root_owner,policy_version,limits_sha256,manifest_sha256,selected_files,selected_bytes,approved_at)
+    values(4,2,'${'d'.repeat(64)}','INITIAL',1,'/synthetic/not-read','posix','PI1:1:2',null,'fixture','${HASH}','${digest}',1,3,'${NOW}');`;
   sql(sourceDb, approval('e'.repeat(64)));
   assert.deepEqual(await exporter.readRetainedCommitTimes({ snapshotIds: ['3'] }), { 3: null }, 'mismatched approval manifests are not fallback proof');
   sql(sourceDb, `delete from job_local_source_inputs; ${approval(HASH)}`);

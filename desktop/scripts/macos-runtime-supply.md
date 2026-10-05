@@ -53,6 +53,44 @@ download and build, create isolated credentials, sign validation binaries ad hoc
 and launch the validation application. It is **not** a preflight command. Review
 its current scope before executing; do not run it while the preflight is blocked.
 
+## Retained package with the real macOS Keychain
+
+After a bundle has passed the native build gate, the separate developer runner
+can verify its cold-start credential and encrypted-source persistence without
+rebuilding it:
+
+```sh
+rtk proxy node desktop/scripts/packaged-keychain-acceptance.cjs \
+  --app '/absolute/original-checkout/.native-product-XXXXXX/Code Intelligence Validation.app'
+```
+
+The selected bundle must be in this original checkout. The runner verifies its
+runtime inventory and ad-hoc signature, creates a new private `automation`
+claim, directly starts the packaged executable, and attaches to that child's
+loopback renderer debugging endpoint. It does not use Playwright's Electron
+launcher, its injected main script, or `--use-mock-keychain`. The identity is
+`Code Intelligence Acceptance`; existing `Code Intelligence Validation` account
+profiles are not reused. OS Keychain storage is app-identity scoped, not a new
+OS keychain per run.
+
+Only newly generated fixture credentials are handled by the product. The driver
+hashes its fixture's ciphertext, imports one synthetic file through the UI, asks
+the owned window to close, and starts the same package and profile again. It
+checks the unchanged ciphertext, authenticated local account, original project
+and snapshot, and the actual decrypted source in the editor. It never extracts
+Keychain keys, reads user account credentials, or enables AI egress. The
+temporary debugging port exists only for this test process; it is not a product
+setting or a published endpoint.
+
+Results and screenshots are retained under `validation/local/packaged-keychain/`.
+Each invocation has a fresh profile and report; failed attempts are not resumed
+as successes. Process exit status and a subsequent successful restart are the
+observed lifecycle evidence, not proof of every unobserved shutdown failure or
+keychain lock/denial scenario. GitHub authentication, native picker interaction,
+other macOS versions, Developer ID installation and old-backup compatibility
+remain separate tests. No manual double-click of the Validation bundle is
+authorized by this runner's successful result.
+
 ## Existing-profile and backup boundary
 
 Use a new isolated validation profile first. The app's V26/V27 schema conversion

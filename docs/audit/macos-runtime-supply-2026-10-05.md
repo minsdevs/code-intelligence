@@ -106,3 +106,100 @@ UI 새 분석 순서다. catalog/소유권/hash를 완화하거나 원본 DB·�
 두 번째 자동화 claim은 `/private/tmp/civa-j0lCXC/desktop-run-n2pYEv/.isolated-run.json`이다. 이 프로필은 Playwright mock-keychain 조건으로 만들어졌으므로 일반 `open` 명령에 그대로 재사용하지 않는다. 단순 Finder 더블클릭은 격리가 적용되지 않아 기존 Validation 프로필을 열 수 있다. 다음 수동/실계정 작업은 별도의 새 격리 프로필에서 실제 packaged Keychain 경계를 확인한 뒤 진행한다. 이번 종료 시 앱은 실행 상태로 남기지 않았다. 기존 사용자 프로필 적용 전에는 pgvector 버전·구백업·locale도 각각 검증해야 한다.
 
 검증 종료 후 이번 run의 Gradle daemon 작업 디렉터리를 확인하고 소유 PID64729를 종료했다. 사용이 끝난 임시 앱 소스/의존성 사본, Gradle/npm 캐시, 네 가지 C 소스 빌드 트리와 압축파일 등12개 경로를 정리했다. 원본 저장소의 기존 의존성은 건드리지 않았다. 최종 앱 manifest와 보고서/화면32개 해시는 정리 전후 일치했다. `cleanup.json`을 포함한33개 증거의 해시는 `macos-runtime-supply-validation-2026-10-05.json`에 기록했다. 관측된 공간 증가는2,978,340,864 bytes(약2.77GiB), 정리 후 여유 공간은37,828,354,048 bytes였다. 다음 호환성 시험에 필요한 실제 소스빌드 prefix(약64MiB), 두 자동화 프로필과 작은 합성 입력·백업은 보존했다. 삭제한 임시 `source` 경로는 과거 실행의 출처이며 현재 재실행 대상으로 쓰지 않는다.
+
+## 실제 packaged Keychain 후속 검증
+
+PR #87 merge `2b5a98d`와 원격 일치를 확인한 뒤 원본의
+`codex/packaged-keychain-compatibility-20261005`에서 진행했다. 보존 앱의
+runtime manifest 해시와 `codesign --verify --strict --deep`를 확인했다.
+`desktop/scripts/packaged-keychain-acceptance.cjs`는 해당 실행 파일을 직접
+시작하고 소유 PID의 loopback CDP에 연결한다. Playwright Electron launcher,
+main-process loader와 `--use-mock-keychain`을 사용하지 않는다. 새로운
+Acceptance 목적 claim을 만들며 실계정 Validation 프로필을 재사용하지 않는다.
+실제 Keychain은 같은 OS 계정의 Acceptance 앱 식별자에 속하며 실행마다 새
+OS Keychain을 만든다는 의미는 아니다.
+
+첫 `validation/local/packaged-keychain/run-6b20Le/result.json`은 앱 READY 뒤
+`attach-existing-renderer`에서 FAIL이었다. 당시 구체 오류 본문은 기록되지
+않았으므로 원인을 확정하지 않는다. 검증 도구의 lsof 주소 확인에 `-nP`를
+추가하고 연결 하위 단계/제한된 공개 오류 정보를 기록하도록 보완했다. 최초
+PID93075 및 해당 격리 경로의 잔존 프로세스가 없는 것을 후속 확인했다.
+
+`run-fcb5jj/result.json`은 같은 앱을 재빌드하지 않은 새 격리 프로필에서
+PASS였다. 직접 실행 두 번의 READY는 11,427ms/11,365ms였으며, UI 폴더 승인과
+합성 `keychain.ts` 분석 뒤 동일 프로필 재시작에서 프로젝트1/snapshot1과
+`return 73` 소스/Monaco snapshot URI가 유지됐다. 새 fixture의 `secrets.enc`
+암호문 해시는 바뀌지 않았고 local 인증 및 실제 내장 서비스가 정상 응답했다.
+키나 자격증명 평문을 직접 열거나 내보내지 않았다. 보존 화면도 직접 확인했다.
+두 앱 PID95093/95326의 종료 코드0과 신호 없음, 해당 프로필 경로의 열린
+파일 프로세스 부재를 확인했다. 보고서의 `cleanExit`는 이 프로세스 종료
+관측을 뜻하며 미관측된 모든 safety 종료 오류까지 검증했다는 의미가 아니다.
+
+이 검증은 **새 프로필에서 보존 packaged 앱의 실제 Keychain 암호화 저장과
+프로세스 재시작 후 복호화·데이터 지속성**을 입증한다. 실계정 GitHub 토큰,
+키체인 잠금/권한 거절/키 회전, 정식 Developer ID 설치, 다른 OS,
+기존 Validation 프로필 및 이전 확장 버전 백업은 별도 범위다. 위의 기존
+Playwright mock-keychain 결과와 하나의 동일 시험으로 합치지 않는다.
+
+후속 검토에서 CDP/window-close의 무기한 대기와 종료 기록 누락 경로를 보완했다.
+기존 `createDeadline`/`closeOwnedApplication`을 재사용하고, 정상 창 닫기 요청·
+PID별 종료 관측·강제 신호·확인되지 않은 종료를 구분한다. 가짜 프로세스와
+CDP를 사용하는12개 회귀가 통과했다. 최종 `run-RGWnsP/result.json`도 실제
+새 격리 프로필에서 PASS였다. 직접 실행2회 READY11,610ms/11,166ms,
+각 종료코드0/신호0/강제종료요청0/종료확인true이며, 자격증명 암호문과
+runtime manifest·app.asar·실행파일 해시가 모두 유지됐다. 이 최종 보고서의
+`processExitedZero`는 관측한 프로세스 종료만 뜻한다. 최초 실패나 이전 성공
+보고서를 덮어쓰지 않았으며 앱은 모든 시도에서 재빌드하지 않았다.
+
+## pgvector SQL 버전과 V26/V27 백업 호환성
+
+`validation/backup-compatibility/run.cjs`는 보존한 소스빌드 PostgreSQL prefix를
+새 fixture에 복사해 실행한다. 원본 prefix·앱·사용자 DB는 변경하지 않는다.
+공식 pgvector0.8.1의 고정 commit
+`778dacf20c07caf904557a88705142631818d8cb`에서 가져온 SQL/control 해시를
+검증하고, 복사본의 새0.8.7 binary에 구0.8.1 SQL 정의를 적용했다. 이는
+**바이너리 교체 뒤 SQL 확장을 아직 UPDATE하지 않은 상태**의 모델이며,
+구 바이너리 자체나 과거 물리 DB·인덱스의 업그레이드 검증은 아니다.
+
+첫 실제 matrix `validation/local/backup-compatibility-GAaskZ/report.json`은
+8개 확인 항목이 모두 PASS였다. PostgreSQL16.15, 새 소유 DB,
+SCRAM 인증·TLS `verify-full`, UTF8/libc/C 기준에서 실행했다.
+
+| 시나리오 | 실제 결과 | 범위 |
+|---|---|---|
+| 동일 pgvector0.8.7의 V27→V27 | 복원 PASS | 메모와 1536차원 vector 데이터 보존, 원본 행·payload 불변 |
+| 구0.8.1 SQL 상태의 V27→새0.8.7 staging | `BACKUP_PG_SCHEMA`로 거부 | load iterator 미시작, 회계 writer0회, source/target 행·원본 payload 불변 |
+| fixture에서 명시적 UPDATE 후 새 V27 export | 복원 PASS | 기존 사용자 행 불변; UPDATE 전 export는 계속 거부 |
+| 고정 역사적 V26 producer→V27, 양쪽0.8.7 | 복원 PASS | `LEGACY_UNMEASURED`, 새 측정0행, 메모·vector 보존, payload 불변 |
+| libc C→en_US.UTF-8, 양쪽0.8.7 | 작은 fixture 복원 관측 | 모든 locale의 호환이나 locale 거부 검사가 있다는 증거가 아님 |
+
+역사적 V26 producer는 로컬 Git의
+`4d8946c7b18b1cdee4f6f86b1e30fc9d469d923f`를 사용했다. 현재 opt-in typed
+backup 시험에 남아 있던 V26 이전 `root_device/root_inode` fixture를
+`root_platform/root_identity/root_owner` 계약에 맞춰 수정했고 실제 native
+시험1개도 통과했다. 제품 migration·schema·backup 검증 코드는 수정하지 않았다.
+단위 실행의72개 PASS/2개 opt-in SKIP와 실제 matrix의 native PASS를 구분한다.
+
+따라서 **기존 pgvector 버전의 백업을 새 버전으로 자동 변환하는 기능은 아직
+없다.** 이 matrix의 거부는 typed DB adapter 경계다. 실제 앱의 복원은
+`backup-runtime.cjs`에서 maintenance seal 뒤에 DB load를 수행하므로,
+같은 거부가 앱에서는 복구 필요 상태를 남길 수 있다. “사용자 앱 상태가 전혀
+변하지 않는 사전 거부”로 확대하지 않는다. 기존 백업·실계정 profile 적용 전에
+버전 변환/명시적 사전 호환 검사와 암호화 archive·복구 수명주기를 별도로
+구현·검증해야 한다. 원본 locale와 ICU 호환도 아직 미확인이다.
+
+후속 fixture의 client TLS 경로를 합성 인증서/키로 명시하고 종료 타이머를
+정리한 최종 코드에서도 `validation/local/backup-compatibility-PwRTQx/report.json`
+8개 항목이 모두 PASS였다. 소유 PostgreSQL PID8387은 종료코드0/신호없음,
+원본 prefix와 vector binary 해시 불변을 확인했다. 먼저 실행한 GAaskZ 보고서는
+그대로 유지하며 최종 코드의 증거는 PwRTQx를 따른다.
+
+완료 뒤 소유 프로세스 부재를 확인하고 이전 Keychain 시험2개의 프로필과
+backup matrix2개의 PostgreSQL 복사본·시험 DB·임시 legacy 소스·합성 TLS
+파일을 정리했다. 첫FAIL·후속PASS 보고서/화면, 원본 구·신 payload8개와
+보고서2개의 해시는 유지됐다. 최종 실제 Keychain 프로필
+`/private/tmp/cikr-sFCVEv/desktop-run-IfGJW2`와 보존 앱, 원래 소스빌드 prefix는
+후속 검증을 위해 남겼다. cleanup 기록은 각각
+`validation/local/packaged-keychain/cleanup-20261005.json` 및
+`validation/local/backup-compatibility-cleanup-20261005.json`이다. 삭제된 경로가
+과거 보고서에 남아 있어도 현재 재실행할 DB나 프로필로 취급하지 않는다.

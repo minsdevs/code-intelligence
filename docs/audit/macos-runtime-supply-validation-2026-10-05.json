@@ -1,8 +1,8 @@
 {
   "format": 1,
   "recordedAt": "2026-10-05T08:52:31.744Z",
-  "status": "NATIVE_BUILD_AND_AUTOMATION_VERIFIED_RELEASE_INCOMPLETE",
-  "scope": "macos-source-provisioning-and-isolated-native-acceptance",
+  "status": "PACKAGED_REAL_KEYCHAIN_AND_BACKUP_BOUNDARIES_VERIFIED_RELEASE_INCOMPLETE",
+  "scope": "macos-native-build-real-packaged-keychain-and-typed-backup-compatibility",
   "currentWorkingDirectory": "/Users/minseokchae/Dev/code-intelligence",
   "implementationCommit": "695424c",
   "evidenceLocation": "validation/local (moved from the removed independent clone; hashes preserved)",
@@ -78,14 +78,14 @@
     "validation/local/macos-supply-20261005-UFh946/actual-preflight.json": "7660f01a7182144716cccf2486ab897ea71913fa58fa1f61b838576444c92773"
   },
   "remaining": [
-    "fresh isolated profile with actual packaged-app Keychain lifecycle",
-    "pgvector extension / older V26-V27 backup and locale compatibility",
-    "real-account project recovery and OAuth lifecycle",
+    "old extension-version backup conversion and pre-maintenance compatibility admission",
+    "encrypted application restore/recovery lifecycle across extension versions and locale policy",
+    "real-account project recovery and OAuth connection/revocation/refresh lifecycle",
     "completion-cancellation race and forced failure",
     "actual minimum OS and clean installation/update acceptance",
     "Developer ID signing and notarization approval"
   ],
-  "updatedAt": "2026-10-05T10:53:21.790Z",
+  "updatedAt": "2026-10-05T11:30:50.762Z",
   "fingerprintsScope": "Initial source-supply preparation; subsequent driver fingerprints are recorded in nativeExecution.",
   "nativeExecution": {
     "branch": "codex/native-validation-20261005",
@@ -371,5 +371,222 @@
         "sha256": "bbcfd6c3a4a6a7dcd15ab1045522138b0c8c27647ae0c3d34865c5dbb4ef783b"
       }
     ]
+  },
+  "packagedKeychain": {
+    "branch": "codex/packaged-keychain-compatibility-20261005",
+    "baseCommit": "2b5a98d3e102dd2810208578541821bc42e97897",
+    "status": "PASS",
+    "appRebuilt": false,
+    "mockKeychain": false,
+    "electronLoaderInjected": false,
+    "identity": "Code Intelligence Acceptance",
+    "appArchiveSha256": "d16de16b6e2fa17b96bba035e5d8d6ab4173657361e3eff2af2e003c9da34750",
+    "executableSha256": "6ac5f7054dd4c15b56ad64095ee850902293c9ec137e7d382fa4855a8f2c5791",
+    "packagedManifestSha256": "f58610e3f16ae87fed95473a1b8f32f5d1289772e13388e0f7a414b7f9d5a726",
+    "driverSha256": "90af6b0a482bb03bcd77623452c46932e322869d1521d948a508880cd25d2de4",
+    "credentialCiphertextUnchanged": true,
+    "bundleFingerprintsUnchanged": true,
+    "attempts": [
+      {
+        "path": "validation/local/packaged-keychain/run-6b20Le/result.json",
+        "status": "FAIL",
+        "phase": "attach-existing-renderer",
+        "sha256": "f1fa955a078b7941c8b9869369280ff91a9c497c6bd01e081aedbadd21e1e58d"
+      },
+      {
+        "path": "validation/local/packaged-keychain/run-fcb5jj/result.json",
+        "status": "PASS",
+        "phase": "complete",
+        "sha256": "28ca09386adc59d449539b30d87705828ff3bf1ecbde3e6a4607473edcd411ae"
+      },
+      {
+        "path": "validation/local/packaged-keychain/run-RGWnsP/result.json",
+        "status": "PASS",
+        "phase": "complete",
+        "sha256": "2990f3254ba25ea8e400d5ddff175eda98b5fae1935d5e73d862dbdfbf722c0a"
+      }
+    ],
+    "finalLaunches": [
+      {
+        "sequence": 1,
+        "pid": 5193,
+        "readyMs": 11610,
+        "directPackage": true,
+        "mockKeychain": false
+      },
+      {
+        "sequence": 2,
+        "pid": 5416,
+        "readyMs": 11166,
+        "directPackage": true,
+        "mockKeychain": false
+      }
+    ],
+    "finalCleanup": [
+      {
+        "pid": 5193,
+        "normalWindowCloseRequested": true,
+        "normalApplicationQuitRequested": false,
+        "signalsRequested": [],
+        "terminationConfirmed": true,
+        "processExitedZero": true,
+        "disconnected": true,
+        "errors": [],
+        "exitCode": 0,
+        "signalCode": null,
+        "launch": 1
+      },
+      {
+        "pid": 5416,
+        "normalWindowCloseRequested": true,
+        "normalApplicationQuitRequested": false,
+        "signalsRequested": [],
+        "terminationConfirmed": true,
+        "processExitedZero": true,
+        "disconnected": true,
+        "errors": [],
+        "exitCode": 0,
+        "signalCode": null,
+        "launch": 2
+      }
+    ],
+    "unitTests": {
+      "tests": 12,
+      "passed": 12,
+      "failed": 0
+    },
+    "boundary": "New synthetic Acceptance profile; direct retained package process plus renderer CDP. Exit zero is process evidence, not every safety-shutdown-failure guarantee. No real GitHub account, lock/denial/rotation or signed installation verified."
+  },
+  "backupVersionCompatibility": {
+    "status": "PASS",
+    "model": "pgvector 0.8.7 binary with historical 0.8.1 SQL definitions before explicit ALTER EXTENSION UPDATE",
+    "attempts": [
+      {
+        "path": "validation/local/backup-compatibility-GAaskZ/report.json",
+        "status": "PASS",
+        "checks": 8,
+        "sha256": "eff58afa48b1efadb1cdbd248d9f845afe02bee30dff5b63db932bf1c8718aff"
+      },
+      {
+        "path": "validation/local/backup-compatibility-PwRTQx/report.json",
+        "status": "PASS",
+        "checks": 8,
+        "sha256": "f047eb78c6adff70a2bd21a0bef1a69671fae53acdb8217ef3f30a92043f69f1"
+      }
+    ],
+    "finalChecks": [
+      {
+        "name": "copy-runtime-and-verify-upstream",
+        "status": "PASS"
+      },
+      {
+        "name": "owned-postgres-tls-and-locale",
+        "status": "PASS"
+      },
+      {
+        "name": "stock-v27-to-v27-0.8.7",
+        "status": "PASS"
+      },
+      {
+        "name": "historical-sql-on-new-binary-refuses-new-staging",
+        "status": "PASS"
+      },
+      {
+        "name": "explicit-update-new-export-passes-old-export-still-refused",
+        "status": "PASS"
+      },
+      {
+        "name": "pinned-historical-v26-to-v27-same-0.8.7",
+        "status": "PASS"
+      },
+      {
+        "name": "non-C-libc-locale-cross-restore-observation",
+        "status": "PASS"
+      },
+      {
+        "name": "existing-opt-in-native-typed-test-with-v26-identity-columns",
+        "status": "PASS"
+      }
+    ],
+    "upstream": {
+      "version": "0.8.1",
+      "commit": "778dacf20c07caf904557a88705142631818d8cb",
+      "sqlSha256": "7fb5bb279ef83bf9204bfac7405bb5c9a05e49f5ac7d64d1eb4464d103b80f32",
+      "controlSha256": "a0205f50f78f48402e3b5ff707a5225dd684360156ba6a591f02e9afa6a47120"
+    },
+    "stockV27": "PASS at SQL extension 0.8.7",
+    "historicalV26": "PASS at same SQL extension 0.8.7 with pinned historical producer",
+    "oldSqlOnNewBinary": "BACKUP_PG_SCHEMA before typed DB load iterator; source/target rows and original payload unchanged",
+    "afterExplicitFixtureUpdate": "New export restored; pre-update payload remained rejected unchanged",
+    "automaticArchiveConversion": false,
+    "localeObservation": "C/libc/UTF8 to en_US.UTF-8/libc/UTF8 restored the small six-row fixture; no general guarantee or locale guard",
+    "originalPrefixUnchanged": true,
+    "vectorBinaryUnchanged": true,
+    "child": {
+      "pid": 8387,
+      "port": 49233,
+      "stopped": true,
+      "code": 0,
+      "signal": null
+    },
+    "shutdownVerified": true,
+    "unitTests": {
+      "passed": 72,
+      "failed": 0,
+      "nativeOptInSkipped": 2
+    },
+    "nativeTypedTestPassed": 1,
+    "boundary": "Typed payload/adapter only. No old binary, physical cluster/index upgrade, encrypted container or actual application maintenance/recovery lifecycle verified; ICU/user locale unverified."
+  },
+  "followupEvidence": [
+    {
+      "path": "validation/local/packaged-keychain/run-6b20Le/result.json",
+      "sha256": "f1fa955a078b7941c8b9869369280ff91a9c497c6bd01e081aedbadd21e1e58d"
+    },
+    {
+      "path": "validation/local/packaged-keychain/run-fcb5jj/result.json",
+      "sha256": "28ca09386adc59d449539b30d87705828ff3bf1ecbde3e6a4607473edcd411ae"
+    },
+    {
+      "path": "validation/local/packaged-keychain/run-RGWnsP/result.json",
+      "sha256": "2990f3254ba25ea8e400d5ddff175eda98b5fae1935d5e73d862dbdfbf722c0a"
+    },
+    {
+      "path": "validation/local/backup-compatibility-GAaskZ/report.json",
+      "sha256": "eff58afa48b1efadb1cdbd248d9f845afe02bee30dff5b63db932bf1c8718aff"
+    },
+    {
+      "path": "validation/local/backup-compatibility-PwRTQx/report.json",
+      "sha256": "f047eb78c6adff70a2bd21a0bef1a69671fae53acdb8217ef3f30a92043f69f1"
+    },
+    {
+      "path": "validation/local/packaged-keychain/run-fcb5jj/restarted-fixture.png",
+      "sha256": "2c0e19724391a8e3ee1d35abd2dc54b577caa0aebfe9cc1cdf3e85193ff5b572"
+    },
+    {
+      "path": "validation/local/packaged-keychain/run-RGWnsP/restarted-fixture.png",
+      "sha256": "63470fdceec42b650dc110e24fe69f1584c80caf8f4f042db34e9b02c5e8c9de"
+    },
+    {
+      "path": "validation/local/packaged-keychain/cleanup-20261005.json",
+      "sha256": "c60842190835f11cbc79d0048d9f30ea8d496463bac9fa34198bfa3d599b8e2c"
+    },
+    {
+      "path": "validation/local/backup-compatibility-cleanup-20261005.json",
+      "sha256": "2259fdf7ed1d71627e0ef48a6b8e536ffea9b03e1cb1da78559114e6b3e34a41"
+    }
+  ],
+  "followupSourceFingerprints": {
+    "desktop/scripts/packaged-keychain-acceptance.cjs": "90af6b0a482bb03bcd77623452c46932e322869d1521d948a508880cd25d2de4",
+    "desktop/test/packaged-keychain-acceptance.test.cjs": "00a14c340dd0415ef7ad43d251069ede48fd7cb3d6bb6bf6fbb73a48090e4d5b",
+    "desktop/test/backup-postgres.test.cjs": "784ff59c934e233701329e0d3fb68bf001bb7a2d7b9ac72b7ddd73c07447fe9b",
+    "validation/backup-compatibility/run.cjs": "df246505bfc8098eb3cc00f8e189be7d104a59899dded6e2e5865984484e8926"
+  },
+  "followupCleanup": {
+    "keychainEarlierProfilesRemoved": 2,
+    "backupScratchEntriesRemoved": 16,
+    "backupReportsAndPayloadsVerified": 10,
+    "finalKeychainProfileRetained": "/private/tmp/cikr-sFCVEv/desktop-run-IfGJW2",
+    "originalPrefixAndAppRetained": true
   }
 }
