@@ -328,3 +328,28 @@ source/TLS17개 경로만 삭제했다. 삭제 직전 해당 디렉터리에 열
 `validation/local/restore-preflight/cleanup.json`에 대상과 보존 해시를 기록했다.
 관측 여유 공간은35,785,981,952→36,644,417,536 bytes였다. 기존 의존성·사용자
 DB/profile/Keychain·기존 source prefix와 두 보존 앱은 정리 대상이 아니다.
+
+## PR89 후속: packaged 복원 실패 / 재시작 검증
+
+원본 `380f67e`에서 `codex/restore-interruption-recovery-20261005`로 작업했다.
+제품 코드를 바꾸거나 앱을 재빌드하지 않고, 보존 `wXqDvU` 앱을 매번 새
+automation/mock-Keychain claim으로 실행했다. 상세 범위·해시·실패 기록은
+`docs/audit/restore-interruption-2026-10-05.md`에 있다.
+
+최종 동일 driver의 `native-fbwjDc`는 실제 DB 교체 뒤 source rename 성공/ACK 전
+오류에서92로 rollback·검증 복구·추가 정상 재시작을 통과했다. `native-CRrBPQ`는
+B 완료 뒤 plaintext 정리 오류에서91로 복원된 상태를 유지한 채 복구·추가 정상
+재시작을 통과했다. 실제 UI 오류, recoveryOnly와 조작 비활성, encrypted checkpoint/
+입력/wrapped keyring 및 journal prefix 보존, 소스와 snapshot URI를 확인했다.
+각3회 프로세스는 exit0/signal없음이며, 첫 시나리오의 첫 종료는 실제 shutdown
+recovery 오류 전달을 관측했으므로 clean으로 세지 않는다. OS native dialog 결과는
+검증 도구가 제한된 계약으로 제어하며 사용자 실계정/실제 Keychain은 쓰지 않았다.
+
+최초 `native-nqH5kC`의 세 번째 MANIFEST-stage 시작 실패는 별도 보존한다.
+후속 inventory/hash 재검사는 통과했지만 최초 실패 원인은 미확정이다. 검증 도구의
+조기 종료 child 참조 보존 결함은 보완했으나 이를 제품 시작 실패의 수정이라고
+기록하지 않는다. 후속 `native-mm6XFa`와 위 최종 두 실행은 통과했다.
+
+복구필요 상태에도 기존 데이터 unchanged를 약속하는 generic unavailable 문구가
+실제 화면에서 발견되어 다음 UI 수정 항목에 기록했다. 이번 I/O failure 시험을
+SIGKILL·전원손실·nonzero 비용원장·실계정 적용·G-RECOVERY 전체 PASS로 확대하지 않는다.

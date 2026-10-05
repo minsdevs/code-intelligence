@@ -105,4 +105,6 @@ release 승인은 필수 gate 전부 PASS+미해결 Critical/High0+공개 지원
 
 1의 **비호환 사전 거부**와 **구 archive 자동 변환**은 다른 기능이다. 사전 거부가 통과해도 구 archive를 새 버전에서 복원할 수 있게 된 것은 아니다. 기존 profile/extension/locale와 교체 조건이 확인되지 않은 상태에서 실계정 DB를 실험 대상으로 쓰지 않는다. 같은 개발 Mac의 단일 PASS로 최소 OS·신규 기기·정식 업데이트를 완료 처리하지 않는다.
 
-현재1단계 중 사전 거부와 후속 정상 복원은 `codex/restore-compatibility-preflight-20261005`의 제품 코드·PG10항목·새 packaged 앱으로 확인했다. 최종 `native-jGteM6`는 비호환 거부 후 UI 재분석·정상 복원·재시작을 통과한 mock-Keychain fixture다. 구 archive 자동 변환, 모든 강제종료/비용원장 replay, 기존 사용자 DB·locale 적용은 미완료이므로 G-RECOVERY 전체 상태를 PASS로 바꾸지 않는다. 다음 단위는 복원 중단/재시작·정상종료 오류 전달과 기존 데이터 적용·되돌리기 조건이며,2단계 실계정 project1에는 그 조건을 확인한 후 접근한다.
+현재1단계 중 사전 거부와 후속 정상 복원은 `codex/restore-compatibility-preflight-20261005`의 제품 코드·PG10항목·새 packaged 앱으로 확인했다. 최종 `native-jGteM6`는 비호환 거부 후 UI 재분석·정상 복원·재시작을 통과한 mock-Keychain fixture다. 후속 `codex/restore-interruption-recovery-20261005`는 같은 앱을 변경하지 않고 새 claim에서 실제 source rename ACK 실패→이전92 유지(`native-fbwjDc`), B 완료 후 cleanup 실패→복원91 유지(`native-CRrBPQ`)를 각각 복구와 추가 정상 재시작까지 확인했다. 종료 code0와 실제 shutdown recovery 오류 전달을 구분하며, 상세 결과·한계는 `docs/audit/restore-interruption-2026-10-05.md`를 따른다.
+
+다음 단위는 **복구 상태별 UI 안내 분리**(generic unavailable가 unchanged를 약속하는 현재 문구 수정), **최초 MANIFEST-stage 반복시작 실패 원인 분류**, 이후 소유 프로세스 경계가 증명된 강제종료/비용원장 replay 및 기존 데이터 적용·되돌리기 조건이다. 구 archive 자동 변환, 모든 강제종료/비용원장 replay, 기존 사용자 DB·locale 적용은 미완료이므로 G-RECOVERY 전체 상태를 PASS로 바꾸지 않는다. 2단계 실계정 project1에는 그 조건을 확인한 후 접근한다.

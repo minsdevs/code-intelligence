@@ -180,3 +180,36 @@ reports, logs, original payloads and encrypted archives remain unchanged; all
 recorded in `validation/local/restore-preflight/cleanup.json`. Neither the original
 source prefix nor either retained application bundle was removed. Historical
 fixture DB paths are not reusable after this cleanup.
+
+## Packaged interruption / restart follow-up
+
+`native-interruption.cjs` exercises two opt-in restore I/O failure boundaries using a
+retained Validation bundle and a **new automation claim per command**. It does not
+modify the bundle or use an existing acceptance or real-account profile.
+
+```sh
+rtk proxy node validation/backup-compatibility/native-interruption.cjs \
+  --app '<original-repository>/.native-product-<id>/Code Intelligence Validation.app' \
+  --point AFTER_SOURCE_RENAME
+
+rtk proxy node validation/backup-compatibility/native-interruption.cjs \
+  --app '<original-repository>/.native-product-<id>/Code Intelligence Validation.app' \
+  --point BEFORE_COMPLETED_CLEANUP
+```
+
+The first boundary throws after the real source rename but before its durability
+acknowledgement; recovery should retain the pre-restore snapshot/source `92`. The
+second throws during cleanup after B maintenance completion; recovery should retain
+the completed restored snapshot/source `91`. Both start with a real backup of `91`
+followed by actual UI reanalysis to `92`, and verify recovery plus one further normal
+restart. Native picker/confirmation/error-box responses are controlled; OS UI dialog
+interaction, real Keychain, nonzero cost obligations, SIGKILL and power loss are not
+covered by this driver. Evidence is preserved under `validation/local/restore-interruption/`.
+
+Exit code 0 is not sufficient for clean shutdown: a delivered shutdown recovery
+error is recorded separately. The SDK-owned live child reference is retained for
+early-exit cleanup; no historical PID can authorize signalling.
+
+See `docs/audit/restore-interruption-2026-10-05.md` for exact results, failed attempts,
+bundle identity and remaining release gates. Offline contracts run with
+`node --test desktop/test/backup-interruption-hooks.test.cjs`.
