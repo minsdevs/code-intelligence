@@ -54,7 +54,7 @@ R0/R1 engineering 작업 합계는66–112 집중 인일이다. [공개18셀의 
 
 ## 3. 출시 판정표
 
-현재 모든 미래 gate는 **NOT RUN 또는 BLOCKED**다. 감사에서 해결한 회귀의 PASS는 참고 입력이며 새 gate PASS로 자동 복사하지 않는다. release manifest의 정확한 app build digest와 capability manifest hash에 결과를 묶는다. 버그 수정 후 영향 gate를 다시 실행한다.
+아래 표는 **최종 출시 gate**의 판정이다. 개별 구현·개발 Mac의 native/Keychain/백업 시험은 [11 최신 상태](11-first-implementation.md)에 기록되어 있지만, 이를 전체 gate PASS로 자동 복사하지 않는다. NOT RUN은 해당 gate의 필수 검증 전체를 완료하지 않았다는 뜻이다. release manifest의 정확한 app build digest와 capability manifest hash에 결과를 묶는다. 버그 수정 후 영향 gate를 다시 실행한다.
 
 | Gate | PASS의 증거 | 금지되는 대체 증거 | 현재 |
 |---|---|---|---|
@@ -65,7 +65,7 @@ R0/R1 engineering 작업 합계는66–112 집중 인일이다. [공개18셀의 
 | G-PERF | 05의 지원 크기별20회 p95/full RSS·quota·latency | backend 단일 process RSS | NOT RUN |
 | G-SEC | 권한·IPC·egress·source execution·credential redaction 독립 검토 High0 및 signed helper C15 OS 거부 증거 | 암호화 라이브러리/별도 JVM 존재 | NOT RUN |
 | G-COST | fake provider C13/C16, 모든 entrypoint/restore 보수원장·safety journal/latch | 이미 청구된 chat 합산 | NOT RUN |
-| G-OAUTH | O1 App으로 signed desktop→선택 public/private repo→expiry/refresh/revoke/SSO | mock OAuth/token 존재 | BLOCKED O1 |
+| G-OAUTH | O1 App으로 signed desktop→선택 public/private repo→expiry/refresh/revoke/SSO | mock OAuth/token 존재 | O1 개발 App 등록·설치 완료; 실계정 전체 수명주기/갱신/서명 앱은 미완료 |
 | G-RECOVERY | 실제 packaged app format2/3 정상·오류·C16 모든 crash 상태, DB+source hash·notes/task 일치·vault/journal 비역행 | 단독 PostgreSQL rollback | NOT RUN |
 | G-NATIVE | O2 서명/notary/staple, clean macOS matrix, install→local+GitHub→flow→source | 개발 Mac의 기존 .app | BLOCKED O2 |
 | G-UPDATE | signed manifest/artifact·거짓서명/다운그레이드거부·schema crash→복원 | electron-builder 옵션 존재 | BLOCKED O2 |
@@ -87,3 +87,22 @@ release 승인은 필수 gate 전부 PASS+미해결 Critical/High0+공개 지원
 | 계획 작성의 가정과 실제 사용자 불일치 | 8명 시험 실패/핵심 repo 미지원 | 제품/QA: UX·지원 우선순위 수정 및 명세 버전 증가 |
 
 기획 HOLD 사유는 중대한 설계 미결정·상충 계약·검증 불가능한 수용기준이다. 아직 구현/실기기 증거가 없다는 사실은 release No-Go이며 명확한 구현/검증 명세가 있으면 기획 착수 자체를 막는 미결정과 구별한다. 운영 입력 O1/O2는 필요한 권한을 대신 얻거나 추측하지 않는다.
+
+## 5. 현재 구현에서 배포 직전까지의 실행 순서
+
+2026-10-05 사용자 요청에 따라 원본 저장소의 기능 브랜치에서 각 단위의 구현·검증·문서 갱신 후 `[skip ci]` commit → push → PR → merge를 수행한다. GitHub Actions, 유료 AI 호출, 정식 서명·공증·배포는 실행하지 않는다. 이미 완료한 개발용 native 빌드·새 프로필 Keychain 검증을 불필요하게 반복하지 않고 변경의 영향을 받는 검증부터 실행한다. 아래 범위는 첫 배포 후보이며 T11–T15 장기 언어 확장까지 자동으로 포함하지 않는다.
+
+| 순서 | 작업과 선행조건 | 배포 판정에 필요한 결과 |
+|---|---|---|
+| 1 데이터 복구 안정화 | 복원 전 catalog/소유자 확인, 구버전 archive 지원·거부/변환 정책, 복원 중 실패·강제종료·재시작 | 비호환 선택만으로 유지보수·복구필요 상태에 들어가지 않음; 실제 복원은 원본 DB/source·메모·비용원장 비역행, checkpoint 회복. schema V26→V27과 pgvector 버전변환을 구분 |
+| 2 실제 GitHub 가져오기 | 1의 사용자 프로필 적용 조건 충족 후 기존 App·설치 재사용 | 실패 project1을 삭제·중복 생성 없이 UI 새 분석하여 GIT_METADATA→FINALIZE/DONE, 최초 실패 증거와 기존 데이터 유지 |
+| 3 인증 수명주기 | 실제 연결/해제/재연결/철회, 만료·refresh 저장/갱신/회전, 동시 시도 | 늦은 응답이 폐기한 권한을 복원하지 않음, 앱 재시작·만료·권한변경에 일관된 표시/재인증; private key를 번들에 넣지 않음 |
+| 4 분석·작업 신뢰 | 완료/취소 경합·삭제·재시도·worker crash·stale fencing, immutable snapshot, 대표 Java/TS/JS corpus와 독립 검토 | 과거 결과/소스 유지, 미지원·부분·미측정 구분, negative 오연결0 및 공개 지원 셀의 기준 충족; parser 성공 숫자를 정확도로 대체하지 않음 |
+| 5 성능·보안·사용성 | 지원 크기별20회 p95/RSS/용량·취소, IPC/파일/egress 경계와 비밀 제외, fake-provider 비용경합, 접근성/사용자 과제 | G-PERF/SEC/COST/UX 기준 충족, 미해결 Critical/High0, 대표성·실행 환경/증거 공개. 유료 호출 없이도 비용 안전 계약 검증 |
+| 6 새 설치·업데이트 | 개발 도구 없는 Mac·실제 최소 지원 OS·새 기기, 기존 버전에서 업데이트·다운그레이드거부·중단/rollback | 번들 밖 runtime 의존 없이 local/GitHub→flow→source 실행, 기존 DB/백업/메모 유지. signed artifact 설치/업데이트 부분은 O2 승인 후 별도 검증 |
+| 7 배포물·운영 준비 | 정확한 dependency SBOM/라이선스/취약점, 지원 범위/한계·설치/복구 안내, 개인정보/외부전송 설명, 버전/릴리스노트, 개발용 GitHub App의 공개 배포 설치범위·운영 소유 점검 | 실제 배포 파일 해시·지원 선언·검증 결과·문서가 일치하고 배포 주체/도메인/문제 대응 경로 확정. 개발 App 등록·본인 설치 성공을 외부 사용자 설치 가능 증거로 대체하지 않음 |
+| 8 출시 최종 판정 | 모든 필수 gate와 독립 검토, 정확한 후보 앱·manifest 고정 | 최종 No-Go/Go를 근거로 기록. Developer ID 서명·공증·staple/Gatekeeper 실검증은 별도 승인/자격 필요하며 실제 공개는 사용자 승인 후 |
+
+1의 **비호환 사전 거부**와 **구 archive 자동 변환**은 다른 기능이다. 사전 거부가 통과해도 구 archive를 새 버전에서 복원할 수 있게 된 것은 아니다. 기존 profile/extension/locale와 교체 조건이 확인되지 않은 상태에서 실계정 DB를 실험 대상으로 쓰지 않는다. 같은 개발 Mac의 단일 PASS로 최소 OS·신규 기기·정식 업데이트를 완료 처리하지 않는다.
+
+현재1단계 중 사전 거부와 후속 정상 복원은 `codex/restore-compatibility-preflight-20261005`의 제품 코드·PG10항목·새 packaged 앱으로 확인했다. 최종 `native-jGteM6`는 비호환 거부 후 UI 재분석·정상 복원·재시작을 통과한 mock-Keychain fixture다. 구 archive 자동 변환, 모든 강제종료/비용원장 replay, 기존 사용자 DB·locale 적용은 미완료이므로 G-RECOVERY 전체 상태를 PASS로 바꾸지 않는다. 다음 단위는 복원 중단/재시작·정상종료 오류 전달과 기존 데이터 적용·되돌리기 조건이며,2단계 실계정 project1에는 그 조건을 확인한 후 접근한다.

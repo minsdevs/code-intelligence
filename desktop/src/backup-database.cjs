@@ -2,9 +2,11 @@
 
 // Main owns the local cluster, names and stopped writer processes. This controller only creates
 // a fresh staging DB and renames exact, OID-bound databases. Retention may drop only a completed
-// authenticated previous/failed slot, never a live/staging DB. There is no arbitrary SQL API.
+// authenticated previous/failed slot, never a live/staging DB. Compatibility probes can drop only
+// the fresh stage acquired in their own invocation. There is no arbitrary SQL API.
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawn: realSpawn } = require('node:child_process');
 const { retentionCandidate } = require('./backup-retention.cjs');
 const { inheritedEnvironment } = require('./runtime-platform.cjs');
@@ -53,7 +55,7 @@ async function createBackupDatabaseControl(options) {
   const spawn = options.spawn || realSpawn;
   const readRetentionAuthority = options.readRetentionAuthority;
   if (typeof spawn !== 'function' || readRetentionAuthority !== undefined && typeof readRetentionAuthority !== 'function') fail('INVALID');
-  let busy = false, closed = false, active = null, terminationFailed = false;
+  let busy = false, closed = false, active = null, terminationFailed = false, compatibilityActive = false;
   function run(sql, database = 'postgres') {
     if (busy || closed || terminationFailed) return Promise.reject(new BackupDatabaseError('UNAVAILABLE'));
     busy = true;
@@ -126,11 +128,74 @@ async function createBackupDatabaseControl(options) {
     const before = await inspect(transactionId); const { live, stage, previous, failed } = before.names;
     if (!before.databases[live] || !before.databases[live].allowConnections
         || before.databases[stage] || before.databases[previous] || before.databases[failed]) fail('NOT_FRESH');
-    await run(`create database "${stage}" with template=template0 encoding='UTF8';
-      select jsonb_build_object('ok',true);`);
+    const created = await run(`create database "${stage}" with template=template0 encoding='UTF8';
+      select jsonb_build_object('ok',true,'stageOid',(select oid::text from pg_catalog.pg_database where datname='${stage}'));`);
+    exact(created, ['ok', 'stageOid']); oid(created.stageOid); if (created.ok !== true) fail('INVALID_RESULT');
     const after = await inspect(transactionId);
-    if (after.databases[live]?.oid !== before.databases[live].oid || !after.databases[stage]?.allowConnections) fail('CHANGED');
+    if (after.databases[live]?.oid !== before.databases[live].oid || !after.databases[live].allowConnections
+        || after.databases[stage]?.oid !== created.stageOid || !after.databases[stage].allowConnections
+        || created.stageOid === before.databases[live].oid || after.databases[previous] || after.databases[failed]) fail('CHANGED');
     return { transactionId, liveOid: before.databases[live].oid, stageOid: after.databases[stage].oid, stageDatabase: stage };
+  }
+  async function cleanupCompatibilityStage(created) {
+    const { transactionId, liveOid, stageOid, stageDatabase: stage } = created;
+    const { previous, failed } = transaction(transactionId);
+    function checkProjection(projection, enabled) {
+      const live = projection.databases[liveDatabase], probe = projection.databases[stage];
+      if (stageOid === liveOid || live?.oid !== liveOid || !live.allowConnections || probe?.oid !== stageOid
+          || probe.allowConnections !== enabled || projection.databases[previous] || projection.databases[failed]) fail('CHANGED');
+    }
+    function guard(enabled) {
+      // Only the probe must be disconnected: the live application is still running.
+      return `do $compatibility$ begin
+        if not exists(select 1 from pg_catalog.pg_database where datname='${liveDatabase}' and oid='${liveOid}'::oid
+          and datallowconn and datdba=(select oid from pg_catalog.pg_roles where rolname=current_user))
+          then raise exception 'live database changed'; end if;
+        if not exists(select 1 from pg_catalog.pg_database where datname='${stage}' and oid='${stageOid}'::oid
+          and ${enabled ? '' : 'not '}datallowconn and datdba=(select oid from pg_catalog.pg_roles where rolname=current_user))
+          then raise exception 'compatibility database changed'; end if;
+        if exists(select 1 from pg_catalog.pg_database where datname in ('${previous}','${failed}'))
+          then raise exception 'compatibility slots changed'; end if;
+        if exists(select 1 from pg_catalog.pg_stat_activity where datid='${stageOid}'::oid)
+          then raise exception 'compatibility database is in use'; end if;
+        end $compatibility$;`;
+    }
+    checkProjection(await inspect(transactionId), true);
+    const disabled = await run(`begin; ${guard(true)}
+      alter database "${stage}" allow_connections false;
+      commit; select jsonb_build_object('disabled',true);`);
+    exact(disabled, ['disabled']); if (disabled.disabled !== true) fail('INVALID_RESULT');
+    checkProjection(await inspect(transactionId), false);
+    // As with dropRetained, main must hold its cluster mutex across this entire callback API,
+    // excluding every cooperating administrative writer. PostgreSQL cannot DROP DATABASE BY OID;
+    // an uncooperative superuser can still rename a database in the server check->DROP interval.
+    const dropped = await run(`${guard(false)}
+      drop database "${stage}";
+      select jsonb_build_object('dropped',true);`);
+    exact(dropped, ['dropped']); if (dropped.dropped !== true) fail('INVALID_RESULT');
+    const after = await inspect(transactionId);
+    if (after.databases[liveDatabase]?.oid !== liveOid || !after.databases[liveDatabase].allowConnections
+        || after.databases[stage] || after.databases[previous] || after.databases[failed]
+        || Object.values(after.databases).some(row => row.oid === stageOid)) fail('CHANGED');
+    const absent = await run(`select jsonb_build_object('absent',not exists(select 1 from pg_catalog.pg_database
+      where oid='${stageOid}'::oid or datname='${stage}'));`);
+    exact(absent, ['absent']); if (absent.absent !== true) fail('CHANGED');
+  }
+  async function withCompatibilityStage(callback) {
+    if (typeof callback !== 'function') fail('INVALID');
+    compatibilityActive = true;
+    try {
+      // No archive-controlled UUID, SQL, name or cleanup authority enters this API. If CREATE
+      // loses its receipt or identity readback, do not guess which database might be ours.
+      const created = Object.freeze(await createStage({ transactionId: crypto.randomUUID() }));
+      let result, callbackError, callbackFailed = false;
+      // The trusted main callback must await its stage adapter's close before settling.
+      // Cleanup independently checks server sessions, and never terminates them forcibly.
+      try { result = await callback(created.stageDatabase); } catch (error) { callbackFailed = true; callbackError = error; }
+      try { await cleanupCompatibilityStage(created); } catch { fail('CLEANUP'); }
+      if (callbackFailed) throw callbackError;
+      return result;
+    } finally { compatibilityActive = false; }
   }
   async function swap(value) {
     exact(value, ['transactionId', 'liveOid', 'stageOid']); oid(value.liveOid); oid(value.stageOid);
@@ -246,6 +311,8 @@ async function createBackupDatabaseControl(options) {
   };
   return Object.freeze({ inspect: serialized(inspect), createStage: serialized(createStage), swap: serialized(swap),
     rollback: serialized(rollback), verifyQuiescent: serialized(verifyQuiescent), readSizes: serialized(readSizes), dropRetained: serialized(dropRetained),
-    async close() { closed = true; active?.terminate('CLOSED'); if (busy) fail('BUSY'); delete environment.PGPASSWORD; if (terminationFailed) fail('TERMINATION'); } });
+    withCompatibilityStage: serialized(withCompatibilityStage),
+    async close() { if (compatibilityActive) fail('BUSY'); closed = true; active?.terminate('CLOSED');
+      if (busy) fail('BUSY'); delete environment.PGPASSWORD; if (terminationFailed) fail('TERMINATION'); } });
 }
 module.exports = Object.freeze({ createBackupDatabaseControl, BackupDatabaseError });

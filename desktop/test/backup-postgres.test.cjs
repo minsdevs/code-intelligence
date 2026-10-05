@@ -185,6 +185,53 @@ test('measureExport inherits schema/owner/precision limits and is export-only', 
   const s = await fixture(t, stageOptions); await rejects(s.adapter.measureExport(), 'STAGING'); assert.equal(s.calls.length, 0);
 });
 
+test('restore identity reads only a validated header in a read-only transaction', async t => {
+  const f = await fixture(t);
+  assert.deepEqual(await f.adapter.readRestoreIdentity(), { ownerUserId: ID, catalogSha256: sha(canonical(f.originalHeader.catalog)) });
+  const sql = f.calls[0].chunks.join('');
+  assert.match(sql, /repeatable read read only/);
+  assert.match(sql, /'kind','header'/);
+  for (const forbidden of ["'kind','row'", "'kind','table'", 'insert into', 'create table', 'update public']) assert(!sql.includes(forbidden));
+});
+
+test('restore identity rejects active work and unknown owners without reading product rows', async t => {
+  const f = await fixture(t);
+  f.controls.header.activeJobs = '1'; await rejects(f.adapter.readRestoreIdentity(), 'ACTIVE_JOB');
+  f.controls.header.activeJobs = '0'; f.controls.header.owner.valid = false;
+  await rejects(f.adapter.readRestoreIdentity(), 'OWNER');
+  const s = await fixture(t, stageOptions); await rejects(s.adapter.readRestoreIdentity(), 'STAGING');
+  assert.equal(s.calls.length, 0);
+});
+
+test('preflight shares the V27 catalog and owner gate without consuming the staging database', async t => {
+  const f = await staging(t), expected = summaryFor(f.originalHeader, [user()]);
+  const result = f.adapter.assertRestoreCompatibility({ expected, liveOwnerUserId: ID });
+  assert.deepEqual(result, expected); assert(Object.isFrozen(result));
+  assert.throws(() => f.adapter.assertRestoreCompatibility({ expected, liveOwnerUserId: OTHER_ID }), { code: 'BACKUP_PG_OWNER' });
+  assert.throws(() => f.adapter.assertRestoreCompatibility({ expected: { ...expected, catalogSha256: HASH }, liveOwnerUserId: ID }), { code: 'BACKUP_PG_SCHEMA' });
+  assert.equal(f.calls.length, 1, 'The comparison must not write rows or issue new SQL');
+  await f.adapter.loadRows(loadOptions(f));
+  assert.throws(() => f.adapter.assertRestoreCompatibility({ expected, liveOwnerUserId: ID }), { code: 'BACKUP_PG_STAGING' });
+});
+
+test('preflight validates pinned V26 separately and real loading still detects schema changes', async t => {
+  const f = await staging(t), expected = legacySummary(f.originalHeader, [user()]);
+  assert.deepEqual(f.adapter.assertRestoreCompatibility({ expected, liveOwnerUserId: ID }), expected);
+  assert.throws(() => f.adapter.assertRestoreCompatibility({ expected: { ...expected, catalogSha256: sha(canonical(f.originalHeader.catalog)) }, liveOwnerUserId: ID }), { code: 'BACKUP_PG_SCHEMA' });
+  f.controls.header.catalog.constraints.push({ validated: true, definition: 'changed after preflight' });
+  await rejects(f.adapter.loadRows(loadOptions(f, [user()], { expected })), 'SCHEMA');
+  assert(!f.calls[1].chunks.join('').includes('insert into'));
+});
+
+test('preflight refuses an unopened or closed staging adapter and malformed summary', async t => {
+  const f = await fixture(t, stageOptions), expected = summaryFor(f.originalHeader, [user()]);
+  assert.throws(() => f.adapter.assertRestoreCompatibility({ expected, liveOwnerUserId: ID }), { code: 'BACKUP_PG_STAGING' });
+  await f.adapter.initializeStaging();
+  assert.throws(() => f.adapter.assertRestoreCompatibility({ expected: { ...expected, rowCount: '123' }, liveOwnerUserId: ID }), { code: 'BACKUP_PG_INTEGRITY' });
+  await f.adapter.close();
+  assert.throws(() => f.adapter.assertRestoreCompatibility({ expected, liveOwnerUserId: ID }), { code: 'BACKUP_PG_CLOSED' });
+});
+
 test('pure summary validation returns an owned frozen value without granting catalog authority', async () => {
   const h = await header(); const supplied = summaryFor(h, [user()]);
   supplied.catalogSha256 = 'b'.repeat(64); // Shape-valid is not a verified live catalog claim.

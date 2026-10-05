@@ -1,8 +1,8 @@
 {
   "format": 1,
   "recordedAt": "2026-10-05T08:52:31.744Z",
-  "status": "PACKAGED_REAL_KEYCHAIN_AND_BACKUP_BOUNDARIES_VERIFIED_RELEASE_INCOMPLETE",
-  "scope": "macos-native-build-real-packaged-keychain-and-typed-backup-compatibility",
+  "status": "RESTORE_COMPATIBILITY_PREFLIGHT_VERIFIED_RELEASE_INCOMPLETE",
+  "scope": "native-runtime-keychain-and-pre-maintenance-restore-compatibility",
   "currentWorkingDirectory": "/Users/minseokchae/Dev/code-intelligence",
   "implementationCommit": "695424c",
   "evidenceLocation": "validation/local (moved from the removed independent clone; hashes preserved)",
@@ -78,14 +78,14 @@
     "validation/local/macos-supply-20261005-UFh946/actual-preflight.json": "7660f01a7182144716cccf2486ab897ea71913fa58fa1f61b838576444c92773"
   },
   "remaining": [
-    "old extension-version backup conversion and pre-maintenance compatibility admission",
-    "encrypted application restore/recovery lifecycle across extension versions and locale policy",
-    "real-account project recovery and OAuth connection/revocation/refresh lifecycle",
-    "completion-cancellation race and forced failure",
+    "historical extension/archive conversion and existing physical database/index/locale upgrade policy",
+    "restore interruption/crash/restart and complete safety-shutdown failure reporting",
+    "real-account project1 recovery and OAuth refresh/revoke lifecycle",
+    "completion-cancellation race, representative accuracy/performance/security/cost/UX release gates",
     "actual minimum OS and clean installation/update acceptance",
-    "Developer ID signing and notarization approval"
+    "Developer ID/notarization/Gatekeeper and public release approval"
   ],
-  "updatedAt": "2026-10-05T11:30:50.762Z",
+  "updatedAt": "2026-10-05T12:38:48.936Z",
   "fingerprintsScope": "Initial source-supply preparation; subsequent driver fingerprints are recorded in nativeExecution.",
   "nativeExecution": {
     "branch": "codex/native-validation-20261005",
@@ -588,5 +588,208 @@
     "backupReportsAndPayloadsVerified": 10,
     "finalKeychainProfileRetained": "/private/tmp/cikr-sFCVEv/desktop-run-IfGJW2",
     "originalPrefixAndAppRetained": true
+  },
+  "followupSourceFingerprintsScope": "Historical PR88 sources. Current preflight source fingerprints are in restorePreflightExecution.",
+  "restorePreflightExecution": {
+    "baseCommit": "8d5f3982009de8ad2eac2b8ab61dc14a717a0993",
+    "branch": "codex/restore-compatibility-preflight-20261005",
+    "status": "PASS_WITH_EXPLICIT_BOUNDARIES",
+    "productSourceMatchesBuild": true,
+    "verifiedProductSource": {
+      "backup-postgres.cjs": "4dbc95158f8c9eabc9fce237279b0408584fcbaba8b819e00fc09bf4e72a20d5",
+      "backup-runtime.cjs": "67c477a46768825844bb64da994e3da37df0bd67adbeeea8e7a6c8ac727ad769",
+      "backup-database.cjs": "3da75fb0003bd78fc6d75399a2288656f3473f10aa4498311e497222f9be8daf",
+      "main.cjs": "dc7079e8ce8fa1e1d69dfc2fa72445aac8df407f9bdc6f319a8f82ab57657390"
+    },
+    "sourceFingerprints": {
+      "desktop/src/backup-postgres.cjs": "4dbc95158f8c9eabc9fce237279b0408584fcbaba8b819e00fc09bf4e72a20d5",
+      "desktop/src/backup-runtime.cjs": "67c477a46768825844bb64da994e3da37df0bd67adbeeea8e7a6c8ac727ad769",
+      "desktop/src/backup-database.cjs": "3da75fb0003bd78fc6d75399a2288656f3473f10aa4498311e497222f9be8daf",
+      "desktop/src/main.cjs": "dc7079e8ce8fa1e1d69dfc2fa72445aac8df407f9bdc6f319a8f82ab57657390",
+      "desktop/test/backup-postgres.test.cjs": "63842065dad5b44ef57dd2d2314b9f60d9190bb74afa806841b638846e5dd78e",
+      "desktop/test/backup-database.test.cjs": "6d330ace3f9b384f7bbd4b242faa7f21af0aca6fb03797b8d9a8635205c08ed8",
+      "desktop/test/backup-runtime.test.cjs": "032f3d1be37b239a08aa23f46536a969c91b506868672fa05c225042c93ace85",
+      "desktop/test/main-runtime-gateway.test.cjs": "711b2936808c86acf4ba3704d3f8d7eeab920be4ffc36cd67cbf61396e7689ef",
+      "frontend/src/desktop.d.ts": "0d13ba7b647e857d08a2e9b016e8ade77ef4195275522b8d53931e4a01494606",
+      "frontend/src/features/settings/SettingsPage.tsx": "f271f31fd91f1d12883f9276f904d48633a5a6c057dbe05e245f3cbc169296d8",
+      "frontend/src/features/settings/settings.test.tsx": "e201a5d5950681df33f9079c6a71fcf04753083d6ec55212e4b482e5cdfd790e",
+      "frontend/src/lib/translations.ts": "4f750a11068989b8d7bf1be42326f92fa3aa2bc00822dc29d1c761162f016e71",
+      "validation/backup-compatibility/run.cjs": "6a38b0a8fe61074c4fcdd4769a2706803c0eb4322b89d16e3377a3339b0531ad",
+      "validation/backup-compatibility/native-preflight.cjs": "de803bb3f8452b2ad75f2ee64504135105346216ae2c6420f76ed944e4797b9a"
+    },
+    "sourceFingerprintScope": "Current product/test/driver source; product four hashes match the tested differential package build.",
+    "unit": {
+      "tests": 341,
+      "pass": 337,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 4
+    },
+    "settings": {
+      "tests": 38,
+      "passed": 38,
+      "failed": 0
+    },
+    "typeCheck": "PASS",
+    "changedFrontendLint": "PASS",
+    "nativeBuild": {
+      "appBundle": "/Users/minseokchae/Dev/code-intelligence/.native-product-wXqDvU/Code Intelligence Validation.app",
+      "appAsarSha256": "2d6f591a4f8d3448004d7914820d8e653be49951431f81f4ab686ce15f09808e",
+      "manifestSha256": "75a6e93f77cdd4fa03f7e99e25a2555e7aace89f643ee35f4dcd28aac7e8f87b",
+      "javaRecompiled": false,
+      "nativeRebuilt": false,
+      "unchangedNonStaticJarEntries": 1080
+    },
+    "nativeAttempts": [
+      {
+        "artifact": "validation/local/restore-preflight/native-j08bk9/result.json",
+        "status": "FAIL",
+        "phase": "ui-incompatible-refusal",
+        "driverSha256": "d58567774bca5855987161116d6fba2d7aaba46dad1cc91ca61175ca84e250a6"
+      },
+      {
+        "artifact": "validation/local/restore-preflight/native-RcDzlZ/result.json",
+        "status": "FAIL",
+        "phase": "restart-after-restore",
+        "driverSha256": "d1fdb8aa54c356d93cf995889a8d1e07b120add8cb9affac9e552a3ec3ef8d0c"
+      },
+      {
+        "artifact": "validation/local/restore-preflight/native-Y6flRA/result.json",
+        "status": "PASS",
+        "phase": "complete",
+        "driverSha256": "33ff502a8f3e43246f63e5eed60960708766e2d1192d29b4de0075315cdfc899"
+      },
+      {
+        "artifact": "validation/local/restore-preflight/native-jGteM6/result.json",
+        "status": "PASS",
+        "phase": "complete",
+        "driverSha256": "de803bb3f8452b2ad75f2ee64504135105346216ae2c6420f76ed944e4797b9a"
+      }
+    ],
+    "nativeFinal": {
+      "artifact": "validation/local/restore-preflight/native-jGteM6/result.json",
+      "status": "PASS",
+      "checks": [
+        "real-ui-backup-created",
+        "authenticated-mismatch-refused-without-ledger-record-authority-or-data-changes",
+        "subsequent-compatible-backup-replaces-newer-db-and-source-with-backup-state",
+        "restored-source-and-normal-service-state-survive-restart"
+      ],
+      "snapshots": {
+        "backup": 1,
+        "beforeRestore": 2
+      },
+      "exits": [
+        {
+          "pid": 59231,
+          "code": 0,
+          "signal": null
+        },
+        {
+          "pid": 60273,
+          "code": 0,
+          "signal": null
+        }
+      ],
+      "mockKeychain": true,
+      "nativePickerInteraction": false,
+      "authenticatedSyntheticCatalogMismatch": true,
+      "realUserAccount": false
+    },
+    "postgres": {
+      "artifact": "validation/local/backup-compatibility-VjdhHc/report.json",
+      "status": "PASS",
+      "checks": 10,
+      "shutdownVerified": true,
+      "child": {
+        "pid": 30473,
+        "port": 56555,
+        "stopped": true,
+        "code": 0,
+        "signal": null,
+        "portClosed": true
+      },
+      "originalPrefixUnchanged": true,
+      "vectorBinaryUnchanged": true,
+      "coordinatorBJournalAndGatewayMocked": true
+    },
+    "limitations": [
+      "No automatic historical archive or extension-version conversion",
+      "No existing user database/profile/Keychain accessed",
+      "Native scope is mock-Keychain with controlled file selection and synthetic data",
+      "No universal locale/ICU or physical index/cluster upgrade proof",
+      "CREATE response loss/cleanup failure may retain a probe; no automatic orphan reclamation",
+      "Preflight cannot prevent later state changes; post-maintenance failures still require recovery",
+      "Process exit0 does not prove all safety-shutdown failure paths",
+      "Signed distribution/actual minimum-OS/fresh-machine acceptance remain incomplete"
+    ],
+    "cleanup": {
+      "artifact": "validation/local/restore-preflight/cleanup.json",
+      "removedEntries": 17,
+      "preservedEvidence": 214,
+      "freeBytesBefore": 35785981952,
+      "freeBytesAfter": 36644417536,
+      "sourcePrefixChanged": false,
+      "originalDependenciesChanged": false,
+      "retainedFinalProfile": "/private/tmp/cirp-voXvgj/desktop-run-8cbj7P/userData"
+    },
+    "artifacts": [
+      {
+        "path": "validation/local/restore-preflight/build-41XPbn/build.json",
+        "sha256": "f3d33cade0a03abc6a38d0ca55c0d76af05b9fdcbba8f2b58910ee9498de7cb1"
+      },
+      {
+        "path": "validation/local/restore-preflight/unit-Hrcr0x/tests.tap",
+        "sha256": "c5450b45396ecfd5ce165ff05e5e6aefe471944c542e05d97bf7a6187aed34d6"
+      },
+      {
+        "path": "validation/local/restore-preflight/unit-Hrcr0x/final-review.tap",
+        "sha256": "262d8fa39e24db04a2d8193f744a554f81a245bca901ef1d3319f5e4fd679236"
+      },
+      {
+        "path": "validation/local/restore-preflight/unit-Hrcr0x/final-settings.json",
+        "sha256": "095628a5adb1d7c58d52a00b95e17a593386ee234c4f32f0f9ca47bf809d1b17"
+      },
+      {
+        "path": "validation/local/restore-preflight/native-j08bk9/result.json",
+        "sha256": "e1007e05e0d5a53d8a1f2a015b791d4ae36a6213b42ffad7f6dbe254c5683396"
+      },
+      {
+        "path": "validation/local/restore-preflight/native-RcDzlZ/incompatible-refused.png",
+        "sha256": "c823c5285647e38df0601acb5c189fd2d7232d0c0974cfef1f1401036d00ef2d"
+      },
+      {
+        "path": "validation/local/restore-preflight/native-RcDzlZ/result.json",
+        "sha256": "e5d95094c7e84ec5d77dc7d9bf9c2d16982919e1647d5f74094d0a86927637c2"
+      },
+      {
+        "path": "validation/local/restore-preflight/native-Y6flRA/incompatible-refused.png",
+        "sha256": "a6f14c31ea9d01313d67220d6b3d008f3eac443e3f22aa62c1470f9ae946ff91"
+      },
+      {
+        "path": "validation/local/restore-preflight/native-Y6flRA/result.json",
+        "sha256": "dcf340b32a6eeee27d4df7e13a71dd034356af1973109597e50f9e3f3a68ad01"
+      },
+      {
+        "path": "validation/local/restore-preflight/native-jGteM6/incompatible-refused.png",
+        "sha256": "1ff5d2dc9d0bc6d5011a9c172f3ba8b12dabcb0f4fe471e3fb646b9de1c917f3"
+      },
+      {
+        "path": "validation/local/restore-preflight/native-jGteM6/result.json",
+        "sha256": "4f938b1ab9d2e3047ed3a093373090b8c7f82b777bc35409a291376b32ef5c4d"
+      },
+      {
+        "path": "validation/local/backup-compatibility-nz44fc/report.json",
+        "sha256": "0bb5aba15172be4a8f1b956a21b63283dd4b5877ecbcac7bcd5416c709549f85"
+      },
+      {
+        "path": "validation/local/backup-compatibility-VjdhHc/report.json",
+        "sha256": "a6954c20aefb49efb63ad7f826a7a60597b6d627c00d0b97f766e323efaab160"
+      },
+      {
+        "path": "validation/local/restore-preflight/cleanup.json",
+        "sha256": "2edd4f5c0ccf807083501b0b9dca84344d32240bfd19967ed2bf91cf430935bc"
+      }
+    ]
   }
 }

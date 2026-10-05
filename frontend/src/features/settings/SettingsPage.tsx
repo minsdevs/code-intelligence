@@ -31,6 +31,7 @@ export default function SettingsPage() {
   const [restoreConfirm, setRestoreConfirm] = useState(false)
   const [backupPath, setBackupPath] = useState<string | null>(null)
   const [recoveryBackupPath, setRecoveryBackupPath] = useState<string | null>(null)
+  const [restoreIncompatible, setRestoreIncompatible] = useState(false)
   const settingsActionInProgress = useRef(false)
   const submittedApiKey = useRef<string | null>(null)
   useEffect(() => () => { submittedApiKey.current = null }, [])
@@ -186,11 +187,17 @@ export default function SettingsPage() {
   })
   const restoreMutation = useMutation({
     mutationFn: () => desktop!.restore(),
-    onSuccess: async (result) => {
-      setRestoreConfirm(false)
-      setRecoveryBackupPath(result?.recoveryBackup ?? null)
-      await queryClient.invalidateQueries({ queryKey: ['desktop-runtime'] })
+    retry: false,
+    onMutate: () => {
+      setRestoreIncompatible(false)
+      setRecoveryBackupPath(null)
     },
+    onSuccess: (result) => {
+      setRestoreConfirm(false)
+      setRestoreIncompatible(result?.restored === false && result.code === 'BACKUP_INCOMPATIBLE')
+      setRecoveryBackupPath(result?.restored === true ? result.recoveryBackup : null)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['desktop-runtime'] }),
   })
   const runtimeControlsReady = runtimeQuery.isSuccess && !runtimeQuery.isFetching
     && !restartMutation.isPending && runtimeQuery.data.ready === true && runtimeQuery.data.error === null
@@ -209,7 +216,7 @@ export default function SettingsPage() {
   const runtimeError = queryError(runtimeQuery.error)
     ?? queryError(restartMutation.error)
     ?? queryError(backupMutation.error)
-    ?? queryError(restoreMutation.error)
+    ?? (restoreMutation.error ? t('common.requestFailed') : null)
 
   function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -470,6 +477,7 @@ export default function SettingsPage() {
           <h2 className="text-[13px] font-semibold text-ink">{t('settings.desktopRuntime')}</h2>
           <p className="mt-1 text-[12px] text-ink-muted">{t('settings.desktopRuntimeDesc')}</p>
           {runtimeError && <p className="mt-2 text-[12px] text-danger" role="alert">{runtimeError}</p>}
+          {restoreIncompatible && <p className="mt-2 text-[12px] text-danger" role="alert">{t('settings.restoreIncompatible')}</p>}
           {runtimeQuery.isLoading && <p className="mt-2 text-[13px] text-ink-muted">{t('settings.runtimeLoading')}</p>}
           {backupUnavailable && <p className="mt-2 text-[12px] text-ink-muted">{t('settings.backupUnavailable')}</p>}
           {runtimeQuery.data && (

@@ -11,6 +11,7 @@ const crypto = require('node:crypto');
 const { encryptFile, decryptFile } = require('./backup-archive.cjs');
 const { createBackupPayload, readBackupPayload } = require('./backup-payload.cjs');
 const { upgradeV26FileRow } = require('./backup-export-policy.cjs');
+const { BackupPostgresError } = require('./backup-postgres.cjs');
 const { createBackupSourceInventory } = require('./backup-source-selection.cjs');
 const { createBackupCostCollector, buildMaintenanceMergeInputs, maintenanceProjectionDigest,
   createMaintenanceVerifier } = require('./backup-cost-state.cjs');
@@ -28,10 +29,11 @@ class BackupRuntimeError extends Error {
   constructor(code = 'RECOVERY_REQUIRED') {
     super(code === 'BUSY' ? 'Backup or restore is already running.'
       : code === 'INPUT' ? 'Choose an intact encrypted backup from this installation.'
+        : code === 'INCOMPATIBLE' ? 'This backup is not compatible with this app. Restore was not started; existing data and the selected backup were preserved.'
         : code === 'CAPACITY' ? 'There is not enough free space to verify this backup safely.'
         : 'Backup or restore could not be verified. Preserved recovery data requires inspection before restarting.');
     this.name = 'BackupRuntimeError'; this.code = `BACKUP_RUNTIME_${code}`;
-    this.recoveryRequired = !['BUSY', 'INPUT', 'CAPACITY'].includes(code);
+    this.recoveryRequired = !['BUSY', 'INPUT', 'CAPACITY', 'INCOMPATIBLE'].includes(code);
   }
 }
 function fail(code) { throw new BackupRuntimeError(code); }
@@ -319,6 +321,36 @@ async function copySelectedFile(selected, destination, created) {
     if (summary.schema.migrations.length === 26) restoredHashes.files = upgradedFiles.digest('hex');
     return { summary, restoredHashes, sources, costs: costs.finish(), payloadSha256,
       payloadIdentity: identity(await fs.lstat(file, { bigint: true })) };
+  }
+  async function checkRestoreCompatibility(expected) {
+    // Keep preflight resources out of perform()'s maintenance cleanup: a refused
+    // archive must not call ports.failure, pause writers or append to the cost journal.
+    let live, control;
+    try {
+      live = await ports.openExport();
+      const owner = await live.readRestoreIdentity();
+      control = await ports.database();
+      await control.withCompatibilityStage(async name => {
+        const probe = await ports.openStage(name);
+        try {
+          await probe.initializeStaging();
+          try { probe.assertRestoreCompatibility({ expected, liveOwnerUserId: owner.ownerUserId }); }
+          catch (error) {
+            // Only the shared catalog/owner comparison produces the typed refusal.
+            // An active job, failed initialization, timeout or cleanup is not a
+            // claim that the archive is incompatible.
+            if (error instanceof BackupPostgresError && ['BACKUP_PG_SCHEMA', 'BACKUP_PG_OWNER'].includes(error.code)) fail('INCOMPATIBLE');
+            throw error;
+          }
+        } finally { await probe.close(); }
+      });
+      const after = await live.readRestoreIdentity();
+      if (!same(after, owner)) fail('INPUT');
+    } finally {
+      let failure;
+      for (const resource of [control, live]) try { await resource?.close(); } catch (error) { failure ||= error; }
+      if (failure) throw failure;
+    }
   }
   async function exportCurrent(root, lease) {
     const writer = await createBackupPayload({ root, installationId, minimumVersion: runningBuild, windowsBoundary,
@@ -675,6 +707,9 @@ async function copySelectedFile(selected, destination, created) {
           identity: identity(await fs.lstat(path.join(payload, 'payload.bin'), { bigint: true })) });
         await freeSpace(root, BigInt(decoded.payloadBytes) * 5n);
         archived = await inspectPayload(payload);
+        await checkRestoreCompatibility(archived.summary);
+        if (closed || identity(await fs.lstat(path.join(payload, 'payload.bin'), { bigint: true })) !== archived.payloadIdentity
+            || await fileHash(path.join(payload, 'payload.bin')) !== archived.payloadSha256) fail('INPUT');
       } else {
         const parent = await fs.realpath(selected); await directory(parent, false);
         // Even an encrypted output must not enter application storage or source staging.
@@ -794,7 +829,7 @@ async function copySelectedFile(selected, destination, created) {
       // before attempting any rollback, even though their admission barrier should still be on.
       if (!maintenanceAttempted) {
         try { await cleanupOwnedScratch(owned); } catch { fail(); }
-        if (error instanceof BackupRuntimeError && ['BACKUP_RUNTIME_RECOVERY_REQUIRED', 'BACKUP_RUNTIME_CAPACITY'].includes(error.code)) throw error;
+        if (error instanceof BackupRuntimeError && ['BACKUP_RUNTIME_RECOVERY_REQUIRED', 'BACKUP_RUNTIME_CAPACITY', 'BACKUP_RUNTIME_INCOMPATIBLE'].includes(error.code)) throw error;
         throw new BackupRuntimeError('INPUT');
       }
       let stopped = false;

@@ -13,6 +13,9 @@ const { once } = require('node:events');
 const REPO = path.resolve(__dirname, '../..');
 const PG = require('../../desktop/src/backup-postgres.cjs');
 const PAYLOAD = require('../../desktop/src/backup-payload.cjs');
+const { createBackupDatabaseControl } = require('../../desktop/src/backup-database.cjs');
+const { createDesktopBackupRuntime, BackupRuntimeError } = require('../../desktop/src/backup-runtime.cjs');
+const { encryptFile } = require('../../desktop/src/backup-archive.cjs');
 const { REVIEWED_SCHEMA, REVIEWED_V26_SCHEMA } = require('../../desktop/src/backup-export-policy.cjs');
 const MIGRATIONS = path.join(REPO, 'backend/src/main/resources/db/migration');
 const INSTALLATION = '11111111-2222-4333-8444-555555555555';
@@ -69,7 +72,9 @@ async function main(argv) {
     model: 'pgvector 0.8.7 binary with historical 0.8.1 SQL definitions before explicit ALTER EXTENSION UPDATE',
     limitations: ['No old pgvector binary executed', 'No existing profile or database opened',
       'No historical on-disk index or physical cluster upgrade proven', 'No packaged Keychain or application restore flow exercised',
-      'C/libc UTF8 baseline; a non-C result applies only to the recorded synthetic dataset', 'ICU and original user locales are unverified'],
+      'C/libc UTF8 baseline; a non-C result applies only to the recorded synthetic dataset', 'ICU and original user locales are unverified',
+      'Coordinator refusal uses real encrypted archive, filesystem and PostgreSQL ports but mocked B journal/gateway',
+      'Synthetic cost tables are empty; no real cost-ledger replay or successful coordinator restore is proven'],
     originalPrefix, reportRoot, checks: [], child: null, upstream: OLD_VECTOR };
   async function save() {
     await fs.writeFile(reportFile + '.next', JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
@@ -163,7 +168,7 @@ async function main(argv) {
     const args = database => ['-X', '--no-password', '--quiet', '--tuples-only', '--no-align', '--set=ON_ERROR_STOP=1',
       '--host=127.0.0.1', `--port=${port}`, '--username=backup_fixture', `--dbname=${database}`, '--file=-'];
     async function sql(database, text) {
-      assert(database === 'postgres' || /^ci_backup_stage_[a-f0-9]{16,32}$/.test(database));
+      assert(database === 'postgres' || /^ci_backup_(?:stage|live)_[a-f0-9]{16,32}$/.test(database));
       return (await command('fixture-sql', psql, args(database), { input: text, env: { ...SYSTEM_ENV, ...pgEnv, ...clientTls } })).stdout.trim();
     }
     await check('owned-postgres-tls-and-locale', async () => {
@@ -237,6 +242,16 @@ async function main(argv) {
         livePreferenceRevisionHighWater: {}, writeAccounting });
     }
     async function unchangedArchive(archive) { assert.equal(sha(await fs.readFile(archive.file)), archive.fileSha256); }
+    async function catalogDatabases() {
+      return JSON.parse(await sql('postgres', `select jsonb_agg(jsonb_build_object('name',datname,'oid',oid::text,
+        'owner',pg_get_userbyid(datdba),'allowConnections',datallowconn) order by datname) from pg_database;`));
+    }
+    async function databaseControl(liveDatabase) {
+      const controller = await createBackupDatabaseControl({ psqlPath: psql,
+        connection: { host: '127.0.0.1', port, user: 'backup_fixture' }, liveDatabase, env: pgEnv, spawn: fixtureSpawn });
+      adapters.add(controller); return controller;
+    }
+    async function closeAdapter(adapter) { await adapter.close(); adapters.delete(adapter); }
     async function rejected(archive) {
       const target = await initialized(), before = await rawRowsHash(target.database); let iterated = false, accounting = 0;
       const rows = { [Symbol.asyncIterator]() { iterated = true; throw new Error('Rejected archive iterator must not start'); } };
@@ -289,6 +304,7 @@ async function main(argv) {
         oldPayloadStillRejected: oldRejected, automaticArchiveConversion: false,
         sourceDatabase: await databaseFacts(oldSource.database), targetDatabase: await databaseFacts(target.database) };
     });
+    let legacyArchive;
     await check('pinned-historical-v26-to-v27-same-0.8.7', async () => {
       const legacySource = path.join(fixture, 'legacy-src'), migrations = path.join(fixture, 'legacy-migrations');
       await fs.cp(path.join(REPO, 'desktop/src'), legacySource, { recursive: true }); await fs.mkdir(migrations, { mode: 0o700 });
@@ -305,6 +321,7 @@ async function main(argv) {
       assert.equal(await vectorVersion(source.database), '0.8.7');
       const before = await rawRowsHash(source.database, REVIEWED_V26_SCHEMA);
       const archive = await exportPayload('historical-v26', source, legacy, migrations, legacyPayload);
+      legacyArchive = archive;
       assert.equal(archive.summary.schema.migrations.length, 26); await load(target, archive);
       assert.equal(await rawRowsHash(source.database, REVIEWED_V26_SCHEMA), before);
       assert.equal(await sql(target.database, "select analysis_status||':'||analysis_targeted::text||':'||(analysis_reason is null)::text from files;"), 'LEGACY_UNMEASURED:false:true');
@@ -315,6 +332,111 @@ async function main(argv) {
       await unchangedArchive(archive); return { legacyCommit: LEGACY_COMMIT, sourceHashes, vector: '0.8.7',
         sourceSchema: 26, targetSchema: 27, sourceRowsUnchanged: true, measurements: 0, payloadSha256: archive.fileSha256,
         sourceDatabase: await databaseFacts(source.database), targetDatabase: await databaseFacts(target.database) };
+    });
+    let preflightLive;
+    await check('disposable-preflight-real-controller-v27-v26-and-old-sql-refusal', async () => {
+      const initializedLive = await initialized(); await seed(initializedLive.database);
+      await closeAdapter(initializedLive.adapter);
+      preflightLive = `ci_backup_live_${crypto.randomBytes(8).toString('hex')}`;
+      await sql('postgres', `alter database "${initializedLive.database}" rename to "${preflightLive}";`);
+      const beforeDatabases = await catalogDatabases(), beforeRows = await rawRowsHash(preflightLive);
+      const live = beforeDatabases.find(row => row.name === preflightLive); assert(live?.allowConnections);
+      const controller = await databaseControl(preflightLive), results = [];
+      try {
+        for (const [label, archive, incompatible] of [['stock-v27', stockArchive, false], ['legacy-v26', legacyArchive, false], ['old-sql-v27', oldArchive, true]]) {
+          const reader = await PG.createBackupPostgres(options(preflightLive, MIGRATIONS, 'export')); adapters.add(reader);
+          const owner = await reader.readRestoreIdentity(); await closeAdapter(reader);
+          let probe, callbackError, closed = false;
+          const operation = controller.withCompatibilityStage(async database => {
+            probe = (await catalogDatabases()).find(row => row.name === database); assert(probe?.allowConnections);
+            const adapter = await PG.createBackupPostgres(options(database)); adapters.add(adapter);
+            try {
+              await adapter.initializeStaging();
+              try { adapter.assertRestoreCompatibility({ expected: archive.summary, liveOwnerUserId: owner.ownerUserId }); }
+              catch (error) {
+                assert.equal(error.code, 'BACKUP_PG_SCHEMA'); callbackError = new BackupRuntimeError('INCOMPATIBLE'); throw callbackError;
+              }
+              return label;
+            } finally { await closeAdapter(adapter); closed = true; }
+          });
+          if (incompatible) await assert.rejects(operation, error => { assert.equal(error, callbackError);
+            assert.equal(error.code, 'BACKUP_RUNTIME_INCOMPATIBLE'); assert.equal(error.recoveryRequired, false); assert(closed); return true; });
+          else assert.equal(await operation, label);
+          assert(closed); assert(probe); assert.notEqual(probe.oid, live.oid);
+          assert.deepEqual(await catalogDatabases(), beforeDatabases); assert.equal(await rawRowsHash(preflightLive), beforeRows);
+          await unchangedArchive(archive);
+          results.push({ label, schema: archive.summary.schema.migrations.length, outcome: incompatible ? 'REFUSED' : 'COMPATIBLE',
+            code: callbackError?.code || null, callbackExceptionPreserved: incompatible ? true : null,
+            probeDatabase: probe.name, probeOid: probe.oid, probeAdapterClosed: closed, probeAbsent: true,
+            payloadSha256: archive.fileSha256, payloadUnchanged: true, liveOidUnchanged: true, liveRowsUnchanged: true });
+        }
+      } finally { await closeAdapter(controller); }
+      return { controller: 'production withCompatibilityStage', migrationSource: 'pinned initializeStaging',
+        administrativeBoundary: 'one owned cluster and sequential administrative operations',
+        liveDatabase: preflightLive, liveOid: live.oid, liveRowsSha256: beforeRows, unrelatedDatabasesUnchanged: true, results };
+    });
+    await check('encrypted-coordinator-old-sql-refusal-before-maintenance', async () => {
+      let source;
+      await fs.copyFile(path.join(fixture, 'upstream/vector-0.8.1.control'), control);
+      try {
+        source = await initialized();
+        await sql(source.database, `insert into users(id,login,local_key,identity_type) values(1,'fixture','${INSTALLATION}','LOCAL');`);
+      } finally { await fs.writeFile(control, currentControl); }
+      const archive = await exportPayload('coordinator-old-sql-users-only', source);
+      assert.equal(archive.summary.rowCount, '1'); assert.equal(archive.rows[0].table, 'users');
+      const sourceRows = await rawRowsHash(source.database), liveRows = await rawRowsHash(preflightLive);
+      const beforeDatabases = await catalogDatabases(), live = beforeDatabases.find(row => row.name === preflightLive);
+      const userData = path.join(fixture, 'coordinator-user-data'), selectedRoot = path.join(fixture, 'coordinator-selected');
+      await fs.mkdir(userData, { mode: 0o700 }); await fs.mkdir(selectedRoot, { mode: 0o700 });
+      const key = crypto.randomBytes(32), keyId = crypto.randomBytes(16).toString('hex'), issuedKeys = [];
+      const keyProvider = { async currentKeyId(purpose) { assert.equal(purpose, 'backup'); return keyId; },
+        async getBackupKey(id) { assert.equal(id, keyId); const issued = Buffer.from(key); issuedKeys.push(issued); return issued; } };
+      const selected = path.join(selectedRoot, 'old-sql.cibackup'), calls = [], probeNames = [];
+      let runtime;
+      try {
+        await encryptFile({ sourceRoot: path.dirname(archive.file), sourcePath: archive.file, destinationRoot: selectedRoot,
+          destinationPath: selected, installationId: INSTALLATION, keyProvider });
+        const selectedHash = sha(await fs.readFile(selected));
+        const state = { pendingRestore: null, pendingMaintenance: null, maintenanceReceipt: null, recoveryOnly: false, aiOff: false };
+        const stateHash = sha(canonical(state));
+        const forbidden = name => async () => { calls.push(name); throw new Error(`Preflight unexpectedly reached ${name}`); };
+        const ports = Object.fromEntries(['pause', 'prepareResume', 'resume', 'failure', 'sourceWorker', 'productState',
+          'exportVault', 'restoreVault', 'invalidateAuthority'].map(name => [name, forbidden(name)]));
+        ports.openExport = async () => {
+          calls.push('openExport'); const adapter = await PG.createBackupPostgres(options(preflightLive, MIGRATIONS, 'export')); adapters.add(adapter);
+          return Object.freeze({ ...adapter, async close() { await closeAdapter(adapter); calls.push('export.close'); } });
+        };
+        ports.openStage = async database => {
+          probeNames.push(database); calls.push('openStage'); const adapter = await PG.createBackupPostgres(options(database)); adapters.add(adapter);
+          return Object.freeze({ ...adapter, async close() { await closeAdapter(adapter); calls.push('probe.close'); } });
+        };
+        ports.database = async () => {
+          calls.push('database'); const controller = await databaseControl(preflightLive);
+          return Object.freeze({ ...controller, async close() { await closeAdapter(controller); calls.push('controller.close'); } });
+        };
+        runtime = await createDesktopBackupRuntime({ userData, installationId: INSTALLATION, runningBuild: '20261005', keyProvider,
+          journal: { snapshot: () => ({ ...state }), sealMaintenance: forbidden('journal.seal'), completeMaintenance: forbidden('journal.complete') },
+          gateway: { beginMaintenance: forbidden('gateway.begin') }, adapter: { readProjection: forbidden('finance.readProjection') }, ports });
+        const recordsRoot = path.join(userData, 'backup-maintenance'), beforeRecords = await treeHash(recordsRoot);
+        assert.equal(await runtime.pendingRecovery(), null);
+        await assert.rejects(runtime.restore(selected), error => { assert(error instanceof BackupRuntimeError);
+          assert.equal(error.code, 'BACKUP_RUNTIME_INCOMPATIBLE'); assert.equal(error.recoveryRequired, false); return true; });
+        assert.equal(await runtime.pendingRecovery(), null); assert.equal(await treeHash(recordsRoot), beforeRecords);
+        assert.equal(sha(canonical(state)), stateHash); assert.equal(sha(await fs.readFile(selected)), selectedHash);
+        assert.deepEqual(await fs.readdir(path.join(userData, 'recovery')), []);
+        assert.deepEqual(await catalogDatabases(), beforeDatabases); assert.equal(await rawRowsHash(preflightLive), liveRows);
+        assert.equal(await rawRowsHash(source.database), sourceRows); await unchangedArchive(archive);
+        assert.equal(probeNames.length, 1); assert.deepEqual(calls, ['openExport', 'database', 'openStage', 'probe.close', 'controller.close', 'export.close']);
+        return { code: 'BACKUP_RUNTIME_INCOMPATIBLE', recoveryRequired: false, selectedArchive: selected,
+          selectedArchiveSha256: selectedHash, selectedArchiveUnchanged: true, payloadSha256: archive.fileSha256,
+          sourceRowsUnchanged: true, liveDatabase: preflightLive, liveOid: live.oid, liveRowsSha256: liveRows,
+          liveOidUnchanged: true, liveRowsUnchanged: true, probes: probeNames, probeDatabasesAbsent: true,
+          gatewayBeginCalls: 0, pauseCalls: 0, failureCalls: 0, journalWrites: 0, pendingRecovery: null,
+          recoveryScratchEmpty: true, authenticatedRecoveryRecordsUnchanged: true, calls,
+          realComponents: ['PostgreSQL controller', 'PostgreSQL adapters', 'typed payload', 'encrypt/decryptFile', 'coordinator', 'authenticated recovery records'],
+          mockedComponents: ['B journal', 'gateway', 'unused maintenance finance adapter'],
+          limitation: 'Pre-maintenance rejection only; no packaged app, durable B cost-ledger or successful coordinator restore claim' };
+      } finally { if (runtime) await runtime.close(); key.fill(0); issuedKeys.forEach(issued => issued.fill(0)); }
     });
     await check('non-C-libc-locale-cross-restore-observation', async () => {
       const locales = (await command('available-locales', '/usr/bin/locale', ['-a'])).stdout.split(/\r?\n/);
@@ -358,12 +480,21 @@ async function main(argv) {
       if (!exit) { child.kill('SIGKILL'); exit = await waitForExit(5000); shutdownFailed = true; }
       report.child = { ...report.child, ...exit, stopped: Boolean(exit && !exit.error) };
       if (!report.child.stopped) shutdownFailed = true;
+      report.child.portClosed = await new Promise(resolve => {
+        const socket = net.createConnection({ host: '127.0.0.1', port: report.child.port }); let settled = false;
+        function finish(closed) { if (settled) return; settled = true; socket.destroy(); resolve(closed); }
+        socket.once('connect', () => finish(false));
+        socket.once('error', error => finish(error.code === 'ECONNREFUSED'));
+        socket.setTimeout(1500, () => finish(false));
+      });
+      if (!report.child.portClosed) shutdownFailed = true;
       await fs.writeFile(path.join(fixture, 'owned-postgres.log'), pgStderr, { mode: 0o600 });
     }
     try {
-      if (originalHash) { const after = await treeHash(originalPrefix); report.originalPrefixUnchanged = after === originalHash;
+      if (originalHash) { const after = await treeHash(originalPrefix); report.originalTreeSha256After = after; report.originalPrefixUnchanged = after === originalHash;
         if (!report.originalPrefixUnchanged) shutdownFailed = true; }
-      if (copiedVector && vectorHash) { report.vectorBinaryUnchanged = sha(await fs.readFile(copiedVector)) === vectorHash;
+      if (copiedVector && vectorHash) { report.vectorBinarySha256After = sha(await fs.readFile(copiedVector));
+        report.vectorBinaryUnchanged = report.vectorBinarySha256After === vectorHash;
         if (!report.vectorBinaryUnchanged) shutdownFailed = true; }
     } catch { shutdownFailed = true; }
     report.shutdownVerified = !shutdownFailed;

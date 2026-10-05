@@ -11,6 +11,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { createDesktopBackupRuntime, BackupRuntimeError } = require('../src/backup-runtime.cjs');
+const { BackupPostgresError } = require('../src/backup-postgres.cjs');
 const { createBackupPayload, readBackupPayload } = require('../src/backup-payload.cjs');
 const { encryptFile, decryptFile } = require('../src/backup-archive.cjs');
 const { createBackupRecoveryRecords } = require('../src/backup-recovery-records.cjs');
@@ -128,7 +129,7 @@ function dataset(label = 'archived source A') {
 }
 async function rejects(promise, code = 'RECOVERY_REQUIRED') {
   await assert.rejects(promise, error => { assert.ok(error instanceof BackupRuntimeError, `unexpected ${error?.name}`);
-    assert.equal(error.code, `BACKUP_RUNTIME_${code}`); assert.equal(error.recoveryRequired, !['INPUT', 'BUSY'].includes(code));
+    assert.equal(error.code, `BACKUP_RUNTIME_${code}`); assert.equal(error.recoveryRequired, !['INPUT', 'BUSY', 'CAPACITY', 'INCOMPATIBLE'].includes(code));
     assert.equal(error.cause, undefined); assert.doesNotMatch(String(error), /synthetic-private|credential-sentinel|SELECT|\/private\/|ENOENT/); return true; });
 }
 function before(trace, a, b) { assert.ok(trace.includes(a), `missing ${a}`); assert.ok(trace.indexOf(a) < trace.indexOf(b), `${a} must precede ${b}: ${trace.join(', ')}`); }
@@ -201,7 +202,12 @@ async function fixture(t) {
       return { async seedMaintenanceProjection(value) { await step('finance.seed', value); assert.equal(value.journalSnapshot.aiOff, true); },
         async close() { await step('finance.close'); } }; }
   };
-  const database = { async verifyQuiescent() { await step('db.quiescent'); assert.equal(drained, true); },
+  const probeName = 'ci_backup_stage_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const database = { async withCompatibilityStage(callback) {
+      await step('preflight.create');
+      try { return await callback(probeName); } finally { await step('preflight.drop'); }
+    },
+    async verifyQuiescent() { await step('db.quiescent'); assert.equal(drained, true); },
     async inspect(transactionId) { await step('db.inspect'); assert.equal(drained, true); const suffix = transactionId.replaceAll('-', '');
       const names = { live: 'codeintel', stage: `ci_backup_stage_${suffix}`, previous: `ci_backup_previous_${suffix}`, failed: `ci_backup_failed_${suffix}` };
       return { names, databases: copy(Object.fromEntries(Object.entries(databaseSlots).filter(([name]) => Object.values(names).includes(name)))) }; },
@@ -240,7 +246,10 @@ async function fixture(t) {
     async productState() { await step('product.open'); return product; }, async invalidateAuthority(value) { await step('authority.invalidate', value); authority = false; },
     async openExport() { await step('export.open'); const connection = { closed: false }; exportConnections.push(connection);
       exportingData = databaseImage === 'restored' ? stagedData : currentData;
-      assert.ok(exportingData, 'export must reflect the active database image'); return { async exportRows({ writeRow }) { connection.purpose = 'data'; await step('export.rows');
+      assert.ok(exportingData, 'export must reflect the active database image'); return {
+      async readRestoreIdentity() { connection.purpose = 'preflight'; await step('preflight.identity');
+        return options.nextIdentity?.shift() ?? { ownerUserId: OWNER, catalogSha256: summary(exportingData.rows).catalogSha256 }; },
+      async exportRows({ writeRow }) { connection.purpose = 'data'; await step('export.rows');
       for (const row of exportingData.rows) await writeRow(copy(row)); exportedSummary = summary(exportingData.rows); await step('export.done'); return copy(exportedSummary); },
       async measureExport() { connection.purpose = 'measure'; await step('export.measure'); const measured = summary(exportingData.rows);
         const rowFrameBytes = exportingData.rows.reduce((n, row) => n + BigInt(frame({ kind: 'ROW', row }).length), 0n);
@@ -250,7 +259,20 @@ async function fixture(t) {
       async readRetainedCommitTimes(value) { await step('export.retainedTimes', value);
         assert.deepEqual(value, { snapshotIds: ['10'] }); return { '10': '0' }; },
       async close() { await step('export.close'); connection.closed = true; trace.push(`export.${connection.purpose}.close`); } }; },
-    async openStage(name) { await step('stage.open', name); assert.equal(name, preparedStage.stageDatabase);
+    async openStage(name) {
+      if (name === probeName) {
+        await step('preflight.open');
+        return {
+          async initializeStaging() { await step('preflight.initialize'); },
+          assertRestoreCompatibility({ expected, liveOwnerUserId }) {
+            trace.push('preflight.compare');
+            if (expected.catalogSha256 !== sha('synthetic reviewed catalog')) throw new BackupPostgresError('SCHEMA');
+            if (expected.ownerUserId !== liveOwnerUserId) throw new BackupPostgresError('OWNER');
+          },
+          async close() { await step('preflight.close'); }
+        };
+      }
+      await step('stage.open', name); assert.equal(name, preparedStage.stageDatabase);
       return { async initializeStaging() { await step('stage.initialize'); },
         async loadRows(value) { await step('stage.load'); loadedRows = []; for await (const row of value.rows) loadedRows.push(row);
           const legacy = value.expected.schema.migrations.length === 26;
@@ -322,11 +344,11 @@ async function fixture(t) {
     async intact() { for (const name of ['repos', 'sources']) { assert.equal(await identity(path.join(dataRoot, name)), originals[name]);
       assert.equal(await fs.readFile(path.join(dataRoot, name, 'original.txt'), 'utf8'), `original ${name}`); }
       assert.equal(await fs.readFile(path.join(safety, 'keep'), 'utf8'), 'synthetic immutable B key sentinel'); },
-    async archive(data = dataset(), mutate = () => {}) {
+    async archive(data = dataset(), mutate = () => {}, summaryPatch = {}) {
       knownData.push(data);
       const dir = await privateDir(path.join(root, `input-${crypto.randomUUID()}`)); const payloadRoot = await privateDir(path.join(dir, 'plain'));
       const writer = await createBackupPayload({ root: payloadRoot, installationId: INSTALL, minimumVersion: BUILD });
-      try { for (const row of data.rows) await writer.writeRow(row); await writer.writeDatabase(summary(data.rows));
+      try { for (const row of data.rows) await writer.writeRow(row); await writer.writeDatabase({ ...summary(data.rows), ...summaryPatch });
         const records = copy(data.records); mutate(records); for (const record of records) await writer.writeSource(record); await writer.finish(); }
       finally { await writer.close(); }
       const destinationPath = path.join(dir, 'archive.cibackup');
@@ -367,6 +389,44 @@ async function fixture(t) {
       const result = []; for await (const record of readBackupPayload({ root: plain, installationId: INSTALL, runningBuild: BUILD })) result.push(record); return result; }
   };
 }
+
+test('incompatible encrypted backup is refused before maintenance and a subsequent valid restore succeeds', async t => {
+  const f = await fixture(t);
+  const incompatible = await f.archive(dataset(), () => {}, { catalogSha256: sha('historical extension catalog') });
+  const original = await fs.readFile(incompatible), previous = copy(f.state);
+  await rejects(f.runtime.restore(incompatible), 'INCOMPATIBLE');
+  assert.deepEqual(f.state, previous); assert.deepEqual(await fs.readFile(incompatible), original);
+  for (const event of ['gateway.begin', 'pause', 'pg.prepare', 'merge', 'journal.seal', 'authority.invalidate', 'failure']) assert(!f.trace.includes(event));
+  before(f.trace, 'preflight.compare', 'preflight.close'); before(f.trace, 'preflight.close', 'preflight.drop');
+  assert.equal((await f.transactions()).length, 0); allExportsClosed(f); await f.intact();
+  await f.reopen();
+  assert.equal((await f.runtime.restore(await f.archive())).restored, true);
+});
+
+for (const where of ['preflight.identity', 'preflight.create', 'preflight.initialize', 'preflight.close', 'preflight.drop']) {
+  test(`preflight failure at ${where} never acquires maintenance authority`, async t => {
+    const f = await fixture(t), archive = await f.archive(), previous = copy(f.state); f.fail(where);
+    await rejects(f.runtime.restore(archive), 'INPUT');
+    assert.deepEqual(f.state, previous); assert(!f.trace.includes('gateway.begin')); assert(!f.trace.includes('failure'));
+    assert.equal((await f.transactions()).length, 0); allExportsClosed(f); await f.intact();
+  });
+}
+
+test('live identity changing during preflight prevents maintenance despite a compatible probe', async t => {
+  const f = await fixture(t), archive = await f.archive(), previous = copy(f.state);
+  f.options.nextIdentity = [{ ownerUserId: OWNER, catalogSha256: sha('original') }, { ownerUserId: OWNER, catalogSha256: sha('changed') }];
+  await rejects(f.runtime.restore(archive), 'INPUT'); assert.deepEqual(f.state, previous);
+  assert(f.trace.includes('preflight.drop')); assert(!f.trace.includes('gateway.begin')); await f.intact();
+});
+
+test('a payload changed after compatibility comparison is not admitted to maintenance', async t => {
+  const f = await fixture(t), archive = await f.archive(), previous = copy(f.state);
+  f.hooks.set('preflight.drop', async () => {
+    const [transaction] = await f.transactions(); await fs.appendFile(path.join(transaction, 'incoming', 'payload.bin'), 'changed');
+  });
+  await rejects(f.runtime.restore(archive), 'INPUT'); assert.deepEqual(f.state, previous);
+  assert(!f.trace.includes('gateway.begin')); await f.intact();
+});
 
 test('backup uses a drained OFF checkpoint and produces an independently readable typed encrypted archive', async t => {
   const f = await fixture(t), original = copy(f.currentData); const file = await f.runtime.backup(f.destination);
