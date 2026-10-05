@@ -52,3 +52,79 @@ executes all V1–V27 migrations and the opt-in six-test JDBC transaction/CAS su
 then verifies PostgreSQL termination and unchanged source/bundle hashes. It never
 accepts a user DB URL or existing profile. This is not real GitHub authentication
 or an end-to-end Spring/JPA account-connection test.
+
+## Build a reviewed development candidate
+
+```sh
+node validation/pre-release/build-candidate.cjs \
+  --app '<original-repository>/.native-product-<baseline>/Code Intelligence Validation.app' \
+  --build-sequence '<positive-build-sequence-newer-than-baseline>'
+```
+
+This uses the original checkout's offline Gradle build and existing user Gradle
+cache/configuration, not a hermetic build home. The frontend build uses a private
+copy with no `.env` loading. Native/JRE/analyzer supply is reused only after the
+baseline inventory/signature check. The current Java classes, migrations, new
+static assets and packaged desktop sources are read back. A new app is created;
+the baseline is not changed. This is an ad-hoc directory build, never a release,
+Developer ID/notarized app, automatic update or existing-profile migration.
+
+`run-product-candidate.cjs --app '<candidate>'` reuses the complete native product
+runner on fresh synthetic sources/profiles. Use a clean child environment as in
+the recorded validation: `env -i HOME="$HOME" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
+LANG=C LC_ALL=C node ...`. The runner uses mock Keychain at process creation and
+owns each launched ChildProcess. Its representative-source counts/timings are
+single-input observations, not an accuracy score or20-run whole-process benchmark.
+
+`run-integrity-diagnostic.cjs --app '<candidate>'` observes bounded read-only
+runtime-inventory failures inside one fresh Electron process. It never changes
+validator outcomes, runtime bytes or manifest hashes.20 validations in one process
+are not20 application restarts or proof that an older intermittent failure is fixed.
+
+## Component inventory and advisory coverage
+
+```sh
+node validation/pre-release/inventory-candidate.cjs --offline \
+  --app '<absolute-candidate.app>' --output inventory-candidate.json
+(cd backend && ./gradlew --offline --no-daemon \
+  -I ../validation/pre-release/runtime-inventory.init.gradle \
+  candidateRuntimeInventory -PcandidateInventoryOutput=runtime-resolved.json)
+node validation/pre-release/scan-candidate-advisories.cjs --online-public-packages \
+  --inventory inventory-candidate.json --output advisory-candidate.json \
+  --resolved-maven runtime-resolved.json
+```
+
+All JSON basenames resolve to new files in `validation/local/pre-release-final`.
+The first two commands do not query advisory providers. Static ZIP/ASAR metadata
+is bounded and never extracted/executed. Unsupported nested metadata remains
+hash-only/NOASSERTION; no permissive parser fallback is used.
+
+The final command explicitly sends dependency names/versions to npm's public
+registry or Maven Central for anonymous publication checks, then sends confirmed
+coordinates to OSV. Root application packages and declared-private packages are
+excluded. A registry request necessarily discloses the proposed coordinate even
+if it is not found, so do not use this as a private-package discovery tool. No raw
+source, paths, keys, JAR bytes or inventory hashes are sent. When a resolved Maven
+list is supplied, both filename and SHA-256 must match; a mismatch never falls back
+to POM declarations. Unknown/ambiguous coordinates remain omissions.
+
+A supplied `--resolved-maven` document must have the expected object shape. JSON
+`null`, booleans, numbers, arrays and malformed component lists are rejected before
+opening an output report or querying a registry. Only omitting the option selects
+the explicitly labelled legacy POM-metadata mode; a valid empty resolved list does
+not authorize POM fallback either.
+
+The result reports the query time, coordinate/publication checks, omissions and
+coverage limits. `NO_MATCHES_IN_QUERIED_COORDINATES` is not a whole-product safety
+approval. Runtime/JRE/Electron/Chromium/native supply, bundled browser transitives,
+reachability, full dependency graph and redistribution obligations require separate
+review. Preserve older matched/failed scans; do not overwrite them with a later0.
+
+## Quality measurement boundaries
+
+`quality-gate` needs a running Docker daemon for its database corpus and fails
+before claiming a result when unavailable. Both Gradle invocations are offline.
+`quality-metrics.cjs` rejects absent, ambiguous or zero RSS rather than substituting
+zero, normalizes macOS bytes versus Linux KiB and preserves the command's failure.
+The small native `/usr/bin/time` test exercises measurement parsing only; neither
+that test nor a timed Gradle peak is whole-application process-tree RSS acceptance.

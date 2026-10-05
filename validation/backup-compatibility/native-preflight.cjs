@@ -53,7 +53,9 @@ async function main(argv) {
     phase('launch'); plan.assertIdentity();
     // The SDK's deadline-bound launch retains ownership of failed-launch cleanup.
     app = await _electron.launch({ executablePath: path.join(bundle, 'Contents/MacOS/Code Intelligence Validation'),
-      args: ['--isolated-run-claim=' + plan.claimFile], env: launchEnvironment(process.env), cwd: root, timeout: deadline.limit(90000) });
+      // Set the synthetic Keychain switch at process creation, not only later in
+      // Playwright's loader. This driver never accepts an existing/user claim.
+      args: ['--use-mock-keychain', '--isolated-run-claim=' + plan.claimFile], env: launchEnvironment(process.env), cwd: root, timeout: deadline.limit(90000) });
     stopObserving = observeStartup(app.process(), report, save);
     page = await perform(() => app.firstWindow({ timeout: deadline.limit(90000) }), 90000); page.setDefaultTimeout(30000);
     assert.equal(await perform(() => app.evaluate(({ app }) => app.getPath('userData'))), plan.paths.userData);

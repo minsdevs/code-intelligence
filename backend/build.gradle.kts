@@ -18,6 +18,26 @@ repositories {
     mavenCentral()
 }
 
+// Security patch alignment, reviewed against the packaged dependency inventory.
+// Keep each family on its existing minor line; do not mix patched core modules
+// with older transitive members. See docs/audit/pre-release-candidate-2026-10-05.md.
+dependencyManagement {
+    imports {
+        mavenBom("com.fasterxml.jackson:jackson-bom:2.21.7")
+        mavenBom("tools.jackson:jackson-bom:3.1.7")
+        mavenBom("io.netty:netty-bom:4.2.17.Final")
+        mavenBom("org.apache.logging.log4j:log4j-bom:2.25.5")
+    }
+    dependencies {
+        dependency("org.postgresql:postgresql:42.7.12")
+        dependencySet("org.apache.tomcat.embed:11.0.26") {
+            entry("tomcat-embed-core")
+            entry("tomcat-embed-el")
+            entry("tomcat-embed-websocket")
+        }
+    }
+}
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
