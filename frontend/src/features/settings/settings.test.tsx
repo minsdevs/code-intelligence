@@ -222,6 +222,23 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('link', { name: '계정 설정' })).toHaveTextContent('재인증 필요')
   })
 
+  for (const [reason, message] of [
+    ['REFRESH_IN_PROGRESS', 'GitHub 토큰을 갱신하고 있습니다. 잠시 기다린 뒤 연결 상태를 다시 확인하세요.'],
+    ['REFRESH_UNCERTAIN', 'GitHub 갱신 결과를 확인하지 못했습니다. 같은 갱신 요청을 자동으로 반복하지 않습니다. 다시 로그인하세요. 로컬 분석 기록은 유지됩니다.'],
+    ['TOKEN_REJECTED', 'GitHub가 현재 인증 정보를 거부했습니다. 다시 로그인하세요. 로컬 분석 기록은 유지됩니다.'],
+  ]) {
+    it(`explains ${reason} without incorrectly claiming refresh is unsupported`, async () => {
+      reauthenticationReason = reason
+      renderSettings()
+      expect(await screen.findByText(message)).toBeInTheDocument()
+      expect(document.body).not.toHaveTextContent('자동 갱신은 아직 지원하지 않으며')
+      expect(document.body).toHaveTextContent('검증된 갱신 토큰이 있는 기기 로그인만 자동 갱신합니다')
+      expect(requests.some(request => request.path.includes('/native/poll'))).toBe(false)
+      fireEvent.click(screen.getByRole('button', { name: 'English' }))
+      expect(await screen.findByText(/Only a device-login credential with a verified refresh token/)).toBeInTheDocument()
+    })
+  }
+
   it('offers login after a confirmed account switch and preserves local data', async () => {
     renderSettings()
     expect(await screen.findByText('GitHub ID 42')).toBeInTheDocument()

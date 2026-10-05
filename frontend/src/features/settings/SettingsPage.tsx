@@ -269,15 +269,22 @@ export default function SettingsPage() {
               <dt className="text-ink-muted">{t('settings.identity')}</dt>
               <dd className="font-mono text-ink">{githubQuery.data.identityType}</dd>
               <dt className="text-ink-muted">{t('settings.githubStatus')}</dt>
-              <dd className="text-ink">{githubQuery.data.connected ? t('settings.githubConnected') : githubQuery.data.reauthenticationReason ? 'GitHub 재인증 필요' : '로컬 모드 · GitHub 미연결'}</dd>
+              <dd className="text-ink">{githubQuery.data.connected ? t('settings.githubConnected')
+                : githubQuery.data.reauthenticationReason === 'REFRESH_IN_PROGRESS' ? t('settings.githubRefreshing')
+                  : githubQuery.data.reauthenticationReason ? 'GitHub 재인증 필요' : '로컬 모드 · GitHub 미연결'}</dd>
               {githubQuery.data.githubId != null && <>
                 <dt className="text-ink-muted">GitHub 계정</dt>
                 <dd className="break-all text-ink">{githubQuery.data.identityType === 'GITHUB' && accountQuery.data?.login ? `@${accountQuery.data.login}` : `GitHub ID ${githubQuery.data.githubId ?? '확인 중'}`}</dd>
               </>}
             </dl>
             {githubQuery.data.reauthenticationReason && <p role="status" className="mt-3 text-[12px] text-ink-muted">
-              {githubQuery.data.reauthenticationReason === 'TOKEN_EXPIRED' ? 'GitHub 연결이 만료되었습니다.' : 'GitHub 인증의 유효 기간을 확인할 수 없습니다.'} 다시 로그인하세요. 자동 갱신은 아직 지원하지 않으며 로컬 분석 기록은 유지됩니다.
+              {t(githubQuery.data.reauthenticationReason === 'REFRESH_IN_PROGRESS' ? 'settings.githubRefreshPending'
+                : githubQuery.data.reauthenticationReason === 'REFRESH_UNCERTAIN' ? 'settings.githubRefreshUncertain'
+                  : githubQuery.data.reauthenticationReason === 'TOKEN_REJECTED' ? 'settings.githubRejected'
+                    : githubQuery.data.reauthenticationReason === 'TOKEN_EXPIRED' ? 'settings.githubExpired'
+                      : 'settings.githubReconnect')}
             </p>}
+            <p className="mt-3 text-[11px] text-ink-faint">{t('settings.githubRefreshPolicy')}</p>
             {!githubQuery.data.connected && (
               <div className="mt-4">
                 {switchAccount && <p role="status" className="mb-3 text-[12px] text-ink-muted">이전 연결을 해제했습니다. 브라우저에서 원하는 GitHub 계정인지 확인한 뒤 다시 로그인하세요.</p>}

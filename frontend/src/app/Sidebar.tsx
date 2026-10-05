@@ -55,6 +55,7 @@ export default function Sidebar() {
   const accountQuery = useQuery({ queryKey: ['github-connection'], queryFn: getGithubConnection, retry: false })
   const accountLabel = accountQuery.isPending ? '계정 확인 중'
     : accountQuery.isError ? '계정 상태 확인 필요'
+      : accountQuery.data.reauthenticationReason === 'REFRESH_IN_PROGRESS' ? t('settings.githubRefreshing')
       : accountQuery.data.reauthenticationReason ? 'GitHub 재인증 필요'
       : accountQuery.data.connected ? `GitHub 연결됨 · ID ${accountQuery.data.githubId}` : '로컬 모드 · GitHub 로그인'
 

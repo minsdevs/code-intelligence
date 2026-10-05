@@ -36,6 +36,14 @@ beforeEach(() => {
 })
 
 describe('progress responses that arrive after newer state', () => {
+  it('requires reconnecting from account settings instead of replaying an authentication-failed job', async () => {
+    vi.mocked(getJob).mockResolvedValue({ ...failed, failureCode: 'GITHUB_REAUTHENTICATION_REQUIRED' })
+    render(<ProgressStep jobId={42} onDone={vi.fn()} onUnauthorized={vi.fn()} />)
+    const account = await screen.findByRole('link', { name: /GitHub/ })
+    expect(account).toHaveAttribute('href', '/settings#github-account')
+    expect(screen.queryByRole('button', { name: /^(Retry|재시도)$/ })).not.toBeInTheDocument()
+    expect(retryJob).not.toHaveBeenCalled()
+  })
   it('continues stream recovery when a cancellation is rejected during the recovery GET', async () => {
     const recovery = deferred<JobDetail>()
     vi.mocked(getJob)

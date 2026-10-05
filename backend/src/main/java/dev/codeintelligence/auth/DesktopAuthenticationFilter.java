@@ -37,7 +37,9 @@ public final class DesktopAuthenticationFilter extends OncePerRequestFilter {
                 response.sendError(HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
-            if (SecurityContextHolder.getContext().getAuthentication() == null) {
+            // The launch capability always represents this installation's local
+            // owner. A previously saved browser/PAT session must not replace it.
+            {
                 UserAccount account = accountService.getOrCreateLocal(properties.localIdentity());
                 AuthenticatedUser principal = new AuthenticatedUser(
                         account.getId(),

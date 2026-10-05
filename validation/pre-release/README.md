@@ -41,3 +41,14 @@ are private, ignored, and preserved for inspection. Tests do not cover Electron
 singleton/UI, actual Keychain, guardian SIGKILL, hostile daemonization, power loss,
 all crash boundaries or real-account application. Do not enable the quarantined
 guardian-kill test as a substitute for these owner-crash cases.
+
+## GitHub credential-store commit/CAS integration
+
+`node validation/pre-release/run-auth-store.cjs --app '<retained Validation.app>'`
+creates a new private `auth-store-*` fixture beneath `validation/local/pre-release-auth`.
+The supplied app only provides verified PostgreSQL binaries; its Electron UI is
+not launched. The runner uses synthetic TLS/credentials and a unique database,
+executes all V1–V27 migrations and the opt-in six-test JDBC transaction/CAS suite,
+then verifies PostgreSQL termination and unchanged source/bundle hashes. It never
+accepts a user DB URL or existing profile. This is not real GitHub authentication
+or an end-to-end Spring/JPA account-connection test.

@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.Instant;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -15,8 +16,19 @@ public class AccountService {
     private final GithubCredentialRepository githubCredentialRepository;
     private final TokenCryptoService tokenCryptoService;
     private final Clock clock;
+    private final GithubDeviceCredentialCodec deviceCodec;
+    private final GithubTokenLifecycle tokenLifecycle;
 
     @Autowired
+    public AccountService(
+            UserAccountRepository users,
+            GithubCredentialRepository credentials,
+            TokenCryptoService crypto,
+            GithubDeviceCredentialCodec codec,
+            GithubTokenLifecycle lifecycle) {
+        this(users, credentials, crypto, Clock.systemUTC(), codec, lifecycle);
+    }
+
     public AccountService(
             UserAccountRepository userAccountRepository,
             GithubCredentialRepository githubCredentialRepository,
@@ -29,10 +41,22 @@ public class AccountService {
             GithubCredentialRepository githubCredentialRepository,
             TokenCryptoService tokenCryptoService,
             Clock clock) {
+        this(userAccountRepository, githubCredentialRepository, tokenCryptoService, clock, null, null);
+    }
+
+    AccountService(
+            UserAccountRepository userAccountRepository,
+            GithubCredentialRepository githubCredentialRepository,
+            TokenCryptoService tokenCryptoService,
+            Clock clock,
+            GithubDeviceCredentialCodec deviceCodec,
+            GithubTokenLifecycle tokenLifecycle) {
         this.clock = clock;
         this.userAccountRepository = userAccountRepository;
         this.githubCredentialRepository = githubCredentialRepository;
         this.tokenCryptoService = tokenCryptoService;
+        this.deviceCodec = deviceCodec;
+        this.tokenLifecycle = tokenLifecycle;
     }
 
     @Transactional
@@ -69,12 +93,12 @@ public class AccountService {
                 .orElseGet(() -> userAccountRepository.save(UserAccount.local(localKey)));
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public UserAccount linkGithub(long userId, GithubUserInfo profile, CredentialKind kind, String rawToken) {
         return linkGithub(userId, profile, kind, rawToken, null);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public UserAccount linkGithub(
             long userId, GithubUserInfo profile, CredentialKind kind, String rawToken, Instant expiresAt) {
         UserAccount user = userAccountRepository.findById(userId).orElseThrow();
@@ -85,10 +109,47 @@ public class AccountService {
         });
         user.linkGithub(profile.id(), profile.login(), profile.name(), profile.avatarUrl());
         storeCredential(user.getId(), profile, kind, rawToken, expiresAt);
+        if (kind == CredentialKind.OAUTH) githubCredentialRepository.deleteByUserIdAndKind(userId, CredentialKind.PAT);
         return user;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public UserAccount linkDeviceGithub(
+            long userId,
+            GithubUserInfo profile,
+            String clientId,
+            String accessToken,
+            Instant accessExpiresAt,
+            String refreshToken,
+            Instant refreshExpiresAt) {
+        if (deviceCodec == null) throw new GithubReauthenticationRequiredException("CREDENTIAL_INVALID");
+        UserAccount user = userAccountRepository.findById(userId).orElseThrow();
+        userAccountRepository.findByGithubId(profile.id()).ifPresent(existing -> {
+            if (!existing.getId().equals(user.getId())) throw new GithubAccountConflictException();
+        });
+        var envelope = GithubDeviceCredentialCodec.Envelope.active(
+                clientId, profile.id(), accessToken, accessExpiresAt, refreshToken, refreshExpiresAt);
+        EncryptedToken encrypted = deviceCodec.encrypt(userId, envelope);
+        user.linkGithub(profile.id(), profile.login(), profile.name(), profile.avatarUrl());
+        storeEncrypted(userId, profile, CredentialKind.OAUTH, encrypted, envelope.accessExpiresAt());
+        githubCredentialRepository.deleteByUserIdAndKind(userId, CredentialKind.PAT);
+        return user;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public UserAccount linkLocalPat(long userId, GithubUserInfo profile, String token) {
+        UserAccount user = userAccountRepository.findById(userId).orElseThrow();
+        if (user.getLocalKey() == null) throw new GithubReauthenticationRequiredException("CONNECTION_CHANGED");
+        userAccountRepository.findByGithubId(profile.id()).ifPresent(existing -> {
+            if (!existing.getId().equals(user.getId())) throw new GithubAccountConflictException();
+        });
+        user.linkGithub(profile.id(), profile.login(), profile.name(), profile.avatarUrl());
+        storeCredential(userId, profile, CredentialKind.PAT, token, null);
+        githubCredentialRepository.deleteByUserIdAndKind(userId, CredentialKind.OAUTH);
+        return user;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void disconnectGithub(long userId) {
         UserAccount user = userAccountRepository.findById(userId).orElseThrow();
         user.disconnectGithub();
@@ -106,7 +167,9 @@ public class AccountService {
                 ? null
                 : credential.isEmpty()
                         ? "CREDENTIAL_MISSING"
-                        : credential.get().reauthenticationReason(clock.instant());
+                        : tokenLifecycle == null
+                                ? credential.get().reauthenticationReason(clock.instant())
+                                : tokenLifecycle.reauthenticationReason(credential.get(), user.getGithubId());
         boolean connected = linked && credential.isPresent() && reason == null;
         return new AccountStatus(
                 user.getIdentityType(),
@@ -119,6 +182,11 @@ public class AccountService {
     private void storeCredential(
             long userId, GithubUserInfo profile, CredentialKind kind, String rawToken, Instant expiresAt) {
         EncryptedToken encrypted = tokenCryptoService.encrypt(rawToken);
+        storeEncrypted(userId, profile, kind, encrypted, expiresAt);
+    }
+
+    private void storeEncrypted(
+            long userId, GithubUserInfo profile, CredentialKind kind, EncryptedToken encrypted, Instant expiresAt) {
         githubCredentialRepository
                 .findByUserIdAndKind(userId, kind)
                 .ifPresentOrElse(

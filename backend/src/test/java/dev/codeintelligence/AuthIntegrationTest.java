@@ -149,7 +149,7 @@ class AuthIntegrationTest {
     }
 
     @Test
-    void rejectedPatReturns400ProblemDetailWithoutEchoingToken() {
+    void rejectedPatReturns401ProblemDetailWithoutEchoingToken() {
         ResponseCookie csrf = primeCsrfToken();
         EntityExchangeResult<byte[]> result = restTestClient
                 .post()
@@ -160,7 +160,7 @@ class AuthIntegrationTest {
                 .body(Map.of("token", "ghp_wrong-secret"))
                 .exchange()
                 .expectStatus()
-                .isBadRequest()
+                .isUnauthorized()
                 .expectHeader()
                 .contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)
                 .expectBody()

@@ -1,5 +1,6 @@
 package dev.codeintelligence.project;
 
+import dev.codeintelligence.github.GitCloneException;
 import dev.codeintelligence.github.GitCloneService;
 import dev.codeintelligence.github.GithubProperties;
 import dev.codeintelligence.github.GithubTokenProvider;
@@ -75,17 +76,33 @@ public class ImportStep implements JobStep {
         }
 
         RepoRef ref = RepoRef.of(project.getRepoOwner(), project.getRepoName());
-        String token = tokenProvider.findToken(project.getUserId()).orElse(null);
+        var token = tokenProvider.findCredential(project.getUserId()).orElse(null);
+        if (token != null) token.verify();
 
-        GitCloneService.CloneResult result = gitCloneService.cloneOrFetch(
-                ctx.clonePath(), ref.cloneUrl(githubProperties.cloneBaseUrl()), token, project.getDefaultBranch());
-
-        if (!Objects.equals(project.getDefaultBranch(), result.branch())) {
-            project.updateDefaultBranch(result.branch());
-            projectRepository.save(project);
+        GitCloneService.CloneResult result;
+        try {
+            result = gitCloneService.cloneOrFetch(
+                    ctx.clonePath(),
+                    ref.cloneUrl(githubProperties.cloneBaseUrl()),
+                    token == null ? null : token.value(),
+                    project.getDefaultBranch());
+        } catch (GitCloneException cloneFailure) {
+            // JGit wraps status details. A bounded /user check may establish an
+            // actual 401; arbitrary clone/403/network errors alone must not revoke tokens.
+            if (token != null) token.checkAfterTransportFailure();
+            throw cloneFailure;
         }
-        Snapshot snapshot = snapshotRepository.save(new Snapshot(project.getId(), result.headSha()));
-        ctx.attachSnapshot(snapshot.getId());
+
+        Runnable publication = () -> {
+            if (!Objects.equals(project.getDefaultBranch(), result.branch())) {
+                project.updateDefaultBranch(result.branch());
+                projectRepository.save(project);
+            }
+            Snapshot snapshot = snapshotRepository.save(new Snapshot(project.getId(), result.headSha()));
+            ctx.attachSnapshot(snapshot.getId());
+        };
+        if (token == null) publication.run();
+        else token.publish(publication);
     }
 
     private void runLocalImport(Project project, JobContext ctx) {

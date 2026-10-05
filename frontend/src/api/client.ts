@@ -25,8 +25,8 @@ export class ApiError extends Error {
 }
 
 export class UnauthorizedError extends ApiError {
-  constructor(message = 'Unauthorized') {
-    super(401, message)
+  constructor(message = 'Unauthorized', code?: string) {
+    super(401, message, code)
     this.name = 'UnauthorizedError'
   }
 }
@@ -51,28 +51,37 @@ export function readCookie(name: string): string | undefined {
 }
 
 export async function primeCsrf(): Promise<void> {
-  await fetch(resolveApiUrl('/api/csrf'), {
+  const response = await fetch(resolveApiUrl('/api/csrf'), {
     method: 'GET',
     credentials: 'include',
     headers: desktopApiHeaders(),
   })
+  if (!response.ok) throw await responseError(response)
 }
 
 async function readApiProblem(response: Response): Promise<{ message: string; code?: string }> {
   try {
     const body: unknown = await response.json()
-    if (body && typeof body === 'object') {
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
       const problem = body as { detail?: unknown; title?: unknown; code?: unknown }
       const code = typeof problem.code === 'string' ? problem.code : undefined
       if (typeof problem.detail === 'string' && problem.detail)
         return { message: problem.detail, code }
       if (typeof problem.title === 'string' && problem.title)
         return { message: problem.title, code }
+      return { message: `Request failed (${response.status})`, code }
     }
   } catch {
     /* non-JSON error */
   }
   return { message: `Request failed (${response.status})` }
+}
+
+async function responseError(response: Response): Promise<ApiError> {
+  const problem = await readApiProblem(response)
+  return response.status === 401
+    ? new UnauthorizedError(problem.message, problem.code)
+    : new ApiError(response.status, problem.message, problem.code)
 }
 
 export async function readApiError(response: Response): Promise<string> {
@@ -98,12 +107,8 @@ async function request<T>(path: string, init: { method: string; body?: unknown }
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   })
 
-  if (response.status === 401) {
-    throw new UnauthorizedError()
-  }
   if (!response.ok) {
-    const problem = await readApiProblem(response)
-    throw new ApiError(response.status, problem.message, problem.code)
+    throw await responseError(response)
   }
   if (response.status === 204 || response.status === 202) {
     const text = await response.text()
@@ -133,12 +138,13 @@ export async function apiSend<T = void>(
   try {
     return await request<T>(path, { method: options.method, body: options.body })
   } catch (error) {
-    // A browser can retain an old XSRF-TOKEN after the backend restarts. Refresh it once
-    // before surfacing a 403; do not disable CSRF or retry other failures indefinitely.
+    // Only the server's explicit CSRF rejection authorizes one refresh and resend.
+    // Permission errors and upstream messages cannot establish that a mutation was rejected by CSRF.
     if (
       options.retryOnCsrfFailure === false ||
       !(error instanceof ApiError) ||
-      error.status !== 403
+      error.status !== 403 ||
+      error.code !== 'CSRF_INVALID'
     ) {
       throw error
     }

@@ -160,6 +160,7 @@ function JobProgress({
       || retryNeedsPreview || job?.failureCode === 'LOCAL_PREVIEW_REQUIRED'
       || retryNeedsSourceFix || job?.failureCode === 'TS_SYNTAX_ERROR'
       || retryNeedsNewAnalysis || job?.failureCode === 'RETRY_SOURCE_UNVERIFIED'
+      || job?.failureCode === 'GITHUB_REAUTHENTICATION_REQUIRED'
     ) return
     mutationInFlight.current = true
     const operationLifetime = lifetime.current
@@ -230,6 +231,7 @@ function JobProgress({
   const needsPreview = retryNeedsPreview || job?.failureCode === 'LOCAL_PREVIEW_REQUIRED'
   const needsSourceFix = retryNeedsSourceFix || job?.failureCode === 'TS_SYNTAX_ERROR'
   const needsNewAnalysis = retryNeedsNewAnalysis || job?.failureCode === 'RETRY_SOURCE_UNVERIFIED'
+  const needsGithubLogin = job?.failureCode === 'GITHUB_REAUTHENTICATION_REQUIRED'
 
   return (
     <div className="flex max-w-xl flex-col gap-4">
@@ -308,7 +310,11 @@ function JobProgress({
           {job?.status === 'FAILED' && needsNewAnalysis && (
             <p className="mt-2 text-[13px] text-ink-muted">{t('analysis.checkpointChanged')}</p>
           )}
-          {job?.status === 'FAILED' && !needsPreview && !needsSourceFix && !needsNewAnalysis && (
+          {job?.status === 'FAILED' && needsGithubLogin && <>
+            <p className="mt-2 text-[13px] text-ink-muted">{t('progress.githubReconnect')}</p>
+            <Link className="mt-2 inline-block text-[13px] underline" to="/settings#github-account">{t('settings.github')}</Link>
+          </>}
+          {job?.status === 'FAILED' && !needsPreview && !needsSourceFix && !needsNewAnalysis && !needsGithubLogin && (
             <button
               type="button"
               onClick={() => void handleRetry()}

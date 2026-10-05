@@ -13,6 +13,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.ObjectProvider;
@@ -26,6 +27,8 @@ import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -33,6 +36,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.access.AccessDeniedHandlerImpl;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
@@ -41,6 +46,7 @@ import org.springframework.security.web.authentication.www.BasicAuthenticationFi
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
@@ -103,11 +109,12 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(logout -> logout.logoutUrl("/api/auth/logout")
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
-                .exceptionHandling(handling ->
-                        handling.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                .exceptionHandling(
+                        handling -> handling.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+                                .accessDeniedHandler(new CsrfProblemAccessDeniedHandler()))
                 .authorizeHttpRequests(
-                        // ERROR dispatch must be reachable, otherwise sendError(403/…) from e.g.
-                        // the CSRF denial handler is re-authorized and turned into a 401.
+                        // ERROR dispatch must be reachable, otherwise sendError(403/…) from
+                        // the default denial handler is re-authorized and turned into a 401.
                         auth -> auth.dispatcherTypeMatchers(DispatcherType.ERROR)
                                 .permitAll()
                                 .requestMatchers(EndpointRequest.to(HealthEndpoint.class, InfoEndpoint.class))
@@ -154,6 +161,27 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    /** Only a CSRF filter rejection permits the SPA to refresh and resend a mutation. */
+    static final class CsrfProblemAccessDeniedHandler implements AccessDeniedHandler {
+        private static final String CSRF_PROBLEM = "{\"type\":\"about:blank\",\"title\":\"Forbidden\",\"status\":403,"
+                + "\"detail\":\"CSRF token is missing or invalid.\",\"code\":\"CSRF_INVALID\"}";
+        private final AccessDeniedHandler delegate = new AccessDeniedHandlerImpl();
+
+        @Override
+        public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException exception)
+                throws IOException, ServletException {
+            if (!(exception instanceof CsrfException)) {
+                delegate.handle(request, response, exception);
+                return;
+            }
+            if (response.isCommitted()) return;
+            response.setStatus(HttpStatus.FORBIDDEN.value());
+            response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            response.getWriter().write(CSRF_PROBLEM);
+        }
     }
 
     /**
