@@ -7,6 +7,7 @@ import { FolderIcon, GithubIcon } from '../../components/icons'
 import { useT } from '../../lib/i18n'
 import { formatWhen } from '../history/format'
 import { areaLabel } from '../areas/labels'
+import { isProjectAnalyzing, projectAnalysisStatus } from './analysisStatus'
 
 export default function ProjectsPage() {
   const t = useT()
@@ -22,6 +23,7 @@ export default function ProjectsPage() {
   const query = useQuery({
     queryKey: ['projects'],
     queryFn: listProjects,
+    refetchInterval: (query) => query.state.data?.some(isProjectAnalyzing) ? 2000 : false,
   })
 
   const projects = query.data ?? []
@@ -62,7 +64,7 @@ export default function ProjectsPage() {
       {!query.isLoading && projects.length > 0 && (
         <ul aria-label={t('projects.listLabel')} className="grid gap-3 lg:grid-cols-2">
           {projects.map((project) => {
-            const status = project.currentSnapshot?.status ?? 'ANALYZING'
+            const status = projectAnalysisStatus(project)
             const ready = status === 'READY'
             return (
               <li key={project.id} className="flex flex-col gap-1">
@@ -80,7 +82,7 @@ export default function ProjectsPage() {
                         ready ? 'border-line-strong text-ok' : 'text-warn'
                       }`}
                     >
-                      {ready ? t('projects.statusReady') : t('projects.statusPending')}
+                      {t(`analysis.status.${status}`)}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 font-mono text-[12px] text-ink-muted">

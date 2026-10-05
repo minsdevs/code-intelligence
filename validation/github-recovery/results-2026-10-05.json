@@ -1,0 +1,56 @@
+{
+  "format": 1,
+  "repository": "minsdevs/code-intelligence",
+  "baseCommit": "a3522903f69444f45bea57405e3a80919cb55064",
+  "branch": "codex/github-project-recovery-20261005",
+  "sourceState": "uncommitted-working-tree",
+  "releaseReady": false,
+  "frontend": {
+    "report": "../local/github-recovery-20261005/frontend-closeout.json",
+    "testFiles": 38,
+    "passed": 370,
+    "failed": 0,
+    "typecheck": "PASS"
+  },
+  "selectedBackendTests": {
+    "report": "../local/github-recovery-20261005/backend-first-summary.json",
+    "passed": 18,
+    "failed": 2,
+    "failureReason": "Testcontainers could not start because Docker was unavailable",
+    "compileTestJava": "PASS",
+    "bootJar": "PASS",
+    "spotlessJavaCheck": "PASS",
+    "newRetentionJUnit": "COMPILED_NOT_EXECUTED"
+  },
+  "realDatabaseAndBrowser": {
+    "firstRun": "../local/github-recovery-20261005/real-2026-10-05T08-12-36-962Z-tELcs9/report.json",
+    "firstStatus": "FAIL",
+    "firstFailure": "Verification script exact Branch label selector did not resolve; import was not sent",
+    "subsequentRun": "../local/github-recovery-20261005/real-2026-10-05T08-14-38-665Z-yyvzKU/report.json",
+    "subsequentStatus": "PASS",
+    "passedChecks": 30,
+    "skippedChecks": 1,
+    "jarSha256": "25f68152e4984039d8861dd1586465438bd4665814867bdaa6ae4fc4868a6dd5",
+    "frontendIndexSha256": "ad6b5d636cce0909e2596493d9aa79a3c33c230e52dfb2cb1427828472f8f2e5",
+    "applicationApiMocked": false,
+    "github": "synthetic-loopback-api-and-local-bare-repository",
+    "project": "fixture/recovery",
+    "failedJobId": 1,
+    "completedRecoveryJobIds": [2, 3],
+    "firstFailureEvidencePreserved": true,
+    "deleteRequests": 0,
+    "ownedResourceCleanup": "PASS"
+  },
+  "boundaries": {
+    "schemaChanged": false,
+    "actualUserGithubProjectVerified": false,
+    "nativeApplicationLaunched": false,
+    "minimumOsValidated": false,
+    "newNativeStage": "BLOCKED_POSTGRES_MINOS_26_EXCEEDS_DECLARED_13",
+    "officialSigningNotarizationDistribution": "NOT_PERFORMED",
+    "githubActions": "NOT_RUN",
+    "paidAi": "NOT_USED",
+    "tokenRefreshImplemented": false,
+    "remotePublication": "NOT_PERFORMED_QUOTA_CONDITION_NOT_OBSERVED"
+  }
+}

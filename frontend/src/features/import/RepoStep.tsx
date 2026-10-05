@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ApiError, UnauthorizedError } from '../../api/client'
 import {
   listBranches,
@@ -7,7 +8,7 @@ import {
   listInstallationRepos,
   type GithubInstallationList,
 } from '../../api/github'
-import { createProject } from '../../api/projects'
+import { createProject, listProjects } from '../../api/projects'
 import type { CredentialKind, GithubBranch, GithubRepo, GithubRepoList } from '../../api/types'
 import { useT } from '../../lib/i18n'
 
@@ -151,6 +152,11 @@ function RepoListStep({
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [existingProject, setExistingProject] = useState<{ id: number; fullName: string } | null>(null)
+  const importingRef = useRef(false)
+  const selectionVersion = useRef(0)
+
+  useEffect(() => () => { selectionVersion.current += 1 }, [])
 
   const requestKey = `${page}:${debouncedQuery}:${reloadEpoch}`
   const loading = loadedKey !== requestKey
@@ -194,6 +200,9 @@ function RepoListStep({
   }, [page, debouncedQuery, requestKey, onUnauthorized, t, installationId])
 
   const handleSelectRepo = (repo: GithubRepo) => {
+    if (importingRef.current) return
+    selectionVersion.current += 1
+    setExistingProject(null)
     setSelected(repo)
     setBranches([])
     setBranch(repo.defaultBranch)
@@ -230,19 +239,40 @@ function RepoListStep({
   }, [selected, onUnauthorized])
 
   const handleImport = async () => {
-    if (!selected || !branch) return
+    if (!selected || !branch || importingRef.current || existingProject) return
+    importingRef.current = true
+    const version = selectionVersion.current
     setImporting(true)
     setError(null)
     try {
       const created = await createProject(selected.owner, selected.name, branch)
+      if (selectionVersion.current !== version) return
       onImported(created.project.id, created.jobId)
     } catch (err) {
+      if (selectionVersion.current !== version) return
       if (err instanceof UnauthorizedError) {
         onUnauthorized()
         return
       }
       setError(err instanceof ApiError ? err.message : t('repo.importError'))
+      if (err instanceof ApiError && err.status === 409) {
+        try {
+          const projects = await listProjects()
+          if (selectionVersion.current !== version) return
+          const existing = projects.find((project) => project.sourceType === 'GITHUB'
+            && project.repoOwner.toLowerCase() === selected.owner.toLowerCase()
+            && project.repoName.toLowerCase() === selected.name.toLowerCase())
+          if (existing) {
+            setExistingProject({ id: existing.id, fullName: selected.fullName })
+            setError(t('analysis.duplicate'))
+          }
+        } catch (lookupError) {
+          if (selectionVersion.current === version && lookupError instanceof UnauthorizedError) onUnauthorized()
+          // Retain the conflict; a failed lookup must never trigger another import or project deletion.
+        }
+      }
     } finally {
+      importingRef.current = false
       setImporting(false)
     }
   }
@@ -261,6 +291,7 @@ function RepoListStep({
         <span className="text-[12px] text-ink-muted">{t('repo.search')}</span>
         <input
           type="search"
+          disabled={importing}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value)
@@ -271,7 +302,7 @@ function RepoListStep({
         />
       </label>
 
-      {error && (
+      {error && !(existingProject && existingProject.fullName === selected?.fullName) && (
         <div
           role="alert"
           className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-[12px] text-danger"
@@ -279,11 +310,21 @@ function RepoListStep({
           <span>{error}</span>
           <button
             type="button"
+            disabled={importing}
             onClick={() => setReloadEpoch((value) => value + 1)}
             className="underline"
           >
             Retry
           </button>
+        </div>
+      )}
+
+      {existingProject && existingProject.fullName === selected?.fullName && (
+        <div role="status" className="rounded-md border border-line px-3 py-2 text-[12px] text-ink-muted">
+          <p>{t('analysis.duplicate')}</p>
+          <Link to={`/projects/${existingProject.id}`} className="mt-1 block underline">
+            {t('analysis.openExisting')}
+          </Link>
         </div>
       )}
 
@@ -302,6 +343,7 @@ function RepoListStep({
                     type="button"
                     role="option"
                     aria-selected={isSelected}
+                    disabled={importing}
                     onClick={() => handleSelectRepo(repo)}
                     className={`flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left transition-colors ${
                       isSelected ? 'bg-surface-3' : 'hover:bg-surface-2'
@@ -333,7 +375,7 @@ function RepoListStep({
           <span className="text-[12px] text-ink-muted">Branch</span>
           <select
             value={branch}
-            disabled={branchLoading || branches.length === 0}
+            disabled={importing || branchLoading || branches.length === 0}
             onChange={(event) => setBranch(event.target.value)}
             className="rounded-md border border-line bg-surface-2 px-3 py-1.5 font-mono text-[13px] text-ink disabled:opacity-60"
           >
@@ -355,7 +397,7 @@ function RepoListStep({
         <div className="flex gap-2">
           <button
             type="button"
-            disabled={page <= 1 || loading}
+            disabled={page <= 1 || loading || importing}
             onClick={() => setPage((current) => Math.max(1, current - 1))}
             className="rounded-md border border-line px-2.5 py-1 text-[12px] text-ink-muted disabled:opacity-40"
           >
@@ -363,7 +405,7 @@ function RepoListStep({
           </button>
           <button
             type="button"
-            disabled={!list?.hasNext || loading}
+            disabled={!list?.hasNext || loading || importing}
             onClick={() => setPage((current) => current + 1)}
             className="rounded-md border border-line px-2.5 py-1 text-[12px] text-ink-muted disabled:opacity-40"
           >
@@ -377,7 +419,8 @@ function RepoListStep({
             !branch ||
             !branches.some((item) => item.name === branch) ||
             branchLoading ||
-            importing
+            importing ||
+            existingProject !== null
           }
           onClick={() => void handleImport()}
           className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-surface-0 disabled:opacity-60"

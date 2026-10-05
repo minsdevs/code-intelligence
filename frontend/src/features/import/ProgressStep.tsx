@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ApiError, UnauthorizedError } from '../../api/client'
 import { cancelJob, getJob, retryJob, subscribeJobEvents } from '../../api/jobs'
 import { useT } from '../../lib/i18n'
@@ -10,6 +11,7 @@ type ProgressStepProps = {
   onDone: () => void
   onUnauthorized: () => void
   onSourcePreviewRequired?: (projectId: number) => void
+  onJobChange?: (job: JobDetail) => void
 }
 
 function isTerminal(status: JobDetail['status']): boolean {
@@ -56,6 +58,7 @@ function JobProgress({
   onDone,
   onUnauthorized,
   onSourcePreviewRequired,
+  onJobChange,
 }: ProgressStepProps) {
   const t = useT()
   const [job, setJob] = useState<JobDetail | null>(null)
@@ -65,35 +68,45 @@ function JobProgress({
   const [streamEpoch, setStreamEpoch] = useState(0)
   const [retryNeedsPreview, setRetryNeedsPreview] = useState(false)
   const [retryNeedsSourceFix, setRetryNeedsSourceFix] = useState(false)
+  const [retryNeedsNewAnalysis, setRetryNeedsNewAnalysis] = useState(false)
   const onDoneRef = useRef(onDone)
+  const onJobChangeRef = useRef(onJobChange)
+  const lifetime = useRef(0)
+  // Requests alone must not invalidate an in-flight stream recovery; accepted observations do.
+  const observationRevision = useRef(0)
+  const mutationInFlight = useRef(false)
+
+  useEffect(() => () => { lifetime.current += 1 }, [])
 
   useEffect(() => {
     onDoneRef.current = onDone
-  }, [onDone])
+    onJobChangeRef.current = onJobChange
+  }, [onDone, onJobChange])
+
+  const apply = useCallback((next: JobDetail) => {
+    observationRevision.current += 1
+    setJob(next)
+    onJobChangeRef.current?.(next)
+    setError(next.status === 'FAILED' ? (next.error ?? t('progress.failed')) : null)
+    if (next.status === 'DONE') onDoneRef.current()
+  }, [t])
 
   useEffect(() => {
     let cancelled = false
     let unsubscribe: (() => void) | undefined
 
-    const apply = (next: JobDetail) => {
-      setJob(next)
-      setError(next.status === 'FAILED' ? (next.error ?? t('progress.failed')) : null)
-      if (next.status === 'DONE') {
-        onDoneRef.current()
-      }
-    }
-
     const recover = () => {
+      const revision = observationRevision.current
       void getJob(jobId)
         .then((next) => {
-          if (cancelled) return
+          if (cancelled || revision !== observationRevision.current) return
           apply(next)
           if (!isTerminal(next.status)) {
             setStreamEpoch((epoch) => epoch + 1)
           }
         })
         .catch((err: unknown) => {
-          if (cancelled) return
+          if (cancelled || revision !== observationRevision.current) return
           if (err instanceof UnauthorizedError) {
             onUnauthorized()
             return
@@ -103,9 +116,10 @@ function JobProgress({
     }
 
     const start = async () => {
+      const revision = observationRevision.current
       try {
         const initial = await getJob(jobId)
-        if (cancelled) return
+        if (cancelled || revision !== observationRevision.current) return
         apply(initial)
         if (isTerminal(initial.status)) {
           return
@@ -124,7 +138,7 @@ function JobProgress({
           },
         )
       } catch (err) {
-        if (cancelled) return
+        if (cancelled || revision !== observationRevision.current) return
         if (err instanceof UnauthorizedError) {
           onUnauthorized()
           return
@@ -138,23 +152,33 @@ function JobProgress({
       cancelled = true
       unsubscribe?.()
     }
-  }, [jobId, streamEpoch, onUnauthorized, t])
+  }, [jobId, streamEpoch, onUnauthorized, t, apply])
 
   const handleRetry = async () => {
     if (
-      retryNeedsPreview || job?.failureCode === 'LOCAL_PREVIEW_REQUIRED'
+      mutationInFlight.current
+      || retryNeedsPreview || job?.failureCode === 'LOCAL_PREVIEW_REQUIRED'
       || retryNeedsSourceFix || job?.failureCode === 'TS_SYNTAX_ERROR'
+      || retryNeedsNewAnalysis || job?.failureCode === 'RETRY_SOURCE_UNVERIFIED'
     ) return
+    mutationInFlight.current = true
+    const operationLifetime = lifetime.current
+    let revision = observationRevision.current
     setRetrying(true)
     setError(null)
     try {
       await retryJob(jobId)
+      if (operationLifetime !== lifetime.current) return
+      revision = observationRevision.current
       const next = await getJob(jobId)
-      setJob(next)
+      // A newer stream observation or remounted attempt owns the state and callbacks.
+      if (operationLifetime !== lifetime.current || revision !== observationRevision.current) return
+      apply(next)
       if (!isTerminal(next.status)) {
         setStreamEpoch((epoch) => epoch + 1)
       }
     } catch (err) {
+      if (operationLifetime !== lifetime.current || revision !== observationRevision.current) return
       if (err instanceof UnauthorizedError) {
         onUnauthorized()
         return
@@ -163,31 +187,49 @@ function JobProgress({
         setRetryNeedsPreview(true)
       if (err instanceof ApiError && err.code === 'TS_SYNTAX_ERROR')
         setRetryNeedsSourceFix(true)
+      if (err instanceof ApiError && err.code === 'RETRY_SOURCE_UNVERIFIED')
+        setRetryNeedsNewAnalysis(true)
       setError(err instanceof ApiError ? err.message : t('progress.retryError'))
     } finally {
-      setRetrying(false)
+      if (operationLifetime === lifetime.current) {
+        mutationInFlight.current = false
+        setRetrying(false)
+      }
     }
   }
   const handleCancel = async () => {
+    if (mutationInFlight.current) return
+    mutationInFlight.current = true
+    const operationLifetime = lifetime.current
+    let revision = observationRevision.current
     setCancelling(true)
     setError(null)
     try {
       await cancelJob(jobId)
-      setJob(await getJob(jobId))
+      if (operationLifetime !== lifetime.current) return
+      revision = observationRevision.current
+      const next = await getJob(jobId)
+      if (operationLifetime !== lifetime.current || revision !== observationRevision.current) return
+      apply(next)
     } catch (err) {
+      if (operationLifetime !== lifetime.current || revision !== observationRevision.current) return
       if (err instanceof UnauthorizedError) {
         onUnauthorized()
         return
       }
       setError(err instanceof ApiError ? err.message : 'Could not cancel analysis.')
     } finally {
-      setCancelling(false)
+      if (operationLifetime === lifetime.current) {
+        mutationInFlight.current = false
+        setCancelling(false)
+      }
     }
   }
 
   const steps = displaySteps(job)
   const needsPreview = retryNeedsPreview || job?.failureCode === 'LOCAL_PREVIEW_REQUIRED'
   const needsSourceFix = retryNeedsSourceFix || job?.failureCode === 'TS_SYNTAX_ERROR'
+  const needsNewAnalysis = retryNeedsNewAnalysis || job?.failureCode === 'RETRY_SOURCE_UNVERIFIED'
 
   return (
     <div className="flex max-w-xl flex-col gap-4">
@@ -219,7 +261,7 @@ function JobProgress({
       {job && !isTerminal(job.status) && (
         <button
           type="button"
-          disabled={cancelling || job.status === 'CANCELLING'}
+          disabled={retrying || cancelling || job.status === 'CANCELLING'}
           onClick={() => void handleCancel()}
           className="w-fit rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink-muted disabled:opacity-60"
         >
@@ -245,35 +287,49 @@ function JobProgress({
                 기존 프로젝트에서 새 미리보기
               </button>
             ) : (
-              <a
+              <Link
                 className="mt-2 inline-block text-[13px] underline"
-                href={`/projects/${job.projectId}`}
+                to={`/projects/${job.projectId}`}
               >
                 기존 프로젝트에서 새 미리보기
-              </a>
+              </Link>
             ))}
           {job?.status === 'FAILED' && needsSourceFix && (
             <>
               <p className="mt-2 text-[13px] text-ink-muted">{t('progress.syntaxFix')}</p>
-              <a
+              <Link
                 className="mt-2 inline-block text-[13px] underline"
-                href={`/projects/${job.projectId}`}
+                to={`/projects/${job.projectId}`}
               >
                 {t('progress.backToProject')}
-              </a>
+              </Link>
             </>
           )}
-          {job?.status === 'FAILED' && !needsPreview && !needsSourceFix && (
+          {job?.status === 'FAILED' && needsNewAnalysis && (
+            <p className="mt-2 text-[13px] text-ink-muted">{t('analysis.checkpointChanged')}</p>
+          )}
+          {job?.status === 'FAILED' && !needsPreview && !needsSourceFix && !needsNewAnalysis && (
             <button
               type="button"
               onClick={() => void handleRetry()}
-              disabled={retrying}
+              disabled={retrying || cancelling}
               className="mt-2 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[13px] text-ink disabled:opacity-60"
             >
               {retrying ? t('progress.retrying') : t('progress.retry')}
             </button>
           )}
+          {job?.status === 'FAILED' && !needsPreview && !needsSourceFix && (
+            <Link to={`/projects/${job.projectId}`} className="mt-2 block text-[13px] underline">
+              {t('analysis.openExisting')}
+            </Link>
+          )}
         </div>
+      )}
+      {job?.status === 'CANCELLED' && (
+        <p role="status" className="text-[13px] text-ink-muted">
+          {t('analysis.status.CANCELLED')}{' '}
+          <Link to={`/projects/${job.projectId}`} className="underline">{t('analysis.openExisting')}</Link>
+        </p>
       )}
     </div>
   )

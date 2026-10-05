@@ -57,6 +57,7 @@ export function subscribeJobEvents(
         for (const block of blocks) emitEventBlock(block, onJob)
         if (done) {
           if (buffer.trim()) emitEventBlock(buffer, onJob)
+          if (!controller.signal.aborted) onDisconnect()
           return
         }
       }

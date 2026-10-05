@@ -302,6 +302,39 @@ class ProjectJobApiIntegrationTest {
     }
 
     @Test
+    void freshAnalysisKeepsFailedAttemptEvidenceBeyondSuccessfulRetention() throws Exception {
+        ResponseCookie session = loginWithPat();
+        String sha = GitRepoFixtures.createBareRepoWithCommit(originsRoot(), "octocat", "failed-recovery");
+        Path bare = originsRoot().resolve("octocat").resolve("failed-recovery.git");
+        gateStep.failOnce();
+        CreatedProject created = createProject(session, "octocat", "failed-recovery");
+        Awaitility.await().atMost(TIMEOUT).until(() -> "FAILED".equals(jobStatus(created.jobId())));
+        Map<String, Object> original = readJson(getAs(session, "/api/jobs/" + created.jobId(), HttpStatus.OK));
+        long failureEvidence = attachLocalImportEvidence(created.projectId(), sha);
+
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            GitRepoFixtures.addCommit(bare, "recovery-" + attempt + ".txt", "fresh analysis " + attempt);
+            awaitJobDone(reanalyze(session, created.projectId()));
+        }
+
+        assertThat(readJson(getAs(session, "/api/jobs/" + created.jobId(), HttpStatus.OK)))
+                .as("fresh analysis must not rewrite or cascade-delete the failed job and its steps")
+                .isEqualTo(original);
+        assertThat(jdbcTemplate.queryForObject(
+                        "select count(*) from snapshots where project_id = ? and status = 'READY'",
+                        Integer.class,
+                        created.projectId()))
+                .as("successful legacy result retention remains bounded")
+                .isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+                        "select count(*) from evidences where id = ?", Integer.class, failureEvidence))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                        "select count(*) from snapshots where project_id = ?", Integer.class, created.projectId()))
+                .isEqualTo(3);
+    }
+
+    @Test
     void retryViaApiResumesFromTheFailedStep() throws Exception {
         ResponseCookie session = loginWithPat();
         GitRepoFixtures.createBareRepoWithCommit(originsRoot(), "octocat", "rt1");

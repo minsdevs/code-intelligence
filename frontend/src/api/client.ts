@@ -31,6 +31,14 @@ export class UnauthorizedError extends ApiError {
   }
 }
 
+/** Mutation preparation failed before the request could reach the server. */
+export class MutationNotSentError extends Error {
+  constructor(cause: unknown) {
+    super('The request was not sent.', { cause })
+    this.name = 'MutationNotSentError'
+  }
+}
+
 export function readCookie(name: string): string | undefined {
   const prefix = `${name}=`
   for (const part of document.cookie.split(';')) {
@@ -117,7 +125,11 @@ export async function apiSend<T = void>(
     retryOnCsrfFailure?: boolean
   },
 ): Promise<T> {
-  await primeCsrf()
+  try {
+    await primeCsrf()
+  } catch (cause) {
+    throw new MutationNotSentError(cause)
+  }
   try {
     return await request<T>(path, { method: options.method, body: options.body })
   } catch (error) {

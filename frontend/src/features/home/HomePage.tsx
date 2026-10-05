@@ -7,12 +7,14 @@ import EmptyState from '../../components/EmptyState'
 import { useT } from '../../lib/i18n'
 import { firstLine, formatWhen, shortSha } from '../history/format'
 import LocalSourceStatus from '../projects/LocalSourceStatus'
+import { isProjectAnalyzing } from '../projects/analysisStatus'
 
 export default function HomePage() {
   const t = useT()
   const projectsQuery = useQuery({
     queryKey: ['projects'],
     queryFn: listProjects,
+    refetchInterval: (query) => query.state.data?.some(isProjectAnalyzing) ? 2000 : false,
   })
 
   const projects = projectsQuery.data ?? []
@@ -78,7 +80,7 @@ export default function HomePage() {
 
 function ProjectCard({ project }: { project: Project }) {
   const t = useT()
-  const analyzing = isAnalyzing(project)
+  const analyzing = isProjectAnalyzing(project)
   return (
     <Link
       to={`/projects/${project.id}/overview`}
@@ -156,9 +158,4 @@ function ProjectCard({ project }: { project: Project }) {
       </dl>
     </Link>
   )
-}
-
-function isAnalyzing(project: Project): boolean {
-  const job = project.latestJob?.status
-  return project.currentSnapshot?.status === 'ANALYZING' || job === 'QUEUED' || job === 'RUNNING' || job === 'CANCELLING'
 }

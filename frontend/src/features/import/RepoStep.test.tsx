@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { renderWithRouter as render } from '../../test/renderWithRouter'
 import RepoStep from './RepoStep'
 import { ApiError, UnauthorizedError } from '../../api/client'
 import { listInstallations, listInstallationRepos, listRepos, listBranches } from '../../api/github'
+import { createProject, listProjects } from '../../api/projects'
+import type { Project } from '../../api/types'
 
 vi.mock('../../api/github', () => ({
   listInstallations: vi.fn(),
@@ -10,7 +13,7 @@ vi.mock('../../api/github', () => ({
   listRepos: vi.fn(),
   listBranches: vi.fn(),
 }))
-vi.mock('../../api/projects', () => ({ createProject: vi.fn() }))
+vi.mock('../../api/projects', () => ({ createProject: vi.fn(), listProjects: vi.fn() }))
 const installs = {
   items: [
     {
@@ -55,6 +58,7 @@ beforeEach(() => {
     page: 1,
     hasNext: false,
   })
+  vi.mocked(listProjects).mockResolvedValue([])
 })
 afterEach(() => {
   cleanup()
@@ -132,5 +136,44 @@ describe('GitHub App installation repository selection', () => {
     await screen.findByRole('option', { name: /team\/private-repo/ })
     expect(listRepos).toHaveBeenCalled()
     expect(listInstallations).not.toHaveBeenCalled()
+  })
+
+  it('links a duplicate import to its existing project without deleting or importing again', async () => {
+    const existing: Project = {
+      id: 1, name: repo.name, repoOwner: 'TEAM', repoName: 'PRIVATE-REPO',
+      defaultBranch: 'main', sourceType: 'GITHUB', sourceAddress: repo.fullName,
+      currentSnapshot: null, latestJob: null, selectedAreas: [], topTechnologies: [],
+      latestCommit: null, latestPull: null, createdAt: '', updatedAt: '',
+    }
+    vi.mocked(createProject).mockRejectedValue(new ApiError(409, 'This repository is already imported.'))
+    vi.mocked(listProjects).mockResolvedValue([existing])
+    show('PAT')
+    fireEvent.click(await screen.findByRole('option', { name: /team\/private-repo/ }))
+    const start = screen.getByRole('button', { name: '저장소 가져오기' })
+    await waitFor(() => expect(start).toBeEnabled())
+    fireEvent.click(start)
+    expect(await screen.findByRole('link', { name: '기존 프로젝트에서 새 분석' })).toHaveAttribute('href', '/projects/1')
+    expect(createProject).toHaveBeenCalledTimes(1)
+    expect(listProjects).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '저장소 가져오기' })).toBeDisabled()
+    const previousLoads = vi.mocked(listRepos).mock.calls.length
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'private' } })
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(previousLoads + 1))
+    expect(screen.getByRole('link', { name: '기존 프로젝트에서 새 분석' })).toHaveAttribute('href', '/projects/1')
+    expect(screen.getByRole('button', { name: '저장소 가져오기' })).toBeDisabled()
+  })
+
+  it('retains the import conflict when lookup fails, without guessing a project id', async () => {
+    vi.mocked(createProject).mockRejectedValue(new ApiError(409, 'This repository is already imported.'))
+    vi.mocked(listProjects).mockRejectedValue(new TypeError('Network unavailable'))
+    show('PAT')
+    fireEvent.click(await screen.findByRole('option', { name: /team\/private-repo/ }))
+    const start = screen.getByRole('button', { name: '저장소 가져오기' })
+    await waitFor(() => expect(start).toBeEnabled())
+    fireEvent.click(start)
+    await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('alert')).toHaveTextContent('This repository is already imported.')
+    expect(screen.queryByRole('link', { name: '기존 프로젝트에서 새 분석' })).not.toBeInTheDocument()
+    expect(createProject).toHaveBeenCalledTimes(1)
   })
 })

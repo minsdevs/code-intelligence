@@ -5,6 +5,7 @@ import { getProject } from '../../api/projects'
 import { parseProjectId } from '../../lib/projectId'
 import { workspaceTabs } from './workspaceTabs'
 import LocalSourceStatus from './LocalSourceStatus'
+import GithubAnalysisStatus from './GithubAnalysisStatus'
 import { useT } from '../../lib/i18n'
 
 export default function ProjectWorkspacePage() {
@@ -79,6 +80,9 @@ export default function ProjectWorkspacePage() {
       </header>
       {projectQuery.data?.sourceType === 'LOCAL' && (
         <LocalSourceStatus key={projectQuery.data.id} projectId={projectQuery.data.id} details />
+      )}
+      {projectQuery.data?.sourceType === 'GITHUB' && (
+        <GithubAnalysisStatus key={projectQuery.data.id} project={projectQuery.data} />
       )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Outlet />

@@ -1,4 +1,5 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
+import { renderWithRouter as render } from '../../test/renderWithRouter'
 import { expect, it, vi } from 'vitest'
 import type { JobDetail } from '../../api/types'
 import { getJob, subscribeJobEvents } from '../../api/jobs'
