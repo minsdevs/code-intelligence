@@ -75,6 +75,10 @@ function main(argv = process.argv.slice(2)) {
   assert.ok(typeof process.getuid === 'function' && process.getuid() > 0, 'Host acceptance must not run as root');
   process.umask(0o077);
   const sourceRoot = fs.realpathSync(path.resolve(__dirname, '../..'));
+  // Fail before creating a run, downloading a JDK, fetching sources or starting compilers.
+  const { requireCapacity } = require('./macos-runtime-supply.cjs');
+  requireCapacity(sourceRoot);
+  requireCapacity(fs.realpathSync(os.tmpdir()));
   const root = fs.realpathSync(fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'codeintel-host-acceptance-')));
   fs.chmodSync(root, 0o700);
   const isolatedRunParent = fs.realpathSync(fs.mkdtempSync('/private/tmp/civa-'));
@@ -95,6 +99,8 @@ function main(argv = process.argv.slice(2)) {
   fs.writeFileSync(contextFile, JSON.stringify(descriptor) + '\n', { flag: 'wx', mode: 0o600 });
   const javaHome = resolveJavaHome(root, commandEnvironment);
   const env = { ...process.env };
+  // Provisioning supplies its own locked extension; do not overlay a previous developer build.
+  delete env.PGVECTOR_ROOT;
   for (const key of Object.keys(env)) if (/^(?:GITHUB_|RUNNER_|DYLD_|CODE_INTELLIGENCE_ISOLATED_)/.test(key)
       || ['NODE_OPTIONS', 'NODE_PATH', 'ELECTRON_RUN_AS_NODE', 'ELECTRON_EXTRA_LAUNCH_ARGS',
         'NATIVE_ACCEPTANCE_CONSENT'].includes(key)) delete env[key];

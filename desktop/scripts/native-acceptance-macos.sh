@@ -5,10 +5,12 @@ umask 077
 : "${JAVA_HOME:?}"
 helper="$(cd "$(dirname "$0")" && pwd)/native-acceptance.cjs"
 context_helper="$(dirname "$helper")/native-acceptance-context.cjs"
-temp_root="$(node - "$context_helper" <<'NODE'
+source_helper="$(dirname "$helper")/macos-runtime-supply.cjs"
+temp_root="$(node - "$context_helper" "$source_helper" <<'NODE'
 const helper = require(process.argv[2]);
 const context = helper.requireExecutionContext();
 if (context.kind === 'github-hosted' && !require('node:path').isAbsolute(process.env.GITHUB_ENV || '')) throw new Error('GITHUB_ENV_REQUIRED');
+require(process.argv[3]).requireCapacity(context.tempRoot);
 helper.claimExecution(context, 'provision'); helper.prepareArtifacts(context);
 console.log(context.tempRoot);
 NODE
@@ -36,28 +38,11 @@ NODE
 }
 trap on_exit EXIT
 quiet() { "$@" > "$work/build-output" 2>&1; }
-# Do not install bottles, invoke brew services, or change system prefixes. Homebrew
-# verifies each upstream archive; independently bind its bytes to formula metadata.
-export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1
-brew info --json=v2 openssl@3 postgresql@16 redis pgvector > "$work/formulae.json" 2> "$work/build-output"
-for spec in 'openssl@3:openssl' 'postgresql@16:postgres' 'redis:redis' 'pgvector:pgvector'; do
-  formula="${spec%%:*}"; name="${spec##*:}"
+# Locked upstream archives are verified before extraction. No Homebrew cache,
+# formula update, bottle installation or system prefix is used for source supply.
+for name in openssl postgres redis pgvector; do
   step="fetch-$name"
-  quiet brew fetch --build-from-source "$formula"
-  archive="$(brew --cache --build-from-source "$formula")"
-  node - "$work/formulae.json" "$formula" "$archive" "$work/$name-source.json" 2> "$work/build-output" <<'NODE'
-const assert = require('node:assert/strict'), fs = require('node:fs'), crypto = require('node:crypto');
-const [metadata, name, archive, destination] = process.argv.slice(2);
-const formula = JSON.parse(fs.readFileSync(metadata, 'utf8')).formulae.find(item => item.name === name);
-assert.ok(formula); assert.match(formula.versions.stable, /^[0-9]+(?:\.[0-9]+){1,3}$/);
-const sha256 = formula.urls.stable.checksum;
-assert.match(sha256, /^[a-f0-9]{64}$/);
-assert.equal(crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex'), sha256);
-if (name === 'postgresql@16') assert.match(formula.versions.stable, /^16\./);
-const url = new URL(formula.urls.stable.url);
-assert.ok(url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash);
-fs.writeFileSync(destination, JSON.stringify({formula: name, version: formula.versions.stable, sourceUrl: url.href, sourceSha256: sha256}));
-NODE
+  archive="$(node "$source_helper" --fetch "$name" "$work" 2> "$work/build-output")"
   mkdir "$work/$name-source"
   quiet tar -xf "$archive" --strip-components=1 -C "$work/$name-source"
 done
@@ -101,6 +86,21 @@ quiet /usr/bin/make -C "$work/redis-source/src" -j2 redis-server BUILD_TLS=yes M
 mkdir -p "$prefix/redis/bin"
 cp "$work/redis-source/src/redis-server" "$prefix/redis/bin/redis-server"
 redis="$prefix/redis/bin/redis-server"
+step=source-notices
+notices="$("$pg_config" --sharedir)/code-intelligence-notices"
+mkdir "$notices"
+node - "$source_helper" "$work" "$notices" <<'NODE'
+const fs = require('node:fs'), path = require('node:path');
+const [helper, work, notices] = process.argv.slice(2);
+const supply = require(path.join(path.dirname(helper), 'macos-runtime-supply.json'));
+require(helper).validateSupply(supply);
+for (const item of supply.sources) {
+  fs.copyFileSync(path.join(work, item.id + '-source', item.licenseFile),
+    path.join(notices, item.id + '-' + item.version + '-' + item.licenseFile), fs.constants.COPYFILE_EXCL);
+}
+fs.copyFileSync(path.join(path.dirname(helper), 'macos-runtime-supply.json'),
+  path.join(notices, 'source-lock.json'), fs.constants.COPYFILE_EXCL);
+NODE
 step=native-dependency-closure
 node - "$helper" "$prefix" "$context_helper" > "$work/closure.json" 2> "$work/build-output" <<'NODE'
 const helper = require(process.argv[2]); require(process.argv[4]).requireExecutionContext();

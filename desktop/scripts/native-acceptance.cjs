@@ -345,6 +345,7 @@ async function main(target) {
     const env = { ...process.env, CODE_INTELLIGENCE_BUILD_SEQUENCE: context.buildSequence,
       GRADLE_USER_HOME: path.join(owned, 'gradle'), npm_config_cache: path.join(owned, 'npm-cache'),
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' };
+    if (target === 'macos') delete env.PGVECTOR_ROOT;
     // No dependency reuse, global npm installs, database URLs or provider credentials.
     for (const key of Object.keys(env)) if (/^(?:GITHUB_TOKEN|GH_TOKEN|OPENAI_|ANTHROPIC_|DATABASE_URL|SPRING_DATASOURCE_|TOKEN_ENC_KEY|PGPASSWORD|REDIS_PASSWORD|AWS_|AZURE_|GOOGLE_APPLICATION_CREDENTIALS)/.test(key)) delete env[key];
     report.phase = 'fresh-dependencies'; save();
