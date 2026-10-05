@@ -24,6 +24,8 @@ Thumbs.db
 
 # Local desktop bundles and browser verification artifacts
 /.native-product-*/
+/.cif-cost-*/
+/.cif-resume-*/
 desktop/node_modules/
 desktop/stage/
 desktop/dist/

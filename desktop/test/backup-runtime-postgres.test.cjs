@@ -1,8 +1,8 @@
 'use strict';
 
-// OPT IN ONLY. This fixture creates its own private /tmp cluster and never accepts a database
+// OPT IN ONLY. This fixture creates its own private repository-local cluster and never accepts a database
 // connection, installation path, existing key store, provider credential, or executable source.
-// Real: V1–V25, psql, PG swaps, keyring/journal/gateway, archive/payload, source JAR, Redis,
+// Real: reviewed V1–V27, psql, PG swaps, keyring/journal/gateway, archive/payload, source JAR, Redis,
 // Spring maintenance startup/HTTP barrier and source directory swaps. Only OS key wrapping and
 // the deliberately forbidden provider transport are synthetic. Electron/UI and power loss are
 // outside this fixture. The root agent alone runs the opt-in case.
@@ -26,6 +26,9 @@ const { initializeSafetyJournal, openSafetyJournal } = require('../src/safety-jo
 const { openDesktopAiGateway } = require('../src/ai-desktop-gateway.cjs');
 const { createNativeOwnerLocks } = require('../src/native-owner-locks.cjs');
 const { spawnManagedProcess } = require('../src/managed-process.cjs');
+const { createSourceVault, openSourceVault } = require('../src/source-vault.cjs');
+const { createSourceBroker } = require('../src/source-broker.cjs');
+const { trackManagedProcess, closeInOrder } = require('./fixtures/owned-runtime-lifecycle.cjs');
 
 const ENABLED = process.env.CI_BACKUP_RUNTIME_REAL === '1';
 const INSTALLATION = '11111111-2222-4333-8444-555555555555', BUILD = '20261003';
@@ -98,10 +101,10 @@ async function fixture(t, options = {}) {
   const psql = await binary(path.join(pgBin, 'psql')), initdb = await binary(path.join(pgBin, 'initdb'));
   const postgresBinary = await binary(path.join(pgBin, 'postgres'));
   const pgLib = process.env.CI_BACKUP_RUNTIME_PG_LIB ? await binary(process.env.CI_BACKUP_RUNTIME_PG_LIB, true) : null;
-  const temp = await fs.realpath('/tmp'), root = options.root
-    ? await fs.realpath(options.root) : await fs.mkdtemp(path.join(temp, 'ci-bkr-'));
-  assert(path.dirname(root) === temp && (options.root
-    ? /^ci-backup-resume-real-[A-Za-z0-9_-]+$/.test(path.basename(root)) : path.basename(root).startsWith('ci-bkr-')));
+  const fixtureParent = await fs.realpath(path.resolve(__dirname, '../..')), root = options.root
+    ? await fs.realpath(options.root) : await fs.mkdtemp(path.join(fixtureParent, '.cif-cost-'));
+  assert(path.dirname(root) === fixtureParent && (options.root
+    ? /^\.cif-resume-[A-Za-z0-9_-]+$/.test(path.basename(root)) : /^\.cif-cost-[A-Za-z0-9]+$/.test(path.basename(root))));
   if (options.root) {
     const rootStat = await fs.lstat(root, { bigint: true });
     const claimFile = path.join(root, 'fixture-claim.json'), claimStat = await fs.lstat(claimFile, { bigint: true });
@@ -113,11 +116,14 @@ async function fixture(t, options = {}) {
       && claim.device === String(rootStat.dev) && claim.inode === String(rootStat.ino), 'Only this parent-created fixture root may reopen');
   } else await fs.chmod(root, 0o700);
   let success = false, runtime, gateway, adapter, keyring, journal, backend, redis, postgres, ownerLocks;
+  let sourceVault, sourceBroker, sourceEndpoint, shutdownPromise, transport;
   let recoveryMode = resume;
   let apiToken = crypto.randomBytes(32).toString('hex'), pathToken = crypto.randomBytes(32).toString('hex');
   const children = new Set(), leaseChildren = new Set(), trace = [], plans = [], failures = [];
   const controls = { failAfterHealth: false, providerCalls: 0, workerExports: 0, workerImports: 0,
     publicResumes: 0, invalidations: 0, verifiedHealth: 0, closed: false };
+  // Register from the first owned resource, not after transport/setup succeeds.
+  t.after(shutdown);
   const stateFile = path.join(root, 'fixture-state.json');
   let saved;
   if (resume) {
@@ -140,21 +146,29 @@ async function fixture(t, options = {}) {
     assert.equal(await fs.realpath(file), file); return file;
   };
   const userData = await fixtureDirectory(path.join(root, 'u')), pgData = path.join(root, 'pg');
-  const transport = await require('../src/service-transport.cjs').createServiceTransport({ userData, ports, getApiToken: () => apiToken });
-  const pgEnv = { PGPASSWORD: password, ...transport.postgresEnvironment, ...(pgLib ? { LD_LIBRARY_PATH: pgLib, DYLD_LIBRARY_PATH: pgLib } : {}) };
-  const serverEnv = { ...systemEnv, ...pgEnv };
+  transport = await require('../src/service-transport.cjs').createServiceTransport({ userData, ports, getApiToken: () => apiToken });
+  // libpq/JDBC must not fall back to the user's ~/.postgresql client key or
+  // connection service/password files, even when no client certificate is needed.
+  const clientCert = path.join(root, 'absent-client.crt'), clientKey = path.join(root, 'absent-client.key');
+  const clientEnv = { PGSSLCERT: clientCert, PGSSLKEY: clientKey, PGPASSFILE: path.join(root, 'absent-pgpass'),
+    PGSERVICEFILE: path.join(root, 'absent-pgservice'), PGSYSCONFDIR: root,
+    HOME: root, TMPDIR: root };
+  const pgEnv = { PGPASSWORD: password, ...transport.postgresEnvironment,
+    ...(pgLib ? { LD_LIBRARY_PATH: pgLib, DYLD_LIBRARY_PATH: pgLib } : {}) };
+  const serverEnv = { ...systemEnv, ...pgEnv, ...clientEnv };
   const dataRoot = await fixtureDirectory(path.join(userData, 'data'));
   const repos = await fixtureDirectory(path.join(dataRoot, 'repos')); await fixtureDirectory(path.join(dataRoot, 'sources'));
   const redisRoot = path.join(userData, 'redis'); await fixtureDirectory(redisRoot);
   const temporaryRoot = await fixtureDirectory(path.join(root, 't')), destination = await fixtureDirectory(path.join(root, 'out'));
   const source = await syntheticGit(repos, !resume), migrationRoot = await fs.realpath(path.resolve(__dirname, '../../backend/src/main/resources/db/migration'));
   const connection = database => ({ host: '127.0.0.1', port: ports.postgres, user: 'codeintel', database });
-  const pgOptions = (database, mode) => ({ psqlPath: psql, connection: connection(database), env: pgEnv,
+  const pgOptions = (database, mode) => ({ psqlPath: psql, connection: connection(database), env: pgEnv, spawn: fixturePgSpawn,
     migrationRoot, installationId: INSTALLATION, mode });
 
   // All subprocesses belong to this new fixture. Real server logs are private local artifacts;
   // test output never echoes SQL, credentials, bootstrap material, source bytes or stderr.
   function launch(name, command, args, env, input) {
+    assert.equal(controls.closed, false, 'Fixture is closing');
     const child = spawn(command, args, { cwd: root, env: { ...env }, shell: false,
       windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     const record = { child, name, stdout: [], stderr: [], stdoutBytes: 0, stderrBytes: 0, stopped: false, error: null };
@@ -180,19 +194,34 @@ async function fixture(t, options = {}) {
     else child.stdin.end();
     return record;
   }
-  async function launchService(name, command, args, env, input) {
-    if (!guardedServices) return launch(name, command, args, env, input);
-    const child = await spawnManagedProcess({ javaPath: java, jarPath: jar, command, args, cwd: root, env: { ...env },
-      logPath: path.join(root, `${process.pid}-${name}.service.log`), ...(Buffer.isBuffer(input) ? { bootstrap: Buffer.from(input) } : {}) });
-    const record = { child, name, stdout: [], stderr: [], stdoutBytes: 0, stderrBytes: 0, stopped: false, error: null,
-      guarded: true, helperPid: child.helperPid };
+  function fixturePgSpawn(command, args, settings) {
+    assert.equal(controls.closed, false, 'Fixture is closing');
+    assert.equal(command, psql);
+    assert(args.includes('--host=127.0.0.1') && args.includes(`--port=${ports.postgres}`));
+    assert.equal(settings.env.PGSSLMODE, 'verify-full');
+    assert.equal(settings.env.PGSSLROOTCERT, transport.materials.postgres.ca);
+    const child = spawn(command, args, { ...settings, cwd: root, env: { ...settings.env, ...clientEnv } });
+    // Adapters consume their own stdout/stderr. Retain the live process handle and
+    // close proof, not SQL or synthetic credentials, for setup failure cleanup.
+    const record = { child, name: 'adapter-psql', stdout: [], stderr: [], stopped: false, error: null };
     children.add(record);
+    record.done = new Promise(resolve => child.once('close', (code, signal) => {
+      record.stopped = true; record.code = code; record.signal = signal; resolve();
+    }));
     child.on('error', () => { record.error = true; });
-    record.done = child.termination.then(proof => {
-      record.stopped = proof.stopped; record.code = proof.exitCode; record.signal = proof.signalCode;
-    }, () => { record.error = true; });
-    options.onProcess?.({ name, pid: child.pid, helperPid: child.helperPid, guarded: true });
-    return record;
+    return child;
+  }
+  async function launchService(name, command, args, env, input) {
+    assert.equal(controls.closed, false, 'Fixture is closing');
+    if (!guardedServices) return launch(name, command, args, env, input);
+    try {
+      const child = await spawnManagedProcess({ javaPath: java, jarPath: jar, command, args, cwd: root, env: { ...env },
+        logPath: path.join(root, `${process.pid}-${name}.service.log`), ...(Buffer.isBuffer(input) ? { bootstrap: Buffer.from(input) } : {}) });
+      return trackManagedProcess(child, name, children, options.onProcess);
+    } catch (error) {
+      if (error?.managedProcess) trackManagedProcess(error.managedProcess, name, children, options.onProcess);
+      throw error;
+    }
   }
   async function stop(record) {
     if (!record || record.stopped) return;
@@ -266,10 +295,17 @@ async function fixture(t, options = {}) {
   }
   async function startBackend(maintenanceId = '') {
     assert(!backend || backend.stopped, 'Backend fixture may not overlap prior process');
-    await startRedis(); const bootstrap = gateway.bootstrap();
+    await startRedis(); await openSources();
+    const aiBytes = gateway.bootstrap(); let bootstrap;
     try {
-      backend = await launchService('backend', java, ['-Xmx512m', '-jar', jar, '--spring.profiles.active=desktop'], {
+      const { socketPath, capability, epoch } = JSON.parse(aiBytes);
+      bootstrap = Buffer.from(JSON.stringify({ version: 2, ai: { socketPath, capability, epoch }, source: sourceEndpoint }));
+    } finally { aiBytes.fill(0); }
+    try {
+      backend = await launchService('backend', java, ['-Xmx512m', `-Duser.home=${root}`, `-Djava.io.tmpdir=${root}`, '-jar', jar, '--spring.profiles.active=desktop'], {
         ...systemEnv, SERVER_ADDRESS: '127.0.0.1', SERVER_PORT: String(ports.backend),
+        // Keep the product JDBC query allowlist. Optional JDBC client defaults
+        // resolve beneath the fresh JVM user.home, not the account home directory.
         DB_URL: transport.jdbcUrl, DB_USERNAME: 'codeintel', DB_PASSWORD: password,
         REDIS_HOST: '127.0.0.1', REDIS_PORT: String(ports.redis), REDIS_PASSWORD: transport.redisPassword,
         SPRING_CONFIG_ADDITIONAL_LOCATION: transport.backendConfigUrl, TOKEN_ENC_KEY: tokenKey, DATA_DIR: dataRoot,
@@ -298,14 +334,18 @@ async function fixture(t, options = {}) {
     const response = await http('/api/projects', { headers: { 'X-Code-Intelligence-Token': apiToken } });
     return response.status;
   }
-  async function shutdown() {
-    controls.closed = true; let unsafe = false;
-    for (const object of [backend, redis]) try { await stop(object); } catch { unsafe = true; }
-    for (const resource of [runtime, gateway, adapter, keyring]) try { await resource?.close(); } catch { unsafe = true; }
-    for (const record of children) try { await stop(record); } catch { unsafe = true; }
-    try { await ownerLocks?.close(); } catch { unsafe = true; }
-    if (!unsafe) await transport.close();
-    const events = { trace, plans, failures, controls, success, children: [...children].map(c => ({ name: c.name, code: c.code, signal: c.signal, stopped: c.stopped })) };
+  function shutdown() {
+    if (shutdownPromise) return shutdownPromise;
+    shutdownPromise = (async () => {
+    controls.closed = true;
+    const cleanup = await closeInOrder({ writers: [backend, redis, ...children], stop, closeSources,
+      closeRuntime: async () => { await runtime?.close(); },
+      closeSafety: async () => {
+        await gateway?.close(); await adapter?.close(); await keyring?.close(); await ownerLocks?.close();
+      }, closeTransport: () => transport?.close() });
+    const unsafe = !cleanup.safe;
+    const events = { trace, plans, failures, controls, success, cleanup,
+      children: [...children].map(c => ({ name: c.name, code: c.code, signal: c.signal, stopped: c.stopped })) };
     await fs.writeFile(path.join(root, 'evidence.json'), JSON.stringify(events, null, 2), { mode: 0o600 });
     if (!success || unsafe || options.preserve) {
       let index = 0;
@@ -317,9 +357,8 @@ async function fixture(t, options = {}) {
     } else await fs.rm(root, { recursive: true, force: true });
     for (const record of children) [...record.stdout, ...record.stderr].forEach(bytes => bytes.fill(0));
     assert(!unsafe, 'Fixture shutdown could not verify every owned process/resource close');
+    })(); return shutdownPromise;
   }
-  t.after(shutdown);
-
   if (!resume) {
     const pwfile = path.join(root, 'initdb-password'); await fs.writeFile(pwfile, password, { mode: 0o600 });
     try { await command('initdb', initdb, ['-D', pgData, '-U', 'codeintel', '--encoding=UTF8', '--no-locale',
@@ -353,6 +392,28 @@ async function fixture(t, options = {}) {
   }
 
   const safetyRoot = path.join(userData, 'safety');
+  async function openSources() {
+    assert(!sourceBroker && !sourceVault, 'Previous source handles must drain before reopen');
+    const settings = { sourceRoot: path.join(dataRoot, 'sources'), safetyRoot, installationId: INSTALLATION,
+      wrapper: wrapper(), ...(ownerLocks ? { ownerLocks } : {}) };
+    let enrolled = true;
+    try { await fs.lstat(path.join(safetyRoot, 'source-vault.enrollment')); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; enrolled = false; }
+    assert(enrolled || !recoveryMode, 'Recovery must not create new source keys');
+    sourceVault = await (enrolled ? openSourceVault : createSourceVault)(settings);
+    // An owner crash may leave a socket namespace. Give each new source lifetime
+    // its own name; never delete/adopt the interrupted owner's socket to reopen.
+    const capability = crypto.randomBytes(32).toString('hex'), socketPath = path.join(temporaryRoot, 's' + crypto.randomBytes(4).toString('hex'));
+    try {
+      sourceBroker = await createSourceBroker({ socketPath, authToken: capability, vault: sourceVault,
+        onLost() { controls.sourceLost = true; void stop(backend).catch(() => {}); } });
+      sourceEndpoint = { socketPath, capability };
+    } catch (error) { await sourceVault.close(); sourceVault = undefined; throw error; }
+  }
+  async function closeSources() {
+    await sourceBroker?.close(); sourceBroker = undefined; sourceEndpoint = undefined;
+    await sourceVault?.close(); sourceVault = undefined;
+  }
   if (guardedServices) ownerLocks = await createNativeOwnerLocks({ javaPath: java, jarPath: jar, safetyRoot,
     installationId: INSTALLATION, assertMainOwnership: () => process.connected === true,
     onLost() {
@@ -369,7 +430,7 @@ async function fixture(t, options = {}) {
     keyring = await (initialize ? initializePurposeKeyring : openPurposeKeyring)({ safetyRoot,
       restoreRoots: [dataRoot, pgData, path.join(userData, 'recovery')],
       installationId: INSTALLATION, wrapper: wrapper(), ...(ownerLocks ? { ownerLocks } : {}) });
-    adapter = await createAiEgressPostgres({ psqlPath: psql, installationId: INSTALLATION, connection: connection('codeintel'), env: pgEnv });
+    adapter = await createAiEgressPostgres({ psqlPath: psql, installationId: INSTALLATION, connection: connection('codeintel'), env: pgEnv, spawn: fixturePgSpawn });
     const verifier = createMaintenanceVerifier({ installationId: INSTALLATION, readProjection: adapter.readProjection });
     gateway = await openDesktopAiGateway({ installationId: INSTALLATION, runningBuild: BUILD, temporaryRoot,
       tokenEncryptionKey: tokenKey, freshEnrollmentAllowed: false, adapter, recoveryMode: mode,
@@ -377,7 +438,7 @@ async function fixture(t, options = {}) {
       async openJournal(callbacks) {
         journal = await (initialize ? initializeSafetyJournal : openSafetyJournal)({ safetyRoot,
           restoreRoots: [dataRoot, pgData, path.join(userData, 'recovery')],
-          installationId: INSTALLATION, runningBuild: BUILD, keyProvider: keyring, ...callbacks,
+          installationId: INSTALLATION, runningBuild: BUILD, keyProvider: keyring, recoveryMode: mode, ...callbacks,
           ...(ownerLocks ? { ownerLocks } : {}) });
         return journal;
       },
@@ -407,12 +468,12 @@ async function fixture(t, options = {}) {
       update projects set clone_path=(select v->>'clone' from(select ${v} v) x),local_path=(select v->>'local' from(select ${v} v) x) where id=${PROJECT};
       insert into analysis_jobs(id,project_id,snapshot_id,type,status) values(21,${PROJECT},${SNAPSHOT},'IMPORT','FAILED') on conflict(id) do nothing;
       insert into job_local_source_inputs(job_id,project_id,approval_token_sha256,purpose,base_snapshot_id,schema_version,canonical_root,
-        root_device,root_inode,policy_version,limits_sha256,manifest_sha256,selected_files,selected_bytes,approved_at)
-        select 21,${PROJECT},'${'c'.repeat(64)}','REFRESH',${SNAPSHOT},1,v->>'local',1,2,'fixture-policy','${'a'.repeat(64)}','${'b'.repeat(64)}',1,1,now()
+        root_platform,root_identity,root_owner,policy_version,limits_sha256,manifest_sha256,selected_files,selected_bytes,approved_at)
+        select 21,${PROJECT},'${'c'.repeat(64)}','REFRESH',${SNAPSHOT},1,v->>'local','posix','PI1:1:2',null,'fixture-policy','${'a'.repeat(64)}','${'b'.repeat(64)}',1,1,now()
         from(select ${v} v) x on conflict(job_id) do nothing;
-      insert into local_source_approvals(token_sha256,user_id,purpose,project_id,base_snapshot_id,schema_version,canonical_root,root_device,root_inode,
+      insert into local_source_approvals(token_sha256,user_id,purpose,project_id,base_snapshot_id,schema_version,canonical_root,root_platform,root_identity,root_owner,
         policy_version,limits_sha256,manifest_sha256,selected_files,selected_bytes,issued_at,expires_at)
-        select '${'d'.repeat(64)}',${OWNER},'REFRESH',${PROJECT},${SNAPSHOT},1,v->>'local',1,2,'fixture-policy','${'a'.repeat(64)}','${'b'.repeat(64)}',1,1,now(),now()+interval '10 minutes'
+        select '${'d'.repeat(64)}',${OWNER},'REFRESH',${PROJECT},${SNAPSHOT},1,v->>'local','posix','PI1:1:2',null,'fixture-policy','${'a'.repeat(64)}','${'b'.repeat(64)}',1,1,now(),now()+interval '10 minutes'
         from(select ${v} v) x on conflict(token_sha256) do nothing;`);
   }
   function guarded(name, operation) {
@@ -431,7 +492,7 @@ async function fixture(t, options = {}) {
         await wait(async () => { const status = await maintenance(transactionId, 'STATUS'); return status.state === 'DRAINED'
           && status.activeRequests === 0 && status.activeWriters === 0 && status.activeJobs === 0; }, 'writer drain');
       }
-      await waitForAiDrain(); await stop(backend); trace.push('backend.stopped');
+      await waitForAiDrain(); await stop(backend); await closeSources(); trace.push('backend.stopped');
       assert(!backend || backend.stopped);
     }),
     prepareResume: guarded('prepareResume', async ({ transactionId, recovery = false }) => {
@@ -447,12 +508,12 @@ async function fixture(t, options = {}) {
       assert.equal(journal.snapshot().maintenanceReceipt.transactionId, transactionId);
       if (recovery) {
         assert.equal(await publicProjects(), 503, 'A recovery handle never releases the HTTP barrier');
-        await stop(backend); await stop(redis); trace.push('recovery.checked-services-stopped'); return;
+        await stop(backend); await closeSources(); await stop(redis); trace.push('recovery.checked-services-stopped'); return;
       }
       drained(await maintenance(transactionId, 'END')); assert.equal(await publicProjects(), 200);
       controls.publicResumes++; trace.push('public.released');
     }),
-    failure: guarded('failure', async () => { await stop(backend); await stop(redis); }),
+    failure: guarded('failure', async () => { await stop(backend); await closeSources(); await stop(redis); }),
     invalidateAuthority: guarded('invalidateAuthority', async ({ transactionId, checkpointRoot, recovery = false }) => {
       if (!recovery) await controls.afterStaged?.({ transactionId });
       assert.equal(checkpointRoot, path.join(userData, 'recovery', transactionId)); await stop(redis);
@@ -472,7 +533,7 @@ async function fixture(t, options = {}) {
     }),
     database: guarded('database', async (options = {}) => {
       const control = await createBackupDatabaseControl({ psqlPath: psql,
-        connection: { host: '127.0.0.1', port: ports.postgres, user: 'codeintel' }, env: pgEnv, liveDatabase: 'codeintel',
+        connection: { host: '127.0.0.1', port: ports.postgres, user: 'codeintel' }, env: pgEnv, spawn: fixturePgSpawn, liveDatabase: 'codeintel',
         ...(options.readRetentionAuthority ? { readRetentionAuthority: options.readRetentionAuthority } : {}) });
       return Object.freeze({ ...control,
         createStage: guarded('database.createStage', async value => { const plan = await control.createStage(value); plans.push(plan); return plan; }),
@@ -481,7 +542,7 @@ async function fixture(t, options = {}) {
     }),
     productState: guarded('productState', async () => {
       const product = await createBackupProductState({ psqlPath: psql,
-        connection: { host: '127.0.0.1', port: ports.postgres, user: 'codeintel' }, env: pgEnv,
+        connection: { host: '127.0.0.1', port: ports.postgres, user: 'codeintel' }, env: pgEnv, spawn: fixturePgSpawn,
         expectedDataDirectory: pgData, ownedPostgres: postgres.child, dataRoot });
       return Object.freeze({ ...product,
         rebindClonePaths: guarded('product.paths', product.rebindClonePaths),
@@ -565,7 +626,7 @@ async function fixture(t, options = {}) {
 module.exports = Object.freeze({ fixture, INSTALLATION, BUILD, OWNER, PROJECT, SNAPSHOT, REQUESTS, ORIGINAL, sha });
 
 if (require.main === module) test('opt-in owned-local PostgreSQL backup runtime: real restore and rollback', { skip: !ENABLED, timeout: 480000 }, async t => {
-  const f = await fixture(t); let archive, roundTripPassed = false;
+  const f = await fixture(t, { preserve: process.env.CI_BACKUP_RUNTIME_PRESERVE === '1' }); let archive, roundTripPassed = false;
   await t.test('encrypted backup restores old product data, preserves newer B obligations and resumes only after real maintenance health', { timeout: 240000 }, async () => {
     const keyBefore = await f.keyring.info(), before = f.journal.snapshot();
     const logPrefix = await fs.readFile(f.logPath), oldRepoInode = await f.inode(f.repos);

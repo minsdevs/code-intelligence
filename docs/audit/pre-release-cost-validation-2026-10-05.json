@@ -1,0 +1,98 @@
+{
+  "format": 1,
+  "status": "PASS_BOUNDED_COST_RECOVERY",
+  "baseCommit": "73ef102",
+  "scope": "current Node composition with retained native binaries; not Electron UI",
+  "runs": [
+    {
+      "report": "validation/local/pre-release-cost/normal-jIoJSg/result.json",
+      "sha256": "e27948a81fe1d87bb38382d1ec47feab6894cf6bb794501e308867028baea932",
+      "mode": "normal",
+      "counts": {
+        "tests": 3,
+        "pass": 3,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "sources": {
+        "desktop/test/backup-runtime-postgres.test.cjs": "75bceaa97d675cc81475b76ca70a78befda056a9a5f76135367e1dd362fdb2e1",
+        "desktop/test/fixtures/backup-runtime-crash-owner.cjs": "f365be13fbc587e8b9c741c16e526e81fddc826df9f3b2438febcf993d06a36a",
+        "desktop/test/fixtures/owned-runtime-lifecycle.cjs": "7a82a9b99e4be8743775eba9e25c19d722a4260bef84dc4928df4a0f3669a6b2",
+        "desktop/src/backup-runtime.cjs": "67c477a46768825844bb64da994e3da37df0bd67adbeeea8e7a6c8ac727ad769",
+        "desktop/src/native-owner-locks.cjs": "1d39d245b2e48daf9e33df8d077de56aa086cb3848c39d598fd742307ce90e0b",
+        "desktop/src/managed-process.cjs": "6806ffbfb818922746250d22bf5106013aabe16704f002ad99ded99bb145b6c3",
+        "desktop/src/source-broker.cjs": "9e5d4c971e1b1d8d209dd27949075effc9d48fcb30648c4e51c2c9c4802fc189",
+        "desktop/src/source-vault.cjs": "49ace78302d82ca9eca690f72e9bdc81cc4a0175dc630cace0dfe859026b543a",
+        "validation/pre-release/run-cost-recovery.cjs": "d5c6c0df6cbcf8ecc66a3e97afae3515fdfff8456839f830a0095212e1f49df1"
+      },
+      "appAsarSha256": "ab6aeddb1ef96f7586185ba6ebad0a1148a0686b107cc2f3086410d31fab5d12",
+      "manifestSha256": "198982420d3d2074ec29898286056cef567cb83f5cd0f972400bb1792e37f6db",
+      "fixtures": [
+        {
+          "path": ".cif-cost-7NX4wM",
+          "safeCleanup": true,
+          "ownedChildren": 164,
+          "allStopped": true,
+          "providerCalls": 0,
+          "restoredHoldsMicroUsd": "173",
+          "sameProcessRollbackHoldsMicroUsd": "202"
+        }
+      ]
+    },
+    {
+      "report": "validation/local/pre-release-cost/crash-IlKwEq/result.json",
+      "sha256": "b98bf474c81fe98df010a0ab0dc888fc4795f8237fbd3658cb7c8b06fb18df0a",
+      "mode": "crash",
+      "counts": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "sources": {
+        "desktop/test/backup-runtime-crash-postgres.test.cjs": "2514a5a90ff6cb7b1f9c6df26381f966edf50f436c407b1980b7d92e8cf2e9dd",
+        "desktop/test/backup-runtime-postgres.test.cjs": "75bceaa97d675cc81475b76ca70a78befda056a9a5f76135367e1dd362fdb2e1",
+        "desktop/test/fixtures/backup-runtime-crash-owner.cjs": "f365be13fbc587e8b9c741c16e526e81fddc826df9f3b2438febcf993d06a36a",
+        "desktop/test/fixtures/owned-runtime-lifecycle.cjs": "7a82a9b99e4be8743775eba9e25c19d722a4260bef84dc4928df4a0f3669a6b2",
+        "desktop/src/backup-runtime.cjs": "67c477a46768825844bb64da994e3da37df0bd67adbeeea8e7a6c8ac727ad769",
+        "desktop/src/native-owner-locks.cjs": "1d39d245b2e48daf9e33df8d077de56aa086cb3848c39d598fd742307ce90e0b",
+        "desktop/src/managed-process.cjs": "6806ffbfb818922746250d22bf5106013aabe16704f002ad99ded99bb145b6c3",
+        "desktop/src/source-broker.cjs": "9e5d4c971e1b1d8d209dd27949075effc9d48fcb30648c4e51c2c9c4802fc189",
+        "desktop/src/source-vault.cjs": "49ace78302d82ca9eca690f72e9bdc81cc4a0175dc630cace0dfe859026b543a",
+        "validation/pre-release/run-cost-recovery.cjs": "d5c6c0df6cbcf8ecc66a3e97afae3515fdfff8456839f830a0095212e1f49df1"
+      },
+      "appAsarSha256": "ab6aeddb1ef96f7586185ba6ebad0a1148a0686b107cc2f3086410d31fab5d12",
+      "manifestSha256": "198982420d3d2074ec29898286056cef567cb83f5cd0f972400bb1792e37f6db",
+      "fixtures": [
+        {
+          "path": ".cif-resume-DQSXuc",
+          "result": "VERIFIED_PREVIOUS",
+          "holdsMicroUsd": "173",
+          "appendOnlyB": true,
+          "initialReaped": true,
+          "teardownVerified": true,
+          "providerCalls": 0
+        },
+        {
+          "path": ".cif-resume-D2aVty",
+          "result": "VERIFIED_RESTORED",
+          "holdsMicroUsd": "173",
+          "appendOnlyB": true,
+          "initialReaped": true,
+          "teardownVerified": true,
+          "providerCalls": 0
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "No real user profile/Keychain",
+    "No Electron singleton/UI integration in these runs",
+    "No guardian SIGKILL, power loss, hostile daemonization or every crash boundary",
+    "202 only same-process rollback; 173 actual owner restart",
+    "Legacy Git source contract0 fixture, not complete vault blob matrix",
+    "Full G-RECOVERY and release remain incomplete"
+  ]
+}
