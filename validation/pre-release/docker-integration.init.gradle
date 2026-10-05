@@ -1,0 +1,65 @@
+import groovy.json.JsonOutput
+import org.gradle.api.tasks.testing.Test
+
+// Only test JVMs use the private home. Gradle itself reuses the reviewed local
+// cache/toolchain; this is not a hermetic build and does not source an app .env.
+def root = new File(System.getenv('CI_DOCKER_TEST_ROOT') ?: '')
+if (!root.isAbsolute() || !root.isDirectory() || root.canonicalFile != root.absoluteFile) {
+    throw new GradleException('PRIVATE_TEST_ROOT_REQUIRED')
+}
+def temporary = new File(System.getenv('CI_DOCKER_TEST_TMP') ?: '')
+def repository = root.parentFile.parentFile.parentFile.parentFile
+if (!temporary.isAbsolute() || !temporary.isDirectory() || temporary.canonicalFile != temporary.absoluteFile
+        || temporary.parentFile != repository || !(temporary.name ==~ /\.citd-[A-Za-z0-9]+/)) {
+    throw new GradleException('PRIVATE_SHORT_TEMP_REQUIRED')
+}
+allprojects {
+    tasks.withType(Test).configureEach {
+        maxParallelForks = 1
+        maxHeapSize = '2g'
+        outputs.upToDateWhen { false }
+        systemProperty 'user.home', new File(root, 'home').path
+        systemProperty 'java.io.tmpdir', temporary.path
+        systemProperty 'spring.test.context.cache.maxSize', '2'
+        systemProperty 'app.github.base-url', 'http://127.0.0.1:1'
+        systemProperty 'app.github.clone-base-url', 'http://127.0.0.1:1'
+        // ServiceConnection/DynamicPropertySource must select a new fixture DB.
+        // Otherwise fail locally rather than falling back to a personal service.
+        def fixed = [
+            PATH: '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin',
+            HOME: new File(root, 'home').path, TMPDIR: temporary.path,
+            XDG_CONFIG_HOME: new File(root, 'home').path,
+            GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: new File(root, 'home/absent-gitconfig').path,
+            LANG: 'C', LC_ALL: 'C', DOCKER_HOST: System.getenv('DOCKER_HOST'),
+            DOCKER_CONFIG: new File(root, 'docker').path,
+            TESTCONTAINERS_REUSE_ENABLE: 'false', TESTCONTAINERS_RYUK_DISABLED: 'false',
+            TESTCONTAINERS_CHECKS_DISABLE: 'false',
+            DATA_DIR: new File(root, 'data').path,
+            DB_URL: 'jdbc:postgresql://127.0.0.1:1/unconfigured_fixture',
+            DB_USERNAME: 'unconfigured_fixture', DB_PASSWORD: 'synthetic-not-a-secret',
+            REDIS_HOST: '127.0.0.1', REDIS_PORT: '1',
+            TOKEN_ENC_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+            OPENAI_BASE_URL: 'http://127.0.0.1:1', GEMINI_BASE_URL: 'http://127.0.0.1:1',
+            GITHUB_DEVICE_CODE_URI: 'http://127.0.0.1:1/device',
+            GITHUB_TOKEN_URI: 'http://127.0.0.1:1/token'
+        ]
+        if (System.getenv('CI_DOCKER_TEST_SUITE') == 'maintenance') {
+            fixed.CI_BACKUP_MAINTENANCE_PG = '1'
+        }
+        environment = fixed
+        reports.junitXml.outputLocation.set(new File(root, 'junit/' + name))
+        reports.html.outputLocation.set(new File(root, 'html/' + name))
+        binaryResultsDirectory.set(new File(root, 'binary/' + name))
+        testLogging { events 'failed', 'skipped' }
+        afterSuite { descriptor, result ->
+            if (descriptor.parent == null) {
+                def file = new File(root, name + '-totals.json')
+                file.text = JsonOutput.prettyPrint(JsonOutput.toJson([
+                    task: name, tests: result.testCount, pass: result.successfulTestCount,
+                    fail: result.failedTestCount, skipped: result.skippedTestCount,
+                    startTime: result.startTime, endTime: result.endTime
+                ])) + '\n'
+            }
+        }
+    }
+}

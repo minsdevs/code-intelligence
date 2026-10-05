@@ -171,19 +171,26 @@ public final class FakeTsAnalyzer implements AutoCloseable {
             if (target == null) {
                 continue;
             }
-            String imported = matcher.group(1) != null ? matcher.group(1).replace(" ", "") : matcher.group(2);
+            boolean named = matcher.group(1) != null;
+            String imported = named ? matcher.group(1) : matcher.group(2);
             if (imported == null) {
                 continue;
             }
             for (String name : imported.split(",")) {
-                String trimmed = name.replace("{", "").replace("}", "").strip();
-                if (trimmed.isEmpty()) {
+                String[] binding = name.strip().split("\\s+as\\s+");
+                String exportedName = named ? binding[0].strip() : "default";
+                String localName = binding[binding.length - 1].strip();
+                if (binding.length > 2
+                        || !exportedName.matches("[A-Za-z_$][A-Za-z0-9_$]*")
+                        || !localName.matches("[A-Za-z_$][A-Za-z0-9_$]*")) {
                     continue;
                 }
                 Map<String, Object> hit = new LinkedHashMap<>();
                 hit.put("fromPath", path);
                 hit.put("toPath", target);
-                hit.put("imported", trimmed);
+                hit.put("imported", localName);
+                hit.put("importedName", exportedName);
+                hit.put("typeOnly", false);
                 imports.add(hit);
             }
         }

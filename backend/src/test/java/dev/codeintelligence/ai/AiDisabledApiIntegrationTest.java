@@ -124,7 +124,13 @@ class AiDisabledApiIntegrationTest {
                 .expectBody()
                 .returnResult()
                 .getResponseBodyContent();
-        assertThat(new String(body)).doesNotContain("sk-");
+        // The public endpoint name "task-draft" itself contains "sk-". Check
+        // actual credential material/fields, not that unrelated substring.
+        String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(text).doesNotContain(FakeGithubApi.VALID_TOKEN, "apiKey", "encrypted_token", "nonce");
+        Map<String, Object> problem = jsonMapper.readValue(body, Map.class);
+        assertThat(problem.get("status")).isEqualTo(404);
+        assertThat(problem.get("instance")).isEqualTo("/api/projects/" + projectId + "/findings/1/task-draft");
     }
 
     private byte[] getAs(ResponseCookie session, String uri, HttpStatus expected) {

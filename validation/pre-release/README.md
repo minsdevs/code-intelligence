@@ -4,6 +4,43 @@ These runners execute explicit, bounded validation units. A passing unit is not 
 release approval. Follow `docs/multilanguage-plan-2026-10-02/07-delivery-release-gates.md`
 for all eight stages and external acceptance requirements.
 
+## Isolated Docker integration follow-up
+
+The existing local Docker daemon must already be running. These commands do not
+start/stop it, prune containers, reuse an application DB or use Docker auth settings.
+
+```sh
+node validation/pre-release/run-docker-integration.cjs --suite auth \
+  --socket "unix://$HOME/.docker/run/docker.sock"
+node validation/pre-release/run-docker-integration.cjs --suite backend \
+  --socket "unix://$HOME/.docker/run/docker.sock"
+node validation/pre-release/run-docker-integration.cjs --suite maintenance \
+  --socket "unix://$HOME/.docker/run/docker.sock"
+node validation/pre-release/run-docker-integration.cjs --suite accuracy \
+  --socket "unix://$HOME/.docker/run/docker.sock"
+node validation/pre-release/run-docker-integration.cjs --suite corpus \
+  --socket "unix://$HOME/.docker/run/docker.sock"
+```
+
+Only the current user's Docker Desktop Unix socket or `/var/run/docker.sock` is
+accepted. Test workers get a fresh home, data and short `.citd-*` temporary root;
+all new files are retained under the original checkout. Gradle itself reuses the
+existing user cache/configuration, so this is not a hermetic or OS-network-sandboxed
+build. Testcontainers creates new PostgreSQL/Redis services and Ryuk cleans them;
+the runner only observes preexisting container IDs/states and refuses success when
+new containers remain. It never infers ownership from a numeric PID/container diff.
+
+`maintenance` alone enables its reviewed opt-in class. `backend` preserves default
+task exclusions and explicit opt-in skips. `accuracy` starts the actual local TS
+sidecar; ordinary backend tests may use the fixture fake. `corpus` checks the existing
+quality-baseline file and timed-Gradle RSS, not whole-app process-tree p95. Each command
+has fresh reports/JUnit; failed results are not overwritten by a successful retry.
+
+See `docs/audit/docker-integration-2026-10-06.md` for the initial failures, fixes,
+raw-count caveat and remaining real-account/independent/OS acceptance requirements.
+Tests for the new command ownership/environment contracts run with
+`node --test validation/pre-release/test/docker-integration.test.cjs`.
+
 ## Nonzero cost / restore and owner-crash recovery
 
 ```sh

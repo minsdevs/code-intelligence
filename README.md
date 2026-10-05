@@ -10,6 +10,13 @@ real-account refresh/revoke/SSO and clean-machine installation are not certified
 The current candidate is a local ad-hoc Validation build, not a public release. Use the exact
 candidate/claim and evidence instructions in that report, not an old bundle path below.
 
+The [Docker integration follow-up](docs/audit/docker-integration-2026-10-06.md)
+now verifies the configured backend suite (1,639 passes; explicit opt-ins reported
+separately), actual local-analyzer fixture accuracy, maintenance HTTP isolation and
+the existing timed corpus baseline. Product source and the retained candidate are
+unchanged. This removes the earlier Docker-unavailable execution blocker, not the
+remaining real-account, independent-quality or signed-release requirements.
+
 Historical audit: [2026-10-02 release assessment](docs/release-audit-2026-10-02.md).
 Follow-up implementation and verification: [integrated results](docs/audit/execution-results-2026-10-02.md),
 [current execution status](docs/audit/execution-status-2026-10-02.md), and
