@@ -1,13 +1,13 @@
 {
   "format": 1,
   "recordedAt": "2026-10-05T08:52:31.744Z",
-  "status": "PREPARATION_VERIFIED_BUILD_BLOCKED",
-  "scope": "macos-source-lock-and-provisioning-preflight",
+  "status": "NATIVE_BUILD_AND_AUTOMATION_VERIFIED_RELEASE_INCOMPLETE",
+  "scope": "macos-source-provisioning-and-isolated-native-acceptance",
   "currentWorkingDirectory": "/Users/minseokchae/Dev/code-intelligence",
   "implementationCommit": "695424c",
   "evidenceLocation": "validation/local (moved from the removed independent clone; hashes preserved)",
-  "sourceBuildPerformed": false,
-  "nativeAppBuilt": false,
+  "sourceBuildPerformed": true,
+  "nativeAppBuilt": true,
   "realAccountVerified": false,
   "productionReleased": false,
   "curlVersionObserved": "8.7.1",
@@ -78,11 +78,298 @@
     "validation/local/macos-supply-20261005-UFh946/actual-preflight.json": "7660f01a7182144716cccf2486ab897ea71913fa58fa1f61b838576444c92773"
   },
   "remaining": [
-    "free working disk space",
-    "full locked source build and native gate",
-    "new isolated Validation app acceptance",
-    "pgvector extension and old-backup compatibility",
-    "real-account project recovery",
-    "minimum OS and installation/update acceptance"
-  ]
+    "fresh isolated profile with actual packaged-app Keychain lifecycle",
+    "pgvector extension / older V26-V27 backup and locale compatibility",
+    "real-account project recovery and OAuth lifecycle",
+    "completion-cancellation race and forced failure",
+    "actual minimum OS and clean installation/update acceptance",
+    "Developer ID signing and notarization approval"
+  ],
+  "updatedAt": "2026-10-05T10:53:21.790Z",
+  "fingerprintsScope": "Initial source-supply preparation; subsequent driver fingerprints are recorded in nativeExecution.",
+  "nativeExecution": {
+    "branch": "codex/native-validation-20261005",
+    "startHead": "a0b572aac443f1cb77d9809fb684e4ff4f2b8d6f",
+    "buildSequence": "1791196007249",
+    "sourceFingerprint": {
+      "files": 943,
+      "sha256": "37d8dfcffa72c1c247a5f69c8b1fd39e0462d5d6e3a968c68d3a4ac2b43589f8"
+    },
+    "sourceBuild": "PASS",
+    "closure": [
+      {
+        "component": "postgres",
+        "nativeFiles": 71,
+        "minimumSystemVersion": "13.0",
+        "sha256": "dfd01da617a4bb969731cbd1105acd17e88d50e80b51a0f7288453dedb1d4f4e"
+      },
+      {
+        "component": "redis",
+        "nativeFiles": 3,
+        "minimumSystemVersion": "13.0",
+        "sha256": "9331be11994a8aa2df2ca852356bae6dddbaa8871d7aa2a04b16dc919ed71d71"
+      }
+    ],
+    "appBundle": ".native-product-yGBKOK/Code Intelligence Validation.app",
+    "packagedManifestSha256": "f58610e3f16ae87fed95473a1b8f32f5d1289772e13388e0f7a414b7f9d5a726",
+    "driverSha256": "fd2a1e48a9f399aee8b565517ec38de039fe7ea2e32388cc4a4252edf9243c6a",
+    "focusedUnitTests": {
+      "tests": 65,
+      "pass": 65,
+      "fail": 0,
+      "skipped": 0,
+      "scope": "source supply, execution context and native acceptance helpers"
+    },
+    "attempts": [
+      {
+        "artifact": "validation/local/native-validation-20261005/first-attempt/acceptance.json",
+        "status": "FAIL",
+        "phase": "synthetic-reanalysis"
+      },
+      {
+        "artifact": "validation/local/native-validation-20261005/read-only-snapshots.json",
+        "status": "PASS",
+        "mutatingApiRequests": 0
+      },
+      {
+        "artifact": "validation/local/native-validation-20261005/second-attempt/acceptance.json",
+        "status": "PASS",
+        "appRebuilt": false,
+        "checkRecords": 31,
+        "executionElapsedMs": 203433
+      }
+    ],
+    "firstResult": {
+      "scope": "one-file TypeScript synthetic fixture; approved import click to populated native overview",
+      "elapsedMs": 1146,
+      "snapshotId": 1,
+      "localImport": {
+        "schemaVersion": 1,
+        "policyVersion": "local-ingest-v1",
+        "acceptedFiles": 1,
+        "bytesRead": 57,
+        "excludedEntriesByReason": {}
+      },
+      "searchRenderMs": 8
+    },
+    "representativeRepository": {
+      "scope": "filtered current Code Intelligence desktop/frontend/backend/TypeScript analyzer source; no dependency install or repository scripts executed",
+      "sourceFiles": 943,
+      "sourceSha256": "37d8dfcffa72c1c247a5f69c8b1fd39e0462d5d6e3a968c68d3a4ac2b43589f8",
+      "localImport": {
+        "schemaVersion": 1,
+        "policyVersion": "local-ingest-v1",
+        "acceptedFiles": 867,
+        "bytesRead": 7571029,
+        "excludedEntriesByReason": {
+          "SECRET_CONTENT": 74,
+          "GENERATED_DIRECTORY": 1,
+          "BINARY": 1
+        }
+      },
+      "importToOverviewMs": 57414,
+      "projectId": 2,
+      "snapshotId": 3,
+      "fileOutcomes": {
+        "PARTIAL": 618,
+        "UNMEASURED": 87,
+        "SUCCESS": 161,
+        "UNSUPPORTED": 1
+      },
+      "entrypointCount": 108,
+      "fileSearchRenderMs": 10,
+      "relationRenderMs": 1115,
+      "flowEvidence": {
+        "flowCount": 102,
+        "selectedFlowId": 8,
+        "stepCount": 5,
+        "sourceSnapshotId": 3
+      }
+    },
+    "backupRestore": {
+      "status": "PASS",
+      "filePicker": "controlled-single-use-selection",
+      "nativePickerInteraction": false
+    },
+    "boundary": {
+      "hostMacOS": "26.6.2",
+      "declaredTargetMacOS": "13.0",
+      "actualMacOS13Execution": false,
+      "directElectronActualKeychainProbe": true,
+      "packagedPlaywrightUsesMockKeychain": true,
+      "actualPackagedLoginKeychainLifecycle": false,
+      "realUserAccount": false,
+      "oldExtensionBackupConversion": false,
+      "signedRelease": false,
+      "notarizedRelease": false
+    },
+    "cleanup": {
+      "status": "COMPLETE",
+      "scope": "only-this-native-build-intermediates",
+      "removed": [
+        "work/native-acceptance-private-Yq3jAH/product-resume/source",
+        "work/native-acceptance-private-Yq3jAH/gradle",
+        "work/native-acceptance-private-Yq3jAH/npm-cache",
+        "work/native-compatible-runtime.BJaX9Y/openssl-source",
+        "work/native-compatible-runtime.BJaX9Y/postgres-source",
+        "work/native-compatible-runtime.BJaX9Y/redis-source",
+        "work/native-compatible-runtime.BJaX9Y/pgvector-source",
+        "work/native-compatible-runtime.BJaX9Y/openssl-3.5.8.tar.gz",
+        "work/native-compatible-runtime.BJaX9Y/postgres-16.15.tar.bz2",
+        "work/native-compatible-runtime.BJaX9Y/redis-8.10.2.tar.gz",
+        "work/native-compatible-runtime.BJaX9Y/pgvector-0.8.7.tar.gz",
+        "work/native-compatible-runtime.BJaX9Y/empty-pkgconfig"
+      ],
+      "retainedEvidenceFiles": 32,
+      "finalAppManifestSha256": "f58610e3f16ae87fed95473a1b8f32f5d1289772e13388e0f7a414b7f9d5a726",
+      "freeBytesBefore": "34850013184",
+      "freeBytesAfter": "37828354048",
+      "observedFreeSpaceGainBytes": "2978340864",
+      "retainedSourceRuntimePrefix": "/private/var/folders/jm/j1k8dq4914g5k2grx_1cqc1r0000gn/T/codeintel-host-acceptance-uZ6PhT/work/native-compatible-runtime.BJaX9Y/prefix",
+      "retainedProfiles": [
+        "/private/tmp/civa-JCv8Ol/desktop-run-VpGfpA",
+        "/private/tmp/civa-j0lCXC/desktop-run-n2pYEv"
+      ],
+      "gradleProcess": {
+        "pid": 64729,
+        "ownedCwdVerified": true,
+        "terminated": true
+      },
+      "originalDependenciesRemoved": false
+    },
+    "artifacts": [
+      {
+        "path": "validation/local/native-validation-20261005/cleanup.json",
+        "sha256": "a510691cf14ad0cb17fb730f3dd4e3636cace712865c12120e09b81a94f20cc2"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/acceptance.json",
+        "sha256": "8b62a6fe90505c7f9abbe4c255e7fbc364b1e3a2e44091aec5f737a85613612e"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/first-start-1280x800.png",
+        "sha256": "eb42555d9183ff8f5d1e08750a976fa2ffa68e51edb53418cfd234ed5b210db5"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/first-start-1440x900.png",
+        "sha256": "98728b7ba1be291c4e3009ea63b6b82d7be9d8724326834e45fa152578f53a5b"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/first-start-980x700.png",
+        "sha256": "1d5acf844a1f3e5a4205b7a17b292cc217857459762640ef1d5d5499cb7a4f77"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/java-version.txt",
+        "sha256": "19e69ef1b2c3266fb4b946934ccd73c188beb9f03a5f9eb1459dc457959803c6"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/pgvector-control.txt",
+        "sha256": "9f7d0fcada5e68aa41adf9d5b3ab3fd43c83f2edd462c391a0f715d72a9941ec"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/postgres-version.txt",
+        "sha256": "0043c1f5af722cbf75ad46ae1640a4f74b69ab22f06217888a74fc9907c43350"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/project-list-1280x800.png",
+        "sha256": "ec7776985e5f761cd60792964446a56d0ec8886a9e79ee89f41e8493ffbdc464"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/project-list-1440x900.png",
+        "sha256": "a59daf59a4b20dab958f1c87f31848284c232ad1ee406b7449e37bbf32d9f55a"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/project-list-980x700.png",
+        "sha256": "5b7b0100748e4d2fadb7622c4294a354047cef1ffcbb470f804947406915bbca"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/provisioning.json",
+        "sha256": "a16ef5099c30617cef09a2746f8e4f84da87ec29f158a96b755a258be45628fc"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/redis-version.txt",
+        "sha256": "d149aed801e64410b1c364b0733955e32e45d0c637d74fb0da8e330997781c79"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/repository-overview-1280x800.png",
+        "sha256": "2c4bfade538f1b88fd7e149e5b5c440a9e1f7b67ab2d2913699b6f442e3f3ce4"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/repository-overview-1440x900.png",
+        "sha256": "41bca533c98a1c17f09dd4ace4ff9647a1d5d73d2e80c89afe233e4cc55720d9"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/first-attempt/repository-overview-980x700.png",
+        "sha256": "6b10e1adde5911ba050202aa608532779e275866c3f548ab2350ec6d1d3112cd"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/read-only-snapshots.json",
+        "sha256": "3e8c8077c90bcb2296f7d78c29cdcae85936926824fea1950c9149c3393fe356"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/acceptance.json",
+        "sha256": "3fda4e41c15a97ca2eebb8ecbc1d8f0bd0fcf060e4936397e701724faf53adc5"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/after-delete-1280x800.png",
+        "sha256": "7ca818acc9519adbb3ee651345b5ad0a35d829f49e86b1eb981c2602c58e3a78"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/after-delete-1440x900.png",
+        "sha256": "698661ef9225b9b47f65f0545baf53da5ea384b2df521fb644f7a159e33b2b02"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/after-delete-980x700.png",
+        "sha256": "cab5888872e2d95c4fcdcd46a90ed563ae02a1888404638185ec29eff23e63b4"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/first-start-1280x800.png",
+        "sha256": "eb42555d9183ff8f5d1e08750a976fa2ffa68e51edb53418cfd234ed5b210db5"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/first-start-1440x900.png",
+        "sha256": "98728b7ba1be291c4e3009ea63b6b82d7be9d8724326834e45fa152578f53a5b"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/first-start-980x700.png",
+        "sha256": "1d5acf844a1f3e5a4205b7a17b292cc217857459762640ef1d5d5499cb7a4f77"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/project-list-1280x800.png",
+        "sha256": "3c287962c12b52fded3a05225af278bdf5adf1be3ddb29c499c7b87047a381fa"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/project-list-1440x900.png",
+        "sha256": "693159a6349c41478999641fb1e5860662b2161a594c638832ad1575bb7efd9e"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/project-list-980x700.png",
+        "sha256": "1be345a1eadbead527cf80d740468208ea505eb50751ecf0a660d11b8d58008c"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/repository-overview-1280x800.png",
+        "sha256": "73c6a6c7fa3098c985391b4508af1a38982e68a2ce7c5566f6b84c8f9c35c594"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/repository-overview-1440x900.png",
+        "sha256": "02e5c40d85bc5f92e66e13df2b95f81f212929ad3ca9df10ff41046092474108"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/repository-overview-980x700.png",
+        "sha256": "06adf82411fa6636e7548dd3c120a476e4fc7726e994932768ed1d2e60c1ac00"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/representative-repository-1280x800.png",
+        "sha256": "6ea72b458464dfa919c0729bbb9d0d08adceabf58e854449d777b9575e65ca88"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/representative-repository-1440x900.png",
+        "sha256": "788bcb8d30d647a0eec6c7037d10c7a83dc4fb89f82e2fce5bb4b03d31283966"
+      },
+      {
+        "path": "validation/local/native-validation-20261005/second-attempt/representative-repository-980x700.png",
+        "sha256": "bbcfd6c3a4a6a7dcd15ab1045522138b0c8c27647ae0c3d34865c5dbb4ef783b"
+      }
+    ]
+  }
 }

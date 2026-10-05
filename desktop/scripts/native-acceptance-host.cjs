@@ -106,6 +106,8 @@ function main(argv = process.argv.slice(2)) {
         'NATIVE_ACCEPTANCE_CONSENT'].includes(key)) delete env[key];
   Object.assign(env, { NATIVE_ACCEPTANCE_CONTEXT: contextFile, CODE_INTELLIGENCE_BUILD_SEQUENCE: buildSequence,
     JAVA_HOME: javaHome, PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' });
+  console.log(JSON.stringify({ status: 'RUNNING', phase: 'source-provisioning', root, isolatedRunParent,
+    artifacts: path.join(tempRoot, 'native-acceptance-artifacts') }));
   run('/bin/bash', [path.join(sourceRoot, 'desktop', 'scripts', 'native-acceptance-macos.sh')], { cwd: sourceRoot, env });
   const runtimeEnvironment = path.join(tempRoot, 'native-runtime.env');
   const acceptance = path.join(sourceRoot, 'desktop', 'scripts', 'native-acceptance.cjs');

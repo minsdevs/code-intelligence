@@ -23,6 +23,7 @@ Thumbs.db
 .freebuff/
 
 # Local desktop bundles and browser verification artifacts
+/.native-product-*/
 desktop/node_modules/
 desktop/stage/
 desktop/dist/
