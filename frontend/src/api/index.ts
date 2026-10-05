@@ -7,6 +7,7 @@ export {
   getProject,
   listProjects,
   getLocalSourceStatus,
+  reanalyzeGithubProject,
   reanalyzeLocalProject,
 } from './projects'
 export { getJob, retryJob, subscribeJobEvents } from './jobs'

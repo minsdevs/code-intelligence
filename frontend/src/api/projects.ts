@@ -75,6 +75,14 @@ export function getLocalSourceStatus(projectId: number): Promise<LocalSourceStat
   return apiGet<LocalSourceStatus>(`/api/projects/${projectId}/local-source-status`)
 }
 
+/** Starts a fresh job on an existing GitHub project; never resumes a failed checkpoint. */
+export function reanalyzeGithubProject(projectId: number): Promise<{ jobId: number }> {
+  return apiSend<{ jobId: number }>(`/api/projects/${projectId}/reanalyze`, {
+    method: 'POST',
+    retryOnCsrfFailure: false,
+  })
+}
+
 export function reanalyzeLocalProject(
   projectId: number,
   previewToken: string,
