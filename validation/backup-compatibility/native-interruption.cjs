@@ -107,6 +107,7 @@ async function main(argv) {
   async function healthy() {
     const value = await status();
     assert.equal(value.ready, true); assert.equal(value.recoveryOnly, false); assert.equal(value.error, null);
+    assert.equal(value.backupSupported, true);
     assert.equal(value.backupAvailable, true); assert.equal(value.restoreAvailable, true); assert.equal(value.aiOff, true);
   }
   const navigate = route => perform(() => page.evaluate(route => { history.pushState(null, '', route); dispatchEvent(new PopStateEvent('popstate')); }, route));
@@ -219,6 +220,24 @@ async function main(argv) {
     assert.equal(report.failureState.ready, false); assert.equal(report.failureState.recoveryOnly, true);
     assert.equal(report.failureState.restoreAvailable, false); assert.equal(report.failureState.backupAvailable, false);
     assert.equal(report.failureState.aiOff, true);
+    assert.equal(report.failureState.backupSupported, true);
+    phase('verify-recovery-guidance');
+    const guidance = page.getByTestId('runtime-guidance');
+    await perform(() => expect(guidance).toHaveAttribute('role', 'alert'));
+    await perform(() => expect(guidance).toContainText('Data may already have been replaced'));
+    await perform(() => expect(guidance).not.toContainText('kept unchanged'));
+    await perform(() => expect(page.getByRole('button', { name: 'Restart runtime', exact: true })).toBeDisabled());
+    await perform(() => page.getByRole('button', { name: '한국어', exact: true }).click());
+    await perform(() => expect(guidance).toContainText('데이터가 이미 교체되었을 수 있으므로'));
+    await perform(() => expect(guidance).toContainText('백업·체크포인트·복구 파일을 삭제하지 마세요'));
+    await perform(() => expect(page.getByRole('button', { name: 'Runtime 재시작', exact: true })).toBeDisabled());
+    await perform(() => guidance.scrollIntoViewIfNeeded());
+    await perform(() => page.screenshot({ path: path.join(evidence, 'guidance-ko.png') }));
+    await perform(() => page.getByRole('button', { name: 'English', exact: true }).click());
+    await perform(() => expect(guidance).toContainText('Restart runtime does not perform this recovery'));
+    await perform(() => guidance.scrollIntoViewIfNeeded());
+    await perform(() => page.screenshot({ path: path.join(evidence, 'guidance-en.png') }));
+    check('recovery-guidance-distinguishes-supported-build-and-replaced-data-in-both-languages');
     const transactionRoot = path.join(plan.paths.userData, 'recovery', report.injection.transactionId);
     const checkpoint = path.join(transactionRoot, 'checkpoint.cibackup'), preservedInput = path.join(transactionRoot, 'input/archive.cibackup');
     const checkpointHash = digest(checkpoint);
@@ -234,6 +253,10 @@ async function main(argv) {
     const expectedSnapshot = restored ? oldSnapshot : newSnapshot, expectedSource = restored ? oldSource : newSource;
     assert.equal((await api('/api/projects/' + projectId)).currentSnapshot.id, expectedSnapshot);
     await source(expectedSource, expectedSnapshot); await healthy();
+    await navigate('/settings');
+    await perform(() => expect(page.getByRole('button', { name: 'Create backup', exact: true })).toBeEnabled());
+    await perform(() => expect(page.getByTestId('runtime-guidance')).toHaveCount(0));
+    await source(expectedSource, expectedSnapshot);
     assertPrefix(interruptedPrefix); assert.equal(digest(keyFile), keyHash);
     assert.equal(digest(selected), selectedHash); assert.equal(digest(preservedInput), selectedHash); assert.equal(digest(checkpoint), checkpointHash);
     for (const directory of ['checkpoint', 'incoming']) assert.equal(fs.existsSync(path.join(transactionRoot, directory, 'payload.bin')), false);

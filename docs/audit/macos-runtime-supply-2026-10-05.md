@@ -353,3 +353,8 @@ recovery 오류 전달을 관측했으므로 clean으로 세지 않는다. OS na
 복구필요 상태에도 기존 데이터 unchanged를 약속하는 generic unavailable 문구가
 실제 화면에서 발견되어 다음 UI 수정 항목에 기록했다. 이번 I/O failure 시험을
 SIGKILL·전원손실·nonzero 비용원장·실계정 적용·G-RECOVERY 전체 PASS로 확대하지 않는다.
+
+이후 복구 안내와 MANIFEST 진단 코드를 수정한 새 `jXdOYk` 앱의 한영 안내·두 실패
+경로 복구/재시작·비호환 사전 거부 회귀가 통과했다. 상세 최신 상태는
+`docs/audit/recovery-guidance-diagnostics-2026-10-05.md`와 `07-delivery-release-gates.md`
+§5의8단계 진행표를 따른다. 과거 최초 MANIFEST 실패의 근본 원인은 미확정이다.

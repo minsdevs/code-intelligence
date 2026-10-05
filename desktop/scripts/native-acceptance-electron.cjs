@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
+const { parseStartupLine } = require('../src/startup-diagnostics.cjs');
 
 function bounded(operation, timeoutMs, code) {
   let timer;
@@ -54,10 +55,6 @@ function createDeadline(timeoutMs = 540000, now = () => performance.now()) {
   } };
 }
 
-function parseStartupLine(line) {
-  const match = /^DESKTOP_STARTUP (MANIFEST|PROFILE|CREDENTIALS|PRIVATE_IPC|TLS|OWNER_LOCKS|SAFETY|GATEWAY|BACKUP|AUTHORIZED_ROOTS|POSTGRES|CACHE_AND_ANALYZER|BACKEND|WINDOW|READY)(?: FAILED (EACCES|ENOENT|SAFETY_RECOVERY_REQUIRED|SAFETY_STORAGE_UNAVAILABLE|SAFETY_OWNER_LOST|MAIN_STARTUP_FAILED))?$/.exec(line);
-  return match ? { phase: match[1], state: match[2] ? 'FAILED' : 'RUNNING', ...(match[2] ? { code: match[2] } : {}) } : null;
-}
 function observeStartup(child, report, save) {
   let line = '', dropping = false;
   const data = bytes => {

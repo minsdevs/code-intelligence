@@ -3,61 +3,75 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { runtimeRelativePath } = require('./runtime-platform.cjs');
+const { RuntimeIntegrityError, integrityError } = require('./startup-diagnostics.cjs');
 // Structural/integrity gate used before any bundled helper executes. Build-time PE
 // closure and provenance are separately verified before the manifest is published.
 async function validateRuntimeManifest(root, manifest, { platform = process.platform, arch = process.arch } = {}) {
-  const invalid = () => { throw new Error('Bundled runtime manifest or inventory is invalid.'); };
-  if (!manifest || manifest.format !== 1 || manifest.platform !== platform || manifest.arch !== arch
-    || !/^(0|[1-9][0-9]{0,18})$/.test(manifest.buildSequence) || typeof manifest.buildSequence !== 'string'
-    || BigInt(manifest.buildSequence) > 9223372036854775807n || !manifest.files || Array.isArray(manifest.files)) invalid();
+  const invalid = (code = 'RUNTIME_MANIFEST_INVALID') => { throw new RuntimeIntegrityError(code); };
+  const relativePath = (raw, label) => {
+    try { return runtimeRelativePath(raw, label, platform); } catch { invalid('RUNTIME_MANIFEST_PATH'); }
+  };
+  try {
+  if (!manifest || manifest.format !== 1 || !manifest.files || Array.isArray(manifest.files)) invalid();
+  if (manifest.platform !== platform || manifest.arch !== arch) invalid('RUNTIME_MANIFEST_PLATFORM');
+  if (!/^(0|[1-9][0-9]{0,18})$/.test(manifest.buildSequence) || typeof manifest.buildSequence !== 'string'
+    || BigInt(manifest.buildSequence) > 9223372036854775807n) invalid('RUNTIME_MANIFEST_BUILD');
   if (platform === 'win32' && (arch !== 'x64' || manifest.runtime?.cache !== 'garnet-2.2.0'
-    || manifest.backupProtocol !== 3 || manifest.ownershipProtocol !== 1)) invalid();
+    || manifest.backupProtocol !== 3 || manifest.ownershipProtocol !== 1)) invalid('RUNTIME_MANIFEST_PROTOCOL');
   const paths = new Map(), expected = Object.entries(manifest.files);
   if (!expected.length || expected.length > 100000 || Object.hasOwn(manifest.files, 'runtime-manifest.json')) invalid();
   for (const [name, hash] of expected) {
-    runtimeRelativePath(name, 'file path', platform);
+    relativePath(name, 'file path');
     if (typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash)) invalid();
     const key = platform === 'win32' ? name.toLowerCase() : name;
     if (paths.has(key)) invalid(); paths.set(key, name);
   }
   for (const key of ['postgresBin', 'postgresLib', 'postgresPkgLib', 'postgresShare']) {
-    const relative = runtimeRelativePath(manifest.runtime?.[key], 'PostgreSQL layout', platform);
-    if (!relative.startsWith('postgres/')) invalid();
+    const relative = relativePath(manifest.runtime?.[key], 'PostgreSQL layout');
+    if (!relative.startsWith('postgres/')) invalid('RUNTIME_MANIFEST_PATH');
   }
   const seen = new Set(), allNames = new Set(); let count = 0;
   const stamp = stat => [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs, stat.nlink].join(':');
   async function visit(relative, depth) {
-    if (++count > 100000 || depth > 64) invalid();
-    if (relative) runtimeRelativePath(relative, 'inventory path', platform);
+    if (++count > 100000 || depth > 64) invalid('RUNTIME_INVENTORY_LIMIT');
+    if (relative) relativePath(relative, 'inventory path');
     const absolute = relative ? path.join(root, ...relative.split('/')) : root;
     const stat = await fs.promises.lstat(absolute, { bigint: true });
-    if (stat.isSymbolicLink()) invalid();
+    if (stat.isSymbolicLink()) invalid('RUNTIME_INVENTORY_TYPE');
     if (relative) {
       const folded = platform === 'win32' ? relative.toLowerCase() : relative;
-      if (allNames.has(folded)) invalid(); allNames.add(folded);
+      if (allNames.has(folded)) invalid('RUNTIME_INVENTORY_UNEXPECTED'); allNames.add(folded);
     }
     if (stat.isDirectory()) {
       for (const name of await fs.promises.readdir(absolute)) await visit(relative ? relative + '/' + name : name, depth + 1);
       return;
     }
-    if (!stat.isFile() || stat.nlink !== 1n || stat.size > 512n * 1024n * 1024n) invalid();
+    if (!stat.isFile() || stat.nlink !== 1n) invalid('RUNTIME_INVENTORY_TYPE');
+    if (stat.size > 512n * 1024n * 1024n) invalid('RUNTIME_INVENTORY_LIMIT');
     if (relative === 'runtime-manifest.json') return;
-    if (!Object.hasOwn(manifest.files, relative)) invalid();
+    if (!Object.hasOwn(manifest.files, relative)) invalid('RUNTIME_INVENTORY_UNEXPECTED');
     const handle = await fs.promises.open(absolute, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    let readFailed = false;
     try {
-      if (stamp(await handle.stat({ bigint: true })) !== stamp(stat)) invalid();
+      if (stamp(await handle.stat({ bigint: true })) !== stamp(stat)) invalid('RUNTIME_INVENTORY_CHANGED');
       const hash = crypto.createHash('sha256');
       for await (const bytes of handle.createReadStream({ autoClose: false })) hash.update(bytes);
-      if (hash.digest('hex') !== manifest.files[relative] || stamp(await handle.stat({ bigint: true })) !== stamp(stat)
-        || stamp(await fs.promises.lstat(absolute, { bigint: true })) !== stamp(stat)) invalid();
-    } finally { await handle.close(); }
+      if (hash.digest('hex') !== manifest.files[relative]) invalid('RUNTIME_INVENTORY_HASH');
+      if (stamp(await handle.stat({ bigint: true })) !== stamp(stat)
+        || stamp(await fs.promises.lstat(absolute, { bigint: true })) !== stamp(stat)) invalid('RUNTIME_INVENTORY_CHANGED');
+    } catch (error) { readFailed = true; throw error; }
+    finally {
+      // A failed close must not replace an already observed integrity/read error.
+      try { await handle.close(); } catch (error) { if (!readFailed) throw error; }
+    }
     seen.add(relative);
   }
   await visit('', 0);
-  if (seen.size !== expected.length) invalid();
+  if (seen.size !== expected.length) invalid('RUNTIME_INVENTORY_MISSING');
   if (platform === 'win32') for (const name of ['native/windows/codeintel-boundary.exe', 'jre/bin/java.exe', 'cache/GarnetServer.exe',
     'cache/coreclr.dll', 'cache/GarnetServer.runtimeconfig.json', 'windows-provenance.json', 'backend/code-intelligence.jar',
-    'postgres/bin/postgres.exe', 'postgres/lib/vector.dll', 'postgres/lib/pg_trgm.dll']) if (!seen.has(name)) invalid();
+    'postgres/bin/postgres.exe', 'postgres/lib/vector.dll', 'postgres/lib/pg_trgm.dll']) if (!seen.has(name)) invalid('RUNTIME_INVENTORY_MISSING');
   return manifest;
+  } catch (error) { throw integrityError(error); }
 }
 module.exports = { validateRuntimeManifest };

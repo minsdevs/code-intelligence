@@ -1,0 +1,253 @@
+{
+  "format": 1,
+  "status": "PASS_SCOPED_VALIDATION_RELEASE_INCOMPLETE",
+  "baseCommit": "8dd6c99ba48aed029ec41d6bf4c72ac22217abb2",
+  "stage": {
+    "current": 1,
+    "total": 8,
+    "name": "Data recovery stabilization",
+    "wholeStageComplete": false
+  },
+  "sources": {
+    "desktop/src/main.cjs": "5e017a2c714bc1a0eb39e0cf3376a4ba08f80e2ca8d6721dfa4ca1dac8e17e68",
+    "desktop/src/runtime-manifest.cjs": "58f4b9f041b36b305eb4ceecb74435d1deb931ec399853aa27dd47abeea0d544",
+    "desktop/src/startup-diagnostics.cjs": "a7b45dee47e31a103920c9b517ecfd2903d319c8c43810f58b7ce44bf30ac616",
+    "desktop/scripts/native-acceptance-electron.cjs": "563b18202eaa34222bcd75e911c29a9a0cc8ee7385e2b18b3d6ae6469329b466",
+    "frontend/src/desktop.d.ts": "606a9fef8b78a04c2b23eb76294188c89ae2fc512b54b4084d16e42ad039db42",
+    "frontend/src/features/settings/SettingsPage.tsx": "6c1b86dd96575e6a93e3b200239e1fbafccf79aa0b97d7092634344115f125b1",
+    "frontend/src/lib/translations.ts": "760cf0e2be86501907067ee4176df1643d85b656952fd4f0dc2fce7e671e3b4d",
+    "validation/backup-compatibility/native-interruption.cjs": "8e258c9a4b3d914d8dc6b8c531edb91bac65973d6999edecf5a64288baf00edb"
+  },
+  "app": {
+    "path": ".native-product-jXdOYk/Code Intelligence Validation.app",
+    "buildSequence": "1791207880791",
+    "appAsarSha256": "ab6aeddb1ef96f7586185ba6ebad0a1148a0686b107cc2f3086410d31fab5d12",
+    "manifestSha256": "198982420d3d2074ec29898286056cef567cb83f5cd0f972400bb1792e37f6db",
+    "javaRecompiled": false,
+    "nativeRebuilt": false,
+    "signature": "ad-hoc validation only"
+  },
+  "tests": {
+    "desktop": {
+      "tests": 236,
+      "pass": 236,
+      "fail": 0,
+      "skip": 0
+    },
+    "settings": {
+      "tests": 44,
+      "pass": 44,
+      "fail": 0
+    },
+    "typescriptNoEmit": true,
+    "changedFrontendLint": true
+  },
+  "native": [
+    {
+      "report": "validation/local/restore-interruption/native-e5Y4sU/result.json",
+      "sha256": "3016585e3c272db44222e2b943b26228ee4e340f70090cd64994b193c4b16809",
+      "point": "BEFORE_COMPLETED_CLEANUP",
+      "status": "PASS",
+      "checks": [
+        "real-ui-backup-created",
+        "newer-real-db-and-source-created",
+        "recovery-guidance-distinguishes-supported-build-and-replaced-data-in-both-languages",
+        "injected-real-restore-failed-closed-with-checkpoint-input-keyring-and-journal-prefix-preserved",
+        "restart-keeps-completed-restored-db-and-source",
+        "second-restart-opens-normally-without-recovery-prompt-and-preserves-source"
+      ],
+      "processExits": 3,
+      "allProcessesExitedZero": true,
+      "shutdownRecoveryNotices": 0,
+      "mockKeychain": true
+    },
+    {
+      "report": "validation/local/restore-interruption/native-hnbzah/result.json",
+      "sha256": "cefebda75cc241563f00238b78267b80eeaac1311704001c4ca9cedc6b0baf18",
+      "point": "AFTER_SOURCE_RENAME",
+      "status": "PASS",
+      "checks": [
+        "real-ui-backup-created",
+        "newer-real-db-and-source-created",
+        "recovery-guidance-distinguishes-supported-build-and-replaced-data-in-both-languages",
+        "injected-real-restore-failed-closed-with-checkpoint-input-keyring-and-journal-prefix-preserved",
+        "restart-keeps-rolled-back-newer-db-and-source",
+        "second-restart-opens-normally-without-recovery-prompt-and-preserves-source"
+      ],
+      "processExits": 3,
+      "allProcessesExitedZero": true,
+      "shutdownRecoveryNotices": 1,
+      "mockKeychain": true
+    },
+    {
+      "report": "validation/local/restore-preflight/native-VCIheO/result.json",
+      "sha256": "ba9c6d3a83340ebd62f5a36d7884d996e8852a3135fb4ed3138a518632b3a28f",
+      "point": "COMPATIBILITY_PREFLIGHT",
+      "status": "PASS",
+      "checks": [
+        "real-ui-backup-created",
+        "authenticated-mismatch-refused-without-ledger-record-authority-or-data-changes",
+        "subsequent-compatible-backup-replaces-newer-db-and-source-with-backup-state",
+        "restored-source-and-normal-service-state-survive-restart"
+      ],
+      "processExits": 2,
+      "allProcessesExitedZero": true,
+      "shutdownRecoveryNotices": 0,
+      "mockKeychain": true
+    }
+  ],
+  "evidence": [
+    {
+      "path": "validation/local/restore-interruption/native-e5Y4sU/guidance-en.png",
+      "sha256": "1d57b6f889f39ff95fb5959fcbbf12c44f4c042db03cf58f267835d6b6774545"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-e5Y4sU/guidance-ko.png",
+      "sha256": "659f6c25725785b58ef76689b708992f9c85e0c3cd6746c667edf72b33503356"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-e5Y4sU/interrupted.png",
+      "sha256": "1d57b6f889f39ff95fb5959fcbbf12c44f4c042db03cf58f267835d6b6774545"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-e5Y4sU/recovered.png",
+      "sha256": "8ef73d4a0ef607b3a2ceacb553aca5d7ef68fbc644d0bd1f52da805cbe76e1a6"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-e5Y4sU/result.json",
+      "sha256": "3016585e3c272db44222e2b943b26228ee4e340f70090cd64994b193c4b16809"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-hnbzah/guidance-en.png",
+      "sha256": "1d57b6f889f39ff95fb5959fcbbf12c44f4c042db03cf58f267835d6b6774545"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-hnbzah/guidance-ko.png",
+      "sha256": "659f6c25725785b58ef76689b708992f9c85e0c3cd6746c667edf72b33503356"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-hnbzah/interrupted.png",
+      "sha256": "1d57b6f889f39ff95fb5959fcbbf12c44f4c042db03cf58f267835d6b6774545"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-hnbzah/recovered.png",
+      "sha256": "dfb5d07e563a83324989f803d789a1f5468cb04dc0c497269cd1c52359b2c975"
+    },
+    {
+      "path": "validation/local/restore-interruption/native-hnbzah/result.json",
+      "sha256": "cefebda75cc241563f00238b78267b80eeaac1311704001c4ca9cedc6b0baf18"
+    },
+    {
+      "path": "validation/local/restore-preflight/native-VCIheO/incompatible-refused.png",
+      "sha256": "3ebbe36c97c47f3e3bb3584a4482017c4a2d6cd8bc0a64570e227ac966749ed0"
+    },
+    {
+      "path": "validation/local/restore-preflight/native-VCIheO/result.json",
+      "sha256": "ba9c6d3a83340ebd62f5a36d7884d996e8852a3135fb4ed3138a518632b3a28f"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/desktop-first.log",
+      "sha256": "e5de3c8f33e5cecc1a42e17d3aa8b815a82ba67af6a00ffc0b03765fbbf441b7"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/desktop-reviewed.log",
+      "sha256": "45fc6455aff8b054318b5c1f2d3c9d96534f31d84965924f85ec74c7aa257518"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/desktop-final.log",
+      "sha256": "630c28cf76d7beae9dce74ea8ba04565a4541f96a129971291820ed61ccd0e0b"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/settings-first.json",
+      "sha256": "9ea4a1fb9898cc448f603e18d855ed3aededa1c50376c1ba91b53159f3324454"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/settings-final.json",
+      "sha256": "fe475d515b4c302e68566fa3892225b14e2843526af6bdc599007fbfc14157b4"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/settings-first.log",
+      "sha256": "2c4089b3a73b84b81e82b4b984380abdd2de9e5b548cfeaa5ad38e54ac6300f0"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/settings-final.log",
+      "sha256": "b0ff9441c89636351abfae7e15d743fce46774f32b92ca98088728700998b344"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/package-result.json",
+      "sha256": "25a5e55b3e73ae72bdcc5dfa7942938ed2526a192b5c5de0309e9c414e9a9793"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/package-resume-result.json",
+      "sha256": "e0b0d8715611b24f113d2f0e63db95b7735e40bc43c9773d743a170c785390a6"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/jar-readback.json",
+      "sha256": "f75ff4f2a2f1360af342e106e90af099bcba5f4ed0a84af0b09df0a5079ad765"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/packager.log",
+      "sha256": "0f48ee98f05497854bd7fbad53fdc72e347116a35bdac14a3068a193e8cbe944"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/packager-resume.log",
+      "sha256": "a53b52d2977fa06e6edd6018592ca9656c245feb84ba6b6a3fb8b5b3e0e158c2"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/build.log",
+      "sha256": "be3249c7c304e41e8993c5dd3528eeaaed7e060a1d6a2ceea598ea488b74d733"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/build-resume.log",
+      "sha256": "b99d6a39a38b775cb8c4b339e42b916027254021ac3b988f8f53607434670440"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/package.cjs",
+      "sha256": "ca474242a844dc6a04ea11f10fbc93f499260eb50037d5e560d78e5d3cdb0db8"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/package-resume.cjs",
+      "sha256": "a91048889043a8448ee8770f1530c37cb8cb82b67945834c283e74de57f40be2"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/replace-static.py",
+      "sha256": "2c528c4f1787968f583286432d862d3b14692af33561011a00253354c8c6e563"
+    },
+    {
+      "path": "validation/local/recovery-guidance.ggRZRr/frontend.config.mjs",
+      "sha256": "5c28711c3a3c132638d8c2920ebd5fbd8255011828af68d156a6a209597204d6"
+    }
+  ],
+  "cleanup": {
+    "path": "validation/local/recovery-guidance.ggRZRr/cleanup.json",
+    "sha256": "1cee09f8fdfb413b0f5867dc802635d3830bd41df5551712681d43859de71d7f",
+    "targets": [
+      {
+        "path": "validation/local/recovery-guidance.ggRZRr/work-EH5hDE",
+        "status": "PRESERVED_OPEN_FILES_OR_UNCONFIRMED"
+      },
+      {
+        "path": ".native-product-cCuC8e",
+        "status": "REMOVED_OWNED_BUILD_COPY"
+      }
+    ],
+    "retainedEvidenceUnchanged": true
+  },
+  "limitations": [
+    "Original PR90 MANIFEST failure cause remains unconfirmed",
+    "Fixed codes classify observed rejection, not its underlying cause",
+    "Non-MANIFEST raw error paths are outside this change",
+    "Observer is attached after SDK launch, not proof of every pre-launch failure capture",
+    "Mock Keychain and controlled native dialogs; no real-account data",
+    "No nonzero cost-obligation, SIGKILL or power-loss matrix",
+    "Not clean-machine/minimum-OS/Developer-ID/notarized release acceptance"
+  ]
+}

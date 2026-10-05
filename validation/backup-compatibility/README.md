@@ -187,6 +187,15 @@ fixture DB paths are not reusable after this cleanup.
 retained Validation bundle and a **new automation claim per command**. It does not
 modify the bundle or use an existing acceptance or real-account profile.
 
+The current driver additionally requires the explicit `backupSupported` status and
+`runtime-guidance` UI from the recovery-guidance/diagnostics update. It verifies
+both Korean and English recovery guidance, disabled runtime restart, and removal
+of recovery guidance after successful recovery. The current tested bundle is
+`.native-product-jXdOYk/Code Intelligence Validation.app`; historical `wXqDvU`
+reports used the previous driver and do not prove these new UI assertions.
+The new `native-e5Y4sU` / `native-hnbzah` interruption runs and `native-VCIheO`
+preflight run passed. See `docs/audit/recovery-guidance-diagnostics-2026-10-05.md`.
+
 ```sh
 rtk proxy node validation/backup-compatibility/native-interruption.cjs \
   --app '<original-repository>/.native-product-<id>/Code Intelligence Validation.app' \

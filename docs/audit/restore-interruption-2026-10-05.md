@@ -91,3 +91,13 @@ The first unclassified MANIFEST-stage startup failure and misleading unavailable
 copy remain recorded follow-ups, not silently discarded observations. Repeated-start
 stability, cause/fix evidence, and accurate recovery guidance are required before a
 broader release claim. Final passing cases do not authorize real-profile mutation.
+
+## Follow-up implementation
+
+The misleading unavailable copy above was fixed in the next product unit; it is a
+historical observation, not the current guidance. See
+`recovery-guidance-diagnostics-2026-10-05.md` for the new `jXdOYk` package, explicit
+support/recovery/pending/unknown UI states, fixed MANIFEST diagnostic codes and
+fresh-profile native results. The original MANIFEST failure's cause remains
+unconfirmed. Neither this follow-up nor its passing reruns upgrades the old failed
+attempt to PASS or completes the full release gate.

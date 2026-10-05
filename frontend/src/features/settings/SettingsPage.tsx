@@ -179,11 +179,17 @@ export default function SettingsPage() {
   })
   const restartMutation = useMutation({
     mutationFn: () => desktop!.restartRuntime(),
+    retry: false,
+    onMutate: () => setRestoreIncompatible(false),
     onSuccess: (status) => queryClient.setQueryData(['desktop-runtime'], status),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['desktop-runtime'] }),
   })
   const backupMutation = useMutation({
     mutationFn: () => desktop!.backup(),
+    retry: false,
+    onMutate: () => setRestoreIncompatible(false),
     onSuccess: (path) => setBackupPath(path),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['desktop-runtime'] }),
   })
   const restoreMutation = useMutation({
     mutationFn: () => desktop!.restore(),
@@ -199,13 +205,26 @@ export default function SettingsPage() {
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['desktop-runtime'] }),
   })
-  const runtimeControlsReady = runtimeQuery.isSuccess && !runtimeQuery.isFetching
-    && !restartMutation.isPending && runtimeQuery.data.ready === true && runtimeQuery.data.error === null
-  const backupDisabled = !runtimeControlsReady || runtimeQuery.data?.backupAvailable === false
-    || backupMutation.isPending || restoreMutation.isPending
-  const restoreDisabled = !runtimeControlsReady || runtimeQuery.data?.restoreAvailable === false
-    || backupMutation.isPending || restoreMutation.isPending
-  const backupUnavailable = runtimeQuery.data?.backupAvailable === false || runtimeQuery.data?.restoreAvailable === false
+  // A known recovery requirement outranks availability, including during a failed
+  // status refresh. Do not infer build support or data preservation from a false flag.
+  const recoveryRequired = runtimeQuery.data?.recoveryOnly === true
+  const runtimePending = restartMutation.isPending || backupMutation.isPending || restoreMutation.isPending
+  const runtimeStatusKnown = runtimeQuery.isSuccess && !runtimeQuery.isFetching
+  const runtimeControlsReady = runtimeStatusKnown && !runtimePending && !recoveryRequired
+    && runtimeQuery.data.ready === true && runtimeQuery.data.error === null
+  const backupDisabled = !runtimeControlsReady || runtimeQuery.data?.backupSupported === false
+    || runtimeQuery.data?.backupAvailable === false
+  const restoreDisabled = !runtimeControlsReady || runtimeQuery.data?.backupSupported === false
+    || runtimeQuery.data?.restoreAvailable === false
+  const restartDisabled = !runtimeStatusKnown || runtimePending || recoveryRequired
+  const runtimeNotice = recoveryRequired ? 'settings.backupRecoveryRequired'
+    : runtimePending ? 'settings.backupBusy'
+      : runtimeQuery.isError ? 'settings.runtimeUnknown'
+        : !runtimeStatusKnown ? null
+          : runtimeQuery.data.backupSupported === false ? 'settings.backupUnsupported'
+            : !runtimeQuery.data.ready || runtimeQuery.data.error !== null
+              || runtimeQuery.data.backupAvailable === false || runtimeQuery.data.restoreAvailable === false
+              ? 'settings.backupUnavailable' : null
 
   const saveError = settingsMutation.error
     ? t(settingsMutation.error instanceof ApiError && settingsMutation.error.status === 409
@@ -477,9 +496,9 @@ export default function SettingsPage() {
           <h2 className="text-[13px] font-semibold text-ink">{t('settings.desktopRuntime')}</h2>
           <p className="mt-1 text-[12px] text-ink-muted">{t('settings.desktopRuntimeDesc')}</p>
           {runtimeError && <p className="mt-2 text-[12px] text-danger" role="alert">{runtimeError}</p>}
-          {restoreIncompatible && <p className="mt-2 text-[12px] text-danger" role="alert">{t('settings.restoreIncompatible')}</p>}
+          {restoreIncompatible && runtimeControlsReady && <p className="mt-2 text-[12px] text-danger" role="alert">{t('settings.restoreIncompatible')}</p>}
           {runtimeQuery.isLoading && <p className="mt-2 text-[13px] text-ink-muted">{t('settings.runtimeLoading')}</p>}
-          {backupUnavailable && <p className="mt-2 text-[12px] text-ink-muted">{t('settings.backupUnavailable')}</p>}
+          {runtimeNotice && <p data-testid="runtime-guidance" className="mt-2 text-[12px] text-ink-muted" role={recoveryRequired ? 'alert' : 'status'}>{t(runtimeNotice)}</p>}
           {runtimeQuery.data && (
             <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
               <dt className="text-ink-muted">{t('settings.runtimeReady')}</dt>
@@ -493,8 +512,8 @@ export default function SettingsPage() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => restartMutation.mutate()}
-              disabled={restartMutation.isPending}
+              onClick={() => { if (!restartDisabled) restartMutation.mutate() }}
+              disabled={restartDisabled}
               className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink hover:bg-surface-2 disabled:opacity-50"
             >
               {restartMutation.isPending ? t('settings.restarting') : t('settings.restartRuntime')}
