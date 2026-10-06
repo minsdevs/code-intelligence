@@ -1,0 +1,338 @@
+{
+  "format": 1,
+  "scope": "Current source diagnostics plus fresh measurements of the previously built candidate",
+  "observedAt": "2026-10-06T06:06:20.857Z",
+  "releaseVerdict": "NO_GO",
+  "previousMerge": {
+    "pullRequest": 99,
+    "commit": "ce0322f8036d281fbebd21c488bc25ea2300326f",
+    "state": "MERGED"
+  },
+  "previousLedger": {
+    "path": "docs/audit/startup-resource-follow-up-2026-10-06.json",
+    "sha256": "744919d642cf07b0e55176dc0f4df79aebe9f62a068a9c1925bd8505e4b22e25"
+  },
+  "previousReadback": {
+    "path": "validation/local/startup-root-cause/resume-readback-uNLsPZ/result.json",
+    "sha256": "6969267e6085feaafc208a10744beaa07b41dc96ea14a1d8dead8b5416ae86dc",
+    "rawReferences": 23,
+    "sourceFingerprints": 14,
+    "assessmentRecomputed": {
+      "status": "FAIL",
+      "requestedRuns": 20,
+      "completedRuns": 20,
+      "failedRuns": 0,
+      "unexecutedRuns": 0,
+      "p95ReadyMs": 12544,
+      "p95IdleRssKiB": 1741728,
+      "maxIdleRssKiB": 1745680,
+      "failures": [
+        "READY_SLO_EXCEEDED",
+        "RSS_SLO_EXCEEDED"
+      ]
+    }
+  },
+  "measuredCandidate": {
+    "app": ".native-product-tZgvV7/Code Intelligence Validation.app",
+    "implementationCommit": "69c2ad8d38c950f543dceca0aa94dd2b28c1b6ce",
+    "buildSequence": "1791264249607",
+    "appAsarSha256": "448d246faecb0efc2a648a9c9d3a1026f7e3657af1261519f6713889d5f70899",
+    "manifestSha256": "9a0dc937af6891df7acb4af681cd8e7ea482e88d50426c8a147202199538e7f7",
+    "containsNewPhaseMarkers": false
+  },
+  "diagnostic": {
+    "path": "validation/local/startup-probe/run-pPI5VC/result.json",
+    "sha256": "b1cbc2cb6d4a154c8ad8ebcf92c38707ba97af386ab72e2c9faf86c38b229a5c",
+    "scope": "diagnostic-startup-probe-only",
+    "status": "COMPLETE_DIAGNOSTIC",
+    "acceptanceGate": false,
+    "resourceSamples": {
+      "path": "validation/local/startup-probe/run-pPI5VC/resource-samples.csv",
+      "sha256": "f1696792660f16624ab9121487dbd4637ed26f59abbaf0cdb165fd2b0b33a330"
+    },
+    "warmup": {
+      "readyMs": 11937,
+      "idlePeakRssKiB": 1721888,
+      "cleanupConfirmed": true
+    },
+    "samples": [
+      {
+        "sequence": 1,
+        "readyMs": 11024,
+        "backendToWindowMs": 6355,
+        "gatewayToBackupIntervalsMs": [
+          269,
+          277
+        ],
+        "gatewayToBackupSumMs": 546,
+        "idlePeakRssKiB": 1711072,
+        "cleanupConfirmed": true,
+        "samplingComplete": true,
+        "powerAtStart": "AC",
+        "powerAtEnd": "AC",
+        "postIdleRoleSnapshot": {
+          "totalRssKiB": 1706784,
+          "byRole": {
+            "MAIN": {
+              "processes": 1,
+              "rssKiB": 207696
+            },
+            "ELECTRON_GPU": {
+              "processes": 1,
+              "rssKiB": 78128
+            },
+            "ELECTRON_UTILITY": {
+              "processes": 1,
+              "rssKiB": 54144
+            },
+            "JAVA": {
+              "processes": 8,
+              "rssKiB": 924768
+            },
+            "POSTGRES": {
+              "processes": 1,
+              "rssKiB": 17776
+            },
+            "ELSE": {
+              "processes": 16,
+              "rssKiB": 150560
+            },
+            "NODE": {
+              "processes": 1,
+              "rssKiB": 146688
+            },
+            "ELECTRON_RENDERER": {
+              "processes": 1,
+              "rssKiB": 127024
+            }
+          },
+          "largestJavaRssKiB": 524096,
+          "remainingJavaRssKiB": 400672
+        }
+      },
+      {
+        "sequence": 2,
+        "readyMs": 10828,
+        "backendToWindowMs": 6377,
+        "gatewayToBackupIntervalsMs": [
+          311,
+          340
+        ],
+        "gatewayToBackupSumMs": 651,
+        "idlePeakRssKiB": 1727936,
+        "cleanupConfirmed": true,
+        "samplingComplete": true,
+        "powerAtStart": "AC",
+        "powerAtEnd": "AC",
+        "postIdleRoleSnapshot": {
+          "totalRssKiB": 1723632,
+          "byRole": {
+            "MAIN": {
+              "processes": 1,
+              "rssKiB": 207456
+            },
+            "ELECTRON_GPU": {
+              "processes": 1,
+              "rssKiB": 78208
+            },
+            "ELECTRON_UTILITY": {
+              "processes": 1,
+              "rssKiB": 54032
+            },
+            "JAVA": {
+              "processes": 8,
+              "rssKiB": 942176
+            },
+            "POSTGRES": {
+              "processes": 1,
+              "rssKiB": 17712
+            },
+            "ELSE": {
+              "processes": 16,
+              "rssKiB": 150128
+            },
+            "NODE": {
+              "processes": 1,
+              "rssKiB": 147072
+            },
+            "ELECTRON_RENDERER": {
+              "processes": 1,
+              "rssKiB": 126848
+            }
+          },
+          "largestJavaRssKiB": 540400,
+          "remainingJavaRssKiB": 401776
+        }
+      },
+      {
+        "sequence": 3,
+        "readyMs": 11384,
+        "backendToWindowMs": 6651,
+        "gatewayToBackupIntervalsMs": [
+          364,
+          385
+        ],
+        "gatewayToBackupSumMs": 749,
+        "idlePeakRssKiB": 1710608,
+        "cleanupConfirmed": true,
+        "samplingComplete": true,
+        "powerAtStart": "AC",
+        "powerAtEnd": "AC",
+        "postIdleRoleSnapshot": {
+          "totalRssKiB": 1706368,
+          "byRole": {
+            "MAIN": {
+              "processes": 1,
+              "rssKiB": 207584
+            },
+            "ELECTRON_GPU": {
+              "processes": 1,
+              "rssKiB": 77936
+            },
+            "ELECTRON_UTILITY": {
+              "processes": 1,
+              "rssKiB": 54048
+            },
+            "JAVA": {
+              "processes": 8,
+              "rssKiB": 923488
+            },
+            "POSTGRES": {
+              "processes": 1,
+              "rssKiB": 17872
+            },
+            "ELSE": {
+              "processes": 16,
+              "rssKiB": 151376
+            },
+            "NODE": {
+              "processes": 1,
+              "rssKiB": 146912
+            },
+            "ELECTRON_RENDERER": {
+              "processes": 1,
+              "rssKiB": 127152
+            }
+          },
+          "largestJavaRssKiB": 521888,
+          "remainingJavaRssKiB": 401600
+        }
+      }
+    ],
+    "sourceAndBundleUnchanged": true,
+    "environmentGate": "AC_OBSERVED_AT_RUN_BOUNDARIES",
+    "roleSnapshotIsIdlePeak": false,
+    "realAccount": false,
+    "mockKeychain": true
+  },
+  "previousTwentyRuns": {
+    "path": "validation/local/startup-performance/run-oAD8MS/result.json",
+    "sha256": "22f07218c7a8197cf97800b0ec6492d513013648682132471164bcb7e551dfaa",
+    "assessment": {
+      "status": "FAIL",
+      "requestedRuns": 20,
+      "completedRuns": 20,
+      "failedRuns": 0,
+      "unexecutedRuns": 0,
+      "p95ReadyMs": 12544,
+      "p95IdleRssKiB": 1741728,
+      "maxIdleRssKiB": 1745680,
+      "failures": [
+        "READY_SLO_EXCEEDED",
+        "RSS_SLO_EXCEEDED"
+      ]
+    },
+    "first": {
+      "sequence": 1,
+      "readyMs": 10981,
+      "backendToWindowMs": 6354,
+      "gatewayToBackupIntervalsMs": [
+        266,
+        316
+      ],
+      "gatewayToBackupSumMs": 582
+    },
+    "last": {
+      "sequence": 20,
+      "readyMs": 12901,
+      "backendToWindowMs": 6373,
+      "gatewayToBackupIntervalsMs": [
+        1146,
+        1122
+      ],
+      "gatewayToBackupSumMs": 2268
+    },
+    "meanBackendToWindowMs": 6259,
+    "interpretation": "Observed gateway intervals grow; per-record replay and key-validation timings were not measured."
+  },
+  "implementation": {
+    "commit": "69337a4df3a3a41c350c05132b25a0f0f6284083",
+    "changedSourceFiles": [
+      "desktop/src/main.cjs",
+      "desktop/src/startup-diagnostics.cjs"
+    ],
+    "sourceHashes": {
+      "desktop/src/main.cjs": "9e251017198590f3c5a432f171aacab84d5543f4a10c6adc75337b6d5f4968e2",
+      "desktop/src/startup-diagnostics.cjs": "cbb608690089853be9ae6250f47b75b1f86677f216f4f5fcd53aeccb19ba1b4a"
+    },
+    "desktopSourceFingerprint": "98670ce51a90af617d0ebe703809b47b2b2a1e8e52f0fa988474d4f73d0a1e00",
+    "markers": [
+      "BACKEND_SOURCES",
+      "BACKEND_PROCESS",
+      "BACKEND_HEALTH",
+      "BACKEND_ROOTS"
+    ],
+    "maintenanceStartupTracing": false,
+    "candidateBuilt": false,
+    "nativePhaseTimingMeasured": false,
+    "performanceOptimizationClaimed": false
+  },
+  "unit": {
+    "path": "validation/local/startup-phase-breakdown/unit-wET6Ea/result.json",
+    "sha256": "36c2df84934682e140229e53f17d55d6ffa502e131e8cedcc589ed814b250d34",
+    "log": {
+      "path": "validation/local/startup-phase-breakdown/unit-wET6Ea/tests.tap",
+      "sha256": "f3dfc47aa51e70300a31badbac8ad96238eec5f5c525e9a1d67988c3fe957e41"
+    },
+    "totals": {
+      "tests": 194,
+      "pass": 194,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "execution": {
+      "status": 0,
+      "signal": null,
+      "errorCode": null,
+      "timedOut": false,
+      "directExitObserved": true
+    },
+    "sourcesUnchanged": true,
+    "newTestsAdded": false,
+    "observedMarkerLines": {
+      "BACKEND_SOURCES": 44,
+      "BACKEND_PROCESS": 43,
+      "BACKEND_HEALTH": 43,
+      "BACKEND_ROOTS": 43
+    }
+  },
+  "buildCapacity": {
+    "observedAt": "2026-10-06T06:04:03.528Z",
+    "status": "BLOCKED",
+    "code": "MAC_BUILD_DISK_SPACE",
+    "availableBytes": "6556340224",
+    "requiredFreeBytes": "8589934592",
+    "policy": "Conservative free-space floor; not a disk reservation or measured build size.",
+    "sourceBuildPerformed": false,
+    "previousArtifactsDeleted": false
+  },
+  "limitations": [
+    "Three warm runs on a fresh synthetic profile do not replace twenty-run acceptance or demonstrate a product improvement.",
+    "Startup phase deltas are observer-arrival intervals, not CPU profiles or method timings.",
+    "Role snapshots were sampled after the idle window and are not simultaneous with the recorded idle peaks; JAVA roles do not identify individual worker duties.",
+    "Current phase-marker source passed existing regressions but has not been packaged or exercised in a new native candidate.",
+    "Two prior performance SLOs and the remaining real-account, crash, independent quality, signed installation and operational release conditions remain unmet."
+  ]
+}

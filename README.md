@@ -4,7 +4,7 @@
 
 Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
 
-Latest pre-deployment work: [physical runtime metadata, standalone control JAR and current candidate](docs/audit/startup-resource-follow-up-2026-10-06.md).
+Latest packaged candidate: [physical runtime metadata, standalone control JAR and current candidate](docs/audit/startup-resource-follow-up-2026-10-06.md).
 The device-origin credential refresh/CAS and revision-bound GitHub consumers are implemented;
 real-account refresh/revoke/SSO and clean-machine installation are not certified by synthetic tests.
 The current candidate is a local ad-hoc Validation build, not a public release. Use the exact
@@ -25,6 +25,13 @@ All20 warm runs completed, but p95 **12.544s** and maximum sampled idle RSS
 **1,745,680KiB** exceed10s/1.5GiB. AC was observed at each run boundary and source
 and candidate identities stayed unchanged. **Formal release remains NO_GO**; synthetic recovery does not certify
 all historical failures, real accounts, power loss or signed installation.
+
+The [startup phase follow-up](docs/audit/startup-phase-breakdown-2026-10-06.md)
+merged PR99, completed a fresh three-run diagnostic on unchanged tZgvV7 and added
+backend source/process/health/authorization markers. The new source passes 194
+existing regressions but is not yet packaged: observed free space was 6.11GiB,
+below the unchanged 8GiB build floor. The old candidate's native results do not
+validate those new markers or establish a performance improvement.
 
 The [initial Docker integration follow-up](docs/audit/docker-integration-2026-10-06.md)
 removed the earlier Docker-unavailable execution blocker. The current continuation
