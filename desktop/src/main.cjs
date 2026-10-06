@@ -425,7 +425,8 @@ async function waitUntil(check, label, timeoutMs = 60_000) {
     } catch (error) {
       lastError = error;
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    // Readiness probes are local and cheap; a coarse interval only adds startup idle time.
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`${label} did not become ready${lastError ? `: ${lastError.message}` : ''}`);
 }
