@@ -15,7 +15,36 @@ const { copyPrivateTree, dependencyInventory } = require('../../desktop/scripts/
 const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.cjs');
 const { requireCapacity } = require('../../desktop/scripts/macos-runtime-supply.cjs');
 const { ensureOutputParent, assertOutputPath } = require('./owned-output.cjs');
+const { candidateSpaceBudget } = require('./candidate-capacity.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const SOURCE_COPY_INPUTS = [
+  ['frontend', ['src', 'public', 'index.html', 'package.json', 'package-lock.json']],
+  ['desktop', ['src', 'scripts', 'build', 'package.json', 'package-lock.json']],
+  ['analyzers/ts-analyzer', ['src', 'package.json', 'package-lock.json', 'tsconfig.json']],
+];
+
+function measureCandidateCopies(repo, originalRuntime) {
+  const dependencies = {}, sources = {};
+  for (const [component, entries] of SOURCE_COPY_INPUTS) {
+    const dependency = dependencyInventory(path.join(repo, component, 'node_modules'));
+    dependencies[component] = { bytes: dependency.bytes, sha256: dependency.sha256 };
+    for (const entry of entries) {
+      const name = component + '/' + entry, file = path.join(repo, name);
+      if (!fs.existsSync(file)) { assert.equal(entry, 'public'); continue; }
+      const stat = fs.lstatSync(file); assert(!stat.isSymbolicLink());
+      if (stat.isDirectory()) {
+        const inventory = dependencyInventory(file); sources[name] = { bytes: inventory.bytes, sha256: inventory.sha256 };
+      } else { assert(stat.isFile() && stat.nlink === 1); sources[name] = { bytes: stat.size, sha256: hash(file) }; }
+    }
+  }
+  const runtime = dependencyInventory(originalRuntime);
+  const electron = dependencyInventory(path.join(repo, 'desktop/node_modules/electron/dist'));
+  const input = { dependencyBytes: Object.values(dependencies).reduce((sum, value) => sum + value.bytes, 0),
+    sourceBytes: Object.values(sources).reduce((sum, value) => sum + value.bytes, 0), runtimeBytes: runtime.bytes,
+    electronBytes: electron.bytes, analyzerDependencyBytes: dependencies['analyzers/ts-analyzer'].bytes };
+  return { dependencies, sources, runtime: { bytes: runtime.bytes, sha256: runtime.sha256 },
+    electron: { bytes: electron.bytes, sha256: electron.sha256 }, input, budget: candidateSpaceBudget(input) };
+}
 
 function ownedDirectory(plan, directory) {
   assert(typeof directory === 'string' && path.isAbsolute(directory) && path.normalize(directory) === directory);
@@ -188,12 +217,17 @@ async function main(argv = process.argv.slice(2)) {
   assert.equal(baseline, options.app); assert.equal(path.basename(baseline), 'Code Intelligence Validation.app');
   assert.equal(path.dirname(path.dirname(baseline)), repo);
   assert.match(path.basename(path.dirname(baseline)), /^\.native-product-[A-Za-z0-9]+$/);
-  requireCapacity(repo);
   const originalRuntime = path.join(baseline, 'Contents/Resources/runtime'), originalManifestFile = path.join(originalRuntime, 'runtime-manifest.json');
   const originalManifest = JSON.parse(fs.readFileSync(originalManifestFile));
   assert(BigInt(options.buildSequence) > BigInt(originalManifest.buildSequence));
   await validateRuntimeManifest(originalRuntime, originalManifest);
   execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', baseline], { stdio: 'pipe', timeout: 30000 });
+  // Full native provisioning retains its 8GiB floor. This path reuses a verified
+  // runtime and measures its distinct copies before applying a separate allowance.
+  const copyMeasurements = measureCandidateCopies(repo, originalRuntime);
+  const capacity = requireCapacity(repo, { minimumBytes: BigInt(copyMeasurements.budget.requiredFreeBytes) });
+  console.log(JSON.stringify({ status: 'CANDIDATE_CAPACITY', availableBytes: capacity.availableBytes,
+    budget: copyMeasurements.budget }));
   const base = ensureOutputParent(repo, 'validation/local/pre-release-candidate');
   const evidence = fs.mkdtempSync(path.join(base, 'build-')), work = path.join(evidence, 'work');
   fs.mkdirSync(work, { mode: 0o700 }); const identity = fs.lstatSync(work);
@@ -213,7 +247,7 @@ async function main(argv = process.argv.slice(2)) {
     sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(),
     sourceWorkingTree: Boolean(execFileSync('git', ['status', '--porcelain', '--', ...sourceRoots, ...buildInputs], { cwd: repo, encoding: 'utf8' }).trim()),
     gradleEnvironment: 'existing checkout and user Gradle cache/configuration; not a hermetic Gradle home',
-    sources: sourceDigests(), buildSequence: options.buildSequence, javaRecompiled: true, nativeRebuilt: false,
+    sources: sourceDigests(), capacity, copyMeasurements, buildSequence: options.buildSequence, javaRecompiled: true, nativeRebuilt: false,
     realKeychain: false, formalSigning: false, notarized: false, released: false,
     baselineHashes: { manifest: hash(originalManifestFile), asar: hash(path.join(baseline, 'Contents/Resources/app.asar')) } };
   const save = () => fs.writeFileSync(assertOutputPath(evidence, path.join(evidence, 'result.json')), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
@@ -243,14 +277,17 @@ async function main(argv = process.argv.slice(2)) {
     const frontend = path.join(work, 'frontend'), desktop = path.join(work, 'desktop'), analyzer = path.join(work, 'analyzers/ts-analyzer');
     for (const dir of [frontend, desktop, path.join(work, 'home'), path.join(work, 'tmp'), path.join(work, 'cache')]) fs.mkdirSync(dir, { mode: 0o700 });
     fs.mkdirSync(analyzer, { recursive: true, mode: 0o700 });
-    for (const [component, entries] of [['frontend', ['src', 'public', 'index.html', 'package.json', 'package-lock.json']],
-      ['desktop', ['src', 'scripts', 'build', 'package.json', 'package-lock.json']],
-      ['analyzers/ts-analyzer', ['src', 'package.json', 'package-lock.json', 'tsconfig.json']]]) {
+    for (const [component, entries] of SOURCE_COPY_INPUTS) {
       for (const entry of entries) {
         const from = path.join(repo, component, entry); if (!fs.existsSync(from)) { assert.equal(entry, 'public'); continue; }
-        fs.cpSync(from, path.join(work, component, entry), { recursive: true, force: false, errorOnExist: true });
+        const to = path.join(work, component, entry);
+        fs.cpSync(from, to, { recursive: true, force: false, errorOnExist: true });
+        const copied = fs.lstatSync(to).isDirectory() ? dependencyInventory(to).sha256 : hash(to);
+        assert.equal(copied, copyMeasurements.sources[component + '/' + entry].sha256, 'CANDIDATE_SOURCE_CHANGED_AFTER_CAPACITY_MEASUREMENT');
       }
       report[component + 'Dependencies'] = copyPrivateTree(plan, path.join(repo, component, 'node_modules'), path.join(work, component, 'node_modules'));
+      assert.equal(report[component + 'Dependencies'].sha256, copyMeasurements.dependencies[component].sha256,
+        'CANDIDATE_DEPENDENCIES_CHANGED_AFTER_CAPACITY_MEASUREMENT');
       save();
     }
     const requireFrontend = createRequire(path.join(frontend, 'package.json'));
@@ -354,6 +391,7 @@ async function main(argv = process.argv.slice(2)) {
     assert.deepEqual(sourceDigests(), report.sources);
     assert.equal(hash(originalManifestFile), report.baselineHashes.manifest);
     assert.equal(hash(path.join(baseline, 'Contents/Resources/app.asar')), report.baselineHashes.asar);
+    report.capacityAfter = requireCapacity(repo, { minimumBytes: 2n * 1024n ** 3n });
     report.app = app; report.appAsarSha256 = hash(asarFile); report.manifestSha256 = hash(finalManifestFile);
     report.status = 'PACKAGED_NOT_RELEASED'; report.sourceAndBaselineUnchanged = true; save();
     console.log(JSON.stringify({ status: report.status, evidence, app, buildSequence: report.buildSequence }));

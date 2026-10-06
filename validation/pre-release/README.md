@@ -134,6 +134,18 @@ destination, and the original failure remains primary. A new app is created;
 the baseline is not changed. This is an ad-hoc directory build, never a release,
 Developer ID/notarized app, automatic update or existing-profile migration.
 
+The verified-runtime reuse builder now has a separate space policy from full
+native provisioning. Full provisioning retains its 8GiB floor. Candidate reuse
+measures the actual logical dependency/source/runtime/Electron copy sizes, adds
+production-install, Java/static/temp and generated-output allowances plus 2GiB
+headroom, and rounds upward to 64MiB. The complete calculation and measured
+fingerprints are recorded in the build report; source and dependency copies must
+match those fingerprints. At completion, at least 2GiB must still be available.
+This is a planning allowance, not reserved disk space, a physical-allocation
+prediction or a hard write bound. It can exceed 8GiB for larger inputs. Earlier
+candidate reports retain the old fixed-floor decision. Startup, RSS, integrity
+and release-acceptance limits are unchanged by this build-policy revision.
+
 `run-product-candidate.cjs --app '<candidate>'` reuses the complete native product
 runner on fresh synthetic sources/profiles. Use a clean child environment as in
 the recorded validation: `env -i HOME="$HOME" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
