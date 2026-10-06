@@ -75,7 +75,7 @@ function classifyCommand(comm, expected) {
 
 function electronRole(type) {
   if (type === 'Browser') return 'ELECTRON_MAIN';
-  if (type === 'Renderer') return 'ELECTRON_RENDERER';
+  if (type === 'Tab' || type === 'Renderer') return 'ELECTRON_RENDERER';
   if (type === 'GPU') return 'ELECTRON_GPU';
   if (type === 'Utility') return 'ELECTRON_UTILITY';
   return 'UNKNOWN';

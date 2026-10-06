@@ -34,6 +34,7 @@ test('binary classification uses exact paths and never infers guardian versus ba
 
 test('Electron type mapping is fixed enum and unknown values stay unknown', () => {
   assert.equal(electronRole('Browser'), 'ELECTRON_MAIN'); assert.equal(electronRole('Renderer'), 'ELECTRON_RENDERER');
+  assert.equal(electronRole('Tab'), 'ELECTRON_RENDERER');
   assert.equal(electronRole('GPU'), 'ELECTRON_GPU'); assert.equal(electronRole('Utility'), 'ELECTRON_UTILITY');
   assert.equal(electronRole('Other'), 'UNKNOWN');
 });

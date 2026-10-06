@@ -44,7 +44,7 @@ test('sends target argv/env/bootstrap only through framed stdin and transfers bo
   const h = harness(); const bootstrap = Buffer.from('synthetic-private-bootstrap');
   const owner = await h.spawn(options({ args: ['synthetic-private-argument'], env: { PRIVATE: 'synthetic-private-environment' }, bootstrap }));
   assert.equal(owner.pid, 502); assert.equal(owner.helperPid, 501);
-  assert.deepEqual(h.launch.args, ['-Xms16m', '-Xmx64m', '-jar', '/synthetic/app.jar', '--ci-managed-process']);
+  assert.deepEqual(h.launch.args, ['-Xms16m', '-Xmx64m', '-XX:+UseSerialGC', '-XX:TieredStopAtLevel=1', '-jar', '/synthetic/app.jar', '--ci-managed-process']);
   assert.equal(h.launch.settings.env.PRIVATE, undefined);
   assert.equal(h.launch.settings.env.JAVA_TOOL_OPTIONS, undefined);
   assert.equal(h.launch.settings.env.JDK_JAVA_OPTIONS, undefined);

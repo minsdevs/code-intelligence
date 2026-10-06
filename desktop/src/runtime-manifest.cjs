@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { Buffer } = require('node:buffer');
 const { runtimeRelativePath } = require('./runtime-platform.cjs');
 const { RuntimeIntegrityError, integrityError } = require('./startup-diagnostics.cjs');
 // Structural/integrity gate used before any bundled helper executes. Build-time PE
@@ -11,7 +12,7 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
   const relativePath = (raw, label) => {
     try { return runtimeRelativePath(raw, label, platform); } catch { invalid('RUNTIME_MANIFEST_PATH'); }
   };
-  let operation = 'STRUCTURE';
+  let operation = 'STRUCTURE', readBuffer;
   try {
   if (!manifest || manifest.format !== 1 || !manifest.files || Array.isArray(manifest.files)) invalid();
   if (manifest.platform !== platform || manifest.arch !== arch) invalid('RUNTIME_MANIFEST_PLATFORM');
@@ -59,9 +60,25 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
     try {
       operation = 'HANDLE_STAT_PRE';
       if (stamp(await handle.stat({ bigint: true })) !== stamp(stat)) invalid('RUNTIME_INVENTORY_CHANGED');
-      operation = 'STREAM';
+      operation = 'READ';
       const hash = crypto.createHash('sha256');
-      for await (const bytes of handle.createReadStream({ autoClose: false })) hash.update(bytes);
+      const size = Number(stat.size);
+      if (!Number.isSafeInteger(size) || size < 0 || size > 512 * 1024 * 1024) invalid('RUNTIME_INVENTORY_LIMIT');
+      // One buffer belongs to this verification invocation, not to each file
+      // or to a module-global pool shared with concurrent verifications.
+      const buffer = readBuffer ??= Buffer.allocUnsafe(64 * 1024);
+      let position = 0;
+      while (position < size) {
+        const length = Math.min(buffer.length, size - position);
+        const count = (await handle.read(buffer, 0, length, position))?.bytesRead;
+        if (!Number.isSafeInteger(count) || count < 0 || count > length) invalid('RUNTIME_NODE_RANGE');
+        if (count === 0) invalid('RUNTIME_INVENTORY_CHANGED');
+        hash.update(buffer.subarray(0, count));
+        position += count;
+      }
+      const extra = (await handle.read(buffer, 0, 1, size))?.bytesRead;
+      if (!Number.isSafeInteger(extra) || extra < 0 || extra > 1) invalid('RUNTIME_NODE_RANGE');
+      if (extra !== 0) invalid('RUNTIME_INVENTORY_CHANGED');
       operation = 'HASH';
       if (hash.digest('hex') !== manifest.files[relative]) invalid('RUNTIME_INVENTORY_HASH');
       operation = 'HANDLE_STAT_POST';

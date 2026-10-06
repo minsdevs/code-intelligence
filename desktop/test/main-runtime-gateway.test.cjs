@@ -1063,7 +1063,7 @@ test('owned protocol startup binds one native provider and guardians before any 
   const backend = h.guardians.find(value => value.args.includes('--spring.profiles.active=desktop'));
   assert(backend); assert.deepEqual([...backend.args.slice(0, 2)], ['-Xms64m', '-Xmx2048m']);
   assert.equal(backend.args.some(value => value.startsWith('-XX:MaxRAMPercentage=')), false);
-  for (const lease of h.leaseChildren) assert.deepEqual([...lease.args.slice(0, 2)], ['-Xms16m', '-Xmx64m']);
+  for (const lease of h.leaseChildren) assert.deepEqual([...lease.args.slice(0, 4)], ['-Xms16m', '-Xmx64m', '-XX:+UseSerialGC', '-XX:TieredStopAtLevel=1']);
   assert.ok(h.events.indexOf('ownerLocks.open') < h.events.indexOf('safety.open'));
   assert.ok(h.events.indexOf('lease.acquire.ai-journal') < h.events.indexOf('spawn.postgres'));
   assert.equal(h.controls.safetyOptions[0].ownerLocks, h.controls.ownerProvider);

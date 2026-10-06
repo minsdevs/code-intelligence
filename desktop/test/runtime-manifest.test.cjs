@@ -91,7 +91,7 @@ test('an unchanged hash with a changed file identity stamp is still rejected and
   const f = fixture(t); let closed = 0;
   const validate = validatorWithIO({ async open(...args) {
     const handle = await fs.promises.open(...args); let stats = 0;
-    return { createReadStream: handle.createReadStream.bind(handle),
+    return { read: handle.read.bind(handle),
       async stat(...statArgs) { const value = await handle.stat(...statArgs); if (++stats > 1) value.ctimeNs += 1n; return value; },
       async close() { closed++; await handle.close(); } };
   } });
@@ -99,19 +99,58 @@ test('an unchanged hash with a changed file identity stamp is still rejected and
   assert.equal(closed, 1);
 });
 
-test('a stream read failure retains the fixed IO classification and closes the opened handle', async t => {
+test('a read failure retains the fixed IO classification and closes the opened handle', async t => {
   const f = fixture(t); let closed = 0;
   const validate = validatorWithIO({ async open(...args) {
     const handle = await fs.promises.open(...args);
     return { stat: handle.stat.bind(handle),
-      createReadStream: () => ({ async *[Symbol.asyncIterator]() { throw Object.assign(new Error('private-sentinel'), { code: 'EMFILE' }); } }),
+      async read() { throw Object.assign(new Error('private-sentinel'), { code: 'EMFILE' }); },
       async close() { closed++; await handle.close(); } };
   } });
   await assert.rejects(validate(f.root, f.manifest, platform), expected('RUNTIME_IO_EMFILE'));
   assert.equal(closed, 1);
 });
 
-test('failure observer sees the original injected IO failure exactly once before normalization', async t => {
+test('short reads hash correctly and reuse one bounded buffer for the file', async t => {
+  const f = fixture(t), seen = [];
+  const validate = validatorWithIO({ async open(...args) {
+    const handle = await fs.promises.open(...args);
+    return { stat: handle.stat.bind(handle),
+      async read(buffer, offset, length, position) {
+        seen.push(buffer);
+        return handle.read(buffer, offset, Math.min(length, 3), position);
+      }, close: handle.close.bind(handle) };
+  } });
+  assert.equal(await validate(f.root, f.manifest, platform), f.manifest);
+  assert(seen.length > 1); assert(seen.every(buffer => buffer === seen[0] && buffer.length === 64 * 1024));
+});
+
+test('truncation during read fails closed without following EOF indefinitely', async t => {
+  const f = fixture(t), file = path.join(f.root, 'sample.txt'); let first = true;
+  const validate = validatorWithIO({ async open(...args) {
+    const handle = await fs.promises.open(...args);
+    return { stat: handle.stat.bind(handle), async read(buffer, offset, length, position) {
+      if (first) { first = false; fs.truncateSync(file, 1); }
+      return handle.read(buffer, offset, length, position);
+    }, close: handle.close.bind(handle) };
+  } });
+  await assert.rejects(validate(f.root, f.manifest, platform), expected('RUNTIME_INVENTORY_CHANGED'));
+});
+
+test('append during read is rejected by the bounded one-byte EOF check', async t => {
+  const f = fixture(t), file = path.join(f.root, 'sample.txt'); let appended = false;
+  const validate = validatorWithIO({ async open(...args) {
+    const handle = await fs.promises.open(...args);
+    return { stat: handle.stat.bind(handle), async read(buffer, offset, length, position) {
+      const result = await handle.read(buffer, offset, length, position);
+      if (!appended && position === 0) { appended = true; fs.appendFileSync(file, 'x'); }
+      return result;
+    }, close: handle.close.bind(handle) };
+  } });
+  await assert.rejects(validate(f.root, f.manifest, platform), expected('RUNTIME_INVENTORY_CHANGED'));
+});
+
+test('failure observer sees the original injected IO failure exactly once without replacing the public error', async t => {
   const f = fixture(t), observed = [];
   const failure = Object.assign(new Error('private-sentinel'), { code: 'EMFILE' });
   const validate = validatorWithIO({ async lstat() { throw failure; } });
@@ -120,12 +159,47 @@ test('failure observer sees the original injected IO failure exactly once before
   assert.deepEqual(observed, [{ operation: 'LSTAT', error: failure }]);
 });
 
+test('all files share one read buffer per invocation and concurrent invocations remain isolated', async t => {
+  const f = fixture(t), second = fixture(t);
+  for (const item of [f, second]) for (const [name, bytes] of [['empty.txt', ''], ['multi.txt', 'z'.repeat(200000)]]) {
+    fs.writeFileSync(path.join(item.root, name), bytes);
+    item.manifest.files[name] = sha(bytes);
+  }
+  const buffers = new Map([[f.root, new Set()], [second.root, new Set()]]), opened = new Map();
+  const validate = validatorWithIO({ async open(file, ...args) {
+    const handle = await fs.promises.open(file, ...args);
+    const root = path.dirname(file); opened.set(root, (opened.get(root) ?? 0) + 1);
+    return { stat: handle.stat.bind(handle), close: handle.close.bind(handle),
+      read(buffer, offset, length, position) {
+        assert.equal(buffer.length, 65536); buffers.get(root).add(buffer);
+        return handle.read(buffer, offset, length, position);
+      } };
+  } });
+  await Promise.all([validate(f.root, f.manifest, platform), validate(second.root, second.manifest, platform)]);
+  assert.equal(opened.get(f.root), 3); assert.equal(opened.get(second.root), 3);
+  assert.equal(buffers.get(f.root).size, 1); assert.equal(buffers.get(second.root).size, 1);
+  assert.notEqual([...buffers.get(f.root)][0], [...buffers.get(second.root)][0]);
+});
+
+for (const value of [-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, undefined, 65537]) {
+  test(`invalid file read count ${value} fails immediately and closes the descriptor`, async t => {
+    const f = fixture(t); let closed = 0, reads = 0;
+    const validate = validatorWithIO({ async open(...args) {
+      const handle = await fs.promises.open(...args);
+      return { stat: handle.stat.bind(handle), async read() { reads++; return { bytesRead: value }; },
+        async close() { closed++; await handle.close(); } };
+    } });
+    await assert.rejects(validate(f.root, f.manifest, platform), expected('RUNTIME_NODE_RANGE'));
+    assert.equal(reads, 1); assert.equal(closed, 1);
+  });
+}
+
 for (const corrupt of [false, true]) test(`close failure ${corrupt ? 'does not mask the first hash failure' : 'still refuses an otherwise valid inventory'}`, async t => {
   const f = fixture(t); let closed = 0;
   if (corrupt) fs.writeFileSync(path.join(f.root, 'sample.txt'), 'different bytes');
   const validate = validatorWithIO({ async open(...args) {
     const handle = await fs.promises.open(...args);
-    return { stat: handle.stat.bind(handle), createReadStream: handle.createReadStream.bind(handle),
+    return { stat: handle.stat.bind(handle), read: handle.read.bind(handle),
       async close() { closed++; await handle.close(); throw Object.assign(new Error('private-sentinel-close'), { code: 'EIO' }); } };
   } });
   await assert.rejects(validate(f.root, f.manifest, platform), expected(corrupt ? 'RUNTIME_INVENTORY_HASH' : 'RUNTIME_IO_EIO'));
@@ -136,7 +210,7 @@ test('observer throw never replaces the original failure or close precedence', a
   const f = fixture(t); fs.writeFileSync(path.join(f.root, 'sample.txt'), 'different bytes');
   const validate = validatorWithIO({ async open(...args) {
     const handle = await fs.promises.open(...args);
-    return { stat: handle.stat.bind(handle), createReadStream: handle.createReadStream.bind(handle),
+    return { stat: handle.stat.bind(handle), read: handle.read.bind(handle),
       async close() { await handle.close(); throw Object.assign(new Error('private-close'), { code: 'EIO' }); } };
   } });
   await assert.rejects(validate(f.root, f.manifest, { ...platform, onFailure() { throw new Error('observer-private'); } }),

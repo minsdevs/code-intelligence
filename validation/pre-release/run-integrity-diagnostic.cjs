@@ -81,12 +81,14 @@ async function main(argv = process.argv.slice(2)) {
           try {
             const value = await Reflect.apply(originals[name], io, [file, ...args]);
             if (name === 'open' && target(file)) {
-              const read = value.createReadStream.bind(value), close = value.close.bind(value), stat = value.stat.bind(value);
+              const read = value.createReadStream.bind(value), directRead = value.read.bind(value),
+                close = value.close.bind(value), stat = value.stat.bind(value);
               value.createReadStream = (...args) => {
                 try { const stream = read(...args); stream.once('error', error => record('STREAM', error)); return stream; }
                 catch (error) { record('STREAM_CREATE', error); throw error; }
               };
               value.stat = async (...args) => { try { return await stat(...args); } catch (error) { record('HANDLE_STAT', error); throw error; } };
+              value.read = async (...args) => { try { return await directRead(...args); } catch (error) { record('READ', error); throw error; } };
               value.close = async () => { try { await close(); } catch (error) { record('CLOSE', error); throw error; } };
             }
             return value;
