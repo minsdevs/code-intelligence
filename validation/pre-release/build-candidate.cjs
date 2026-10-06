@@ -106,9 +106,9 @@ async function main(argv = process.argv.slice(2)) {
     const originalJar = path.join(repo, 'backend/build/libs', jars[0]); report.compiledJarSha256 = hash(originalJar);
     const controlJar = path.join(repo, 'backend/build/libs/code-intelligence-control.jar');
     const controlProvenance = path.join(repo, 'backend/build/libs/code-intelligence-control-provenance.json');
-    const { verifyControlRuntime } = require('./control-runtime.cjs');
-    report.control = await verifyControlRuntime({ jarFile: controlJar, provenanceFile: controlProvenance,
-      classRoot: path.join(repo, 'backend/build/classes/java/main') });
+    const { verifyControlSourceMembers } = require('./control-runtime.cjs');
+    report.control = await verifyControlSourceMembers({ jarFile: controlJar, provenanceFile: controlProvenance,
+      classRoot: path.join(repo, 'backend/build/classes/java/main'), backendJarFile: originalJar });
     save();
     const frontend = path.join(work, 'frontend'), desktop = path.join(work, 'desktop'), analyzer = path.join(work, 'analyzers/ts-analyzer');
     for (const dir of [frontend, desktop, path.join(work, 'home'), path.join(work, 'tmp'), path.join(work, 'cache')]) fs.mkdirSync(dir, { mode: 0o700 });
@@ -187,9 +187,11 @@ async function main(argv = process.argv.slice(2)) {
     const appRuntime = path.join(app, 'Contents/Resources/runtime'), finalManifestFile = path.join(appRuntime, 'runtime-manifest.json');
     await validateRuntimeManifest(appRuntime, JSON.parse(fs.readFileSync(finalManifestFile)));
     assert.equal(hash(path.join(appRuntime, 'backend/code-intelligence.jar')), readback.candidateJarSha256);
-    assert.deepEqual(await verifyControlRuntime({ jarFile: path.join(appRuntime, 'backend/code-intelligence-control.jar'),
+    // The Java/static readback already proves that the candidate retains every
+    // non-static backend member, including these original dependency archives.
+    assert.deepEqual(await verifyControlSourceMembers({ jarFile: path.join(appRuntime, 'backend/code-intelligence-control.jar'),
       provenanceFile: path.join(appRuntime, 'backend/code-intelligence-control-provenance.json'),
-      classRoot: path.join(repo, 'backend/build/classes/java/main') }), report.control);
+      classRoot: path.join(repo, 'backend/build/classes/java/main'), backendJarFile: originalJar }), report.control);
     for (const [name, expected] of Object.entries(report.analyzer.fileHashes))
       assert.equal(hash(path.join(appRuntime, 'ts-analyzer/dist', name)), expected);
     execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { stdio: 'pipe', timeout: 30000 });
