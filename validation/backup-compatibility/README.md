@@ -213,7 +213,8 @@ the completed restored snapshot/source `91`. Both start with a real backup of `9
 followed by actual UI reanalysis to `92`, and verify recovery plus one further normal
 restart. Native picker/confirmation/error-box responses are controlled; OS UI dialog
 interaction, real Keychain, nonzero cost obligations, SIGKILL and power loss are not
-covered by this driver. Evidence is preserved under `validation/local/restore-interruption/`.
+covered by the default injected-EIO mode. Its evidence is preserved under
+`validation/local/restore-interruption/`.
 
 Exit code 0 is not sufficient for clean shutdown: a delivered shutdown recovery
 error is recorded separately. The SDK-owned live child reference is retained for
@@ -222,3 +223,41 @@ early-exit cleanup; no historical PID can authorize signalling.
 See `docs/audit/restore-interruption-2026-10-05.md` for exact results, failed attempts,
 bundle identity and remaining release gates. Offline contracts run with
 `node --test desktop/test/backup-interruption-hooks.test.cjs`.
+
+## Packaged owner SIGKILL mode
+
+The explicit `--owner-crash` suffix pauses at either real restore operation instead
+of throwing EIO. Only the retained Electron ChildProcess receives SIGKILL. Each
+invocation creates a new private `.nr/desktop-run-*` automation claim under the
+original repository, then reuses that claim for recovery and a normal restart.
+It never uses a preexisting acceptance or user profile. PID/PPID tables only
+observe disappearance of the sampled process set; no numeric PID authorizes a
+signal, and unsampled descendants/hostile daemonization are not certified.
+
+```sh
+env -i HOME="$HOME" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C \
+  node validation/backup-compatibility/native-interruption.cjs \
+  --app '<original-repository>/.native-product-j5EJLB/Code Intelligence Validation.app' \
+  --point AFTER_SOURCE_RENAME --owner-crash
+
+env -i HOME="$HOME" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C \
+  node validation/backup-compatibility/native-interruption.cjs \
+  --app '<original-repository>/.native-product-j5EJLB/Code Intelligence Validation.app' \
+  --point BEFORE_COMPLETED_CLEANUP --owner-crash
+```
+
+Run one case at a time. The current owner-crash mode requires COMPLETE shutdown
+diagnostics for both ordinary exits after recovery; its intentional SIGKILL is
+recorded separately. The app imports source91, creates a note and backup, then
+reanalyzes source92 and changes the note. Recovery checks previous snapshot2/note92
+before commit or restored snapshot1/note91 after commit, retained source through
+the real API/UI, preserved ciphertext/keyring/record history, and no repeated
+recovery prompt. It does not reset locks or replace key material to make startup pass.
+
+`native-vgFQTn` and `native-iTZrBY` under `validation/local/electron-crash/` each
+passed six recorded checks with the unchanged j5EJLB bundle. The final synthetic
+contracts passed79/79; the original one-case test synchronization failure is kept.
+These are two main-process crash boundaries, not all C16 boundaries, power loss,
+real Keychain/account testing, or a nonzero cost-obligation fixture. See
+`docs/audit/electron-owner-crash-2026-10-06.md` and its companion JSON for exact
+source/result hashes, observed process counts and remaining release requirements.

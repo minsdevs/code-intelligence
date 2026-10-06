@@ -38,6 +38,11 @@ SSE19·backend1665PASS/12명시skip·frontend436·타입/lint·선택desktop212�
 확인하고 새 후보 j5EJLB를 만들었다. 종료 FAILED를 exit0으로 정상 처리하지 않는
 진단 검증도 포함한다. 정확한 후보·native 결과·남은 수용조건은 위 최신 원장을 따른다.
 
+이어 [Electron owner 강제종료 복구](../audit/electron-owner-crash-2026-10-06.md)에서
+j5EJLB의 실제 복원 두 경계를 SIGKILL로 중단한 뒤 같은 새 프로필을 복구했다.
+소스·메모·암호화 기록 보존과 추가 정상 재시작까지 통과했고 제품 코드는 변경하지
+않았다. 이 두 경계의 통과를 전체 crash/전원손실·기존 실사용 데이터 수용으로 확대하지 않는다.
+
 최신 사용자 지시에 따라 **원본 로컬 저장소 `/Users/minseokchae/Dev/code-intelligence`(CoS `/code-intelligence`)에서 기능별 브랜치를 만들어 작업한다.** Orca `main-2`와 별도 clone은 사용하지 않는다. 주요 기능의 구현·검증을 마치면 commit → push → PR → merge까지 진행하고 모든 커밋·병합 메시지에 `[skip ci]`를 붙인다. 이전의 잔여 한도 2% 원격 발행 조건은 폐기됐다. GitHub Actions와 정식 서명·공증·배포는 계속 금지하며 보호 규칙을 우회하지 않는다. 과거 `main-2` 또는 `.cos-pre-release-recovery-20261005` 경로는 당시 증거의 출처이며 현재 작업/실행 지시가 아니다. 원본 설치 앱·DB·Keychain/profile·기존 산출물과 사용자 작업을 보존하고 자동 stash/reset/clean은 하지 않는다.
 
 2026-10-05 사용자가 저장공간 확보와 다음 단계 진행을 명시했다. 원본/원격 main `a0b572a` 일치와 약36GiB 여유 공간, 8GiB 사전 검사 통과를 확인한 뒤 원본의 `codex/native-validation-20261005` 브랜치에서 native 검증을 재개했다. 기존 앱·계정 프로필과 과거 실패/성공 증거는 보존한다.
