@@ -573,11 +573,13 @@ function nativeGithubClientId() {
   return typeof value === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(value) ? value : '';
 }
 
-async function startBackend({ maintenanceId = '' } = {}) {
+async function startBackend({ maintenanceId = '', traceStartup = false } = {}) {
   const java = binary('jre', 'bin', 'java');
   const jar = binary('backend', 'code-intelligence.jar');
+  if (traceStartup) noteStartup('BACKEND_SOURCES');
   const dataDir = await runtimeDirectory('data', true);
   await openProductionSources();
+  if (traceStartup) noteStartup('BACKEND_PROCESS');
   await spawnManaged('backend', java, [...BACKEND_JVM_OPTIONS,
     ...(runtime.windowsBoundary ? [`-Dcodeintelligence.windows.runtimeRoot=${runtimeRoot()}`] : []),
     '-jar', jar, '--spring.profiles.active=desktop'], {
@@ -607,11 +609,13 @@ async function startBackend({ maintenanceId = '' } = {}) {
       CORS_ALLOWED_ORIGINS: runtime.apiBaseUrl
     }
   });
+  if (traceStartup) noteStartup('BACKEND_HEALTH');
   await waitUntil(async () => {
     const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/actuator/health`).catch(() => null);
     return response?.ok;
   }, 'Backend', 90_000);
   if (maintenanceId) return;
+  if (traceStartup) noteStartup('BACKEND_ROOTS');
   assertSafetyReady();
   for (const root of [...runtime.authorizedRoots]) {
     try {
@@ -638,7 +642,7 @@ async function startRuntime() {
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
   noteStartup('BACKEND');
-  await startBackend();
+  await startBackend({ traceStartup: true });
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
   runtime.ready = true;
