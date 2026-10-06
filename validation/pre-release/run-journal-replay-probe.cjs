@@ -191,9 +191,11 @@ async function runCase(evidence, records, supply) {
     const state = journal.snapshot(), after = readSyntheticLog(log);
     result.measurements = metrics.snapshot();
     assert.equal(result.measurements.calls.currentKeyId.calls, 2);
-    assert.equal(result.measurements.calls.getMacKey.calls, records + 4);
-    assert.equal(result.measurements.calls.isAvailable.calls, records + 6);
-    assert.equal(result.measurements.protocol['purpose-keyring'].CHECK, 2 * (records + 6));
+    // Since d9d74cd, replay verifies its single safety key id before first use and after the
+    // last record, so key work no longer scales with the replayed history (earlier: N+4/N+6/2(N+6)).
+    assert.equal(result.measurements.calls.getMacKey.calls, 6);
+    assert.equal(result.measurements.calls.isAvailable.calls, 8);
+    assert.equal(result.measurements.protocol['purpose-keyring'].CHECK, 16);
     assert(METHODS.every(name => result.measurements.calls[name].failed === 0));
     assert.equal(state.sequence, records + 1);
     assert.equal(countFrames(after), records + 1);
