@@ -246,10 +246,34 @@ exec('npm', ['run', 'build'], path.join(root, 'analyzers', 'ts-analyzer'));
 exec('./gradlew', ['bootJar'], path.join(root, 'backend'));
 
 const jars = fs.readdirSync(path.join(root, 'backend', 'build', 'libs'))
-  .filter((name) => name.endsWith('.jar') && !name.endsWith('-plain.jar'));
+  .filter((name) => name.endsWith('.jar') && !name.endsWith('-plain.jar') && name !== 'code-intelligence-control.jar');
 if (jars.length !== 1) throw new Error(`Expected one backend boot jar, found: ${jars.join(', ')}`);
 copy(path.join(root, 'backend', 'build', 'libs', jars[0]), path.join(staging, 'backend', 'code-intelligence.jar'));
 copy(path.join(root, 'backend', 'src', 'main', 'resources', 'db', 'migration'), path.join(staging, 'backend', 'backup-migrations'));
+const controlJar = path.join(root, 'backend/build/libs/code-intelligence-control.jar');
+const controlProof = path.join(root, 'backend/build/libs/code-intelligence-control-provenance.json');
+function readBoundedMetadata(file, limit) {
+  const canonical = fs.realpathSync(file);
+  if (canonical !== file) throw new Error('DESKTOP_CONTROL_BUILD_INVALID');
+  const stat = fs.lstatSync(file, { bigint: true });
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1n || stat.size <= 0n || stat.size > BigInt(limit))
+    throw new Error('DESKTOP_CONTROL_BUILD_INVALID');
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const bytes = Buffer.alloc(Number(stat.size));
+    if (fs.readSync(fd, bytes, 0, bytes.length, 0) !== bytes.length) throw new Error('DESKTOP_CONTROL_BUILD_INVALID');
+    return bytes;
+  } finally { fs.closeSync(fd); }
+}
+const controlMetadata = JSON.parse(readBoundedMetadata(controlProof, 1024 * 1024));
+if (controlMetadata.format !== 1 || controlMetadata.kind !== 'DESKTOP_CONTROL_RUNTIME'
+  || controlMetadata.mainClass !== 'dev.codeintelligence.desktop.DesktopControlApplication'
+  || controlMetadata.jarSha256 !== hash(controlJar)) throw new Error('DESKTOP_CONTROL_BUILD_INVALID');
+for (const file of [controlJar, controlProof]) {
+  const target = path.join(staging, 'backend', path.basename(file));
+  copy(file, target);
+  if (hash(file) !== hash(target)) throw new Error('DESKTOP_CONTROL_BUILD_INVALID');
+}
 
 const analyzerStage = path.join(staging, 'ts-analyzer');
 copy(path.join(root, 'analyzers', 'ts-analyzer', 'dist'), path.join(analyzerStage, 'dist'));
@@ -342,6 +366,7 @@ fs.writeFileSync(
     buildSequence,
     backupProtocol: 3,
     ownershipProtocol: 1,
+    controlProtocol: 1,
     platform: process.platform,
     arch: process.arch,
     runtime: {

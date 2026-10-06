@@ -345,7 +345,8 @@ async function main() {
     const pgPkgLib = requireInside(runtime, path.join(runtime, layout.postgresPkgLib));
     const pgShare = requireInside(runtime, path.join(runtime, layout.postgresShare));
     const libs = requireInside(ROOT, path.join(ROOT, 'backend/build/libs'));
-    const jars = fs.readdirSync(libs).filter((name) => name.endsWith('.jar') && !name.endsWith('-plain.jar'));
+    const jars = fs.readdirSync(libs).filter((name) => name.endsWith('.jar') && !name.endsWith('-plain.jar')
+      && name !== 'code-intelligence-control.jar');
     if (jars.length !== 1) throw new Error(`Expected one executable JAR in backend/build/libs; found ${JSON.stringify(jars)}`);
     const jar = requireInside(libs, path.join(libs, jars[0]));
     const chromiumPath = fs.realpathSync(path.resolve(ROOT, opts.chromium));

@@ -7,6 +7,8 @@ const BACKEND_JVM_OPTIONS = Object.freeze(['-Xms64m', '-Xmx2048m']);
 
 // Lease and process-guardian workers handle bounded control frames, not analysis.
 // Fixed small heaps also avoid multiplying host-sized JVM startup ergonomics.
-const CONTROL_JVM_OPTIONS = Object.freeze(['-Xms16m', '-Xmx64m']);
+// Lease/guardian workers retain small control state and mostly wait on IO.
+// Keep their collector and compiler overhead separate from the analysis backend.
+const CONTROL_JVM_OPTIONS = Object.freeze(['-Xms16m', '-Xmx64m', '-XX:+UseSerialGC', '-XX:TieredStopAtLevel=1']);
 
 module.exports = Object.freeze({ BACKEND_JVM_OPTIONS, CONTROL_JVM_OPTIONS });

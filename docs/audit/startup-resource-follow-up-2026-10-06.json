@@ -1,0 +1,565 @@
+{
+  "format": 1,
+  "scope": "Standalone desktop control and physical metadata correction; release acceptance is separate",
+  "observedAt": "2026-10-06T05:42:17.674Z",
+  "implementationCommit": "69c2ad8d38c950f543dceca0aa94dd2b28c1b6ce",
+  "headAtVerification": "69c2ad8d38c950f543dceca0aa94dd2b28c1b6ce",
+  "releaseVerdict": "NO_GO",
+  "sourcesMatchBuild": true,
+  "candidate": {
+    "app": ".native-product-tZgvV7/Code Intelligence Validation.app",
+    "buildSequence": "1791264249607",
+    "build": {
+      "path": "validation/local/pre-release-candidate/build-HNZIX8/result.json",
+      "sha256": "d607d6deb8b45460e46e3fbb9f2285ede09039df1d35287cc513a7259b94a941"
+    },
+    "appAsarSha256": "448d246faecb0efc2a648a9c9d3a1026f7e3657af1261519f6713889d5f70899",
+    "manifestSha256": "9a0dc937af6891df7acb4af681cd8e7ea482e88d50426c8a147202199538e7f7",
+    "backendJarSha256": "ca9afe0ac14f1e306bee71d4e8de5a6eb3f58dd8cafc3f7d4257f9430a99add5",
+    "control": {
+      "jarSha256": "70b516885b3c50487cf1937022975b616c99ec176a5632ee3bf9e032946b15b0",
+      "provenanceSha256": "24fc8ec1be3a7f5475b2b630e9a566c433f64f606714dffc4cf867e2ad03882e",
+      "classesCount": 6,
+      "entriesCount": 1358,
+      "dependencies": [
+        {
+          "groupId": "com.fasterxml.jackson.core",
+          "artifactId": "jackson-annotations",
+          "version": "2.21",
+          "fileName": "jackson-annotations-2.21.jar",
+          "sha256": "53ca085f4a150f703f49e1aabd935bd03b43e1ea3d55d135438292af22cef56b"
+        },
+        {
+          "groupId": "tools.jackson.core",
+          "artifactId": "jackson-core",
+          "version": "3.1.7",
+          "fileName": "jackson-core-3.1.7.jar",
+          "sha256": "7608c367fd8a92666d28711519599543c180298259963184ce04d2947a8f71e7"
+        },
+        {
+          "groupId": "tools.jackson.core",
+          "artifactId": "jackson-databind",
+          "version": "3.1.7",
+          "fileName": "jackson-databind-3.1.7.jar",
+          "sha256": "48c781de87e2016e1f0d973748a27130f11643e7ac080173f40e2d9669d84be3"
+        }
+      ],
+      "licenses": [
+        "META-INF/licenses/com.fasterxml.jackson.core/jackson-annotations/2.21/LICENSE",
+        "META-INF/licenses/com.fasterxml.jackson.core/jackson-annotations/2.21/NOTICE",
+        "META-INF/licenses/tools.jackson.core/jackson-core/3.1.7/FastDoubleParser-LICENSE",
+        "META-INF/licenses/tools.jackson.core/jackson-core/3.1.7/FastDoubleParser-ThirdParty-LICENSE",
+        "META-INF/licenses/tools.jackson.core/jackson-core/3.1.7/LICENSE",
+        "META-INF/licenses/tools.jackson.core/jackson-core/3.1.7/NOTICE",
+        "META-INF/licenses/tools.jackson.core/jackson-core/3.1.7/Schubfach-LICENSE",
+        "META-INF/licenses/tools.jackson.core/jackson-databind/3.1.7/LICENSE",
+        "META-INF/licenses/tools.jackson.core/jackson-databind/3.1.7/NOTICE"
+      ]
+    },
+    "sourceFingerprints": {
+      "backend/src/main": "3c8024084e0801b0c82ff493774a135913cc750e70a7d0f939be153418f22216",
+      "frontend/src": "dc7167d257754aa5030e922ed36e142ec0902a25fce66936a91eebbdbad3dcc7",
+      "desktop/src": "5e36ec34ee8bac92ddac2b70efa1d43fac8e11dcf74755cb477631d85006e35b",
+      "analyzers/ts-analyzer/src": "e77cf40e18a9d875b97ea3f33e2f58410471317dd73fd4d28cdbfbbc9402c071",
+      "backend/build.gradle.kts": "98483068529f47da5c2781378bba3528d23c3f07deaa75e5afacdd7772c93f55",
+      "backend/settings.gradle.kts": "b8b068943adeaa9b9fa7a96d5ca8f51ce68b6ae674a0302bf004769c07852711",
+      "backend/gradle/wrapper/gradle-wrapper.properties": "fc913ffa0625b544190844a506086ca0b93c4361986e820e10dd64c088257bf7",
+      "frontend/package.json": "b2ba3f52bca45caceea34f293aacfb4bb52035b373b3fe7324516918eeaccfcb",
+      "frontend/package-lock.json": "bdd68ecb2b06c743727bbd7e3dea9f89af4d238a142bfb3ddef17365e69acc46",
+      "desktop/package.json": "e804aa1b58198affbe1bfa5a5551a82cff4c5b3d960f5e51ef517b3f4d2e3fdf",
+      "desktop/package-lock.json": "644dd4fc65dbf002768ef8d9986be6cda1536883d649355ff4dc31bb0bf421b5",
+      "analyzers/ts-analyzer/package.json": "ed1fe4d2761f6fad1f42044ede75c547d0f0298415be5a8c7e79cc78859976ab",
+      "analyzers/ts-analyzer/package-lock.json": "6b7cb98446d0c770912e04a16c4308688f29e328f32aa5a13457556169a1c6a2",
+      "analyzers/ts-analyzer/tsconfig.json": "c3afae120c702362c06de2f1294ab0ac6de8273f484ae36ff2e9524e1e9d0c9f"
+    },
+    "javaClasses": 751,
+    "staticEntries": 120,
+    "migrations": 27,
+    "analyzerFiles": 30,
+    "desktopSources": 44,
+    "nativeRebuilt": false,
+    "formalSigning": false,
+    "notarized": false,
+    "released": false
+  },
+  "current": {
+    "unit": {
+      "path": "validation/local/startup-root-cause/native-stat-final-8j7cc0/result.json",
+      "sha256": "f61289a40cfd5b9e302765454fdf04f5e191215bbab0b0312821896f3a933fa7",
+      "totals": {
+        "tests": 198,
+        "pass": 198,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "sourcesUnchanged": true
+    },
+    "integrity": {
+      "path": "validation/local/pre-release-final/integrity-QSGvEF/result.json",
+      "sha256": "42cddf79ece5d9cd9e6f661a422b6bae0057968246772604393d94be14bc9334",
+      "repetitions": 20,
+      "failures": [],
+      "traces": [],
+      "artifactIdentityUnchanged": true
+    },
+    "functional": {
+      "path": "validation/local/pre-release-final/product-1o93Vn/result.json",
+      "sha256": "eb1e1924a0815b67c227827c39b42407bf3769eca8b628e98a4cd7bd796ec9cc",
+      "checks": [
+        "native-app-version-ipc",
+        "native-services-ready",
+        "electron-safeStorage-api-encrypt-under-automation",
+        "first-start-three-native-window-sizes",
+        "repository-overview-three-native-window-sizes",
+        "import-default-overview-snapshot-table-filter-local-relations-without-ai",
+        "real-folder-grant-preview-import-analysis-source-navigation",
+        "project-list-three-native-window-sizes",
+        "native-app-version-ipc",
+        "native-services-ready",
+        "electron-safeStorage-api-decrypt-after-automation-restart",
+        "real-database-and-encrypted-source-persistence",
+        "real-main-quiescent-backup-and-resume",
+        "real-preview-approved-reanalysis-source-navigation",
+        "real-main-restore-db-source-and-revoke-old-api-authority",
+        "real-main-recovery-checkpoint-restores-pre-replacement-db-and-source",
+        "native-app-version-ipc",
+        "native-services-ready",
+        "restored-db-and-encrypted-source-survive-process-restart",
+        "after-delete-three-native-window-sizes",
+        "synthetic-project-delete",
+        "native-app-version-ipc",
+        "native-services-ready",
+        "deleted-project-stays-deleted-after-restart",
+        "representative-repository-three-native-window-sizes",
+        "representative-repository-confirmed-entrypoints-flow-step-to-snapshot-source",
+        "representative-repository-approved-import-overview-search-relations-snapshot-source",
+        "native-app-version-ipc",
+        "native-services-ready",
+        "representative-repository-results-survive-packaged-app-restart",
+        "packaged-default-export-route-binding-and-shadow-refusal",
+        "packaged-package-entry-heuristic-refusal",
+        "native-app-version-ipc",
+        "native-services-ready",
+        "packaged-react-route-graph-survives-restart",
+        "native-clean-shutdown"
+      ],
+      "normalCompleteExits": 6,
+      "omittedSuites": [],
+      "representative": {
+        "scope": "filtered current Code Intelligence desktop/frontend/backend/TypeScript analyzer source; no dependency install or repository scripts executed",
+        "sourceFiles": 976,
+        "sourceSha256": "75d63e152ec97842a8db537d08651ed9827730ed719e5e4cdccbb8c5349099c4",
+        "localImport": {
+          "schemaVersion": 1,
+          "policyVersion": "local-ingest-v1",
+          "acceptedFiles": 894,
+          "bytesRead": 8122142,
+          "excludedEntriesByReason": {
+            "BINARY": 1,
+            "GENERATED_DIRECTORY": 1,
+            "SECRET_CONTENT": 80
+          }
+        },
+        "importToOverviewMs": 62045,
+        "projectId": 2,
+        "snapshotId": 3,
+        "fileOutcomes": {
+          "UNMEASURED": 87,
+          "PARTIAL": 641,
+          "SUCCESS": 165,
+          "UNSUPPORTED": 1
+        },
+        "entrypointCount": 108,
+        "fileSearchRenderMs": 13,
+        "relationRenderMs": 1110,
+        "flowEvidence": {
+          "flowCount": 102,
+          "selectedFlowId": 8,
+          "stepCount": 5,
+          "sourceSnapshotId": 3
+        }
+      }
+    },
+    "crashes": [
+      {
+        "path": "validation/local/electron-crash/native-TOh48T/result.json",
+        "sha256": "e8c54ebdd6e41e72f1a0159a2aba8678b77a13f84a72b25ec568c098ef6e5854",
+        "point": "AFTER_SOURCE_RENAME",
+        "status": "PASS",
+        "checks": 6,
+        "intentionalCrashes": 1,
+        "normalCompleteExits": 2,
+        "powerLoss": false,
+        "nonzeroCostObligations": false,
+        "recoveredScreenshot": {
+          "path": "validation/local/electron-crash/native-TOh48T/recovered.png",
+          "sha256": "d267fbe75443830c2c4b5449870692fc7b2d448452627ee12dc44b518fe4e25e"
+        },
+        "visuallyReviewed": true
+      },
+      {
+        "path": "validation/local/electron-crash/native-P1tItq/result.json",
+        "sha256": "0a65965b4ea348157dd2b569ce78390d7acea3f9acf370254f3618b416052719",
+        "point": "BEFORE_COMPLETED_CLEANUP",
+        "status": "PASS",
+        "checks": 6,
+        "intentionalCrashes": 1,
+        "normalCompleteExits": 2,
+        "powerLoss": false,
+        "nonzeroCostObligations": false,
+        "recoveredScreenshot": {
+          "path": "validation/local/electron-crash/native-P1tItq/recovered.png",
+          "sha256": "118ca6e801c68a28e9ea33c1e6829168f55bfdf235d88210ecb5935524e6937f"
+        },
+        "visuallyReviewed": true
+      }
+    ],
+    "performance": {
+      "path": "validation/local/startup-performance/run-oAD8MS/result.json",
+      "sha256": "22f07218c7a8197cf97800b0ec6492d513013648682132471164bcb7e551dfaa",
+      "status": "FAIL",
+      "assessment": {
+        "status": "FAIL",
+        "requestedRuns": 20,
+        "completedRuns": 20,
+        "failedRuns": 0,
+        "unexecutedRuns": 0,
+        "p95ReadyMs": 12544,
+        "p95IdleRssKiB": 1741728,
+        "maxIdleRssKiB": 1745680,
+        "failures": [
+          "READY_SLO_EXCEEDED",
+          "RSS_SLO_EXCEEDED"
+        ]
+      },
+      "measurementStatus": "COMPLETE",
+      "sourceAndBundleUnchanged": true,
+      "power": "AC",
+      "environmentGate": "AC_OBSERVED_AT_RUN_BOUNDARIES",
+      "powerScope": "Series start and both boundaries of each run; not continuous monitoring",
+      "integrityFailures": 0,
+      "maxGapMs": 221.04716700001154,
+      "minIdleSamples": 29,
+      "samples": [
+        {
+          "sequence": 1,
+          "status": "PASS",
+          "readyMs": 10981,
+          "idlePeakRssKiB": 1726864,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 2,
+          "status": "PASS",
+          "readyMs": 10889,
+          "idlePeakRssKiB": 1699696,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 3,
+          "status": "PASS",
+          "readyMs": 11233,
+          "idlePeakRssKiB": 1726240,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 4,
+          "status": "PASS",
+          "readyMs": 10943,
+          "idlePeakRssKiB": 1729552,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 5,
+          "status": "PASS",
+          "readyMs": 11107,
+          "idlePeakRssKiB": 1729168,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 6,
+          "status": "PASS",
+          "readyMs": 11789,
+          "idlePeakRssKiB": 1738992,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 7,
+          "status": "PASS",
+          "readyMs": 11216,
+          "idlePeakRssKiB": 1726912,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 8,
+          "status": "PASS",
+          "readyMs": 11282,
+          "idlePeakRssKiB": 1733744,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 9,
+          "status": "PASS",
+          "readyMs": 11279,
+          "idlePeakRssKiB": 1741728,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 10,
+          "status": "PASS",
+          "readyMs": 11561,
+          "idlePeakRssKiB": 1726512,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 11,
+          "status": "PASS",
+          "readyMs": 11767,
+          "idlePeakRssKiB": 1731888,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 12,
+          "status": "PASS",
+          "readyMs": 11849,
+          "idlePeakRssKiB": 1728624,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 13,
+          "status": "PASS",
+          "readyMs": 11866,
+          "idlePeakRssKiB": 1728480,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 14,
+          "status": "PASS",
+          "readyMs": 12273,
+          "idlePeakRssKiB": 1732336,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 15,
+          "status": "PASS",
+          "readyMs": 12094,
+          "idlePeakRssKiB": 1732576,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 16,
+          "status": "PASS",
+          "readyMs": 12323,
+          "idlePeakRssKiB": 1745680,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 17,
+          "status": "PASS",
+          "readyMs": 12544,
+          "idlePeakRssKiB": 1726960,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 18,
+          "status": "PASS",
+          "readyMs": 12383,
+          "idlePeakRssKiB": 1692480,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 19,
+          "status": "PASS",
+          "readyMs": 12520,
+          "idlePeakRssKiB": 1732752,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        },
+        {
+          "sequence": 20,
+          "status": "PASS",
+          "readyMs": 12901,
+          "idlePeakRssKiB": 1700368,
+          "cleanupConfirmed": true,
+          "samplingComplete": true,
+          "powerAtStart": "AC",
+          "powerAtEnd": "AC"
+        }
+      ],
+      "resourceSamples": {
+        "path": "validation/local/startup-performance/run-oAD8MS/resource-samples.csv",
+        "sha256": "d5f5944ff5b9ba79f82cb5b6cc70f138e10c212e2624d2825d551847acbc1629"
+      }
+    },
+    "inventory": {
+      "path": "validation/local/pre-release-final/inventory-physical-runtime-20261006.json",
+      "sha256": "2bfd4ea6afcb942acc3ef0fd3066b41853baf860c5a5d86ebdae773414247cdb",
+      "completeSbom": false,
+      "controlShadedMembersIndependentlyComparedToSourceArchives": false,
+      "newOnlineAdvisoryScan": false
+    }
+  },
+  "reproducedMechanism": {
+    "host": {
+      "path": "validation/local/startup-root-cause/stat-reentrancy-t6mkkF/result.json",
+      "sha256": "fc54bd78eac83efba0d9fa46b29377d2243c0db3bf5ba64540e6232b49a8bf61"
+    },
+    "electron": {
+      "path": "validation/local/startup-root-cause/electron-stat-aa230e/result.json",
+      "sha256": "5b4338ffb669a7ba2f5282c40dac968e1787a4dc1865c14ea260ebb2d0e290ab",
+      "probe": {
+        "electron": "44.4.5",
+        "node": "24.21.0",
+        "results": [
+          {
+            "api": "electron-promises",
+            "observations": 20,
+            "hookFailed": false,
+            "fileCount": 0,
+            "directoryCount": 20
+          },
+          {
+            "api": "original-promises",
+            "observations": 20,
+            "hookFailed": false,
+            "fileCount": 20,
+            "directoryCount": 0
+          },
+          {
+            "api": "original-callback",
+            "observations": 20,
+            "hookFailed": false,
+            "fileCount": 0,
+            "directoryCount": 20
+          }
+        ],
+        "physicalKind": "FILE",
+        "bytesUnchanged": true
+      },
+      "cleanupConfirmed": true,
+      "artifactUnchanged": true
+    },
+    "historicalFailuresAllAttributed": false
+  },
+  "retainedEvidence": [
+    {
+      "path": "validation/local/electron-crash/native-nBHbN7/result.json",
+      "sha256": "db2921819b2aab41fcfa3706562bb579f2bec63b16f76c73931b9a44d791293b",
+      "status": "FAIL",
+      "checks": 0,
+      "phase": "launch-normal",
+      "integrityFailure": {
+        "operation": "READDIR",
+        "code": "ENOTDIR",
+        "kind": "Error",
+        "pathSha256": "b6a7a6d955dcbaa83ec116e5111134c94e0c103ef2a3a4373c9afbd3f21facc7",
+        "physicalKindBeforeFailure": "DIRECTORY",
+        "physicalKindAfterFailure": "FILE"
+      },
+      "crashInjectionExecuted": false
+    },
+    {
+      "path": "validation/local/pre-release-final/product-XcwogG/result.json",
+      "sha256": "81c7da7e24591579e0e83c73904d3aa0e5dd1e23fe17453a838c0e2a5f71bfc9"
+    },
+    {
+      "path": "validation/local/electron-crash/native-FijAIv/result.json",
+      "sha256": "d2286247fa49f2ee37811c09fdb788c4e2d2f61d15af02cb5f64470df4c8e688"
+    },
+    {
+      "path": "validation/local/startup-root-cause/control-final-unit-1wCTyr/result.json",
+      "sha256": "e2e834331341a8ed4d40275bdc93315b7e9926a322b32958c0f452df221ba74e"
+    },
+    {
+      "path": "validation/local/control-runtime/verify-ZLtwSG/result.json",
+      "sha256": "ae7eda526b3729afaaeb68911523090ee05fc6454b3f2c2de807d3bebaac91f3"
+    },
+    {
+      "path": "validation/local/control-runtime/actual-i7b9jy/result.json",
+      "sha256": "2f3aecd7140d0f07df4ecd1ffc3b1c24725ee1fbda6ddfca1a841edbb057f905"
+    },
+    {
+      "path": "validation/local/startup-root-cause/native-stat-unit-RrMcGE/result.json",
+      "sha256": "7cdcf5506d8790b1818d5235cf0b4928209105ebbd923762242489e6d4d5c6e0"
+    },
+    {
+      "path": "validation/local/startup-performance/run-Icavwg/result.json",
+      "sha256": "b5b514581470dcc6a4530938b02732aa54854e326411c6e3f277cbe81c5ff4d5"
+    },
+    {
+      "path": "validation/local/startup-root-cause/retire-kcux-copies-3HPkT6/result.json",
+      "sha256": "a8d0aa149340f4976d84e0f03261cf03143996004bf595ce305b8eae0443a690"
+    },
+    {
+      "path": "validation/local/startup-root-cause/retire-completed-stage-XjX7a7/result.json",
+      "sha256": "e6c6ff7e88ac49e0933ec6304b06e5dd14bd851b27979f874f983f2733a33f1f"
+    }
+  ],
+  "limitations": [
+    "Warm-startup p95 exceeds 10000ms and maximum sampled idle RSS exceeds1572864KiB; no threshold changed.",
+    "RSS is sampled non-atomic owner-tree accounting, not continuous private-memory measurement.",
+    "Targeted metadata reentry was reproduced; the exact trigger of each historical failure was not observed.",
+    "Two owner-SIGKILL boundaries are not complete crash/power-loss or combined nonzero-cost/source certification.",
+    "Real-account refresh/revoke/SSO, existing-user data, independent corpus/security/usability, workload SLOs and signed clean-machine/minimum-OS/update acceptance remain open.",
+    "Control provenance and current static inventory do not establish a full SBOM, all shaded-member provenance or completed license obligations.",
+    "No existing user profile, Keychain, paid provider, Actions, formal signing, notarization or public release was used for these validations."
+  ]
+}

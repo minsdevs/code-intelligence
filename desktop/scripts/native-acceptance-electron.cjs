@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
-const { parseStartupLine, parseShutdownLine } = require('../src/startup-diagnostics.cjs');
+const { parseStartupLine, parseShutdownLine, parseIntegrityLine } = require('../src/startup-diagnostics.cjs');
 
 function bounded(operation, timeoutMs, code) {
   let timer;
@@ -89,6 +89,8 @@ function observeStartup(child, report, save, now = () => performance.now()) {
       if (character === '\n') {
         const value = dropping ? null : parseStartupLine(line.replace(/\r$/, ''));
         if (value && report.startup?.state !== 'FAILED') { report.startup = value; save(); }
+        const integrity = dropping ? null : parseIntegrityLine(line.replace(/\r$/, ''));
+        if (integrity && !report.integrityFailure) { report.integrityFailure = integrity; save(); }
         const shutdown = dropping ? null : parseShutdownLine(line.replace(/\r$/, ''));
         if (shutdown) {
           shutdownStarted ??= now();
@@ -199,6 +201,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     ownedApplication = { process: () => ownedChild,
       close: () => ownedChild.exitCode !== null || ownedChild.signalCode !== null ? Promise.resolve() : launched.close() };
     delete report.startup;
+    delete report.integrityFailure;
     delete report.shutdown; delete report.shutdownTrace;
     stopObserving = observeStartup(ownedChild, report, () => phase(report.phase));
     phase('electron-first-window');

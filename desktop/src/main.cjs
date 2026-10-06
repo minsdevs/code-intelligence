@@ -34,7 +34,8 @@ const { createWindowsBoundary } = require('./windows-native-boundary.cjs');
 const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 const { writeStorageFile } = require('./windows-storage-files.cjs');
 const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
-const { RuntimeIntegrityError, integrityError, startupFailureCode } = require('./startup-diagnostics.cjs');
+const { RuntimeIntegrityError, integrityError, startupFailureCode,
+  integrityDiagnostic, formatIntegrityDiagnostic } = require('./startup-diagnostics.cjs');
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
 const packageMetadata = require('../package.json');
 
@@ -245,6 +246,12 @@ function binary(...parts) {
   return candidate;
 }
 
+function controlRuntimeJar() {
+  // Only an explicitly verified control package replaces the legacy helper entrypoint.
+  return binary('backend', runtimeManifest.controlProtocol === 1
+    ? 'code-intelligence-control.jar' : 'code-intelligence.jar');
+}
+
 function assertAbsolutePath(raw) {
   if (typeof raw !== 'string' || raw.length === 0 || !path.isAbsolute(raw)) {
     throw new Error('A non-empty absolute path is required.');
@@ -298,7 +305,10 @@ async function verifyRuntimeIntegrity() {
       || !manifest.files || typeof manifest.files !== 'object') {
     throw new RuntimeIntegrityError('RUNTIME_MANIFEST_PATH');
   }
-  await validateRuntimeManifest(root, manifest);
+  await validateRuntimeManifest(root, manifest, { onFailure(operation, error, details) {
+    const line = formatIntegrityDiagnostic(integrityDiagnostic(operation, error, details));
+    if (line) console.error(line);
+  } });
   manifest.runtime = {
     ...(manifest.runtime.cache ? { cache: manifest.runtime.cache } : {}),
     postgresBin: assertRuntimeRelativePath(manifest.runtime.postgresBin, 'PostgreSQL bin path'),
@@ -333,7 +343,7 @@ async function spawnManaged(name, command, args, options = {}) {
   const logPath = childLogPath(name), log = guarded ? null : fs.openSync(logPath, 'a', 0o600);
   let child;
   try { child = guarded ? await spawnManagedProcess({
-    javaPath: binary('jre', 'bin', 'java'), jarPath: binary('backend', 'code-intelligence.jar'),
+    javaPath: binary('jre', 'bin', 'java'), jarPath: controlRuntimeJar(),
     command, args, cwd: options.cwd || runtime.userData, env: bundledChildEnvironment(options.env),
     logPath, ...(options.bootstrap ? { bootstrap: options.bootstrap } : {})
   }) : spawn(command, args, {
@@ -1204,7 +1214,7 @@ async function startApplication() {
     runtime.apiBaseUrl = runtime.transport.backend.origin;
     noteStartup('OWNER_LOCKS');
     if (runtimeManifest.ownershipProtocol === 1) ownerLocks = await createNativeOwnerLocks({
-      javaPath: binary('jre', 'bin', 'java'), jarPath: binary('backend', 'code-intelligence.jar'),
+      javaPath: binary('jre', 'bin', 'java'), jarPath: controlRuntimeJar(),
       safetyRoot: path.join(runtime.userData, 'safety'), installationId: secrets.localIdentity,
       assertMainOwnership: () => ownsInstance && app.hasSingleInstanceLock(),
       onLost: loseRuntimeOwnership

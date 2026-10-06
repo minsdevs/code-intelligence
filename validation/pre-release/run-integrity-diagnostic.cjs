@@ -62,44 +62,69 @@ async function main(argv = process.argv.slice(2)) {
       assert.equal(app.getName(), 'Code Intelligence Acceptance'); assert.equal(app.getPath('userData'), profile);
       assert.equal(fs.realpathSync(runtime), runtime);
       const req = process.getBuiltinModule('module').createRequire(p.join(app.getAppPath(), 'package.json'));
+      const originalFs = req('original-fs');
       const { validateRuntimeManifest } = req('./src/runtime-manifest.cjs');
       const known = new Set([...Object.keys(process.getBuiltinModule('os').constants.errno),
         'ERR_STREAM_PREMATURE_CLOSE', 'ERR_STREAM_DESTROYED', 'ERR_STREAM_WRITE_AFTER_END',
         'ERR_INVALID_ARG_TYPE', 'ERR_INVALID_ARG_VALUE', 'ERR_OUT_OF_RANGE', 'ERR_INVALID_STATE',
         'ERR_FS_FILE_TOO_LARGE', 'ERR_INTERNAL_ASSERTION', 'ABORT_ERR', 'ERR_OPERATION_FAILED']);
-      const io = fs.promises, originals = {}, failures = [], traces = [];
-      const record = (operation, error) => {
+      const failures = [], traces = [];
+      const target = file => typeof file === 'string' && p.isAbsolute(file) && p.normalize(file) === file
+        && (file === runtime || file.startsWith(runtime + p.sep));
+      const record = (operation, error, file) => {
+        if (traces.length >= 16) return;
+        try {
         let code, kind;
         try { code = error?.code; kind = error?.name; } catch { code = undefined; kind = undefined; }
-        if (traces.length < 16) traces.push({ operation, code: known.has(code) ? code : 'UNCLASSIFIED',
-          kind: ['Error', 'TypeError', 'RangeError', 'AbortError'].includes(kind) ? kind : 'OTHER' });
-      };
-      const target = file => typeof file === 'string' && (file === runtime || file.startsWith(runtime + p.sep));
-      for (const name of ['readFile', 'readdir', 'lstat', 'open']) {
-        originals[name] = io[name];
-        io[name] = async function(file, ...args) {
+        let pathSha256 = null, physicalKindAfterFailure = 'UNOBSERVED';
+        if (target(file)) {
+          pathSha256 = process.getBuiltinModule('crypto').createHash('sha256').update(p.relative(runtime, file)).digest('hex');
           try {
-            const value = await Reflect.apply(originals[name], io, [file, ...args]);
-            if (name === 'open' && target(file)) {
-              const read = value.createReadStream.bind(value), close = value.close.bind(value), stat = value.stat.bind(value);
-              value.createReadStream = (...args) => {
-                try { const stream = read(...args); stream.once('error', error => record('STREAM', error)); return stream; }
-                catch (error) { record('STREAM_CREATE', error); throw error; }
-              };
-              value.stat = async (...args) => { try { return await stat(...args); } catch (error) { record('HANDLE_STAT', error); throw error; } };
-              value.close = async () => { try { await close(); } catch (error) { record('CLOSE', error); throw error; } };
-            }
-            return value;
-          } catch (error) { if (target(file)) record(name.toUpperCase(), error); throw error; }
-        };
-      }
+            const stat = originalFs.lstatSync(file);
+            physicalKindAfterFailure = stat.isSymbolicLink() ? 'SYMLINK' : stat.isDirectory() ? 'DIRECTORY' : stat.isFile() ? 'FILE' : 'OTHER';
+          } catch { physicalKindAfterFailure = 'UNAVAILABLE'; }
+        }
+        traces.push({ operation, code: known.has(code) ? code : 'UNCLASSIFIED',
+          kind: ['Error', 'TypeError', 'RangeError', 'AbortError'].includes(kind) ? kind : 'OTHER',
+          pathSha256, physicalKindAfterFailure });
+        } catch { /* A diagnostic allocation or observer failure must not replace the original IO error. */ }
+      };
+      const restore = [], wrapped = new Set();
+      const install = (io, namespace) => {
+        if (!io || wrapped.has(io)) return;
+        wrapped.add(io);
+        const originals = {};
+        for (const name of ['readFile', 'readdir', 'lstat', 'open']) {
+          originals[name] = io[name];
+          restore.push(() => { io[name] = originals[name]; });
+          io[name] = async function(file, ...args) {
+            try {
+              const value = await Reflect.apply(originals[name], io, [file, ...args]);
+              if (name === 'open' && target(file)) {
+                const read = value.createReadStream.bind(value), directRead = value.read.bind(value),
+                  close = value.close.bind(value), stat = value.stat.bind(value);
+                value.createReadStream = (...args) => {
+                  try { const stream = read(...args); stream.once('error', error => record(namespace + ':STREAM', error, file)); return stream; }
+                  catch (error) { record(namespace + ':STREAM_CREATE', error, file); throw error; }
+                };
+                value.stat = async (...args) => { try { return await stat(...args); } catch (error) { record(namespace + ':HANDLE_STAT', error, file); throw error; } };
+                value.read = async (...args) => { try { return await directRead(...args); } catch (error) { record(namespace + ':READ', error, file); throw error; } };
+                value.close = async () => { try { await close(); } catch (error) { record(namespace + ':CLOSE', error, file); throw error; } };
+              }
+              return value;
+            } catch (error) { if (target(file)) record(namespace + ':' + name.toUpperCase(), error, file); throw error; }
+          };
+        }
+      };
       let completed = 0;
       try {
+        install(fs.promises, 'fs');
+        install(originalFs.promises, 'original-fs');
         for (let index = 0; index < 20; index++) {
-          try { await validateRuntimeManifest(runtime, JSON.parse(await io.readFile(p.join(runtime, 'runtime-manifest.json'), 'utf8'))); completed++; }
+          try { await validateRuntimeManifest(runtime, JSON.parse(await fs.promises.readFile(p.join(runtime, 'runtime-manifest.json'), 'utf8'))); completed++; }
           catch (error) { failures.push({ index, code: req('./src/startup-diagnostics.cjs').startupFailureCode(error) }); break; }
         }
-      } finally { for (const [name, original] of Object.entries(originals)) io[name] = original; }
+      } finally { while (restore.length) restore.pop()(); }
       return { completed, failures, traces, electronVersion: process.versions.electron, nodeVersion: process.versions.node };
     }, { runtime, profile: plan.paths.userData }), 90000, 'INVENTORY_DIAGNOSTIC_TIMEOUT');
     save();

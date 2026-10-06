@@ -1,3 +1,8 @@
+import java.security.MessageDigest
+import java.util.jar.JarFile
+import java.util.zip.ZipFile
+import org.springframework.boot.gradle.tasks.bundling.BootJar
+
 plugins {
     java
     id("org.springframework.boot") version "4.1.0"
@@ -82,6 +87,200 @@ spotless {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+val desktopControlDependencies = providers.provider {
+    val artifacts = configurations.runtimeClasspath.get().resolvedConfiguration.resolvedArtifacts
+        .filter { artifact ->
+            val id = artifact.moduleVersion.id
+            (id.group == "tools.jackson.core" && id.name in setOf("jackson-core", "jackson-databind")) ||
+                (id.group == "com.fasterxml.jackson.core" && id.name == "jackson-annotations")
+        }
+        .sortedWith(compareBy({ it.moduleVersion.id.group }, { it.name }, { it.moduleVersion.id.version }))
+    val coordinates = artifacts.map { "${it.moduleVersion.id.group}:${it.name}" }
+    require(artifacts.size == 3 && coordinates == listOf(
+        "com.fasterxml.jackson.core:jackson-annotations",
+        "tools.jackson.core:jackson-core",
+        "tools.jackson.core:jackson-databind",
+    )) { "Unexpected desktop control dependency set: $coordinates" }
+    artifacts
+}
+
+val desktopControlMultiRelease = desktopControlDependencies.map { artifacts ->
+    artifacts.any { artifact ->
+        JarFile(artifact.file).use { jar ->
+            jar.manifest?.mainAttributes?.getValue("Multi-Release")?.equals("true", ignoreCase = true) == true
+        }
+    }
+}
+
+fun sha256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            if (count > 0) digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+    .digest(bytes)
+    .joinToString("") { "%02x".format(it) }
+
+fun desktopControlClass(relative: String): Boolean = relative.matches(
+    Regex("dev/codeintelligence/desktop/(DesktopControlApplication|NativeLeaseWorker(?:[$].*)?|ManagedProcessWorker(?:[$].*)?)\\.class")
+)
+
+fun controlLicenseEntry(entry: String): Boolean = entry.startsWith("META-INF/") &&
+    (entry.substringAfterLast('/').contains("LICENSE", ignoreCase = true) ||
+        entry.substringAfterLast('/').contains("NOTICE", ignoreCase = true))
+
+fun controlLicensePath(group: String, artifact: String, version: String, entry: String): String =
+    "META-INF/licenses/$group/$artifact/$version/${entry.substringAfter("META-INF/")}"
+
+val desktopControlProvenance = layout.buildDirectory.file("libs/code-intelligence-control-provenance.json")
+
+val desktopControlJar by tasks.registering(Jar::class) {
+    group = "build"
+    description = "Builds the minimal desktop lease/process-control runtime without Spring Boot."
+    dependsOn(tasks.named("classes"))
+    archiveFileName.set("code-intelligence-control.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("libs"))
+    isReproducibleFileOrder = true
+    isPreserveFileTimestamps = false
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    manifest.attributes["Main-Class"] = "dev.codeintelligence.desktop.DesktopControlApplication"
+    if (desktopControlMultiRelease.get()) manifest.attributes["Multi-Release"] = "true"
+    outputs.file(desktopControlProvenance)
+
+    val classesDir = layout.buildDirectory.dir("classes/java/main")
+    from(classesDir) {
+        include { element -> element.isDirectory || desktopControlClass(element.path) }
+    }
+    from(desktopControlDependencies.map { artifacts ->
+        artifacts.map { artifact ->
+            zipTree(artifact.file).matching {
+                exclude(
+                    "META-INF/MANIFEST.MF", "module-info.class", "META-INF/versions/*/module-info.class",
+                    "META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA", "META-INF/*LICENSE*", "META-INF/*NOTICE*"
+                )
+            }
+        }
+    })
+    desktopControlDependencies.get().forEach { artifact ->
+        val id = artifact.moduleVersion.id
+        from(zipTree(artifact.file).matching {
+            include { element -> element.isDirectory || controlLicenseEntry(element.path) }
+        }) {
+            eachFile {
+                path = controlLicensePath(id.group, artifact.name, id.version, path)
+            }
+        }
+    }
+
+    doLast {
+        val jar = archiveFile.get().asFile
+        val provenance = desktopControlProvenance.get().asFile
+        val classRoot = classesDir.get().asFile
+        val classFiles = classRoot.walkTopDown().filter { file ->
+            file.isFile && desktopControlClass(file.relativeTo(classRoot).invariantSeparatorsPath)
+        }.sortedBy { it.relativeTo(classRoot).invariantSeparatorsPath }.toList()
+        val deps = desktopControlDependencies.get()
+        require(deps.size == 3) { "CONTROL_DEPS_COUNT" }
+        val licenseEntries = mutableListOf<String>()
+        deps.forEach { artifact ->
+            ZipFile(artifact.file).use { zip ->
+                zip.entries().asSequence().filter { entry ->
+                    !entry.isDirectory && controlLicenseEntry(entry.name)
+                }.forEach { entry ->
+                    licenseEntries += controlLicensePath(
+                        artifact.moduleVersion.id.group, artifact.name, artifact.moduleVersion.id.version, entry.name
+                    )
+                }
+            }
+        }
+        val json = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(mapOf(
+            "format" to 1,
+            "kind" to "DESKTOP_CONTROL_RUNTIME",
+            "mainClass" to "dev.codeintelligence.desktop.DesktopControlApplication",
+            "jarSha256" to sha256(jar),
+            "classes" to classFiles.associate { it.relativeTo(classRoot).invariantSeparatorsPath to sha256(it) },
+            "dependencies" to deps.map { artifact -> mapOf(
+                "groupId" to artifact.moduleVersion.id.group,
+                "artifactId" to artifact.name,
+                "version" to artifact.moduleVersion.id.version,
+                "fileName" to artifact.file.name,
+                "sha256" to sha256(artifact.file),
+            ) },
+            "licenses" to licenseEntries.sorted(),
+        )))
+        provenance.writeText(json + "\n", Charsets.UTF_8)
+
+        JarFile(jar).use { built ->
+            val manifest = built.manifest
+            require(manifest.mainAttributes.getValue("Main-Class") == "dev.codeintelligence.desktop.DesktopControlApplication") { "CONTROL_MAIN_CLASS" }
+            require(manifest.mainAttributes.getValue("Class-Path") == null) { "CONTROL_CLASS_PATH" }
+            require((manifest.mainAttributes.getValue("Multi-Release")?.equals("true", ignoreCase = true) == true) == desktopControlMultiRelease.get()) { "CONTROL_MULTI_RELEASE" }
+            val entries = built.entries().asSequence().filterNot { it.isDirectory }.toList()
+            require(entries.none { it.name.startsWith("org/springframework/") }) { "CONTROL_SPRING_CLASS" }
+            val builtClasses = entries.map { it.name }.filter(::desktopControlClass).sorted()
+            val expectedClasses = classFiles.map { it.relativeTo(classRoot).invariantSeparatorsPath }.sorted()
+            require(builtClasses == expectedClasses) { "CONTROL_CLASS_SET" }
+            for (file in classFiles) {
+                val relative = file.relativeTo(classRoot).invariantSeparatorsPath
+                val entry = built.getEntry(relative) ?: error("Missing control class $relative")
+                require(built.getInputStream(entry).use { sha256(it.readBytes()) } == sha256(file)) { "CONTROL_CLASS_BYTES" }
+            }
+            val expectedLicenses = mutableMapOf<String, Pair<File, String>>()
+            for (artifact in deps) {
+                ZipFile(artifact.file).use { source ->
+                    source.entries().asSequence().filter { entry ->
+                        !entry.isDirectory && controlLicenseEntry(entry.name)
+                    }.forEach { entry ->
+                        expectedLicenses[controlLicensePath(
+                            artifact.moduleVersion.id.group, artifact.name, artifact.moduleVersion.id.version, entry.name
+                        )] = artifact.file to entry.name
+                    }
+                }
+            }
+            require(licenseEntries.sorted() == expectedLicenses.keys.sorted()) { "CONTROL_LICENSE_SET" }
+            for ((target, source) in expectedLicenses) {
+                val builtEntry = built.getEntry(target) ?: error("Missing control license $target")
+                val builtBytes = built.getInputStream(builtEntry).use { it.readBytes() }
+                val originalBytes = ZipFile(source.first).use { zip ->
+                    zip.getInputStream(zip.getEntry(source.second)).use { it.readBytes() }
+                }
+                require(builtBytes.contentEquals(originalBytes)) { "CONTROL_LICENSE_BYTES" }
+            }
+        }
+
+        val parsed = groovy.json.JsonSlurper().parseText(provenance.readText(Charsets.UTF_8)) as Map<*, *>
+        require(parsed["format"] == 1) { "CONTROL_PROVENANCE_FORMAT" }
+        require(parsed["kind"] == "DESKTOP_CONTROL_RUNTIME") { "CONTROL_PROVENANCE_KIND" }
+        require(parsed["mainClass"] == "dev.codeintelligence.desktop.DesktopControlApplication") { "CONTROL_PROVENANCE_MAIN" }
+        require(parsed["jarSha256"] == sha256(jar)) { "CONTROL_PROVENANCE_JAR" }
+        val parsedClasses = parsed["classes"] as Map<*, *>
+        require(parsedClasses == classFiles.associate { it.relativeTo(classRoot).invariantSeparatorsPath to sha256(it) }) { "CONTROL_PROVENANCE_CLASSES" }
+        val parsedDependencies = parsed["dependencies"] as List<*>
+        require(parsedDependencies.size == 3) { "CONTROL_PROVENANCE_DEPS_COUNT" }
+        require(parsedDependencies == deps.map { artifact -> mapOf(
+            "groupId" to artifact.moduleVersion.id.group,
+            "artifactId" to artifact.name,
+            "version" to artifact.moduleVersion.id.version,
+            "fileName" to artifact.file.name,
+            "sha256" to sha256(artifact.file),
+        ) }) { "CONTROL_PROVENANCE_DEPS" }
+        require(parsed["licenses"] == licenseEntries.sorted()) { "CONTROL_PROVENANCE_LICENSES" }
+    }
+}
+
+tasks.named<BootJar>("bootJar") {
+    mainClass.set("dev.codeintelligence.CodeIntelligenceBackendApplication")
+    dependsOn(desktopControlJar)
 }
 // Explicit opt-in gate: requires installed frontend dependencies and local Playwright Chromium.
 tasks.test {

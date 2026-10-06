@@ -30,3 +30,14 @@ test('diagnostic errors read each field once and never export unknown or throwin
   assert.equal(diagnosticFailure(new Error('INVENTORY_DIAGNOSTIC_TIMEOUT')), 'INVENTORY_DIAGNOSTIC_TIMEOUT');
   assert.equal(diagnosticFailure({ code: 'PRIVATE_BUT_UPPERCASE' }), 'DIAGNOSTIC_FAILED');
 });
+
+test('diagnostic runner source wraps builtin and original-fs promise namespaces and restores both', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '../run-integrity-diagnostic.cjs'), 'utf8');
+  assert.match(source, /install\(fs\.promises, 'fs'\)/);
+  assert.match(source, /install\(originalFs\.promises, 'original-fs'\)/);
+  assert.match(source, /while \(restore\.length\) restore\.pop\(\)\(\)/);
+  assert.match(source, /const stat = originalFs\.lstatSync\(file\)/);
+  assert.doesNotMatch(source, /process\.noAsar\s*=/);
+});
