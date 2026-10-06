@@ -17,7 +17,9 @@ public final class SecretMask {
             Pattern.compile("(?i)((?:password|secret|token|api[_-]?key)[\"']?\\s*[:=]\\s*)"
                     + "(?:\"(?:\\\\.|[^\"\\\\])*(?:\"|\\z)|'(?:\\\\.|[^'\\\\])*(?:'|\\z)|[^\\s,;}]+)"),
             Pattern.compile("(?i)sk-[A-Za-z0-9_-]{20,}"),
-            Pattern.compile("AIza[0-9A-Za-z_-]{20,}"));
+            Pattern.compile("AIza[0-9A-Za-z_-]{20,}"),
+            // Password in connection-URI userinfo (scheme://user:password@host); user and host stay readable.
+            Pattern.compile("(?i)(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s:/?#@'\"`]{0,256}:)[^\\s/?#@'\"`]{1,256}(?=@)"));
 
     private SecretMask() {}
 
