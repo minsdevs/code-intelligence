@@ -187,8 +187,20 @@ async function acquireNativeOwnerLock(provider, { safetyRoot, kind, installation
     assertLive(); ready = true;
     const file = path.join(dir, ROLES[kind]); const markerStat = await lockStat(file, null, state.boundary);
     const verifyPath = async () => {
-      assertLive(); await directory(safetyRoot, rootStat, state.boundary); await directory(dir, dirStat, state.boundary);
-      await lockStat(file, markerStat, state.boundary); assertLive();
+      assertLive();
+      if (state.boundary) {
+        await directory(safetyRoot, rootStat, state.boundary); await directory(dir, dirStat, state.boundary);
+        await lockStat(file, markerStat, state.boundary);
+      } else {
+        // Independent metadata reads retain every check on both sides of the
+        // lease exchange. Join all reads before failure/cleanup, preserving the
+        // original root, role, marker error priority.
+        const checks = await Promise.allSettled([
+          directory(safetyRoot, rootStat, null), directory(dir, dirStat, null), lockStat(file, markerStat, null),
+        ]);
+        for (const check of checks) if (check.status === 'rejected') throw check.reason;
+      }
+      assertLive();
     };
     let queue = Promise.resolve(); let releasing = false;
     const lease = Object.freeze({
