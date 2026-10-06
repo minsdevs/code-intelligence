@@ -8,6 +8,8 @@ const crypto = require('node:crypto');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const { PassThrough } = require('node:stream');
+const { createHook } = require('node:async_hooks');
+const { promisify } = require('node:util');
 const test = require('node:test');
 const { validateRuntimeManifest } = require('../src/runtime-manifest.cjs');
 const diagnostics = require('../src/startup-diagnostics.cjs');
@@ -35,13 +37,63 @@ function expected(code) {
     return true;
   };
 }
-function validatorWithIO(promises) {
+function validatorWithIO(promises, electron = false) {
   const file = path.resolve(__dirname, '../src/runtime-manifest.cjs'), requireSource = createRequire(file);
-  const context = { module: { exports: {} }, process,
-    require: name => name === 'node:fs' ? { ...fs, promises: { ...fs.promises, ...promises } } : requireSource(name) };
+  const context = { module: { exports: {} }, process: electron
+    ? { platform: 'darwin', arch: 'arm64', versions: { electron: 'synthetic' } } : process,
+    require: name => ['node:fs', 'original-fs'].includes(name)
+      ? { ...fs, promises: { ...fs.promises, ...promises } } : requireSource(name) };
   vm.runInNewContext(fs.readFileSync(file, 'utf8'), context, { filename: file });
   return context.module.exports.validateRuntimeManifest;
 }
+
+for (const electron of [false, true]) test(`physical filesystem injection remains fail-closed in ${electron ? 'Electron' : 'Node'}`, async t => {
+  const f = fixture(t); let calls = 0;
+  const validate = validatorWithIO({ async lstat() {
+    calls++; throw Object.assign(new Error('private-sentinel'), { code: 'EIO' });
+  } }, electron);
+  await assert.rejects(validate(f.root, f.manifest, platform), expected('RUNTIME_IO_EIO'));
+  assert.equal(calls, 1);
+});
+
+test('Electron physical inventory requires original-fs and never falls back to ASAR metadata', async t => {
+  const f = fixture(t), file = path.resolve(__dirname, '../src/runtime-manifest.cjs');
+  const requireSource = createRequire(file), requested = [];
+  const load = native => {
+    const context = { module: { exports: {} }, process: { platform: 'darwin', arch: 'arm64', versions: { electron: 'synthetic' } },
+      require(name) {
+        requested.push(name);
+        if (name === 'original-fs') { if (!native) throw new Error('ORIGINAL_FS_UNAVAILABLE'); return native; }
+        if (name === 'node:fs') throw new Error('ASAR_FS_MUST_NOT_BE_USED');
+        return requireSource(name);
+      } };
+    vm.runInNewContext(fs.readFileSync(file, 'utf8'), context, { filename: file });
+    return context.module.exports.validateRuntimeManifest;
+  };
+  const validate = load(fs);
+  assert.equal(await validate(f.root, f.manifest, platform), f.manifest);
+  assert(requested.includes('original-fs')); assert.equal(requested.includes('node:fs'), false);
+  assert.throws(() => load(null), /ORIGINAL_FS_UNAVAILABLE/);
+  fs.writeFileSync(path.join(f.root, 'sample.txt'), 'changed');
+  await assert.rejects(validate(f.root, f.manifest, platform), expected('RUNTIME_INVENTORY_HASH'));
+});
+
+test('native promise inventory remains correct across synchronous stat reentry into callback metadata', async t => {
+  const f = fixture(t), ids = new Set(); let callbacks = 0, hookFailure = null;
+  const hook = createHook({ init(id, type) { if (type === 'FSREQCALLBACK') ids.add(id); },
+    before(id) { if (ids.has(id)) { callbacks++; try { fs.lstatSync(f.root, { bigint: true }); } catch (error) { hookFailure = error; } } },
+    destroy(id) { ids.delete(id); } });
+  let physical;
+  try {
+    hook.enable();
+    // Exercise the callback/shared-array path under reentry without asserting
+    // upstream remains buggy: future Node versions may fix its own implementation.
+    await promisify(fs.lstat)(path.join(f.root, 'sample.txt'), { bigint: true });
+    physical = await fs.promises.lstat(path.join(f.root, 'sample.txt'), { bigint: true });
+    assert.equal(await validateRuntimeManifest(f.root, f.manifest, platform), f.manifest);
+  } finally { hook.disable(); }
+  assert.equal(hookFailure, null); assert(callbacks > 0); assert.equal(physical.isFile(), true);
+});
 
 test('valid inventory is read-only and keeps the existing returned manifest contract', async t => {
   const { root, manifest } = fixture(t), file = path.join(root, 'sample.txt');

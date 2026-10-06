@@ -1,5 +1,9 @@
 'use strict';
-const fs = require('node:fs');
+// The runtime is a physical, unpacked tree. Electron's ASAR fs.promises.lstat
+// wraps the callback API, whose shared stat array can be overwritten by a
+// synchronous stat during async-hook reentry. Keep the native promise
+// implementation's per-request metadata; do not retry or weaken integrity checks.
+const fs = process.versions?.electron ? require('original-fs') : require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { Buffer } = require('node:buffer');
