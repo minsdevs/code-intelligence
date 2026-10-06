@@ -11,7 +11,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Constants;
@@ -87,6 +90,29 @@ class LocalSourceBindingTest {
         try (var entries = Files.list(target().getParent())) {
             assertThat(entries.toList()).containsExactly(target());
         }
+    }
+
+    @Test
+    void retainedSourceWritesDoNotConsumeTheSourceInspectionTimeBudget() throws Exception {
+        Path source = source();
+        Files.writeString(source.resolve("b.txt"), "BBBB");
+        AtomicLong clock = new AtomicLong();
+        var service = new LocalImportService(
+                new AppProperties(temp.resolve("data").toString(), 2),
+                new LocalImportProperties(temp.toRealPath().toString()),
+                new DesktopPathAuthorizationService(),
+                new LocalSourcePolicy(limits(), clock::get, path -> {}),
+                LocalImportService::moveDirectory,
+                staging -> {});
+        var binding = service.inspect(source).binding();
+        List<String> retained = new ArrayList<>();
+        // Each retained write takes longer than the whole one-second inspection budget.
+        service.importApproved(binding, target(), () -> {}, (path, oid, bytes) -> {
+            clock.addAndGet(Duration.ofSeconds(2).toNanos());
+            retained.add(path);
+        });
+        assertThat(retained).containsExactly("a.txt", "b.txt");
+        assertThat(Files.readString(target().resolve("b.txt"))).isEqualTo("BBBB");
     }
 
     @Test
