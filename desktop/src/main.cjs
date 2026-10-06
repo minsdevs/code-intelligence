@@ -416,10 +416,12 @@ function run(command, args, options = {}) {
   return result.stdout.trim();
 }
 
-async function waitUntil(check, label, timeoutMs = 60_000) {
+async function waitUntil(check, label, timeoutMs = 60_000, signal) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
   while (Date.now() < deadline) {
+    // A failed sibling service ends this wait instead of holding the runtime queue until timeout.
+    if (signal?.aborted) throw new Error(`${label} readiness wait was cancelled`);
     try {
       if (await check()) return;
     } catch (error) {
@@ -514,7 +516,8 @@ async function startPostgres({ recoveryOnly = false } = {}) {
   ], { env });
 }
 
-async function startRedis() {
+// Spawn functions return their readiness wait so startup can overlap it with later spawns.
+async function spawnRedis() {
   const data = await runtimeDirectory('redis', true);
   const args = runtime.windowsBoundary
     ? ['--config-import-path', runtime.transport.redisConfig, '--config-import-format', 'Garnet']
@@ -524,10 +527,14 @@ async function startRedis() {
       ...libraryEnvironment(runtimeRoot(), process.platform === 'win32' ? ['cache'] : ['redis/lib'], process.env, process.platform)
     }
   });
-  await waitUntil(() => runtime.transport.redisReady(), 'Redis');
+  return signal => waitUntil(() => runtime.transport.redisReady(), 'Redis', undefined, signal);
 }
 
-async function startAnalyzer() {
+async function startRedis() {
+  await (await spawnRedis())();
+}
+
+async function spawnAnalyzer() {
   const main = binary('ts-analyzer', 'dist', 'main.js');
   await spawnManaged('ts-analyzer', process.execPath, [main], {
     cwd: path.dirname(main),
@@ -541,10 +548,14 @@ async function startAnalyzer() {
       NODE_ENV: 'production'
     }
   });
-  await waitUntil(async () => {
+  return signal => waitUntil(async () => {
     const response = await runtime.transport.analyzer.request(`${runtime.transport.analyzer.origin}/health`).catch(() => null);
     return response?.ok;
-  }, 'TypeScript analyzer');
+  }, 'TypeScript analyzer', undefined, signal);
+}
+
+async function startAnalyzer() {
+  await (await spawnAnalyzer())();
 }
 
 async function authorizePath(selected, persist = true) {
@@ -574,7 +585,7 @@ function nativeGithubClientId() {
   return typeof value === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(value) ? value : '';
 }
 
-async function startBackend({ maintenanceId = '', traceStartup = false } = {}) {
+async function spawnBackend({ maintenanceId = '', traceStartup = false } = {}) {
   const java = binary('jre', 'bin', 'java');
   const jar = binary('backend', 'code-intelligence.jar');
   if (traceStartup) noteStartup('BACKEND_SOURCES');
@@ -610,13 +621,16 @@ async function startBackend({ maintenanceId = '', traceStartup = false } = {}) {
       CORS_ALLOWED_ORIGINS: runtime.apiBaseUrl
     }
   });
-  if (traceStartup) noteStartup('BACKEND_HEALTH');
-  await waitUntil(async () => {
+}
+
+function waitForBackendHealth(signal) {
+  return waitUntil(async () => {
     const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/actuator/health`).catch(() => null);
     return response?.ok;
-  }, 'Backend', 90_000);
-  if (maintenanceId) return;
-  if (traceStartup) noteStartup('BACKEND_ROOTS');
+  }, 'Backend', 90_000, signal);
+}
+
+async function restoreAuthorizedRoots() {
   assertSafetyReady();
   for (const root of [...runtime.authorizedRoots]) {
     try {
@@ -626,6 +640,15 @@ async function startBackend({ maintenanceId = '', traceStartup = false } = {}) {
     }
   }
   await saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
+}
+
+async function startBackend({ maintenanceId = '', traceStartup = false } = {}) {
+  await spawnBackend({ maintenanceId, traceStartup });
+  if (traceStartup) noteStartup('BACKEND_HEALTH');
+  await waitForBackendHealth();
+  if (maintenanceId) return;
+  if (traceStartup) noteStartup('BACKEND_ROOTS');
+  await restoreAuthorizedRoots();
 }
 
 async function startRuntime() {
@@ -639,11 +662,27 @@ async function startRuntime() {
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
   noteStartup('CACHE_AND_ANALYZER');
-  await Promise.all([startRedis(), startAnalyzer()]);
+  // Helpers are spawned before the backend, so a helper spawn failure still prevents the backend
+  // spawn. Only readiness waits overlap backend JVM startup, which first reaches Redis after
+  // Tomcat starts and never calls the analyzer during startup.
+  const helpersReady = await Promise.all([spawnRedis(), spawnAnalyzer()]);
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
   noteStartup('BACKEND');
-  await startBackend({ traceStartup: true });
+  await spawnBackend({ traceStartup: true });
+  noteStartup('BACKEND_HEALTH');
+  const cancel = { aborted: false };
+  let failure;
+  // Settle every wait before failing so no readiness loop outlives this startup attempt,
+  // and report the first real failure rather than a sibling's cancellation.
+  await Promise.all([...helpersReady, waitForBackendHealth].map(ready => ready(cancel).catch(error => {
+    failure ??= error;
+    cancel.aborted = true;
+  })));
+  if (failure) throw failure;
+  if (quitting) throw new Error('Runtime is shutting down.');
+  noteStartup('BACKEND_ROOTS');
+  await restoreAuthorizedRoots();
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
   runtime.ready = true;
