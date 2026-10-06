@@ -12,6 +12,10 @@ server:
         http-only: true
         same-site: lax
 spring:
+  # Single-user desktop: keep peak pool capacity but open idle PostgreSQL backends on demand.
+  datasource:
+    hikari:
+      minimum-idle: 2
   ssl:
     bundle:
       pem:
