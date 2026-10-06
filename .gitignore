@@ -27,6 +27,7 @@ Thumbs.db
 /.cif-cost-*/
 /.cif-resume-*/
 /.citd-*/
+/.nr/
 desktop/node_modules/
 desktop/stage/
 desktop/dist/

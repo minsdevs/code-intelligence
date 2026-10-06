@@ -57,6 +57,46 @@ test('serialized completed-cleanup hook preserves its target and cannot trip on 
   await h.io.unlink(transaction + '/checkpoint/payload.bin'); assert.equal(h.calls.length, 4);
 });
 
+test('serialized pause-for-crash source hook holds after the real rename and restores without repeating it', async () => {
+  const h = harness(installOwnedInterruption), original = { ...h.io };
+  const hook = h.execute({ app: h.app }, { profile, parent, mode: 'AFTER_SOURCE_RENAME', pauseForCrash: true });
+  await h.io.rename('/outside/data/repos', transaction + '/previous-repos');
+  const held = h.io.rename(profile + '/data/repos', transaction + '/previous-repos');
+  // The serialized hook awaits a promise from the outer VM realm; one local
+  // microtask does not establish that its rename continuation has run.
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(JSON.parse(JSON.stringify(hook.inspect())), {
+    mode: 'AFTER_SOURCE_RENAME', transactionId, operationCompleted: true, count: 1, pauseForCrash: true,
+  });
+  assert.equal(h.calls.length, 2);
+  await h.io.rename(profile + '/data/repos', transaction + '/previous-repos');
+  assert.equal(h.calls.length, 3); assert.equal(hook.inspect().count, 1);
+  const restored = hook.restore();
+  assert.equal(restored.count, 1);
+  await assert.rejects(held, { code: 'EIO' });
+  assert.equal(h.io.rename, original.rename); assert.equal(h.io.unlink, original.unlink);
+  assert.equal(h.calls.filter(call => call[0] === 'rename' && call[1] === profile + '/data/repos'
+    && call[2] === transaction + '/previous-repos').length, 2);
+});
+
+test('serialized pause-for-crash cleanup hook holds before unlink and restores without duplicate cleanup', async () => {
+  const h = harness(installOwnedInterruption), original = { ...h.io };
+  const hook = h.execute({ app: h.app }, { profile, parent, mode: 'BEFORE_COMPLETED_CLEANUP', pauseForCrash: true });
+  await h.io.unlink(transaction + '/incoming/payload.bin');
+  const held = h.io.unlink(transaction + '/checkpoint/payload.bin');
+  await Promise.resolve();
+  assert.deepEqual(JSON.parse(JSON.stringify(hook.inspect())), {
+    mode: 'BEFORE_COMPLETED_CLEANUP', transactionId, operationCompleted: false, count: 1, pauseForCrash: true,
+  });
+  assert.equal(h.calls.length, 1);
+  await h.io.unlink(transaction + '/checkpoint/payload.bin');
+  assert.equal(h.calls.length, 2); assert.equal(hook.inspect().count, 1);
+  assert.equal(hook.restore().count, 1);
+  await assert.rejects(held, { code: 'EIO' });
+  assert.equal(h.io.rename, original.rename); assert.equal(h.io.unlink, original.unlink);
+  assert.equal(h.calls.filter(call => call[0] === 'unlink' && call[1] === transaction + '/checkpoint/payload.bin').length, 1);
+});
+
 test('hooks refuse ordinary profiles, another claim, noncanonical paths, wrong owners and modes before installation', () => {
   for (const overrides of [
     { app: { getName: () => 'Code Intelligence Validation' } },
@@ -72,6 +112,9 @@ test('hooks refuse ordinary profiles, another claim, noncanonical paths, wrong o
   const h = harness(installOwnedInterruption), original = { ...h.io };
   assert.throws(() => h.execute({ app: h.app }, { profile, parent: '/elsewhere', mode: 'AFTER_SOURCE_RENAME' }));
   assert.throws(() => h.execute({ app: h.app }, { profile, parent, mode: 'SIGKILL' }));
+  for (const pauseForCrash of [null, 0, 1, 'true', {}, []]) {
+    assert.throws(() => h.execute({ app: h.app }, { profile, parent, mode: 'AFTER_SOURCE_RENAME', pauseForCrash }));
+  }
   assert.equal(h.io.rename, original.rename); assert.equal(h.io.unlink, original.unlink);
 });
 

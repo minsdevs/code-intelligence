@@ -10,6 +10,12 @@ real-account refresh/revoke/SSO and clean-machine installation are not certified
 The current candidate is a local ad-hoc Validation build, not a public release. Use the exact
 candidate/claim and evidence instructions in that report, not an old bundle path below.
 
+The [packaged owner-crash follow-up](docs/audit/electron-owner-crash-2026-10-06.md)
+verifies two actual Electron SIGKILL boundaries during restore on unchanged j5EJLB,
+including source/note/history preservation, recovery and a further normal restart.
+Each case passed six recorded checks;79 synthetic contracts passed. Full crash/
+power-loss coverage and real-user database acceptance remain separate.
+
 The [initial Docker integration follow-up](docs/audit/docker-integration-2026-10-06.md)
 removed the earlier Docker-unavailable execution blocker. The current continuation
 verifies 1,665 backend passes with12 explicit skips,12 actual-analyzer/PostgreSQL

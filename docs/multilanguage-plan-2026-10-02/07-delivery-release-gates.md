@@ -156,6 +156,13 @@ exports/main을 무시한 src/index 추측 연결을 차단하는 마지막 수�
 exit0에 가려지지 않도록 진단과 검증을 보강했다. 과거 두 native 실패의 원인까지
 확정한 것은 아니다. 위 미검증 checkpoint는 이 후속으로 해소된 과거 상태다.
 
+이후 [실제 Electron 강제종료 복구](../audit/electron-owner-crash-2026-10-06.md)는
+같은 j5EJLB를 변경하지 않고 새 합성 프로필2개에서 실행했다. 소스 rename 직후와
+복원 완료 후 cleanup 직전의 SIGKILL, 기록된 거래 복구, source92/91·메모 보존,
+추가 정상 재시작이 각각6개 점검 PASS다. 최종 합성 회귀79개도 통과했다.
+이 결과는1단계의 실제 main-process crash 두 경계를 보완하며, 전원손실·전체C16·
+nonzero 비용원장과 retained-source를 결합한 native crash·실사용 DB 적용은 별도다.
+
 **현재 수행 위치는 통합 후보를 고정하고 8단계 출시 전 최종 판정을 기록한 시점이다.
 판정은 No-Go이며, 1–7단계의 필수 출시 수용조건이 모두 완료됐다는 뜻은 아니다.**
 중단 사이 PR92의 비용원장 복구와 PR93의 인증 갱신·소비자 권한 검증이 병합되었고,
@@ -171,7 +178,7 @@ exit0에 가려지지 않도록 진단과 검증을 보강했다. 과거 두 nat
 
 | 단계 | 현재 상태 | 완료 근거 또는 남은 조건 |
 | --- | --- | --- |
-| 1 데이터 복구 안정화 | 자동화 단위·후보 회귀 완료 / 전체 수용 미완료 | 173 비용원장 보존·Node owner 중단2경계,202 동일프로세스 rollback과 후보 정상/오류 복원 확인. Electron 전체 crash·전원손실·실사용 DB/locale 적용 조건·최초 시작 실패 원인 잔여 |
+| 1 데이터 복구 안정화 | Electron SIGKILL 두 경계·복구·추가 정상 재시작 완료 / 전체 수용 미완료 | 새 프로필별6개 점검, source92/91·메모·암호화 기록 보존. 기존 Node owner173 및 동일프로세스202 비용 검증은 별도 근거. 전체C16·전원손실·nonzero비용+retained-source 결합 native crash·실사용 DB/locale·과거 시작 실패 원인 잔여 |
 | 2 실제 GitHub 가져오기 | 소비자 권한 검증 구현·회귀 완료 / 실계정 대기 | repo·clone/import·PR metadata에 revision-bound 권한과 결과 게시 검증. 기존 실패 project1의 실제 UI 재분석은 사용자 데이터 적용 조건 충족 후 |
 | 3 인증 수명주기 | refresh/CAS 구현·기본 Docker 인증통합 보완 / 실권한 수용 미완료 | 기존 JDBC6과 별도로 실제 Spring HTTP/JPA/Redis 인증13, 유지보수HTTP9 및 기본backend suite 통과. 실제 GitHub refresh/revoke/SSO와 그 전체운영경로 수용은 별도 |
 | 4 분석·작업 신뢰 | 마지막 binding/완료 알림 수정·회귀 완료 / 독립 수용 미완료 | TS271·실제sidecar12·backend1665PASS/12명시skip, SSE19·frontend436. package-entry 추측 거부·DB 완료 알림 복구와 snapshot 보존 검증. 독립corpus·모든취소/중단/재시도 간 이벤트 경합은 별도 |

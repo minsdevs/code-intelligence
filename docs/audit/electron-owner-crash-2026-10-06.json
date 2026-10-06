@@ -1,0 +1,903 @@
+{
+  "format": 1,
+  "status": "SCOPED_PACKAGED_OWNER_CRASH_PASS",
+  "observedAt": "2026-10-06T02:14:08.375Z",
+  "stage": {
+    "primary": 1,
+    "related": [
+      6
+    ],
+    "total": 8,
+    "wholeStageOneAccepted": false,
+    "releaseVerdict": "NO_GO"
+  },
+  "baseCommit": "0aab11933207c79d66f7e80b1520f7b11f8f0030",
+  "validatedImplementationCommit": "e26cbd69310fc71c115a8c639361a8b8e9102297",
+  "productSourcesUnchanged": true,
+  "productSourceFingerprints": {
+    "backend/src/main": "d963aa3e44f3d3de7fdac0adda50a90f7fc749228bd7e5e08967b1bace259c62",
+    "frontend/src": "dc7167d257754aa5030e922ed36e142ec0902a25fce66936a91eebbdbad3dcc7",
+    "desktop/src": "ab562230f730f7c039317cb992612b67d5d2bd6939f6b9e5961173de1a2839c8",
+    "analyzers/ts-analyzer/src": "e77cf40e18a9d875b97ea3f33e2f58410471317dd73fd4d28cdbfbbc9402c071",
+    "backend/build.gradle.kts": "76728d660b7fdc22b4045560026624af607306702e09125a428a26dc3d3bf0f2",
+    "backend/settings.gradle.kts": "b8b068943adeaa9b9fa7a96d5ca8f51ce68b6ae674a0302bf004769c07852711",
+    "backend/gradle/wrapper/gradle-wrapper.properties": "fc913ffa0625b544190844a506086ca0b93c4361986e820e10dd64c088257bf7",
+    "frontend/package.json": "b2ba3f52bca45caceea34f293aacfb4bb52035b373b3fe7324516918eeaccfcb",
+    "frontend/package-lock.json": "bdd68ecb2b06c743727bbd7e3dea9f89af4d238a142bfb3ddef17365e69acc46",
+    "desktop/package.json": "e804aa1b58198affbe1bfa5a5551a82cff4c5b3d960f5e51ef517b3f4d2e3fdf",
+    "desktop/package-lock.json": "644dd4fc65dbf002768ef8d9986be6cda1536883d649355ff4dc31bb0bf421b5",
+    "analyzers/ts-analyzer/package.json": "ed1fe4d2761f6fad1f42044ede75c547d0f0298415be5a8c7e79cc78859976ab",
+    "analyzers/ts-analyzer/package-lock.json": "6b7cb98446d0c770912e04a16c4308688f29e328f32aa5a13457556169a1c6a2",
+    "analyzers/ts-analyzer/tsconfig.json": "c3afae120c702362c06de2f1294ab0ac6de8273f484ae36ff2e9524e1e9d0c9f"
+  },
+  "baselineEvidence": {
+    "path": "docs/audit/pre-release-continuation-validation-2026-10-06.json",
+    "sha256": "d478a32ba6bcf0cb1a96fc2f10c23ed961747f77f86aeb333b5119ce3cf47747"
+  },
+  "candidate": {
+    "path": ".native-product-j5EJLB/Code Intelligence Validation.app",
+    "appAsarSha256": "31ddec1d3cc5a13fe44c68a5b76e7027e3075e8573213940b01a9bf01bc4f85d",
+    "manifestSha256": "f138415a5e390c150d2f62fb2788a81d038f03324cc30394c4d70e10bc9fb83f",
+    "backendJarSha256": "bd20db8f69443eca950ff7b886454658548bf5ccb6b40ae807148c009858bbee",
+    "buildSequence": "1791229598313",
+    "runtimeInventoryReverifiedAfterRuns": true,
+    "adHocSignatureReverifiedAfterRuns": true,
+    "rebuilt": false
+  },
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "osVersion": "26.6.2",
+    "node": "v26.5.0",
+    "mockKeychain": true,
+    "realAccount": false,
+    "freshProfilePerCase": true,
+    "sameClaimReusedOnlyInsideEachCase": true
+  },
+  "unit": {
+    "path": "validation/local/electron-crash/unit-final-eS6COg/result.json",
+    "sha256": "a8832203db0a480efa7eb69d4382bd5a8400ea840007c7e24ed30de0bd931792",
+    "status": "PASS",
+    "scope": "Synthetic hooks/ChildProcess, CLI/native-parent and isolated-run/close contracts; no live process killed",
+    "execution": {
+      "status": 0,
+      "signal": null,
+      "errorCode": null,
+      "timedOut": false,
+      "directExitObserved": true
+    },
+    "totals": {
+      "tests": 79,
+      "pass": 79,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "sources": {
+      "desktop/test/backup-interruption-hooks.test.cjs": "e0069ee1875c310ed072f58c6c14a4848926109fd59796ec08bb8ec4264811e7",
+      "desktop/test/owned-crash.test.cjs": "6dcfe97dfab3600b83266a352c34e020f10bd5ba7fa398984d3811e8e101b145",
+      "validation/pre-release/test/native-close-contract.test.cjs": "423e9edf6d0bd88706cba5a99430c05f49ff8cfca26290ef6ccbfd57761e0b96",
+      "desktop/test/isolated-run.test.cjs": "e758d2d7de88d150d7bfb4c6067399af14708e5a97dad6ba930d0c20c5f5b8fe",
+      "validation/backup-compatibility/owned-crash.cjs": "51fd6df3a5752b154731f996116d8d29b7de254e1ffb92b74cf781c3faae9ef6",
+      "validation/backup-compatibility/interruption-hooks.cjs": "0f4d1249d15b5dce9ea9586d3e3abe86046dbc2b9053661e85b2e758b7aa00d4",
+      "validation/backup-compatibility/native-interruption.cjs": "ab7300d39f433fcac1376d400673d5434839bc2374c0bab2d6b6eb871e1e5dc6"
+    },
+    "sourcesUnchanged": true,
+    "evidence": "/Users/minseokchae/Dev/code-intelligence/validation/local/electron-crash/unit-final-eS6COg"
+  },
+  "cases": [
+    {
+      "point": "AFTER_SOURCE_RENAME",
+      "status": "PASS",
+      "resultPath": "validation/local/electron-crash/native-vgFQTn/result.json",
+      "resultSha256": "6265766a6b36d691fccf73b8f4d119f67cc96512775fd19ad63f49231341cacf",
+      "claim": ".nr/desktop-run-ghwH7K/.isolated-run.json",
+      "snapshotIds": {
+        "backup": 1,
+        "beforeRestore": 2
+      },
+      "outcome": "PREVIOUS_SNAPSHOT",
+      "checks": [
+        "real-ui-backup-created",
+        "newer-real-db-and-source-created",
+        "actual-restore-paused-with-authenticated-snapshot-ciphertexts-and-durable-history-retained",
+        "owned-electron-sigkill-and-observed-descendant-snapshot-exit-confirmed",
+        "interrupted-publication-recovers-newer-note-and-both-snapshot-sources",
+        "subsequent-normal-start-needs-no-recovery-and-retains-verified-snapshot-source"
+      ],
+      "injection": {
+        "mode": "AFTER_SOURCE_RENAME",
+        "transactionId": "6ef629b8-bc2e-453b-af1f-69501195cfe4",
+        "operationCompleted": true,
+        "count": 1,
+        "pauseForCrash": true
+      },
+      "crash": {
+        "observedBefore": [
+          {
+            "pid": 83611,
+            "ppid": 83575
+          },
+          {
+            "pid": 83616,
+            "ppid": 83611
+          },
+          {
+            "pid": 83617,
+            "ppid": 83611
+          },
+          {
+            "pid": 83636,
+            "ppid": 83611
+          },
+          {
+            "pid": 83643,
+            "ppid": 83611
+          },
+          {
+            "pid": 83656,
+            "ppid": 83611
+          },
+          {
+            "pid": 83660,
+            "ppid": 83656
+          },
+          {
+            "pid": 83661,
+            "ppid": 83660
+          },
+          {
+            "pid": 83662,
+            "ppid": 83660
+          },
+          {
+            "pid": 83664,
+            "ppid": 83660
+          },
+          {
+            "pid": 83665,
+            "ppid": 83660
+          },
+          {
+            "pid": 83666,
+            "ppid": 83660
+          },
+          {
+            "pid": 84047,
+            "ppid": 83611
+          }
+        ],
+        "signalRequested": "SIGKILL",
+        "normalQuitRequested": false,
+        "exit": {
+          "code": null,
+          "signal": "SIGKILL"
+        },
+        "remainingObservedPids": [],
+        "observedTreeGone": true,
+        "observationScope": "PID/PPID snapshot before SIGKILL absent afterward; no proof of unsampled descendants or hostile daemonization",
+        "cleanupObservationMs": 161,
+        "observedProcessCount": 13
+      },
+      "exits": [
+        {
+          "sequence": 1,
+          "pid": 83611,
+          "code": null,
+          "signal": "SIGKILL",
+          "intentionalCrash": true,
+          "cleanShutdownObserved": false
+        },
+        {
+          "sequence": 2,
+          "pid": 84792,
+          "code": 0,
+          "signal": null,
+          "shutdown": {
+            "phase": "COMPLETE",
+            "state": "COMPLETE",
+            "elapsedMs": 2569
+          },
+          "shutdownTrace": [
+            {
+              "phase": "QUEUED",
+              "state": "RUNNING",
+              "elapsedMs": 0
+            },
+            {
+              "phase": "STOPPING",
+              "state": "RUNNING",
+              "elapsedMs": 1
+            },
+            {
+              "phase": "SAFETY_OFF",
+              "state": "RUNNING",
+              "elapsedMs": 1
+            },
+            {
+              "phase": "BACKEND",
+              "state": "RUNNING",
+              "elapsedMs": 68
+            },
+            {
+              "phase": "ANALYZER",
+              "state": "RUNNING",
+              "elapsedMs": 954
+            },
+            {
+              "phase": "REDIS",
+              "state": "RUNNING",
+              "elapsedMs": 1409
+            },
+            {
+              "phase": "POSTGRES",
+              "state": "RUNNING",
+              "elapsedMs": 1981
+            },
+            {
+              "phase": "SOURCES",
+              "state": "RUNNING",
+              "elapsedMs": 2441
+            },
+            {
+              "phase": "SAFETY",
+              "state": "RUNNING",
+              "elapsedMs": 2452
+            },
+            {
+              "phase": "CONNECTIONS",
+              "state": "RUNNING",
+              "elapsedMs": 2567
+            },
+            {
+              "phase": "OWNER_LOCKS",
+              "state": "RUNNING",
+              "elapsedMs": 2568
+            },
+            {
+              "phase": "TRANSPORT",
+              "state": "RUNNING",
+              "elapsedMs": 2568
+            },
+            {
+              "phase": "STORAGE",
+              "state": "RUNNING",
+              "elapsedMs": 2569
+            },
+            {
+              "phase": "PRIVATE_IPC",
+              "state": "RUNNING",
+              "elapsedMs": 2569
+            },
+            {
+              "phase": "COMPLETE",
+              "state": "COMPLETE",
+              "elapsedMs": 2569
+            }
+          ],
+          "processExitedZero": true,
+          "shutdownRecoveryNotice": false,
+          "cleanShutdownObserved": true
+        },
+        {
+          "sequence": 3,
+          "pid": 85263,
+          "code": 0,
+          "signal": null,
+          "shutdown": {
+            "phase": "COMPLETE",
+            "state": "COMPLETE",
+            "elapsedMs": 2448
+          },
+          "shutdownTrace": [
+            {
+              "phase": "QUEUED",
+              "state": "RUNNING",
+              "elapsedMs": 0
+            },
+            {
+              "phase": "STOPPING",
+              "state": "RUNNING",
+              "elapsedMs": 0
+            },
+            {
+              "phase": "SAFETY_OFF",
+              "state": "RUNNING",
+              "elapsedMs": 0
+            },
+            {
+              "phase": "BACKEND",
+              "state": "RUNNING",
+              "elapsedMs": 60
+            },
+            {
+              "phase": "ANALYZER",
+              "state": "RUNNING",
+              "elapsedMs": 933
+            },
+            {
+              "phase": "REDIS",
+              "state": "RUNNING",
+              "elapsedMs": 1393
+            },
+            {
+              "phase": "POSTGRES",
+              "state": "RUNNING",
+              "elapsedMs": 1892
+            },
+            {
+              "phase": "SOURCES",
+              "state": "RUNNING",
+              "elapsedMs": 2322
+            },
+            {
+              "phase": "SAFETY",
+              "state": "RUNNING",
+              "elapsedMs": 2328
+            },
+            {
+              "phase": "CONNECTIONS",
+              "state": "RUNNING",
+              "elapsedMs": 2445
+            },
+            {
+              "phase": "OWNER_LOCKS",
+              "state": "RUNNING",
+              "elapsedMs": 2446
+            },
+            {
+              "phase": "TRANSPORT",
+              "state": "RUNNING",
+              "elapsedMs": 2446
+            },
+            {
+              "phase": "STORAGE",
+              "state": "RUNNING",
+              "elapsedMs": 2447
+            },
+            {
+              "phase": "PRIVATE_IPC",
+              "state": "RUNNING",
+              "elapsedMs": 2447
+            },
+            {
+              "phase": "COMPLETE",
+              "state": "COMPLETE",
+              "elapsedMs": 2448
+            }
+          ],
+          "processExitedZero": true,
+          "shutdownRecoveryNotice": false,
+          "cleanShutdownObserved": true
+        }
+      ],
+      "oneRecoveryConsent": true,
+      "sourceAndNotesVerified": true,
+      "priorRecordCount": 12,
+      "permanentState": {
+        "purpose-keyring/purpose-keyring.wrapped": {
+          "bytes": 655,
+          "device": "16777229",
+          "inode": "36691709",
+          "sha256": "919f1f1f0ee31150aecc28b70340d96816027d62e5d45e804dc1388b000d69d9"
+        },
+        "purpose-keyring/owner.lock": {
+          "bytes": 99,
+          "device": "16777229",
+          "inode": "36691708",
+          "sha256": "80f23f1bfced576376384f861ab18378280b2e28c2ca57a8d0bf087e11cadf59"
+        },
+        "source-vault/source-keyring.wrapped": {
+          "bytes": 431,
+          "device": "16777229",
+          "inode": "36693067",
+          "sha256": "9677431aa293fa9a0f63e3dedce634fb3a69e57c044bf4f92a671d293b4d5a13"
+        },
+        "source-vault/owner.lock": {
+          "bytes": 96,
+          "device": "16777229",
+          "inode": "36693066",
+          "sha256": "e110095f55f465f7e81e3d533a946c5ad97b67a8757a39cb3e821bdd009bd819"
+        },
+        "ai-journal/writer.lock": {
+          "bytes": 94,
+          "device": "16777229",
+          "inode": "36691712",
+          "sha256": "a868c6ba609887f63713bac20855569c4d7bbe77c272348c3a762a16ae3d1fdc"
+        }
+      },
+      "retainedBeforeCrash": {
+        "old": {
+          "snapshotId": 1,
+          "contentOid": "920da3a4246588cd3e5b3f514917d9929cd61a35",
+          "contentSha256": "0931da25ff934e635ffbdce64054bf856de9a62f1ac51089d3cf50511babe41b",
+          "sourceState": "AVAILABLE"
+        },
+        "newer": {
+          "snapshotId": 2,
+          "contentOid": "4ac1eee0d1e17bf6353edc24976c04e2d7c24576",
+          "contentSha256": "ae49df70e9769311f3fcbfdaf530dd7fd89a2874358d4a30ad406ca3693ae425",
+          "sourceState": "AVAILABLE"
+        },
+        "oldCipher": {
+          "contentSha256": "0931da25ff934e635ffbdce64054bf856de9a62f1ac51089d3cf50511babe41b",
+          "bytes": 389,
+          "sha256": "42d9f88e579e39e9ef72bd2d8382b9b8ca65d6daf6840925a7d421ffe45843c1"
+        },
+        "newCipher": {
+          "contentSha256": "ae49df70e9769311f3fcbfdaf530dd7fd89a2874358d4a30ad406ca3693ae425",
+          "bytes": 389,
+          "sha256": "34f884b08059a30988cab5681dfe8cd964b02e773d817f2dd60a0154720de73c"
+        }
+      },
+      "recoveredScreenshot": {
+        "path": "validation/local/electron-crash/native-vgFQTn/recovered.png",
+        "sha256": "bb1aa0f229a20a506e4a918fb60c5426326ebdc88e77cd76c71a999c88584627",
+        "visuallyReviewed": true
+      }
+    },
+    {
+      "point": "BEFORE_COMPLETED_CLEANUP",
+      "status": "PASS",
+      "resultPath": "validation/local/electron-crash/native-iTZrBY/result.json",
+      "resultSha256": "1eb126e53cdea77111073c99d247bf787e648e4fb5ccd71521bc7cefa486eb7f",
+      "claim": ".nr/desktop-run-79Kqny/.isolated-run.json",
+      "snapshotIds": {
+        "backup": 1,
+        "beforeRestore": 2
+      },
+      "outcome": "RESTORED_SNAPSHOT",
+      "checks": [
+        "real-ui-backup-created",
+        "newer-real-db-and-source-created",
+        "actual-restore-paused-with-authenticated-snapshot-ciphertexts-and-durable-history-retained",
+        "owned-electron-sigkill-and-observed-descendant-snapshot-exit-confirmed",
+        "completed-restore-survives-owner-crash-with-original-note-and-source",
+        "subsequent-normal-start-needs-no-recovery-and-retains-verified-snapshot-source"
+      ],
+      "injection": {
+        "mode": "BEFORE_COMPLETED_CLEANUP",
+        "transactionId": "4dfcab73-1ae9-41b6-84b1-e42b1643d0e0",
+        "operationCompleted": false,
+        "count": 1,
+        "pauseForCrash": true
+      },
+      "crash": {
+        "observedBefore": [
+          {
+            "pid": 85870,
+            "ppid": 85839
+          },
+          {
+            "pid": 85872,
+            "ppid": 85870
+          },
+          {
+            "pid": 85873,
+            "ppid": 85870
+          },
+          {
+            "pid": 85885,
+            "ppid": 85870
+          },
+          {
+            "pid": 85889,
+            "ppid": 85870
+          },
+          {
+            "pid": 85910,
+            "ppid": 85870
+          },
+          {
+            "pid": 85924,
+            "ppid": 85910
+          },
+          {
+            "pid": 85925,
+            "ppid": 85924
+          },
+          {
+            "pid": 85926,
+            "ppid": 85924
+          },
+          {
+            "pid": 85928,
+            "ppid": 85924
+          },
+          {
+            "pid": 85929,
+            "ppid": 85924
+          },
+          {
+            "pid": 85930,
+            "ppid": 85924
+          },
+          {
+            "pid": 86216,
+            "ppid": 85870
+          },
+          {
+            "pid": 86969,
+            "ppid": 85870
+          },
+          {
+            "pid": 86970,
+            "ppid": 86969
+          },
+          {
+            "pid": 86971,
+            "ppid": 85870
+          },
+          {
+            "pid": 86972,
+            "ppid": 86971
+          },
+          {
+            "pid": 86973,
+            "ppid": 85870
+          },
+          {
+            "pid": 86979,
+            "ppid": 85870
+          },
+          {
+            "pid": 86982,
+            "ppid": 86979
+          },
+          {
+            "pid": 87010,
+            "ppid": 85924
+          },
+          {
+            "pid": 87018,
+            "ppid": 85924
+          },
+          {
+            "pid": 87019,
+            "ppid": 85924
+          },
+          {
+            "pid": 87020,
+            "ppid": 85924
+          },
+          {
+            "pid": 87021,
+            "ppid": 85924
+          },
+          {
+            "pid": 87022,
+            "ppid": 85924
+          },
+          {
+            "pid": 87023,
+            "ppid": 85924
+          },
+          {
+            "pid": 87024,
+            "ppid": 85924
+          },
+          {
+            "pid": 87025,
+            "ppid": 85924
+          },
+          {
+            "pid": 87026,
+            "ppid": 85924
+          }
+        ],
+        "signalRequested": "SIGKILL",
+        "normalQuitRequested": false,
+        "exit": {
+          "code": null,
+          "signal": "SIGKILL"
+        },
+        "remainingObservedPids": [],
+        "observedTreeGone": true,
+        "observationScope": "PID/PPID snapshot before SIGKILL absent afterward; no proof of unsampled descendants or hostile daemonization",
+        "cleanupObservationMs": 544,
+        "observedProcessCount": 30
+      },
+      "exits": [
+        {
+          "sequence": 1,
+          "pid": 85870,
+          "code": null,
+          "signal": "SIGKILL",
+          "intentionalCrash": true,
+          "cleanShutdownObserved": false
+        },
+        {
+          "sequence": 2,
+          "pid": 87072,
+          "code": 0,
+          "signal": null,
+          "shutdown": {
+            "phase": "COMPLETE",
+            "state": "COMPLETE",
+            "elapsedMs": 2630
+          },
+          "shutdownTrace": [
+            {
+              "phase": "QUEUED",
+              "state": "RUNNING",
+              "elapsedMs": 0
+            },
+            {
+              "phase": "STOPPING",
+              "state": "RUNNING",
+              "elapsedMs": 0
+            },
+            {
+              "phase": "SAFETY_OFF",
+              "state": "RUNNING",
+              "elapsedMs": 1
+            },
+            {
+              "phase": "BACKEND",
+              "state": "RUNNING",
+              "elapsedMs": 132
+            },
+            {
+              "phase": "ANALYZER",
+              "state": "RUNNING",
+              "elapsedMs": 999
+            },
+            {
+              "phase": "REDIS",
+              "state": "RUNNING",
+              "elapsedMs": 1455
+            },
+            {
+              "phase": "POSTGRES",
+              "state": "RUNNING",
+              "elapsedMs": 2032
+            },
+            {
+              "phase": "SOURCES",
+              "state": "RUNNING",
+              "elapsedMs": 2493
+            },
+            {
+              "phase": "SAFETY",
+              "state": "RUNNING",
+              "elapsedMs": 2499
+            },
+            {
+              "phase": "CONNECTIONS",
+              "state": "RUNNING",
+              "elapsedMs": 2627
+            },
+            {
+              "phase": "OWNER_LOCKS",
+              "state": "RUNNING",
+              "elapsedMs": 2627
+            },
+            {
+              "phase": "TRANSPORT",
+              "state": "RUNNING",
+              "elapsedMs": 2628
+            },
+            {
+              "phase": "STORAGE",
+              "state": "RUNNING",
+              "elapsedMs": 2629
+            },
+            {
+              "phase": "PRIVATE_IPC",
+              "state": "RUNNING",
+              "elapsedMs": 2629
+            },
+            {
+              "phase": "COMPLETE",
+              "state": "COMPLETE",
+              "elapsedMs": 2630
+            }
+          ],
+          "processExitedZero": true,
+          "shutdownRecoveryNotice": false,
+          "cleanShutdownObserved": true
+        },
+        {
+          "sequence": 3,
+          "pid": 87547,
+          "code": 0,
+          "signal": null,
+          "shutdown": {
+            "phase": "COMPLETE",
+            "state": "COMPLETE",
+            "elapsedMs": 2434
+          },
+          "shutdownTrace": [
+            {
+              "phase": "QUEUED",
+              "state": "RUNNING",
+              "elapsedMs": 0
+            },
+            {
+              "phase": "STOPPING",
+              "state": "RUNNING",
+              "elapsedMs": 0
+            },
+            {
+              "phase": "SAFETY_OFF",
+              "state": "RUNNING",
+              "elapsedMs": 0
+            },
+            {
+              "phase": "BACKEND",
+              "state": "RUNNING",
+              "elapsedMs": 54
+            },
+            {
+              "phase": "ANALYZER",
+              "state": "RUNNING",
+              "elapsedMs": 917
+            },
+            {
+              "phase": "REDIS",
+              "state": "RUNNING",
+              "elapsedMs": 1361
+            },
+            {
+              "phase": "POSTGRES",
+              "state": "RUNNING",
+              "elapsedMs": 1836
+            },
+            {
+              "phase": "SOURCES",
+              "state": "RUNNING",
+              "elapsedMs": 2297
+            },
+            {
+              "phase": "SAFETY",
+              "state": "RUNNING",
+              "elapsedMs": 2303
+            },
+            {
+              "phase": "CONNECTIONS",
+              "state": "RUNNING",
+              "elapsedMs": 2432
+            },
+            {
+              "phase": "OWNER_LOCKS",
+              "state": "RUNNING",
+              "elapsedMs": 2432
+            },
+            {
+              "phase": "TRANSPORT",
+              "state": "RUNNING",
+              "elapsedMs": 2432
+            },
+            {
+              "phase": "STORAGE",
+              "state": "RUNNING",
+              "elapsedMs": 2433
+            },
+            {
+              "phase": "PRIVATE_IPC",
+              "state": "RUNNING",
+              "elapsedMs": 2434
+            },
+            {
+              "phase": "COMPLETE",
+              "state": "COMPLETE",
+              "elapsedMs": 2434
+            }
+          ],
+          "processExitedZero": true,
+          "shutdownRecoveryNotice": false,
+          "cleanShutdownObserved": true
+        }
+      ],
+      "oneRecoveryConsent": true,
+      "sourceAndNotesVerified": true,
+      "priorRecordCount": 18,
+      "permanentState": {
+        "purpose-keyring/purpose-keyring.wrapped": {
+          "bytes": 655,
+          "device": "16777229",
+          "inode": "36695829",
+          "sha256": "c8ccb1d2e74f6cd53b0d5524427cd481c135abd5313e05ebbd6f270fa756942c"
+        },
+        "purpose-keyring/owner.lock": {
+          "bytes": 99,
+          "device": "16777229",
+          "inode": "36695828",
+          "sha256": "c1e6cf7a77aae56506bab1ccc2b688604f2a29177162cdbbe7dc6341a91f596e"
+        },
+        "source-vault/source-keyring.wrapped": {
+          "bytes": 431,
+          "device": "16777229",
+          "inode": "36697174",
+          "sha256": "51bb668a73d6cb2ffcda1fa99bd26c0c3d4f03ff855fa274ca5460f9f4e272e4"
+        },
+        "source-vault/owner.lock": {
+          "bytes": 96,
+          "device": "16777229",
+          "inode": "36697173",
+          "sha256": "2d88b9cd97673dfe69f884efaca1865f2c256560d109b1ee7cdb305960d12469"
+        },
+        "ai-journal/writer.lock": {
+          "bytes": 94,
+          "device": "16777229",
+          "inode": "36695832",
+          "sha256": "41fea3ec010dd7f23f8f93cb73a5a01fafbb8e6bc609901346ef6eb4fbc9a9f0"
+        }
+      },
+      "retainedBeforeCrash": {
+        "old": {
+          "snapshotId": 1,
+          "contentOid": "920da3a4246588cd3e5b3f514917d9929cd61a35",
+          "contentSha256": "0931da25ff934e635ffbdce64054bf856de9a62f1ac51089d3cf50511babe41b",
+          "sourceState": "AVAILABLE"
+        },
+        "newer": {
+          "snapshotId": 2,
+          "contentOid": "4ac1eee0d1e17bf6353edc24976c04e2d7c24576",
+          "contentSha256": "ae49df70e9769311f3fcbfdaf530dd7fd89a2874358d4a30ad406ca3693ae425",
+          "sourceState": "AVAILABLE"
+        },
+        "oldCipher": {
+          "contentSha256": "0931da25ff934e635ffbdce64054bf856de9a62f1ac51089d3cf50511babe41b",
+          "bytes": 389,
+          "sha256": "f2682f266839d07002bf62c0229d9fd80f4e63e0afd0f9182a81b7b9a7ed6d6d"
+        },
+        "newCipher": {
+          "contentSha256": "ae49df70e9769311f3fcbfdaf530dd7fd89a2874358d4a30ad406ca3693ae425",
+          "bytes": 389,
+          "sha256": "f90cb0f5dbb700b50a8ca0a8aa47162a6b493d026eb9086fb8d4d09e83c7c832"
+        }
+      },
+      "recoveredScreenshot": {
+        "path": "validation/local/electron-crash/native-iTZrBY/recovered.png",
+        "sha256": "593c9649952eb475194d2f3cd4223bd6a6b551546744300113727e4ab9ca6438",
+        "visuallyReviewed": true
+      }
+    }
+  ],
+  "finalReadOnlyProcessObservation": {
+    "observedPids": 47,
+    "remainingObservedPids": [],
+    "scope": "Union of pre-crash process snapshots and direct launched app PIDs, absent in final read-only PID/PPID snapshot; no unsampled-tree or hostile-daemonization proof"
+  },
+  "preservedAttempts": [
+    {
+      "path": "validation/local/electron-crash/unit-aUP69g/result.json",
+      "sha256": "97e0a809dd318d33524b9d950ae06564dd632f679be52919e1f927e8e26efdad",
+      "status": "FAIL",
+      "pass": 75,
+      "fail": 1,
+      "cause": "Test inspected a cross-VM async rename after only one local microtask; test synchronization corrected without changing runtime product"
+    },
+    {
+      "path": "validation/local/electron-crash/unit-m4wXmr/result.json",
+      "sha256": "fd8b348735b56a903ec68da50a3ed71a7287a1d2fd439a792c523f8d91a1b7a7",
+      "status": "PASS",
+      "tests": 76
+    }
+  ],
+  "remaining": [
+    "Power loss and all fsync/receipt boundaries",
+    "Nonzero cost obligations combined with retained-source Electron SIGKILL in one fixture",
+    "Original user DB, extension, index and locale application/rollback",
+    "Real-account import, refresh, revoke and SSO",
+    "Independent accuracy, full process-tree performance/security and user tasks",
+    "Fresh machine, minimum supported OS and signed update",
+    "Complete SBOM/license and operational release acceptance"
+  ],
+  "limits": {
+    "independentPowerLossProof": false,
+    "allCrashMatrixComplete": false,
+    "nonzeroCostObligations": false,
+    "realKeychain": false,
+    "realUserProfile": false,
+    "nativeDialogInteraction": false,
+    "oldIntermittentFailureRootCauseEstablished": false,
+    "providerCallsRequested": false,
+    "actionsRequested": false,
+    "formalSigning": false,
+    "notarization": false,
+    "publicRelease": false
+  }
+}
