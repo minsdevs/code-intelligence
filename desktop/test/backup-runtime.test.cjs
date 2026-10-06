@@ -1207,3 +1207,109 @@ test('completed V26 restore recovery compares upgraded hashes while keeping orig
   assert.deepEqual(f.state.maintenanceReceipt, receipt); assert.equal(f.state.aiOff, true);
   assert.equal((await f.recordState()).active, null);
 });
+
+// G-RECOVERY old-archive policy as implemented (2026-10-07). Every refused archive must leave B,
+// A, the selected bytes and recovery state untouched and must never acquire maintenance authority.
+async function craftedArchive(f, { rows, summary: archiveSummary, payloadInstallation = INSTALL, minimumVersion = BUILD,
+  containerInstallation = INSTALL, keyProvider = f.keyProvider, records = dataset().records }) {
+  const header = { kind: 'HEADER', format: 'code-intelligence-backup-payload', version: 1,
+    installationSha256: sha(payloadInstallation), minimumVersion };
+  const frames = [header, ...rows.map(row => ({ kind: 'ROW', row })), { kind: 'DATABASE', summary: archiveSummary }, ...records];
+  const sources = records.filter(r => ['SOURCE_END', 'VAULT_OBJECT'].includes(r.kind)).length;
+  frames.push({ kind: 'FOOTER', rowCount: rows.length, sourceCount: sources, recordsSha256: sha(Buffer.concat(frames.map(frame))) });
+  const dir = await privateDir(path.join(f.root, `crafted-${crypto.randomUUID()}`));
+  await regular(path.join(dir, 'payload.bin'), Buffer.concat(frames.map(frame)));
+  const destinationPath = path.join(dir, 'archive.cibackup');
+  await encryptFile({ sourceRoot: dir, sourcePath: path.join(dir, 'payload.bin'), destinationRoot: dir, destinationPath,
+    installationId: containerInstallation, keyProvider });
+  await fs.unlink(path.join(dir, 'payload.bin'));
+  return destinationPath;
+}
+function legacyRows(data = dataset()) {
+  return copy(data.rows).map(row => {
+    if (row.table === 'files') for (const key of ['analysis_status', 'analysis_reason', 'analysis_targeted']) delete row.values[key];
+    return row;
+  });
+}
+async function refusedBeforeMaintenance(f, selected, code) {
+  const previous = copy(f.state), original = (await fs.lstat(selected)).isFile() ? await fs.readFile(selected) : null;
+  await rejects(f.runtime.restore(selected), code);
+  assert.deepEqual(f.state, previous);
+  for (const event of ['gateway.begin', 'pause', 'pg.prepare', 'merge', 'journal.seal', 'authority.invalidate', 'failure', 'db.createStage']) {
+    assert(!f.trace.includes(event), `${event} must not run for a refused archive`);
+  }
+  if (original) assert.deepEqual(await fs.readFile(selected), original);
+  assert.equal((await f.transactions()).length, 0); await f.intact();
+  await f.reopen();
+}
+
+test('old-archive policy: format 1/2 directory backups and other container versions are refused as input before maintenance', async t => {
+  const f = await fixture(t);
+  const legacy = await privateDir(path.join(f.root, 'legacy-format2-backup'));
+  await privateDir(path.join(legacy, 'repositories'));
+  await regular(path.join(legacy, 'database.dump'), 'synthetic legacy pg_dump');
+  await regular(path.join(legacy, 'manifest.json'), JSON.stringify({ format: 2, installationId: INSTALL,
+    createdAt: STAMP, files: { 'database.dump': sha('synthetic legacy pg_dump') } }));
+  await refusedBeforeMaintenance(f, path.join(legacy, 'manifest.json'), 'INPUT');
+  await refusedBeforeMaintenance(f, path.join(legacy, 'database.dump'), 'INPUT');
+  await refusedBeforeMaintenance(f, legacy, 'INPUT');
+  const valid = await fs.readFile(await f.archive());
+  for (const magic of ['CIBAK002', 'CIBAK004']) {
+    const file = path.join(await privateDir(path.join(f.root, `container-${magic}`)), 'archive.cibackup');
+    const bytes = Buffer.from(valid); Buffer.from(magic).copy(bytes, 0); await regular(file, bytes);
+    await refusedBeforeMaintenance(f, file, 'INPUT');
+  }
+  const state = await f.recordState(); assert.equal(state.active, null); assert.equal(state.completed.length, 0);
+  await f.reopen(); assert.equal((await f.runtime.restore(await f.archive())).restored, true);
+});
+
+test('old-archive policy: V25-and-older and unknown future schemas are refused as input; V26 is converted, V27 catalog drift is INCOMPATIBLE', async t => {
+  const f = await fixture(t), rows = legacyRows();
+  const v25 = v26Summary(rows); v25.schema = { ...v25.schema, migrations: v25.schema.migrations.slice(0, 25) };
+  await refusedBeforeMaintenance(f, await craftedArchive(f, { rows, summary: v25 }), 'INPUT');
+  const current = dataset(), future = summary(current.rows);
+  future.schema = { ...future.schema, migrations: [...future.schema.migrations,
+    { version: future.schema.migrations.length + 1, filename: `V${future.schema.migrations.length + 1}__synthetic_future.sql`, sha256: 'f'.repeat(64) }] };
+  await refusedBeforeMaintenance(f, await craftedArchive(f, { rows: current.rows, summary: future, records: current.records }), 'INPUT');
+  const drift = await f.archive(dataset(), () => {}, { catalogSha256: sha('historical extension catalog') });
+  await refusedBeforeMaintenance(f, drift, 'INCOMPATIBLE');
+  const state = await f.recordState(); assert.equal(state.active, null); assert.equal(state.completed.length, 0);
+  await f.reopen();
+  // Positive control: the same crafting path with the exact pinned V26 schema is accepted and converted,
+  // so the refusals above are caused by the schema itself rather than by the crafted container.
+  assert.equal((await f.runtime.restore(await craftedArchive(f, { rows, summary: v26Summary(rows) }))).restored, true);
+  assert.ok(f.loadedRows.some(row => row.table === 'files' && !Object.hasOwn(row.values, 'analysis_status')));
+});
+
+test('old-archive policy: foreign installation, foreign payload identity, newer-build and foreign-owner archives never reach maintenance', async t => {
+  const f = await fixture(t), data = dataset(), rows = data.rows, records = data.records;
+  await refusedBeforeMaintenance(f, await craftedArchive(f, { rows, records, summary: summary(rows), containerInstallation: 'foreign-installation' }), 'INPUT');
+  await refusedBeforeMaintenance(f, await craftedArchive(f, { rows, records, summary: summary(rows), payloadInstallation: 'foreign-installation' }), 'INPUT');
+  await refusedBeforeMaintenance(f, await craftedArchive(f, { rows, records, summary: summary(rows), minimumVersion: String(BigInt(BUILD) + 1n) }), 'INPUT');
+  await refusedBeforeMaintenance(f, await f.archive(dataset(), () => {}, { ownerUserId: '42' }), 'INCOMPATIBLE');
+  const state = await f.recordState(); assert.equal(state.active, null); assert.equal(state.completed.length, 0);
+  await f.reopen();
+  // Positive control through the identical crafting path with only the varied field restored.
+  assert.equal((await f.runtime.restore(await craftedArchive(f, { rows, records, summary: summary(rows) }))).restored, true);
+});
+
+test('backup key rotation: an archive under the retired key restores, new evidence uses the current key, and an unknown key is refused', async t => {
+  const f = await fixture(t), archive = await f.archive(), archiveBytes = await fs.readFile(archive);
+  const NEW_ID = 'b'.repeat(32), NEW_KEY = Buffer.alloc(32, 82), requested = [];
+  const keys = new Map([[KEY_ID, KEY], [NEW_ID, NEW_KEY]]);
+  f.args.keyProvider = { async currentKeyId(purpose) { assert.equal(purpose, 'backup'); return NEW_ID; },
+    async getBackupKey(id) { requested.push(id); if (!keys.has(id)) throw new Error('synthetic-private missing key'); return Buffer.from(keys.get(id)); } };
+  await f.reopen();
+  const result = await f.runtime.restore(archive);
+  assert.equal(result.restored, true); assert.deepEqual(await fs.readFile(archive), archiveBytes);
+  const checkpoint = await fs.readFile(result.recoveryBackup), length = checkpoint.readUInt32BE(8);
+  assert.equal(JSON.parse(checkpoint.subarray(12, 12 + length).toString('utf8')).keyId, NEW_ID);
+  assert(requested.includes(KEY_ID), 'retired key must remain available for the old archive and evidence');
+  assert(requested.includes(NEW_ID), 'new checkpoint and records must use the current key');
+  const unknown = { async currentKeyId() { return 'c'.repeat(32); }, async getBackupKey() { return Buffer.alloc(32, 83); } };
+  const foreignKeyArchive = await craftedArchive(f, { rows: dataset().rows, summary: summary(dataset().rows), keyProvider: unknown });
+  const previous = copy(f.state), admissions = f.admissions.length;
+  await rejects(f.runtime.restore(foreignKeyArchive), 'INPUT');
+  assert.deepEqual(f.state, previous); assert.equal(f.admissions.length, admissions);
+  assert.deepEqual(await fs.readFile(archive), archiveBytes);
+});
