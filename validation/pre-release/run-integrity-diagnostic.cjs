@@ -68,13 +68,26 @@ async function main(argv = process.argv.slice(2)) {
         'ERR_INVALID_ARG_TYPE', 'ERR_INVALID_ARG_VALUE', 'ERR_OUT_OF_RANGE', 'ERR_INVALID_STATE',
         'ERR_FS_FILE_TOO_LARGE', 'ERR_INTERNAL_ASSERTION', 'ABORT_ERR', 'ERR_OPERATION_FAILED']);
       const io = fs.promises, originals = {}, failures = [], traces = [];
-      const record = (operation, error) => {
+      const target = file => typeof file === 'string' && p.isAbsolute(file) && p.normalize(file) === file
+        && (file === runtime || file.startsWith(runtime + p.sep));
+      const record = (operation, error, file) => {
+        if (traces.length >= 16) return;
+        try {
         let code, kind;
         try { code = error?.code; kind = error?.name; } catch { code = undefined; kind = undefined; }
-        if (traces.length < 16) traces.push({ operation, code: known.has(code) ? code : 'UNCLASSIFIED',
-          kind: ['Error', 'TypeError', 'RangeError', 'AbortError'].includes(kind) ? kind : 'OTHER' });
+        let pathSha256 = null, physicalKindAfterFailure = 'UNOBSERVED';
+        if (target(file)) {
+          pathSha256 = process.getBuiltinModule('crypto').createHash('sha256').update(p.relative(runtime, file)).digest('hex');
+          try {
+            const stat = fs.lstatSync(file);
+            physicalKindAfterFailure = stat.isSymbolicLink() ? 'SYMLINK' : stat.isDirectory() ? 'DIRECTORY' : stat.isFile() ? 'FILE' : 'OTHER';
+          } catch { physicalKindAfterFailure = 'UNAVAILABLE'; }
+        }
+        traces.push({ operation, code: known.has(code) ? code : 'UNCLASSIFIED',
+          kind: ['Error', 'TypeError', 'RangeError', 'AbortError'].includes(kind) ? kind : 'OTHER',
+          pathSha256, physicalKindAfterFailure });
+        } catch { /* A diagnostic allocation or observer failure must not replace the original IO error. */ }
       };
-      const target = file => typeof file === 'string' && (file === runtime || file.startsWith(runtime + p.sep));
       for (const name of ['readFile', 'readdir', 'lstat', 'open']) {
         originals[name] = io[name];
         io[name] = async function(file, ...args) {
@@ -84,15 +97,15 @@ async function main(argv = process.argv.slice(2)) {
               const read = value.createReadStream.bind(value), directRead = value.read.bind(value),
                 close = value.close.bind(value), stat = value.stat.bind(value);
               value.createReadStream = (...args) => {
-                try { const stream = read(...args); stream.once('error', error => record('STREAM', error)); return stream; }
-                catch (error) { record('STREAM_CREATE', error); throw error; }
+                try { const stream = read(...args); stream.once('error', error => record('STREAM', error, file)); return stream; }
+                catch (error) { record('STREAM_CREATE', error, file); throw error; }
               };
-              value.stat = async (...args) => { try { return await stat(...args); } catch (error) { record('HANDLE_STAT', error); throw error; } };
-              value.read = async (...args) => { try { return await directRead(...args); } catch (error) { record('READ', error); throw error; } };
-              value.close = async () => { try { await close(); } catch (error) { record('CLOSE', error); throw error; } };
+              value.stat = async (...args) => { try { return await stat(...args); } catch (error) { record('HANDLE_STAT', error, file); throw error; } };
+              value.read = async (...args) => { try { return await directRead(...args); } catch (error) { record('READ', error, file); throw error; } };
+              value.close = async () => { try { await close(); } catch (error) { record('CLOSE', error, file); throw error; } };
             }
             return value;
-          } catch (error) { if (target(file)) record(name.toUpperCase(), error); throw error; }
+          } catch (error) { if (target(file)) record(name.toUpperCase(), error, file); throw error; }
         };
       }
       let completed = 0;

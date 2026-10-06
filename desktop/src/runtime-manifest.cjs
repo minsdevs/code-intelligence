@@ -12,10 +12,12 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
   const relativePath = (raw, label) => {
     try { return runtimeRelativePath(raw, label, platform); } catch { invalid('RUNTIME_MANIFEST_PATH'); }
   };
-  let operation = 'STRUCTURE', readBuffer;
+  let operation = 'STRUCTURE', readBuffer, failureRelative = null, failureAbsolute = null, failureKindBefore = null;
   try {
   if (!manifest || manifest.format !== 1 || !manifest.files || Array.isArray(manifest.files)) invalid();
   if (manifest.platform !== platform || manifest.arch !== arch) invalid('RUNTIME_MANIFEST_PLATFORM');
+  if (Object.hasOwn(manifest, 'controlProtocol')
+    && (manifest.controlProtocol !== 1 || manifest.ownershipProtocol !== 1 || platform === 'win32')) invalid('RUNTIME_MANIFEST_PROTOCOL');
   if (!/^(0|[1-9][0-9]{0,18})$/.test(manifest.buildSequence) || typeof manifest.buildSequence !== 'string'
     || BigInt(manifest.buildSequence) > 9223372036854775807n) invalid('RUNTIME_MANIFEST_BUILD');
   if (platform === 'win32' && (arch !== 'x64' || manifest.runtime?.cache !== 'garnet-2.2.0'
@@ -46,8 +48,10 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
       if (allNames.has(folded)) invalid('RUNTIME_INVENTORY_UNEXPECTED'); allNames.add(folded);
     }
     if (stat.isDirectory()) {
+      failureRelative = relative; failureAbsolute = absolute; failureKindBefore = 'DIRECTORY';
       operation = 'READDIR';
       for (const name of await fs.promises.readdir(absolute)) await visit(relative ? relative + '/' + name : name, depth + 1);
+      failureRelative = null; failureAbsolute = null; failureKindBefore = null;
       return;
     }
     if (!stat.isFile() || stat.nlink !== 1n) invalid('RUNTIME_INVENTORY_TYPE');
@@ -97,6 +101,8 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
   await visit('', 0);
   operation = 'FINALIZE';
   if (seen.size !== expected.length) invalid('RUNTIME_INVENTORY_MISSING');
+  if (manifest.controlProtocol === 1) for (const name of ['backend/code-intelligence-control.jar',
+    'backend/code-intelligence-control-provenance.json']) if (!seen.has(name)) invalid('RUNTIME_INVENTORY_MISSING');
   if (platform === 'win32') for (const name of ['native/windows/codeintel-boundary.exe', 'jre/bin/java.exe', 'cache/GarnetServer.exe',
     'cache/coreclr.dll', 'cache/GarnetServer.runtimeconfig.json', 'windows-provenance.json', 'backend/code-intelligence.jar',
     'postgres/bin/postgres.exe', 'postgres/lib/vector.dll', 'postgres/lib/pg_trgm.dll']) if (!seen.has(name)) invalid('RUNTIME_INVENTORY_MISSING');
@@ -104,7 +110,23 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
   } catch (error) {
     const failure = integrityError(error);
     if (typeof onFailure === 'function') {
-      try { Promise.resolve(onFailure(operation, error)).catch(() => {}); }
+      let details;
+      if (operation === 'READDIR' && typeof failureRelative === 'string' && typeof failureAbsolute === 'string') {
+        try {
+          let physicalKindAfterFailure = 'UNAVAILABLE';
+          try {
+            const observed = fs.lstatSync(failureAbsolute);
+            physicalKindAfterFailure = observed.isSymbolicLink() ? 'SYMLINK'
+              : observed.isDirectory() ? 'DIRECTORY' : observed.isFile() ? 'FILE' : 'OTHER';
+          } catch { /* Observation failure is bounded metadata only. */ }
+          details = Object.freeze({
+            pathSha256: crypto.createHash('sha256').update(failureRelative).digest('hex'),
+            physicalKindBeforeFailure: failureKindBefore === 'DIRECTORY' ? 'DIRECTORY' : 'UNAVAILABLE',
+            physicalKindAfterFailure,
+          });
+        } catch { details = undefined; /* Diagnostics cannot replace the captured failure. */ }
+      }
+      try { Promise.resolve(onFailure(operation, error, details)).catch(() => {}); }
       catch { /* Diagnostics can never affect verification. */ }
     }
     throw failure;

@@ -66,7 +66,8 @@ function startupFailureCode(error) {
   let code; try { code = error?.code; } catch { /* Never stringify arbitrary thrown values. */ }
   return startupCodes.has(code) ? code : 'MAIN_STARTUP_FAILED';
 }
-function integrityDiagnostic(operation, error) {
+const physicalKinds = new Set(['DIRECTORY', 'FILE', 'SYMLINK', 'OTHER', 'UNAVAILABLE']);
+function integrityDiagnostic(operation, error, details) {
   const safeOperation = integrityOperations.has(operation) ? operation : 'FINALIZE';
   let code = 'UNCLASSIFIED', kind = 'OTHER';
   try {
@@ -77,25 +78,69 @@ function integrityDiagnostic(operation, error) {
     const value = error?.name;
     if (typeof value === 'string' && diagnosticKinds.has(value)) kind = value;
   } catch { /* A hostile name getter is never evidence. */ }
+  let pathSha256, physicalKindBeforeFailure, physicalKindAfterFailure;
+  if (safeOperation === 'READDIR' && details !== undefined) {
+    try {
+      if (!details || typeof details !== 'object' || Array.isArray(details)) return Object.freeze({ operation: safeOperation, code, kind });
+      const keys = Reflect.ownKeys(details);
+      if (keys.length !== 3 || !['pathSha256', 'physicalKindBeforeFailure', 'physicalKindAfterFailure'].every(key => keys.includes(key))) {
+        return Object.freeze({ operation: safeOperation, code, kind });
+      }
+      pathSha256 = details?.pathSha256;
+      physicalKindBeforeFailure = details?.physicalKindBeforeFailure;
+      physicalKindAfterFailure = details?.physicalKindAfterFailure;
+    } catch { return Object.freeze({ operation: safeOperation, code, kind }); }
+    if (typeof pathSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(pathSha256)
+        || physicalKindBeforeFailure !== 'DIRECTORY'
+        || !physicalKinds.has(physicalKindAfterFailure)) {
+      return Object.freeze({ operation: safeOperation, code, kind });
+    }
+    return Object.freeze({ operation: safeOperation, code, kind, pathSha256,
+      physicalKindBeforeFailure, physicalKindAfterFailure });
+  }
   return Object.freeze({ operation: safeOperation, code, kind });
 }
 function formatIntegrityDiagnostic(value) {
-  let operation, code, kind;
-  try { operation = value?.operation; code = value?.code; kind = value?.kind; }
+  let operation, code, kind, pathSha256, physicalKindBeforeFailure, physicalKindAfterFailure;
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const keys = Reflect.ownKeys(value);
+    if (!keys.every(key => typeof key === 'string')) return null;
+    operation = value?.operation; code = value?.code; kind = value?.kind;
+    pathSha256 = value?.pathSha256; physicalKindBeforeFailure = value?.physicalKindBeforeFailure;
+    physicalKindAfterFailure = value?.physicalKindAfterFailure;
+    const detailed = pathSha256 !== undefined || physicalKindBeforeFailure !== undefined || physicalKindAfterFailure !== undefined;
+    const allowed = detailed
+      ? ['operation', 'code', 'kind', 'pathSha256', 'physicalKindBeforeFailure', 'physicalKindAfterFailure']
+      : ['operation', 'code', 'kind'];
+    if (keys.length !== allowed.length || allowed.some(key => !keys.includes(key))) return null;
+  }
   catch { return null; }
   if (!integrityOperations.has(operation)
       || !(integrityCodes.has(code) || errnoCodes.has(code) || diagnosticNodeCodes.has(code) || code === 'UNCLASSIFIED')
       || !(diagnosticKinds.has(kind) || kind === 'OTHER')) return null;
+  const hasDetails = pathSha256 !== undefined || physicalKindBeforeFailure !== undefined || physicalKindAfterFailure !== undefined;
+  if (hasDetails) {
+    if (operation !== 'READDIR' || typeof pathSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(pathSha256)
+        || physicalKindBeforeFailure !== 'DIRECTORY' || !physicalKinds.has(physicalKindAfterFailure)) return null;
+    return `DESKTOP_INTEGRITY ${operation} ${code} ${kind} ${pathSha256} ${physicalKindBeforeFailure} ${physicalKindAfterFailure}`;
+  }
   return `DESKTOP_INTEGRITY ${operation} ${code} ${kind}`;
 }
 function parseIntegrityLine(line) {
   if (typeof line !== 'string' || line.length > 256) return null;
   const parts = line.split(' ');
-  if (parts.length !== 4 || parts[0] !== 'DESKTOP_INTEGRITY') return null;
+  if (![4, 7].includes(parts.length) || parts[0] !== 'DESKTOP_INTEGRITY') return null;
   const [, operation, code, kind] = parts;
   if (!integrityOperations.has(operation)
       || !(integrityCodes.has(code) || errnoCodes.has(code) || diagnosticNodeCodes.has(code) || code === 'UNCLASSIFIED')
       || !(diagnosticKinds.has(kind) || kind === 'OTHER')) return null;
+  if (parts.length === 7) {
+    const [, , , , pathSha256, physicalKindBeforeFailure, physicalKindAfterFailure] = parts;
+    if (operation !== 'READDIR' || typeof pathSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(pathSha256)
+        || physicalKindBeforeFailure !== 'DIRECTORY' || !physicalKinds.has(physicalKindAfterFailure)) return null;
+    return { operation, code, kind, pathSha256, physicalKindBeforeFailure, physicalKindAfterFailure };
+  }
   return { operation, code, kind };
 }
 function parseStartupLine(line) {

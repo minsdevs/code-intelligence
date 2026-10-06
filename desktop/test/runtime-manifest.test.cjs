@@ -52,6 +52,44 @@ test('valid inventory is read-only and keeps the existing returned manifest cont
   for (const field of ['ino', 'dev', 'size', 'mtimeNs', 'ctimeNs']) assert.equal(after[field], before[field]);
 });
 
+test('control runtime protocol requires both hashed artifacts and validates their bytes', async t => {
+  const f = fixture(t);
+  f.manifest.controlProtocol = 1; f.manifest.ownershipProtocol = 1;
+  fs.mkdirSync(path.join(f.root, 'backend'));
+  for (const name of ['code-intelligence-control.jar', 'code-intelligence-control-provenance.json']) {
+    const relative = 'backend/' + name;
+    fs.writeFileSync(path.join(f.root, relative), 'synthetic control bytes');
+    f.manifest.files[relative] = sha('synthetic control bytes');
+  }
+  assert.equal(await validateRuntimeManifest(f.root, f.manifest, platform), f.manifest);
+  fs.writeFileSync(path.join(f.root, 'backend/code-intelligence-control.jar'), 'altered control bytes');
+  await assert.rejects(validateRuntimeManifest(f.root, f.manifest, platform), expected('RUNTIME_INVENTORY_HASH'));
+});
+
+for (const missing of ['code-intelligence-control.jar', 'code-intelligence-control-provenance.json']) {
+  test(`control marker cannot accept an inventory that omits ${missing}`, async t => {
+    const f = fixture(t);
+    f.manifest.controlProtocol = 1; f.manifest.ownershipProtocol = 1;
+    fs.mkdirSync(path.join(f.root, 'backend'));
+    const present = missing.endsWith('.jar') ? 'code-intelligence-control-provenance.json' : 'code-intelligence-control.jar';
+    fs.writeFileSync(path.join(f.root, 'backend', present), 'synthetic');
+    f.manifest.files['backend/' + present] = sha('synthetic');
+    await assert.rejects(validateRuntimeManifest(f.root, f.manifest, platform), expected('RUNTIME_INVENTORY_MISSING'));
+  });
+}
+
+for (const controlProtocol of [0, 2, '1', null, true]) test(`unknown control marker ${JSON.stringify(controlProtocol)} fails closed`, async t => {
+  const f = fixture(t); f.manifest.controlProtocol = controlProtocol; f.manifest.ownershipProtocol = 1;
+  await assert.rejects(validateRuntimeManifest(f.root, f.manifest, platform), expected('RUNTIME_MANIFEST_PROTOCOL'));
+});
+
+test('a control marker requires guarded ownership and cannot select a Java helper on Windows', async t => {
+  const f = fixture(t); f.manifest.controlProtocol = 1;
+  await assert.rejects(validateRuntimeManifest(f.root, f.manifest, platform), expected('RUNTIME_MANIFEST_PROTOCOL'));
+  Object.assign(f.manifest, { platform: 'win32', arch: 'x64', ownershipProtocol: 1 });
+  await assert.rejects(validateRuntimeManifest(f.root, f.manifest, { platform: 'win32', arch: 'x64' }), expected('RUNTIME_MANIFEST_PROTOCOL'));
+});
+
 for (const [label, mutate, code] of [
   ['format', f => { f.manifest.format = 2; }, 'RUNTIME_MANIFEST_INVALID'],
   ['platform', f => { f.manifest.arch = 'x64'; }, 'RUNTIME_MANIFEST_PLATFORM'],
@@ -157,6 +195,55 @@ test('failure observer sees the original injected IO failure exactly once withou
   await assert.rejects(validate(f.root, f.manifest, { ...platform, onFailure(operation, error) { observed.push({ operation, error }); } }),
     expected('RUNTIME_IO_EMFILE'));
   assert.deepEqual(observed, [{ operation: 'LSTAT', error: failure }]);
+});
+
+test('READDIR failure reports only hashed relative path and fixed physical kinds', async t => {
+  const f = fixture(t), directory = path.join(f.root, 'postgres'), observed = [];
+  const validate = validatorWithIO({ async readdir(file, ...args) {
+    if (file === directory) {
+      fs.rmSync(directory, { recursive: true, force: true });
+      fs.writeFileSync(directory, 'replacement');
+      throw Object.assign(new Error('/private/raw-path'), { code: 'ENOTDIR' });
+    }
+    return fs.promises.readdir(file, ...args);
+  } });
+  await assert.rejects(validate(f.root, f.manifest, { ...platform, onFailure(operation, error, details) {
+    observed.push({ operation, error, details });
+  } }), expected('RUNTIME_INTEGRITY_FAILED'));
+  assert.equal(observed.length, 1); assert.equal(observed[0].operation, 'READDIR');
+  assert.equal(observed[0].error.code, 'ENOTDIR');
+  assert.deepEqual({ ...observed[0].details }, {
+    pathSha256: sha('postgres'), physicalKindBeforeFailure: 'DIRECTORY', physicalKindAfterFailure: 'FILE',
+  });
+  assert.doesNotMatch(JSON.stringify(observed[0].details), /postgres|private|raw-path/);
+});
+
+test('READDIR failure-time kind observation cannot replace the original error', async t => {
+  const f = fixture(t), directory = path.join(f.root, 'postgres');
+  const validate = validatorWithIO({ async readdir(file, ...args) {
+    if (file === directory) {
+      fs.rmSync(directory, { recursive: true, force: true });
+      throw Object.assign(new Error('original'), { code: 'ENOTDIR' });
+    }
+    return fs.promises.readdir(file, ...args);
+  } });
+  await assert.rejects(validate(f.root, f.manifest, { ...platform, onFailure(_operation, original, details) {
+    assert.equal(original.code, 'ENOTDIR'); assert.equal(details.physicalKindAfterFailure, 'UNAVAILABLE');
+    throw new Error('observer-private');
+  } }), expected('RUNTIME_INTEGRITY_FAILED'));
+});
+
+test('READDIR metadata construction failure cannot replace the captured public failure', async t => {
+  const f = fixture(t), directory = path.join(f.root, 'postgres');
+  const validate = validatorWithIO({ async readdir(file, ...args) {
+    if (file === directory) throw Object.assign(new Error('original'), { code: 'ENOTDIR' });
+    return fs.promises.readdir(file, ...args);
+  } });
+  const originalCreate = crypto.createHash;
+  crypto.createHash = () => { throw new Error('observer-allocation'); };
+  try {
+    await assert.rejects(validate(f.root, f.manifest, { ...platform, onFailure() {} }), expected('RUNTIME_INTEGRITY_FAILED'));
+  } finally { crypto.createHash = originalCreate; }
 });
 
 test('all files share one read buffer per invocation and concurrent invocations remain isolated', async t => {
@@ -273,6 +360,44 @@ test('integrity diagnostic hostile getters are sampled once and never escape', (
     get name() { nameReads++; throw new Error('private-name'); } };
   assert.deepEqual(diagnostics.integrityDiagnostic('OPEN', hostile), { operation: 'OPEN', code: 'UNCLASSIFIED', kind: 'OTHER' });
   assert.equal(codeReads, 1); assert.equal(nameReads, 1);
+});
+
+test('READDIR extended integrity protocol round-trips fixed details and rejects malformed metadata', () => {
+  const details = { pathSha256: 'a'.repeat(64), physicalKindBeforeFailure: 'DIRECTORY', physicalKindAfterFailure: 'FILE' };
+  const value = diagnostics.integrityDiagnostic('READDIR', Object.assign(new Error('private'), { code: 'ENOTDIR' }), details);
+  const line = diagnostics.formatIntegrityDiagnostic(value);
+  assert.equal(line, `DESKTOP_INTEGRITY READDIR ENOTDIR Error ${'a'.repeat(64)} DIRECTORY FILE`);
+  assert.deepEqual(diagnostics.parseIntegrityLine(line), value);
+  assert.equal(diagnostics.parseIntegrityLine(`DESKTOP_INTEGRITY READDIR ENOTDIR Error ${'a'.repeat(63)} DIRECTORY FILE`), null);
+  assert.equal(diagnostics.parseIntegrityLine(`DESKTOP_INTEGRITY OPEN ENOTDIR Error ${'a'.repeat(64)} DIRECTORY FILE`), null);
+  assert.equal(diagnostics.formatIntegrityDiagnostic({ ...value, extra: 'private' }), null);
+});
+
+test('malicious READDIR detail getters cannot emit raw values or break four-token fallback', () => {
+  const reads = { pathSha256: 0, physicalKindBeforeFailure: 0, physicalKindAfterFailure: 0 };
+  const details = {};
+  for (const [name, first] of Object.entries({ pathSha256: 'b'.repeat(64), physicalKindBeforeFailure: 'DIRECTORY', physicalKindAfterFailure: 'UNAVAILABLE' })) {
+    Object.defineProperty(details, name, { get() { return ++reads[name] === 1 ? first : '/private'; } });
+  }
+  const value = diagnostics.integrityDiagnostic('READDIR', Object.assign(new Error('private'), { code: 'ENOTDIR' }), details);
+  assert.deepEqual(reads, { pathSha256: 1, physicalKindBeforeFailure: 1, physicalKindAfterFailure: 1 });
+  assert.doesNotMatch(JSON.stringify(value), /private/);
+  assert.equal(diagnostics.formatIntegrityDiagnostic({ operation: 'READDIR', code: 'ENOTDIR', kind: 'Error', pathSha256: 'bad' }), null);
+  assert.equal(diagnostics.formatIntegrityDiagnostic(diagnostics.integrityDiagnostic('READDIR', new Error('private'))),
+    'DESKTOP_INTEGRITY READDIR UNCLASSIFIED Error');
+});
+
+test('READDIR details reject extra fields and non-string sha without coercion', () => {
+  const extra = { pathSha256: 'c'.repeat(64), physicalKindBeforeFailure: 'DIRECTORY',
+    physicalKindAfterFailure: 'FILE', rawPath: '/private' };
+  assert.deepEqual(diagnostics.integrityDiagnostic('READDIR', new Error('private'), extra),
+    { operation: 'READDIR', code: 'UNCLASSIFIED', kind: 'Error' });
+  let coerced = 0;
+  const hostileSha = { toString() { coerced++; return 'd'.repeat(64); } };
+  assert.deepEqual(diagnostics.integrityDiagnostic('READDIR', new Error('private'), {
+    pathSha256: hostileSha, physicalKindBeforeFailure: 'DIRECTORY', physicalKindAfterFailure: 'FILE',
+  }), { operation: 'READDIR', code: 'UNCLASSIFIED', kind: 'Error' });
+  assert.equal(coerced, 0);
 });
 
 test('diagnostic formatting snapshots getters once and cannot emit a changing private value', () => {

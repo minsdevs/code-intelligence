@@ -51,6 +51,8 @@ async function harness(t, options = {}) {
   const resources = path.join(root, 'resources'); const bundled = path.join(resources, 'runtime');
   const files = ['postgres/bin/psql', 'postgres/bin/initdb', 'postgres/bin/postgres', 'postgres/bin/pg_isready', 'postgres/bin/createdb',
     'redis/bin/redis-server', 'ts-analyzer/dist/main.js', 'jre/bin/java', 'backend/code-intelligence.jar'];
+  if (options.controlProtocol === 1 && !options.missingControlRuntime) files.push('backend/code-intelligence-control.jar',
+    'backend/code-intelligence-control-provenance.json');
   const hashes = {};
   for (const name of files) { const file = path.join(bundled, name); await fsp.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
     await fsp.writeFile(file, 'synthetic non-executable fixture', { mode: 0o600 }); hashes[name] = crypto.createHash('sha256').update('synthetic non-executable fixture').digest('hex'); }
@@ -60,6 +62,7 @@ async function harness(t, options = {}) {
   if (Object.hasOwn(options, 'backupProtocol')) manifest.backupProtocol = options.backupProtocol;
   if (manifest.backupProtocol === 3) manifest.ownershipProtocol = 1;
   if (Object.hasOwn(options, 'ownershipProtocol')) manifest.ownershipProtocol = options.ownershipProtocol;
+  if (Object.hasOwn(options, 'controlProtocol')) manifest.controlProtocol = options.controlProtocol;
   await fsp.writeFile(path.join(bundled, 'runtime-manifest.json'), JSON.stringify(manifest));
   const events = []; const handlers = new Map(); const appHandlers = new Map(); const timers = new Set();
   const children = []; const synchronous = []; const written = []; const ownedBootstrap = []; const logHandles = new Set();
@@ -1057,11 +1060,47 @@ for (const ownershipProtocol of [undefined, 0, 2, '1', null]) {
   });
 }
 
+test('control protocol uses only the minimal helper jar while the backend retains its full application jar', async t => {
+  const h = await harness(t, { backupProtocol: 3, controlProtocol: 1 });
+  await h.start();
+  assert.equal(h.run('runtime.ready'), true);
+  assert.equal(h.guardians.length, 4);
+  assert.equal(path.basename(h.controls.ownerLockOptions.jarPath), 'code-intelligence-control.jar');
+  for (const guardian of h.guardians) assert.equal(path.basename(guardian.jarPath), 'code-intelligence-control.jar');
+  const backend = h.guardians.find(value => value.args.includes('--spring.profiles.active=desktop'));
+  assert(backend);
+  assert.equal(path.basename(backend.args[backend.args.indexOf('-jar') + 1]), 'code-intelligence.jar');
+  await h.shutdown();
+  assert.equal(h.run('children.size'), 0);
+});
+
+for (const controlProtocol of [null, 0, 2, '1']) {
+  test(`declared unsupported control protocol ${String(controlProtocol)} cannot fall back to the full backend`, async t => {
+    const h = await harness(t, { backupProtocol: 3, controlProtocol });
+    await h.start(); await h.shutdown();
+    assert.equal(h.events.includes('secrets.load'), false);
+    assert.equal(h.guardians.length, 0); assert.equal(h.leaseChildren.length, 0);
+    assert.match(h.dialogs[0][1], /RUNTIME_MANIFEST_PROTOCOL/);
+  });
+}
+
+test('missing declared minimal control runtime refuses startup before any credentials or helper', async t => {
+  const h = await harness(t, { backupProtocol: 3, controlProtocol: 1, missingControlRuntime: true });
+  await h.start(); await h.shutdown();
+  assert.equal(h.events.includes('secrets.load'), false);
+  assert.equal(h.guardians.length, 0); assert.equal(h.leaseChildren.length, 0);
+  assert.match(h.dialogs[0][1], /RUNTIME_INVENTORY_MISSING/);
+});
+
 test('owned protocol startup binds one native provider and guardians before any product service is admitted', async t => {
   const h = await harness(t, { backupProtocol: 3 }); await h.start();
   assert.equal(h.run('runtime.ready'), true); assert.equal(h.guardians.length, 4); assert.equal(h.leaseChildren.length, 2);
   const backend = h.guardians.find(value => value.args.includes('--spring.profiles.active=desktop'));
+  assert.equal(path.basename(h.controls.ownerLockOptions.jarPath), 'code-intelligence.jar');
+  for (const guardian of h.guardians) assert.equal(path.basename(guardian.jarPath), 'code-intelligence.jar');
   assert(backend); assert.deepEqual([...backend.args.slice(0, 2)], ['-Xms64m', '-Xmx2048m']);
+  assert.equal(path.basename(backend.jarPath), 'code-intelligence.jar');
+  assert.equal(path.basename(h.controls.ownerLockOptions.jarPath), 'code-intelligence.jar');
   assert.equal(backend.args.some(value => value.startsWith('-XX:MaxRAMPercentage=')), false);
   for (const lease of h.leaseChildren) assert.deepEqual([...lease.args.slice(0, 4)], ['-Xms16m', '-Xmx64m', '-XX:+UseSerialGC', '-XX:TieredStopAtLevel=1']);
   assert.ok(h.events.indexOf('ownerLocks.open') < h.events.indexOf('safety.open'));
@@ -1079,6 +1118,45 @@ test('owned protocol startup binds one native provider and guardians before any 
   assert.equal(h.run('children.size'), 0);
   assert.equal(h.events.filter(value => value === 'lease.release.ai-journal').length, 1);
   assert.equal(h.events.filter(value => value === 'lease.release.purpose-keyring').length, 1);
+});
+
+test('verified control protocol selects the small helper JAR while the analysis backend keeps its full runtime', async t => {
+  const h = await harness(t, { backupProtocol: 3, controlProtocol: 1 });
+  await h.start();
+  assert.equal(h.run('runtime.ready'), true);
+  assert.equal(h.guardians.length, 4);
+  assert.equal(path.basename(h.controls.ownerLockOptions.jarPath), 'code-intelligence-control.jar');
+  for (const guardian of h.guardians) assert.equal(path.basename(guardian.jarPath), 'code-intelligence-control.jar');
+  for (const lease of h.leaseChildren) {
+    const jarArgument = lease.args.indexOf('-jar');
+    assert(jarArgument >= 0);
+    assert.equal(path.basename(lease.args[jarArgument + 1]), 'code-intelligence-control.jar');
+    assert.equal(lease.args.at(-1), '--ci-desktop-lease');
+  }
+  const backend = h.guardians.find(value => value.args.includes('--spring.profiles.active=desktop'));
+  assert(backend);
+  assert.equal(path.basename(backend.args[backend.args.indexOf('-jar') + 1]), 'code-intelligence.jar');
+  assert.deepEqual([...backend.args.slice(0, 2)], ['-Xms64m', '-Xmx2048m']);
+  assert.equal(h.ownedBootstrap[0].every(byte => byte === 0), true);
+  assert.ok(h.events.indexOf('ownerLocks.open') < h.events.indexOf('safety.open'));
+  await h.shutdown();
+  assert.equal(h.run('children.size'), 0);
+  assert.equal(h.events.filter(value => value === 'lease.release.ai-journal').length, 1);
+});
+
+for (const [options, code] of [
+  [{ controlProtocol: 1, missingControlRuntime: true }, 'RUNTIME_INVENTORY_MISSING'],
+  [{ controlProtocol: 0 }, 'RUNTIME_MANIFEST_PROTOCOL'],
+  [{ controlProtocol: 2 }, 'RUNTIME_MANIFEST_PROTOCOL'],
+  [{ controlProtocol: '1' }, 'RUNTIME_MANIFEST_PROTOCOL'],
+  [{ controlProtocol: null }, 'RUNTIME_MANIFEST_PROTOCOL'],
+]) test(`advertised invalid control runtime is refused before credentials or any helper: ${JSON.stringify(options)}`, async t => {
+  const h = await harness(t, { backupProtocol: 3, ...options });
+  await h.start(); await h.shutdown();
+  assert.equal(h.children.length, 0); assert.equal(h.leaseChildren.length, 0); assert.equal(h.browser.length, 0);
+  assert.equal(h.events.includes('secrets.load'), false);
+  assert.equal(fs.existsSync(path.join(h.paths.userData, 'secrets.enc')), false);
+  assert.equal(h.dialogs[0][1], `Bundled runtime manifest or inventory is invalid (${code}).`);
 });
 
 test('loss of native ownership closes admission synchronously and stops every synthetic service without restart', async t => {
