@@ -15,7 +15,7 @@ async function verify() {
   const psql = fs.realpathSync('/opt/homebrew/bin/psql');
   const database = `ci_ai_cost_test_${crypto.randomBytes(8).toString('hex')}`;
   const password = 'public-synthetic-cost-fixture';
-  let container;
+  let container; let certificateDirectory;
   try {
     container = execFileSync('docker', ['run', '--pull=never', '--rm', '-d', '--memory=512m', '--cpus=2',
       '--pids-limit=128', '--tmpfs', '/var/lib/postgresql/data', '-p', '127.0.0.1::5432',
@@ -30,12 +30,30 @@ async function verify() {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     assert(ready, 'Disposable PG did not start');
+    // The adapter test requires libpq verify-full TLS; give the fresh container its own one-day CA.
+    execFileSync('docker', ['exec', container, 'sh', '-ec', 'openssl req -x509 -newkey rsa:2048 -nodes -days 1 '
+      + '-subj /CN=ci-cost-fixture -addext subjectAltName=IP:127.0.0.1 -keyout /tmp/ci.key -out /tmp/ci.crt 2>/dev/null; '
+      + 'chown postgres:postgres /tmp/ci.key; chmod 600 /tmp/ci.key; psql -v ON_ERROR_STOP=1 -U postgres -d "$1" '
+      + '-c "ALTER SYSTEM SET ssl_cert_file = \'/tmp/ci.crt\'" -c "ALTER SYSTEM SET ssl_key_file = \'/tmp/ci.key\'" '
+      + '-c "ALTER SYSTEM SET ssl = \'on\'" -c "SELECT pg_reload_conf()"', 'tls', database],
+    { timeout: 30000, stdio: 'ignore' });
+    let tls = false;
+    for (let attempt = 0; attempt < 100 && !tls; attempt++) {
+      tls = spawnSync('docker', ['exec', container, 'psql', '-U', 'postgres', '-d', database, '-Atc', 'SHOW ssl'],
+        { encoding: 'utf8', timeout: 5000 }).stdout?.trim() === 'on';
+      if (!tls) await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert(tls, 'Disposable PG TLS did not start');
+    certificateDirectory = fs.mkdtempSync('/tmp/ci-cost-pg-ca-');
+    const rootCert = path.join(certificateDirectory, 'root.crt');
+    fs.writeFileSync(rootCert, execFileSync('docker', ['exec', container, 'cat', '/tmp/ci.crt'], { timeout: 5000 }), { mode: 0o600 });
     const port = execFileSync('docker', ['port', container, '5432/tcp'], { encoding: 'utf8', timeout: 5000 }).trim();
     assert.match(port, /^127\.0\.0\.1:[0-9]+$/);
     const environment = {};
     for (const key of ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'TZ']) if (process.env[key]) environment[key] = process.env[key];
     Object.assign(environment, { CI_AI_COST_PG_TEST_PSQL: psql, CI_AI_COST_PG_TEST_PORT: port.split(':')[1],
-      CI_AI_COST_PG_TEST_DATABASE: database, CI_AI_COST_PG_TEST_USER: 'postgres', CI_AI_COST_PG_TEST_PASSWORD: password });
+      CI_AI_COST_PG_TEST_DATABASE: database, CI_AI_COST_PG_TEST_USER: 'postgres', CI_AI_COST_PG_TEST_PASSWORD: password,
+      PGSSLROOTCERT: rootCert });
     const result = spawnSync(process.execPath, ['--test', '--test-reporter=spec',
       `--test-reporter-destination=${prefix}.log`, '--test-reporter=junit',
       `--test-reporter-destination=${prefix}.xml`,
@@ -45,6 +63,7 @@ async function verify() {
     console.log(JSON.stringify({ status: 'PASS', scope: 'real psql + disposable PG + V25, synthetic authority; no installed app or provider' }));
   } finally {
     if (container && /^[0-9a-f]{64}$/.test(container)) execFileSync('docker', ['rm', '-f', container], { timeout: 30000, stdio: 'ignore' });
+    if (certificateDirectory) fs.rmSync(certificateDirectory, { recursive: true, force: true });
   }
 }
 verify().catch(() => { console.error('AI cost PG verification failed. Read the local test artifacts.'); process.exitCode = 1; });
