@@ -24,7 +24,8 @@ const { SLO, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplet
 
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 // `delete` is a diagnostic row (project deletion time), not an SLO row; it runs only on request.
-const ROWS = Object.freeze(['analysis', 'graph', 'incremental', 'cancel', 'delete']);
+// `preview` alone measures admission and inspection without approving an analysis (large class).
+const ROWS = Object.freeze(['preview', 'analysis', 'graph', 'incremental', 'cancel', 'delete']);
 const DEFAULT_ROWS = Object.freeze(['analysis', 'graph', 'incremental', 'cancel']);
 const DELETE_TIMEOUT_MS = 30 * 60000;
 const STARTUP_TIMEOUT_MS = 90000;
@@ -39,12 +40,12 @@ const CLASS_SETTINGS = Object.freeze({
 const MINIMUM_FREE_BYTES = 2 * GiB;
 const GRAPH_REPEATS = 5;
 // Cancel after the job has been in a long-running step for a fixed time.
-const CANCEL_TRIGGER = Object.freeze({ steps: ['SOURCE_PARSING', 'GRAPH_BUILD', 'TS_PARSING'], afterMs: 1000 });
+const CANCEL_TRIGGER = Object.freeze({ steps: ['IMPORT', 'SOURCE_PARSING', 'GRAPH_BUILD', 'TS_PARSING'], afterMs: 1000 });
 const codes = new Set(['STARTUP_TIMEOUT', 'STARTUP_SDK_TIMEOUT', 'STARTUP_FAILED', 'STARTUP_PROCESS_EXITED',
   'PREVIEW_FAILED', 'PREVIEW_ADMISSION_MISMATCH', 'ANALYSIS_START_FAILED', 'ANALYSIS_FAILED', 'ANALYSIS_CANCELLED',
   'ANALYSIS_TIMEOUT', 'ANALYSIS_HARD_TIMEOUT', 'OVERVIEW_NOT_SHOWN', 'GRAPH_API_FAILED', 'GRAPH_RENDER_FAILED',
   'INCREMENTAL_FAILED', 'INCREMENTAL_TIMEOUT', 'CANCEL_TRIGGER_MISSED', 'CANCEL_FAILED', 'CANCEL_TIMEOUT',
-  'PROJECT_DELETE_FAILED', 'MEMORY_SAMPLE_FAILED', 'MEMORY_EVIDENCE_LIMIT', 'MEMORY_SAMPLING_INCOMPLETE',
+  'PROJECT_DELETE_FAILED', 'CANCEL_LOCK_NOT_RELEASED', 'CANCEL_ENDED_WITHOUT_CANCELLED', 'MEMORY_SAMPLE_FAILED', 'MEMORY_EVIDENCE_LIMIT', 'MEMORY_SAMPLING_INCOMPLETE',
   'OBSERVED_PROCESSES_REMAIN', 'WORKLOAD_FIXTURE_CHANGED', 'DISK_SPACE_LOW', 'NATIVE_ELECTRON_CLOSE_TIMEOUT',
   'NATIVE_ELECTRON_EXIT_TIMEOUT', 'NATIVE_ELECTRON_UNCLEAN_EXIT', 'NATIVE_SHUTDOWN_RECOVERY_REQUIRED',
   'NATIVE_SHUTDOWN_UNCONFIRMED', 'NATIVE_SHUTDOWN_DIAGNOSTIC_TIMEOUT', 'NOT_RUN_AFTER_ANALYSIS_FAILURE']);
@@ -71,7 +72,8 @@ function argumentsFor(argv) {
     assert(argv[index] === '--rows' && index + 1 < argv.length && !rowsGiven);
     rowsGiven = true;
     const rows = argv[++index].split(',');
-    assert(rows.length > 0 && rows.every(row => ROWS.includes(row)) && new Set(rows).size === rows.length && rows.includes('analysis'));
+    assert(rows.length > 0 && rows.every(row => ROWS.includes(row)) && new Set(rows).size === rows.length
+      && (rows.length === 1 && rows[0] === 'preview' ? true : rows.includes('analysis') && !rows.includes('preview')));
     options.rows = ROWS.filter(row => rows.includes(row));
   }
   return options;
@@ -227,7 +229,7 @@ async function main(argv = process.argv.slice(2)) {
         const text = await response.text();
         return { status: response.status, body: response.ok && text ? JSON.parse(text) : null };
       }, { route, method }), timeoutMs, 'API_TIMEOUT');
-      if (!(result.status >= 200 && result.status < 300)) throw new Error('API_STATUS');
+      if (!(result.status >= 200 && result.status < 300)) throw Object.assign(new Error('API_STATUS'), { status: result.status });
       return result.body;
     };
     // Times measured inside the renderer: request start to body read, without IPC overhead.
@@ -314,7 +316,12 @@ async function main(argv = process.argv.slice(2)) {
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local/preview' && r.request().method() === 'POST', { timeout: 120000 }),
       button.click(),
     ]);
-    if (!response.ok()) throw new Error('PREVIEW_FAILED');
+    measurement.previewHttpStatus = response.status();
+    if (!response.ok()) {
+      const shown = await d.marks();
+      measurement.previewResponseMs = Math.round(shown.now - shown.previewClick);
+      throw new Error('PREVIEW_FAILED');
+    }
     const preview = await response.json();
     const shown = await d.waitMark('previewShown', 60000, 'PREVIEW_FAILED');
     measurement.previewFirstResponseMs = shown.previewAck !== undefined ? Math.round(shown.previewAck - shown.previewClick) : null;
@@ -449,7 +456,7 @@ async function main(argv = process.argv.slice(2)) {
   async function cancelRow(page, d, sampler, run, folder) {
     const row = run.rows.cancel = { status: 'RUNNING', metrics: {}, failure: null };
     sampler.phase('CANCEL');
-    await stage('CANCEL_FAILED', () => importAndPreview(page, d, folder, {}));
+    await stage('CANCEL_FAILED', () => importAndPreview(page, d, folder + '-cancel', {}));
     const started = await stage('CANCEL_FAILED', () => approve(page, d));
     run.cancelProjectId = started.projectId;
     const cancel = page.getByRole('button', { name: 'Cancel analysis', exact: true });
@@ -472,18 +479,24 @@ async function main(argv = process.argv.slice(2)) {
     const released = await stage('CANCEL_FAILED', () => d.pollJob(started.jobId, { intervalMs: 100, timeoutMs: settings.analysisTimeoutMs }));
     row.job = jobTimings(released.job);
     if (released.timedOut) throw new Error('CANCEL_TIMEOUT');
-    if (released.job.status !== 'CANCELLED') throw new Error('CANCEL_FAILED');
     const current = await d.marks();
     row.metrics.cancelUiAckMs = current.cancelAck === undefined ? null : Math.round(current.cancelAck - current.cancelClick);
     row.metrics.cancelReleaseMs = Math.round(released.at - current.cancelClick);
-    if (row.metrics.cancelUiAckMs === null) throw new Error('CANCEL_FAILED');
+    row.terminalStatus = publicCode(released.job.status);
     row.pollIntervalMs = 100;
-    // The project write lock is the active-job constraint. A refresh preview is refused
+    // The project write lock is the active-job constraint. A refresh preview is refused (409)
     // while any job is QUEUED/RUNNING/CANCELLING, so its acceptance confirms the release.
     const proofStarted = performance.now();
-    await stage('CANCEL_FAILED', () => d.api(`/api/projects/${started.projectId}/local-preview`, 'POST', 120000));
+    try {
+      await d.api(`/api/projects/${started.projectId}/local-preview`, 'POST', 120000);
+      row.lockReleaseProof = 'REFRESH_PREVIEW_ACCEPTED';
+    } catch (error) {
+      row.lockReleaseProof = Number.isSafeInteger(error?.status) ? 'HTTP_' + error.status : 'UNCONFIRMED';
+    }
     row.lockReleaseProofMs = Math.round(performance.now() - proofStarted);
-    row.lockReleaseConfirmedBy = 'refresh preview (requires no active job) accepted after CANCELLED';
+    if (row.lockReleaseProof === 'HTTP_409') throw new Error('CANCEL_LOCK_NOT_RELEASED');
+    if (released.job.status !== 'CANCELLED') throw new Error('CANCEL_ENDED_WITHOUT_CANCELLED');
+    if (row.metrics.cancelUiAckMs === null) throw new Error('CANCEL_FAILED');
     row.scope = 'in-process job: cancellation is observed between pipeline steps; there is no separate worker process to terminate';
     row.status = 'PASS';
   }
@@ -516,6 +529,7 @@ async function main(argv = process.argv.slice(2)) {
       if (sequence > 0) {
         cloneTree(pristine, folder);
         if (hashTree(folder).treeSha256 !== fixture.treeSha256) throw new Error('WORKLOAD_FIXTURE_CHANGED');
+        if (options.rows.includes('cancel')) cloneTree(pristine, folder + '-cancel');
       }
       const launched = await stage('STARTUP_FAILED', () => launch(run, started));
       ({ sdk, owner } = launched);
@@ -526,7 +540,17 @@ async function main(argv = process.argv.slice(2)) {
       if (sequence > 0) {
         const d = driver(page);
         let analysisFailure = null;
-        try {
+        if (options.rows[0] === 'preview') {
+          const row = run.rows.preview = { status: 'RUNNING', metrics: {}, failure: null };
+          sampler.phase('PREVIEW');
+          try {
+            const preview = await stage('PREVIEW_FAILED', () => importAndPreview(page, d, folder, row.metrics));
+            row.localImport = preview.localImport;
+            row.status = preview.localImport?.acceptedFiles === fixture.files ? 'PASS' : 'FAIL';
+            if (row.status === 'FAIL') row.failure = 'PREVIEW_ADMISSION_MISMATCH';
+          } catch (error) { row.status = 'FAIL'; row.failure = failureCode(error, 'PREVIEW_FAILED'); }
+          finally { row.peakRssKiB = sampler.snapshot().phases.PREVIEW?.peakRssKiB || null; save(); }
+        } else try {
           await analysisRow(page, d, sampler, run, folder);
           run.rows.analysis.status = 'PASS';
         } catch (error) {
@@ -582,7 +606,8 @@ async function main(argv = process.argv.slice(2)) {
         try { fs.rmSync(plan.root, { recursive: true, force: true }); run.profileRemoved = true; } catch { run.profileRemoved = false; }
       } else run.profileRemoved = false;
       if (sequence > 0) {
-        try { fs.rmSync(folder, { recursive: true, force: true }); } catch { failure ||= 'WORKLOAD_FIXTURE_CHANGED'; }
+        try { for (const tree of [folder, folder + '-cancel']) fs.rmSync(tree, { recursive: true, force: true }); }
+        catch { failure ||= 'WORKLOAD_FIXTURE_CHANGED'; }
       }
       for (const row of Object.values(run.rows)) {
         if (row.status === 'RUNNING') { row.status = 'FAIL'; row.failure ||= failure || 'WORKLOAD_BENCHMARK_CHECK_FAILED'; }
@@ -617,10 +642,10 @@ async function main(argv = process.argv.slice(2)) {
       }
     }
     const assessed = {}, observed = {};
-    const rowKeys = { analysis: [`analysis.${options.sizeClass}`, `preview.${options.sizeClass}`], graph: [`graph.${options.sizeClass}`],
+    const rowKeys = { preview: [`preview.${options.sizeClass}`], analysis: [`analysis.${options.sizeClass}`, `preview.${options.sizeClass}`], graph: [`graph.${options.sizeClass}`],
       incremental: [`incremental.${options.sizeClass}`], cancel: [`cancel.${options.sizeClass}`] };
     for (const name of options.rows) {
-      for (const key of rowKeys[name]) {
+      for (const key of rowKeys[name] ?? []) {
         if (!Object.hasOwn(SLO, key)) continue;
         const samples = rowSamples(name);
         if (options.series) assessed[key] = evaluateRow(key, samples, { expectedRuns: options.runs });

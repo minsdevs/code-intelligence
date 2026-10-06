@@ -190,10 +190,11 @@ test('runner arguments require an explicit class and mode and accept only known 
   assert.deepEqual(argumentsFor(['--app', '/a/X.app', '--class', 'small', '--smoke-2', '--rows', 'cancel,analysis']).rows, ['analysis', 'cancel']);
   assert.deepEqual(argumentsFor(['--app', '/a/X.app', '--class', 'small', '--smoke-1', '--rows', 'analysis,delete', '--keep-work']),
     { app: '/a/X.app', sizeClass: 'small', runs: 1, series: false, rows: ['analysis', 'delete'], keepWork: true });
+  assert.deepEqual(argumentsFor(['--app', '/a/X.app', '--class', 'large', '--smoke-1', '--rows', 'preview']).rows, ['preview']);
   for (const argv of [[], ['--app', 'rel', '--class', 'small', '--smoke-1'], ['--app', '/a', '--class', 'huge', '--smoke-1'],
     ['--app', '/a', '--class', 'small', '--series-5'], ['--app', '/a', '--class', 'small', '--smoke-1', '--rows', 'graph'],
     ['--app', '/a', '--class', 'small', '--smoke-1', '--rows', 'analysis,restore'], ['--app', '/a', '--class', 'small', '--smoke-1', '--ignore-failure'],
-    ['--app', '/a', '--class', 'small', '--series-20', '--keep-work'],
+    ['--app', '/a', '--class', 'small', '--series-20', '--keep-work'], ['--app', '/a', '--class', 'large', '--smoke-1', '--rows', 'preview,analysis'],
     ['--app', '/a', '--class', 'small', '--smoke-1', '--rows', 'analysis', '--rows', 'analysis']]) {
     assert.throws(() => argumentsFor(argv));
   }
