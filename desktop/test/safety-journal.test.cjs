@@ -684,6 +684,74 @@ test('journal clears every transferred key copy on signing and replay without ch
   assert.deepEqual(f.keys.get('safety-2'), Buffer.alloc(32, 82));
 });
 
+async function mixedKeyHistory(f, latches) {
+  // GENESIS and every later record use safety-1; only the second record uses safety-2.
+  f.controls.keyId = 'safety-2'; await f.journal.latch(); f.controls.keyId = 'safety-1';
+  for (let index = 0; index < latches; index++) await f.journal.latch();
+  await f.journal.close();
+}
+function countingKeys(f, calls) {
+  const { getMacKey } = f.options.keyProvider;
+  return { ...f.options.keyProvider, getMacKey: async (id, purpose) => { calls.push(id); return getMacKey(id, purpose); } };
+}
+
+test('replay verifies each key id before first use and after the last record, independent of history length', async (t) => {
+  for (const latches of [1, 40]) {
+    const f = await fixture(t); await mixedKeyHistory(f, latches); const calls = [];
+    const journal = await f.reopen({ keyProvider: countingKeys(f, calls) });
+    assert.equal(journal.snapshot().sequence, latches + 3);
+    // Latch read, first use of each id, closing check of each id, then restart latch read/sign and record sign.
+    assert.deepEqual(calls, ['safety-1', 'safety-1', 'safety-2', 'safety-1', 'safety-2', 'safety-1', 'safety-1', 'safety-1']);
+    for (const ownedCopy of f.controls.issuedKeys) assert.equal(ownedCopy.every(byte => byte === 0), true);
+  }
+});
+
+test('replay with per-replay key copies still rejects any damaged MAC or a MAC from another key id', async (t) => {
+  const f = await fixture(t); await mixedKeyHistory(f, 2); const records = frames(await fs.readFile(f.log));
+  const sign = (record, material) => {
+    const { mac, ...body } = record;
+    return { ...body, mac: crypto.createHmac('sha256', material).update(`CI-SAFETY-RECORD-1\0${f.options.installationId}\0`).update(canonical(body)).digest('hex') };
+  };
+  const damaged = records.map((_, index) => records.map((record, i) => i !== index ? record
+    : { ...record, mac: (record.mac[0] === '0' ? '1' : '0') + record.mac.slice(1) }));
+  // Both ids are already cached when these records are reached.
+  damaged.push(records.map((record, i) => i === 2 ? sign(record, f.keys.get('safety-2')) : record));
+  damaged.push(records.map((record, i) => i === 3 ? sign({ ...record, keyId: 'safety-2' }, f.keys.get('safety-1')) : record));
+  for (const values of damaged) {
+    const bytes = Buffer.concat(values.map(encode)); await fs.writeFile(f.log, bytes);
+    await rejects(openSafetyJournal(f.options), 'MAC_INVALID'); assert.deepEqual(await fs.readFile(f.log), bytes);
+  }
+  for (const ownedCopy of f.controls.issuedKeys) assert.equal(ownedCopy.every(byte => byte === 0), true);
+});
+
+test('replay closing verification fails closed before restart writes when a key changes after its first use', async (t) => {
+  const f = await fixture(t); await mixedKeyHistory(f, 3);
+  const log = await fs.readFile(f.log); const latch = await fs.readFile(f.latch);
+  let calls = 0; const { getMacKey } = f.options.keyProvider;
+  // Calls 1-3 are the latch read and the first replay use of each id. Every later copy differs.
+  const keyProvider = { ...f.options.keyProvider, getMacKey: async (id, purpose) => {
+    const copy = await getMacKey(id, purpose); if (++calls > 3) copy[0] ^= 1; return copy;
+  } };
+  await rejects(openSafetyJournal({ ...f.options, keyProvider }), 'KEY_UNAVAILABLE');
+  assert.deepEqual(await fs.readFile(f.log), log); assert.deepEqual(await fs.readFile(f.latch), latch);
+  for (const ownedCopy of f.controls.issuedKeys) assert.equal(ownedCopy.every(byte => byte === 0), true);
+});
+
+test('replay key copies end with that replay; later operations and reopen fetch fresh copies', async (t) => {
+  const f = await fixture(t); await mixedKeyHistory(f, 2); const calls = []; const keyProvider = countingKeys(f, calls);
+  const used = []; const createHmac = crypto.createHmac;
+  crypto.createHmac = (algorithm, key) => { used.push(key); return createHmac(algorithm, key); };
+  try {
+    await f.reopen({ keyProvider }); const opened = calls.length; const openKeys = new Set(used);
+    for (const key of used) assert.equal(key.every(byte => byte === 0), true);
+    const usedBefore = used.length; await f.journal.latch();
+    assert.ok(calls.length > opened); assert.ok(used.length > usedBefore);
+    assert.equal(used.slice(usedBefore).some(key => openKeys.has(key)), false);
+    const reopened = calls.length; await f.reopen({ keyProvider }); assert.equal(calls.length - reopened, opened);
+    for (const key of used) assert.equal(key.every(byte => byte === 0), true);
+  } finally { crypto.createHmac = createHmac; }
+});
+
 for (const length of [0, 31, 33]) {
   test(`invalid ${length}-byte key is cleared even though MAC creation fails`, async (t) => {
     const issued = [];
