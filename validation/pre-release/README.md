@@ -221,9 +221,13 @@ and is not called a cold-cache benchmark. OS caches are not flushed.
 
 Each measured start waits for the actual home screen and four ready services,
 records a three-second idle window and confirms COMPLETE/natural exit0 before
-the next start. RSS sums the captured owner's current PID/PPID descendants at a
-100ms target interval. The initial interval before SDK child capture is unsampled;
-the report records that gap and the actual largest sampling gap. Raw per-process
+the next start. A PID/PPID-only topology query selects the captured owner's tree;
+RSS is then requested only for those numeric PIDs at a 100ms target interval.
+No numeric PID grants signal authority. The two queries are not atomic, and new
+children between them may be absent from that sample. The initial interval before
+SDK child capture is unsampled; the report records it and the actual largest gap,
+including the tail from the last sample to stop. Phase is fixed before a read,
+so an overlapping startup read cannot be counted as idle. Raw per-process
 samples are local CSV, bounded to64MiB for the entire series and2,000 observations
 per launch. This is sampled RSS, not a continuous or private-memory measurement.
 
@@ -233,7 +237,8 @@ requires at least20 idle observations and no interval above250ms. Any failed
 launch, sampling or cleanup stops the series; remaining rows stay NOT_RUN and
 the p95 is not recomputed from only successful runs. SLO failure preserves the
 measured values. Battery/unknown power is recorded and cannot certify the AC-power
-acceptance condition. Other workload sizes, cold cache, user tasks and the full
+acceptance condition. AC is observed at the series start and both boundaries of
+every run, not continuously between them. Other workload sizes, cold cache, user tasks and the full
 performance/release gates are not certified by this command.
 
 `quality-gate` needs a running Docker daemon for its database corpus and fails
@@ -242,3 +247,25 @@ before claiming a result when unavailable. Both Gradle invocations are offline.
 zero, normalizes macOS bytes versus Linux KiB and preserves the command's failure.
 The small native `/usr/bin/time` test exercises measurement parsing only; neither
 that test nor a timed Gradle peak is whole-application process-tree RSS acceptance.
+
+## Physical metadata and standalone control runtime
+
+The current candidate and hashes are recorded in
+[`startup-resource-follow-up-2026-10-06.md`](../../docs/audit/startup-resource-follow-up-2026-10-06.md).
+The optional manifest `controlProtocol: 1` requires both the hashed small control
+JAR and its provenance, and requires non-Windows guarded ownership. Legacy bundles
+without this marker retain their earlier helper entrypoint. The backend service
+and backup-source worker still use the full application JAR.
+
+The offline builder awaits `verifyControlRuntime` before staging and again after
+packaging. It validates bounded ZIP contents, own compiled classes, manifest,
+declared dependency set and license coverage. This is not full shaded-member
+provenance, a complete SBOM or an independent license audit. Existing staged
+control files are preserved before replacement; the baseline app is never edited.
+
+Runtime inventory checks use Electron's `original-fs` native promise APIs for the
+physical unpacked runtime tree. This avoids a callback-stat reentry mechanism
+reproduced with unchanged synthetic files; no retry or integrity exception is
+introduced. Node tests retain injectable filesystem failures in both runtime
+modes. The read-only diagnostic runner temporarily observes both promise
+namespaces, records bounded fixed metadata only and restores its wrappers.

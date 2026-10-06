@@ -4,7 +4,7 @@
 
 Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
 
-Latest pre-deployment work: [JVM budgets, measured startup limits and current candidate](docs/audit/startup-performance-2026-10-06.md).
+Latest pre-deployment work: [physical runtime metadata, standalone control JAR and current candidate](docs/audit/startup-resource-follow-up-2026-10-06.md).
 The device-origin credential refresh/CAS and revision-bound GitHub consumers are implemented;
 real-account refresh/revoke/SSO and clean-machine installation are not certified by synthetic tests.
 The current candidate is a local ad-hoc Validation build, not a public release. Use the exact
@@ -16,13 +16,15 @@ including source/note/history preservation, recovery and a further normal restar
 Each case passed six recorded checks;79 synthetic contracts passed. Full crash/
 power-loss coverage and real-user database acceptance remain separate.
 
-The latest development candidate is **XIWb8X**, with bounded backend/control JVM
-heaps. It passes36 functional checks and both six-check owner-crash cases. Its
-completed20-run series nevertheless has warm p95 **14.106s** and maximum sampled
-idle RSS **2,030,576KiB**, exceeding10s/1.5GiB. The series began on battery power.
-An earlier incomplete measurement and a separate MANIFEST startup failure remain
-recorded; subsequent successful runs do not establish that failure's root cause.
-Performance/startup stability and formal release are not approved.
+The latest development candidate is **tZgvV7**, built from `69c2ad8`. It uses a
+small standalone control JAR and native promise metadata for the physical runtime
+inventory. A controlled stat-reentry mechanism was reproduced in Electron before
+that narrow correction; old failures remain retained rather than reclassified.
+This candidate passes36 functional checks and both six-check owner-crash cases.
+All20 warm runs completed, but p95 **12.544s** and maximum sampled idle RSS
+**1,745,680KiB** exceed10s/1.5GiB. AC was observed at each run boundary and source
+and candidate identities stayed unchanged. **Formal release remains NO_GO**; synthetic recovery does not certify
+all historical failures, real accounts, power loss or signed installation.
 
 The [initial Docker integration follow-up](docs/audit/docker-integration-2026-10-06.md)
 removed the earlier Docker-unavailable execution blocker. The current continuation
