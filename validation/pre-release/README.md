@@ -122,7 +122,15 @@ now recompiled; its staged dist is replaced as an exact file set and read back
 against the updated runtime manifest. Native/JRE and installed analyzer dependencies
 are reused only after baseline inventory/signature and analyzer package/lock
 compatibility checks. Current Java classes, migrations, static assets, analyzer
-outputs and packaged desktop sources are read back. A new app is created;
+outputs and packaged desktop sources are read back. When the analyzer package or
+lock changes, a fresh private production tree is installed from the prefilled
+`validation/local/pre-release-cache/npm` cache with offline, ignore-scripts,
+omit-dev and no-bin-links options. Empty private npm configurations avoid inherited
+credentials. Its package/lock identities and complete regular-file inventory are
+checked before replacing the staged analyzer; the old staged tree is preserved.
+A failed second rename attempts rollback only while the original parent and old
+tree identities match and the destination is absent. It never overwrites a new
+destination, and the original failure remains primary. A new app is created;
 the baseline is not changed. This is an ad-hoc directory build, never a release,
 Developer ID/notarized app, automatic update or existing-profile migration.
 
@@ -257,11 +265,20 @@ JAR and its provenance, and requires non-Windows guarded ownership. Legacy bundl
 without this marker retain their earlier helper entrypoint. The backend service
 and backup-source worker still use the full application JAR.
 
-The offline builder awaits `verifyControlRuntime` before staging and again after
-packaging. It validates bounded ZIP contents, own compiled classes, manifest,
-declared dependency set and license coverage. This is not full shaded-member
-provenance, a complete SBOM or an independent license audit. Existing staged
-control files are preserved before replacement; the baseline app is never edited.
+The offline builder now awaits `verifyControlSourceMembers` before staging and
+again after packaging. It includes the existing bounded ZIP, compiled-class,
+manifest and dependency checks, then compares every ordinary shaded file and
+relocated license with the three exact, hash-bound dependency archives inside
+the compiled backend JAR. Missing, additional, renamed, conflicting or changed
+members are rejected. No archive is extracted and no cache or registry is queried.
+The packaged backend is connected to that compiled input by the existing
+non-static-entry readback and candidate JAR hash. The generated manifest is
+validated separately; empty directory entries are not source-file comparisons.
+This does not establish a complete product SBOM, upstream trust or all license
+obligations. Older build reports retain their narrower verification scope.
+Existing staged control files are preserved before replacement; the baseline app
+is never edited. The source-member regression suite is
+`node --test validation/pre-release/test/control-source-members.test.cjs`.
 
 Runtime inventory checks use Electron's `original-fs` native promise APIs for the
 physical unpacked runtime tree. This avoids a callback-stat reentry mechanism

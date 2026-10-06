@@ -24,6 +24,7 @@
     "vitest": "4.1.11"
   },
   "overrides": {
+    "proxy-addr": "2.0.8",
     "@nestjs/platform-express": {
       "multer": "2.4.0"
     }
