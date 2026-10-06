@@ -205,6 +205,37 @@ review. Preserve older matched/failed scans; do not overwrite them with a later0
 
 ## Quality measurement boundaries
 
+### Warm startup and idle owner-tree RSS
+
+```sh
+env -i HOME="$HOME" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C \
+  node validation/pre-release/run-startup-benchmark.cjs \
+  --app '<original-repository>/.native-product-<candidate>/Code Intelligence Validation.app' \
+  --warm-startup-20
+```
+
+This initializes one fresh private automation profile and then performs20 normal
+restarts of that same initialized empty profile. Mock Keychain is explicit; no
+existing profile or account is accepted. The initial launch is recorded separately
+and is not called a cold-cache benchmark. OS caches are not flushed.
+
+Each measured start waits for the actual home screen and four ready services,
+records a three-second idle window and confirms COMPLETE/natural exit0 before
+the next start. RSS sums the captured owner's current PID/PPID descendants at a
+100ms target interval. The initial interval before SDK child capture is unsampled;
+the report records that gap and the actual largest sampling gap. Raw per-process
+samples are local CSV, bounded to64MiB for the entire series and2,000 observations
+per launch. This is sampled RSS, not a continuous or private-memory measurement.
+
+The fixed assessment requires20 complete measured samples, p95 warm ready≤10s,
+every sampled idle peak≤1,572,864KiB and confirmed AC power. The implementation additionally
+requires at least20 idle observations and no interval above250ms. Any failed
+launch, sampling or cleanup stops the series; remaining rows stay NOT_RUN and
+the p95 is not recomputed from only successful runs. SLO failure preserves the
+measured values. Battery/unknown power is recorded and cannot certify the AC-power
+acceptance condition. Other workload sizes, cold cache, user tasks and the full
+performance/release gates are not certified by this command.
+
 `quality-gate` needs a running Docker daemon for its database corpus and fails
 before claiming a result when unavailable. Both Gradle invocations are offline.
 `quality-metrics.cjs` rejects absent, ambiguous or zero RSS rather than substituting
