@@ -2,7 +2,7 @@
 
 // Serialized into the SDK-owned Electron main process, never imported by product code.
 // Only the runner's fresh automation claim is accepted; no keys or DB connections are read.
-function installOwnedInterruption({ app }, { profile, parent, mode }) {
+function installOwnedInterruption({ app }, { profile, parent, mode, pauseForCrash = false }) {
   const builtin = name => process.getBuiltinModule(name);
   const assert = builtin('assert/strict'), fs = builtin('fs'), path = builtin('path');
   assert.equal(app.getName(), 'Code Intelligence Acceptance');
@@ -13,11 +13,12 @@ function installOwnedInterruption({ app }, { profile, parent, mode }) {
   assert.equal(fs.lstatSync(profile).uid, process.getuid());
   assert.equal(fs.lstatSync(profile).mode & 0o777, 0o700);
   assert(['AFTER_SOURCE_RENAME', 'BEFORE_COMPLETED_CLEANUP'].includes(mode));
+  assert.equal(typeof pauseForCrash, 'boolean');
   const io = fs.promises, originalRename = io.rename, originalUnlink = io.unlink;
   const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
   const sourcePattern = new RegExp('^recovery/(' + uuid + ')/previous-repos$');
   const cleanupPattern = new RegExp('^recovery/(' + uuid + ')/checkpoint/payload\\.bin$');
-  let hit = null, restored = false;
+  let hit = null, restored = false, rejectHold;
   function relative(value) {
     return typeof value === 'string' && path.isAbsolute(value) && path.normalize(value) === value
       && value.startsWith(profile + path.sep) ? path.relative(profile, value) : null;
@@ -32,6 +33,13 @@ function installOwnedInterruption({ app }, { profile, parent, mode }) {
       assert.equal(stat.uid, process.getuid());
     }
     hit = { mode, transactionId, operationCompleted, count: 1 };
+    if (pauseForCrash) {
+      hit.pauseForCrash = true;
+      // Only this test invocation can pause here. No rollback runs before the
+      // parent kills its captured Electron ChildProcess. restore() rejects the
+      // hold when a failed test must unwind without leaving the app blocked.
+      return new Promise((_, reject) => { rejectHold = reject; });
+    }
     const error = new Error('OWNED_RESTORE_INTERRUPTION'); error.code = 'EIO'; throw error;
   }
   async function rename(from, to, ...rest) {
@@ -39,13 +47,13 @@ function installOwnedInterruption({ app }, { profile, parent, mode }) {
     if (!restored && !hit && mode === 'AFTER_SOURCE_RENAME'
         && from === path.join(profile, 'data', 'repos') && match) {
       await Reflect.apply(originalRename, io, [from, to, ...rest]);
-      trip(match[1], true);
+      return trip(match[1], true);
     }
     return Reflect.apply(originalRename, io, [from, to, ...rest]);
   }
   async function unlink(file, ...rest) {
     const match = relative(file)?.match(cleanupPattern);
-    if (!restored && !hit && mode === 'BEFORE_COMPLETED_CLEANUP' && match) trip(match[1], false);
+    if (!restored && !hit && mode === 'BEFORE_COMPLETED_CLEANUP' && match) return trip(match[1], false);
     return Reflect.apply(originalUnlink, io, [file, ...rest]);
   }
   io.rename = rename; io.unlink = unlink;
@@ -54,6 +62,10 @@ function installOwnedInterruption({ app }, { profile, parent, mode }) {
     restore() {
       assert.equal(io.rename, rename); assert.equal(io.unlink, unlink);
       restored = true; io.rename = originalRename; io.unlink = originalUnlink;
+      if (rejectHold) {
+        const reject = rejectHold; rejectHold = undefined;
+        const error = new Error('OWNED_RESTORE_INTERRUPTION'); error.code = 'EIO'; reject(error);
+      }
       return hit ? { ...hit } : null;
     },
   };
