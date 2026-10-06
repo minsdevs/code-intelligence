@@ -1,0 +1,163 @@
+{
+  "format": 1,
+  "unit": "review-follow-up-1lvulq-2026-10-06",
+  "releaseVerdict": "NO_GO",
+  "stage": 5,
+  "branch": "codex/review-follow-up-20261006",
+  "previousUnit": {
+    "pr": 102,
+    "mergeCommit": "a9bf787877df6bf6c3be99dcf3706ef44a6250fa",
+    "candidate": "xb6Kxe"
+  },
+  "commits": {
+    "analyzerEngineRetry": "05f092c",
+    "helperSpawnSettle": "ee2ad39",
+    "vocabularyAndAssertions": "9211e88"
+  },
+  "candidate": {
+    "id": "1lvULq",
+    "app": ".native-product-1lvULq/Code Intelligence Validation.app",
+    "baseline": "tZgvV7",
+    "sourceCommit": "9211e88d85de0c7f7fa08bd1082bc2e9e5dab941",
+    "sourceWorkingTree": false,
+    "buildSequence": "1791292686000",
+    "status": "PACKAGED_NOT_RELEASED",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+    "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+    "candidateJarSha256": "7f0a61e414de9ad885486acd5ffb28384a936a2fb2524cccf9d52179d4aeaf26",
+    "controlJarSha256": "70b516885b3c50487cf1937022975b616c99ec176a5632ee3bf9e032946b15b0",
+    "controlMembersCompared": 1221,
+    "capacity": {
+      "status": "READY_FOR_PROVISIONING",
+      "code": null,
+      "root": "/Users/minseokchae/Dev/code-intelligence",
+      "availableBytes": "6577111040",
+      "requiredFreeBytes": "6174015488",
+      "policy": "Conservative free-space floor; not a disk reservation or measured build size.",
+      "sourceBuildPerformed": false,
+      "nativeRuntimeVerified": false,
+      "launchAllowed": false
+    },
+    "formalSigning": false,
+    "notarized": false,
+    "released": false
+  },
+  "performance": {
+    "evidence": "startup-performance/run-uvEMJ8/result.json",
+    "assessment": {
+      "status": "PASS",
+      "requestedRuns": 20,
+      "completedRuns": 20,
+      "failedRuns": 0,
+      "unexecutedRuns": 0,
+      "p95ReadyMs": 8466,
+      "p95IdleRssKiB": 1514880,
+      "maxIdleRssKiB": 1519408,
+      "failures": []
+    },
+    "environmentGate": "AC_OBSERVED_AT_RUN_BOUNDARIES",
+    "sourceAndBundleUnchanged": true,
+    "readyMs": [
+      8103,
+      8686,
+      8163,
+      8466,
+      8427,
+      8410,
+      8229,
+      8168,
+      8118,
+      8115,
+      8294,
+      8080,
+      8230,
+      8014,
+      8113,
+      7988,
+      8206,
+      8036,
+      8064,
+      8065
+    ],
+    "idlePeakRssKiB": [
+      1507088,
+      1496816,
+      1503184,
+      1498624,
+      1514880,
+      1510032,
+      1494576,
+      1494464,
+      1494800,
+      1510240,
+      1505456,
+      1509280,
+      1519408,
+      1500592,
+      1506768,
+      1504528,
+      1497936,
+      1512416,
+      1499600,
+      1495264
+    ]
+  },
+  "functional": {
+    "product": {
+      "evidence": "pre-release-final/product-9epbSW/result.json",
+      "status": "PASS",
+      "checks": 36,
+      "omittedSuites": []
+    },
+    "ownerCrash": [
+      {
+        "point": "AFTER_SOURCE_RENAME",
+        "evidence": "electron-crash/native-vZcaMh/result.json",
+        "status": "PASS",
+        "checks": 6
+      },
+      {
+        "point": "BEFORE_COMPLETED_CLEANUP",
+        "evidence": "electron-crash/native-DoJ2Zj/result.json",
+        "status": "PASS",
+        "checks": 6
+      }
+    ],
+    "inventoryLoop": {
+      "evidence": "pre-release-final/integrity-c6uTdi/result.json",
+      "status": "PASS",
+      "validations": 20
+    }
+  },
+  "tests": {
+    "analyzer": "272/272",
+    "desktopFull": {
+      "tests": 3112,
+      "pass": 3069,
+      "fail": 1,
+      "skipped": 42,
+      "failingTest": "dependency-downloader upstream HTTP retry (flaky, unrelated; 2 of 3 standalone reruns pass)"
+    },
+    "runtime": "60/60",
+    "runtimeManifestAndNativeAcceptance": "94/94",
+    "backendDesktopStartupSettings": "3/3"
+  },
+  "recordedNotChanged": [
+    "50ms pg_isready spawnSync polling",
+    "job pub/sub subscription delay if Redis is slower than backend Tomcat",
+    "BACKEND_HEALTH failure includes helper readiness"
+  ],
+  "rawReferences": {
+    "pre-release-candidate/build-os7kRp/result.json": "7c1f9e9ddc7e43b33f8d4e63ca4fb3dccc6b1cfea43d6cbb57168bca7da9b8db",
+    "pre-release-final/product-9epbSW/result.json": "c6c72898eaf096e9c36b730c9706dfe97b71314d2be6e2abde29e2350fce8941",
+    "electron-crash/native-vZcaMh/result.json": "479126f4e8dcbf2953b7380cf470bebfeed550858048446e36a9b7be78856238",
+    "electron-crash/native-DoJ2Zj/result.json": "82084edbe0e3e21f158a5a9b09446528f8a497a27d9811f119e3b3df49e1da67",
+    "pre-release-final/integrity-c6uTdi/result.json": "d592a426482c9b0d5d03ed0705f1cc14668bb4827bf0e522a491ccf90c210156",
+    "startup-performance/run-uvEMJ8/result.json": "6d0f1debe345b27a6e6d1332277a8ac534c18559d34c364f5e07f7a1b2c83022",
+    "final-candidate/archival-jZfi0r/result.json": "c7622d6df284cc9bad2488878bf808ce20ba7a73d80f9b19736a90c15b2f8194",
+    "final-candidate/retirement-XLeAe2/result.json": "b222a291a16c4f048e8e3d8a83d832952c9a75c3053284a8ba1103f782068bd0",
+    "final-candidate/retirement-tmp-RkhG4K/result.json": "2684655d7486a18c3944cc0a6feb852767c491a03eddf7019037d592da7913b5",
+    "final-candidate/retirement-tmp-JUQCmg/result.json": "eb066db02d485c38a11899eacecfd5114be6eb10651cea7148d48aeba6a4ba34",
+    "pre-release-final/product-ziBnjK/profile-retirement.json": "6b138a9884d76180126ea7321d9677f1364448582d387ac65614b2678a5d3d53"
+  }
+}

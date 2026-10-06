@@ -344,16 +344,30 @@ test('content verification overlaps a bounded number of files and hashes every i
 
 test('a content failure closes every in-flight handle and reports the earliest failed entry', async t => {
   const f = manyFiles(t, 40), observed = [];
-  fs.writeFileSync(path.join(f.root, 'many/005.txt'), 'tampered'); fs.writeFileSync(path.join(f.root, 'many/030.txt'), 'tampered');
-  let open = 0, opened = 0;
-  const validate = validatorWithIO({ async open(...args) {
-    const handle = await fs.promises.open(...args); open++; opened++;
-    return { stat: handle.stat.bind(handle), read: handle.read.bind(handle),
-      async close() { await new Promise(resolve => setImmediate(resolve)); open--; await handle.close(); } };
+  fs.writeFileSync(path.join(f.root, 'many/006.txt'), 'tampered');
+  let open = 0, opened = 0, slowFailed = false, fastFailed = false;
+  // Entry 005 fails late with CHANGED; entry 006 fails first with HASH. Sequential order reports 005.
+  const validate = validatorWithIO({ async open(file, ...args) {
+    const handle = await fs.promises.open(file, ...args); open++; opened++;
+    const slow = file.endsWith(path.join('many', '005.txt')); let stats = 0;
+    return { read: handle.read.bind(handle),
+      async stat(...statArgs) {
+        const value = await handle.stat(...statArgs);
+        if (slow && ++stats > 1) {
+          while (!fastFailed) await new Promise(resolve => setImmediate(resolve));
+          slowFailed = true; value.ctimeNs += 1n;
+        }
+        return value;
+      },
+      async close() {
+        if (file.endsWith(path.join('many', '006.txt'))) fastFailed = true;
+        await new Promise(resolve => setImmediate(resolve)); open--; await handle.close();
+      } };
   } });
   await assert.rejects(validate(f.root, f.manifest, { ...platform, onFailure(operation) { observed.push(operation); } }),
-    expected('RUNTIME_INVENTORY_HASH'));
-  assert.equal(open, 0); assert(opened < 41); assert.deepEqual(observed, ['HASH']);
+    expected('RUNTIME_INVENTORY_CHANGED'));
+  assert.equal(fastFailed && slowFailed, true); assert.equal(open, 0); assert(opened < 41);
+  assert.deepEqual(observed, ['HANDLE_STAT_POST']);
 });
 
 for (const value of [-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, undefined, 65537]) {

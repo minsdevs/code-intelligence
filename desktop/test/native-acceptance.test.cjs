@@ -435,6 +435,8 @@ test('step failures keep their code and add only a fixed signal without raw mess
   }
   const coded = { phase: 'x' }; recordFailure(coded, new Error('NATIVE_BACKUP_TIMEOUT'));
   assert.equal(coded.failure.code, 'NATIVE_BACKUP_TIMEOUT'); assert.equal(coded.failure.signal, null);
-  const weird = { phase: 'x' }; const odd = new Error('x'); odd.name = 'Bad name/with path'; recordFailure(weird, odd);
-  assert.equal(weird.failure.errorName, null);
+  for (const name of ['Bad name/with path', 'CustomPrivateName']) {
+    const weird = { phase: 'x' }; const odd = new Error('x'); odd.name = name; recordFailure(weird, odd);
+    assert.equal(weird.failure.errorName, null);
+  }
 });

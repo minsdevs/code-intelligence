@@ -4,7 +4,8 @@
 
 Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
 
-Latest packaged candidate: [startup and idle-memory acceptance on xb6Kxe](docs/audit/startup-acceptance-xb6kxe-2026-10-06.md).
+Latest packaged candidate: [review follow-up on 1lvULq](docs/audit/review-follow-up-1lvulq-2026-10-06.md), after the
+[startup and idle-memory acceptance on xb6Kxe](docs/audit/startup-acceptance-xb6kxe-2026-10-06.md).
 The device-origin credential refresh/CAS and revision-bound GitHub consumers are implemented;
 real-account refresh/revoke/SSO and clean-machine installation are not certified by synthetic tests.
 The current candidate is a local ad-hoc Validation build, not a public release. Use the exact
@@ -16,7 +17,11 @@ including source/note/history preservation, recovery and a further normal restar
 Each case passed six recorded checks;79 synthetic contracts passed. Full crash/
 power-loss coverage and real-user database acceptance remain separate.
 
-The latest development candidate is **xb6Kxe**, built from clean `ecf6344`. It
+The latest development candidate is **1lvULq** (`9211e88`). It applies the review
+follow-up fixes to xb6Kxe and again passes 36 product checks, both crash cases and
+the twenty-run gate (p95 **8,466ms**, maximum idle RSS **1,519,408KiB**).
+
+Candidate **xb6Kxe**, built from clean `ecf6344`,
 removes measured startup work (parallel inventory content checks and TLS issuance,
 50ms readiness polling, history-independent journal key checks, deferred JPA
 bootstrap behind readiness-gated health, helper readiness overlapping backend

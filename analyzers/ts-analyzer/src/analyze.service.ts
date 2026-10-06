@@ -29,7 +29,11 @@ export class AnalyzeService {
       assertContentSize(file.content)
       return { path, content: file.content }
     })
-    const { extractTs } = await (extractor ??= import('./ts-extractor'))
+    // A failed load is not cached: the next request retries instead of failing until restart.
+    const { extractTs } = await (extractor ??= import('./ts-extractor').catch((error: unknown) => {
+      extractor = undefined
+      throw error
+    }))
     try {
       return extractTs(files)
     } catch (error) {

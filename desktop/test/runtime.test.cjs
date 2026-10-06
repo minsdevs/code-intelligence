@@ -757,3 +757,18 @@ test('a cancelled readiness wait stops before probing again', async () => {
     /Synthetic readiness wait was cancelled/);
   assert.deepEqual(h.context.calls, []);
 });
+
+test('a helper spawn failure propagates only after the sibling spawn has registered its child', async () => {
+  const h = harness(); h.context.calls = []; let release;
+  h.context.gate = new Promise(resolve => { release = resolve; });
+  h.run(`startPostgres = async () => {};
+    spawnRedis = async () => { throw new Error('synthetic redis spawn failure'); };
+    spawnAnalyzer = async () => { await gate; calls.push('analyzer.registered'); return async () => {}; };
+    spawnBackend = async () => { calls.push('backend.spawn'); }; waitForBackendHealth = async () => {};
+    restoreAuthorizedRoots = async () => { calls.push('roots'); };`);
+  let settled = false; const starting = h.run('startRuntime()'); starting.then(() => {}, () => { settled = true; });
+  for (let i = 0; i < 50; i++) await Promise.resolve();
+  assert.equal(settled, false);
+  release(); await assert.rejects(starting, /synthetic redis spawn failure/);
+  assert.deepEqual(h.context.calls, ['analyzer.registered']);
+});
