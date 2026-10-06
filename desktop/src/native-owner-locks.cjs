@@ -9,6 +9,7 @@ const { types: { isProxy } } = require('node:util');
 const providers = new WeakMap();
 const ROLES = Object.freeze({ 'purpose-keyring': 'owner.lock', 'ai-journal': 'writer.lock', 'source-vault': 'owner.lock' });
 const { inheritedEnvironment } = require('./runtime-platform.cjs');
+const { CONTROL_JVM_OPTIONS } = require('./jvm-options.cjs');
 const { boundaryFromJava } = require('./windows-native-boundary.cjs');
 class NativeOwnerLockError extends Error {
   constructor(code) { super(`Native owner lock: ${code}`); this.name = 'NativeOwnerLockError'; this.code = `NATIVE_OWNER_${code}`; }
@@ -157,7 +158,7 @@ async function acquireNativeOwnerLock(provider, { safetyRoot, kind, installation
     state.assertOwner();
     const env = inheritedEnvironment(process.env);
     child = state.boundary ? state.boundary.launch('lease', state.spawn)
-      : state.spawn(state.java.path, ['-jar', state.jar.path, '--ci-desktop-lease'],
+      : state.spawn(state.java.path, [...CONTROL_JVM_OPTIONS, '-jar', state.jar.path, '--ci-desktop-lease'],
         { env, cwd: path.dirname(state.jar.path), stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });
     child.on('error', () => lose('PROCESS'));
     child.stdin.on('error', () => lose('PROCESS'));

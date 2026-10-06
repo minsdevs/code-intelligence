@@ -379,7 +379,7 @@ test('runtime launcher strips Java injection environment and rejects modified pi
     } });
     const lease = await f.lease(provider);
     assert.equal(Object.hasOwn(captured.options.env, 'JAVA_TOOL_OPTIONS'), false);
-    assert.deepEqual(captured.args, ['-jar', copied, '--ci-desktop-lease']); assert.equal(captured.options.shell, false);
+    assert.deepEqual(captured.args, ['-Xms16m', '-Xmx64m', '-jar', copied, '--ci-desktop-lease']); assert.equal(captured.options.shell, false);
     await lease.release(); await fs.appendFile(copied, 'modified');
     await rejects(f.lease(provider), 'NATIVE_OWNER_BINARY_CHANGED');
   } finally { if (old === undefined) delete process.env.JAVA_TOOL_OPTIONS; else process.env.JAVA_TOOL_OPTIONS = old; }

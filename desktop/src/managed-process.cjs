@@ -10,6 +10,7 @@ const MAX_FRAME = 256 * 1024;
 const MAX_BOOTSTRAP = 16 * 1024;
 const MAX_REPLY = 4096;
 const { inheritedEnvironment } = require('./runtime-platform.cjs');
+const { CONTROL_JVM_OPTIONS } = require('./jvm-options.cjs');
 const { boundaryFromJava, managedWire } = require('./windows-native-boundary.cjs');
 const HELPER_ERRORS = new Set(['START_FAILED', 'CONTROL_INVALID', 'BOOTSTRAP_FAILED', 'STOP_UNVERIFIED']);
 const ERROR_CODES = new Set(['INVALID', 'HELPER_START', 'START_TIMEOUT', 'PROTOCOL', 'CONTROL_LOST', 'HELPER_DIED', ...HELPER_ERRORS]);
@@ -166,7 +167,7 @@ function createManagedProcessSpawner({ spawn = childProcess.spawn, startTimeoutM
     try {
       const env = inheritedEnvironment(process.env);
       helper = process.platform === 'win32' ? boundaryFromJava(spec.javaPath).launch('managed', spawn)
-        : spawn(spec.javaPath, ['-jar', spec.jarPath, '--ci-managed-process'], {
+        : spawn(spec.javaPath, [...CONTROL_JVM_OPTIONS, '-jar', spec.jarPath, '--ci-managed-process'], {
           env, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true,
         });
       if (helper.stderr) {
