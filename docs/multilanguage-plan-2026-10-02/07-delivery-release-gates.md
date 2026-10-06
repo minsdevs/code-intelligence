@@ -190,13 +190,19 @@ nonzero 비용원장과 retained-source를 결합한 native crash·실사용 DB 
 미달해 새 후보 제작은 미실행이다. 아래 tZgvV7의 native 결과는 그 새 소스를
 검증한 결과가 아니며, 두 성능 기준 실패는 그대로다.
 
+이후 [원장 비용 후속](../audit/journal-replay-performance-2026-10-06.md)의 `85f889e`는
+POSIX metadata 세 조회의 대기만 병렬화하고 모든 키/잠금 검증을 유지했다.
+영향 회귀41·새 동시성4·진단15개가 통과했으며 실제 lease를 쓰는 257기록의
+단일 관측은949→784ms다. 새 앱은 공간6.09GiB<8GiB로 미제작이다. 현재 소스의
+합성/native lease 결과를 tZgvV7 전체 앱의 성능·복구 수용으로 대체하지 않는다.
+
 | 단계 | 현재 상태 | 완료 근거 또는 남은 조건 |
 | --- | --- | --- |
 | 1 데이터 복구 안정화 | tZgvV7의 Electron SIGKILL 두 경계·복구·추가 정상 재시작 완료 / 전체 수용 미완료 | 각6개 점검과 source92/91·메모·암호화 기록 보존 확인. 실제 Electron에서 파일 메타데이터 재진입 문제를 재현하고 좁게 보정했으나 모든 과거 오류의 원인 확정은 아님. 기존 비용 검증은 별도이며 전체C16·전원손실·nonzero비용+retained-source 결합 native crash·실사용 DB/locale 수용은 잔여 |
 | 2 실제 GitHub 가져오기 | 소비자 권한 검증 구현·회귀 완료 / 실계정 대기 | repo·clone/import·PR metadata에 revision-bound 권한과 결과 게시 검증. 기존 실패 project1의 실제 UI 재분석은 사용자 데이터 적용 조건 충족 후 |
 | 3 인증 수명주기 | refresh/CAS 구현·기본 Docker 인증통합 보완 / 실권한 수용 미완료 | 기존 JDBC6과 별도로 실제 Spring HTTP/JPA/Redis 인증13, 유지보수HTTP9 및 기본backend suite 통과. 실제 GitHub refresh/revoke/SSO와 그 전체운영경로 수용은 별도 |
 | 4 분석·작업 신뢰 | 마지막 binding/완료 알림 수정·회귀 완료 / 독립 수용 미완료 | TS271·실제sidecar12·backend1665PASS/12명시skip, SSE19·frontend436. package-entry 추측 거부·DB 완료 알림 복구와 snapshot 보존 검증. 독립corpus·모든취소/중단/재시도 간 이벤트 경합은 별도 |
-| 5 성능·보안·사용성 | tZgvV7의 시작20회 운영·수집 완료 / 두 성능 목표 초과로 수용 실패 | run-oAD8MS p95 12.544초>10초, idle p95 1741728KiB·최대1745680KiB>1572864KiB. 전 회차 시작/끝 AC 관측, 소스·후보 불변, 오류/미실행0, 최대수집간격221.047ms. 연속 AC 감시·cold cache·크기별 workload·독립보안·사용자 과제·전체공급망 수용은 별도 |
-| 6 새 설치·업데이트 | tZgvV7 제작·기능36개·복구 두 경계 통과 / 실기기·정식 업데이트 수용 미완료 | 69c2ad8의751class·30분석기파일·44desktop소스 readback, 경량 제어 JAR와 original-fs 물리 메타데이터 조회. 전체기능6회 COMPLETE/code0 및20회 warm 정상 종료. 새기기·최소OS·정식서명/업데이트와 모든 과거 시작 실패 원인 확인은 미완료 |
+| 5 성능·보안·사용성 | 원장 검증 대기 보완·새 진단 완료 / 전체 앱의 두 성능 목표 수용 실패 유지 | 85f889e의 POSIX 보완은 위 별도 진단/회귀 결과를 따른다. 기존 tZgvV7 run-oAD8MS p95 12.544초>10초, idle p95 1741728KiB·최대1745680KiB>1572864KiB. 전 회차 경계 AC, 소스·후보 불변, 운영오류/미실행0. 새 전체 앱 성능·크기별 workload·독립보안·사용자 과제·전체공급망 수용은 별도 |
+| 6 새 설치·업데이트 | 새 계측·POSIX 보완 소스 미패키징 / 이전 tZgvV7 기능36개·복구 두 경계 통과 | 여유공간6.09GiB<8GiB로 새 후보 미제작. 이전69c2ad8의751class·30분석기파일·44desktop소스 readback와 전체기능6회 COMPLETE/code0·20회 warm 정상 종료는 그 후보의 결과다. 새기기·최소OS·정식서명/업데이트와 모든 과거 시작 실패 원인 확인은 미완료 |
 | 7 배포물·운영 준비 | 현재 후보 해시·정적 inventory·제어 JAR provenance 확인 / 운영 조건 잔여 | 별도 제어 클래스6개·의존성3개·라이선스/notice9개 확인. 현재 정적 inventory는 completeSbom=false이며 shaded 멤버 전체 출처 대조·전체 라이선스 의무 완료를 뜻하지 않음. 새 온라인 advisory scan 없이 과거 결과를 보존. 전체공급망·운영 App/지원정책은 잔여 |
 | **8 출시 최종 판정** | **이번 후보의 No-Go 판정 기록 완료 / 출시 미승인** | 앞선 필수 gate·독립 검토·정식 서명/공증 자격과 최종 공개 승인 전 배포 금지. 미검증을 통과로 바꾸지 않음 |
