@@ -175,7 +175,8 @@ function replaceAnalyzerRuntime(plan, runtime, compiled, production, manifest, e
   plan.assertIdentity();
   return { manifest: { ...manifest, files }, evidence: { codeRebuilt: true, dependenciesRestaged: true,
     compiledDigest: built.inventory.sha256, productionDigest: productionTree.inventory.sha256,
-    files: Object.keys(preparedTree.files).length, fileHashes: built.files,
+    files: Object.keys(built.files).length, fileHashes: built.files,
+    runtimeFiles: Object.keys(preparedTree.files).length, productionFiles: Object.keys(productionTree.files).length,
     packageJsonSha256: expectedInputs.packageJsonSha256, packageLockSha256: expectedInputs.packageLockSha256,
     proxyAddrVersion: proxyPackage.version } };
 }

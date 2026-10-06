@@ -83,6 +83,8 @@ function runtimeFixture(t) {
 test('dependency restaging replaces the complete analyzer tree, preserves the old tree and rebuilds its manifest inventory', t => {
   const f = runtimeFixture(t), result = replaceAnalyzerRuntime(f.plan, f.runtime, f.compiled, f.production, f.manifest, f.expectedInputs);
   assert.equal(result.evidence.dependenciesRestaged, true); assert.equal(result.evidence.proxyAddrVersion, '2.0.8');
+  assert.equal(result.evidence.files, 2); assert.equal(result.evidence.runtimeFiles, 5);
+  assert.equal(result.evidence.productionFiles, 3);
   assert.equal(result.manifest.files['jre/bin/java'], 'retained-native-hash');
   for (const stale of ['ts-analyzer/dist/stale.js', 'ts-analyzer/node_modules/old/package.json'])
     assert.equal(result.manifest.files[stale], undefined);
