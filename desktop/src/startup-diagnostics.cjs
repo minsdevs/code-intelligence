@@ -16,13 +16,22 @@ const INTEGRITY_CODES = Object.freeze([
   'RUNTIME_NODE_ARGUMENT', 'RUNTIME_NODE_RANGE', 'RUNTIME_NODE_STATE',
   'RUNTIME_JS_TYPE_ERROR', 'RUNTIME_JS_RANGE_ERROR',
 ]);
+const INTEGRITY_OPERATIONS = Object.freeze([
+  'STRUCTURE', 'LSTAT', 'READDIR', 'OPEN', 'HANDLE_STAT_PRE', 'STREAM', 'HASH',
+  'HANDLE_STAT_POST', 'LSTAT_POST', 'CLOSE', 'FINALIZE',
+]);
 const integrityCodes = new Set(INTEGRITY_CODES);
+const integrityOperations = new Set(INTEGRITY_OPERATIONS);
 const ioCodes = new Set(['EACCES', 'EPERM', 'ENOENT', 'EMFILE', 'ENFILE', 'EIO', 'ENOMEM', 'ENOSPC',
   'EBADF', 'EINTR', 'EAGAIN', 'ECANCELED']);
 const nodeCodes = Object.freeze({ ERR_STREAM_PREMATURE_CLOSE: 'RUNTIME_STREAM_CLOSED',
   ERR_STREAM_DESTROYED: 'RUNTIME_STREAM_DESTROYED', ABORT_ERR: 'RUNTIME_OPERATION_ABORTED',
   ERR_INVALID_ARG_TYPE: 'RUNTIME_NODE_ARGUMENT', ERR_INVALID_ARG_VALUE: 'RUNTIME_NODE_ARGUMENT',
   ERR_OUT_OF_RANGE: 'RUNTIME_NODE_RANGE', ERR_INVALID_STATE: 'RUNTIME_NODE_STATE' });
+const diagnosticNodeCodes = new Set([...Object.keys(nodeCodes), 'ERR_STREAM_WRITE_AFTER_END',
+  'ERR_FS_FILE_TOO_LARGE', 'ERR_INTERNAL_ASSERTION', 'ERR_OPERATION_FAILED']);
+const errnoCodes = new Set(Object.keys(require('node:os').constants.errno));
+const diagnosticKinds = new Set(['Error', 'TypeError', 'RangeError', 'AbortError', 'RuntimeIntegrityError']);
 const startupCodes = new Set(['EACCES', 'ENOENT', 'SAFETY_RECOVERY_REQUIRED',
   'SAFETY_STORAGE_UNAVAILABLE', 'SAFETY_OWNER_LOST', 'MAIN_STARTUP_FAILED', ...INTEGRITY_CODES]);
 const phases = new Set(['MANIFEST', 'PROFILE', 'CREDENTIALS', 'PRIVATE_IPC', 'TLS', 'OWNER_LOCKS',
@@ -57,6 +66,38 @@ function startupFailureCode(error) {
   let code; try { code = error?.code; } catch { /* Never stringify arbitrary thrown values. */ }
   return startupCodes.has(code) ? code : 'MAIN_STARTUP_FAILED';
 }
+function integrityDiagnostic(operation, error) {
+  const safeOperation = integrityOperations.has(operation) ? operation : 'FINALIZE';
+  let code = 'UNCLASSIFIED', kind = 'OTHER';
+  try {
+    const value = error?.code;
+    if (typeof value === 'string' && (integrityCodes.has(value) || errnoCodes.has(value) || diagnosticNodeCodes.has(value))) code = value;
+  } catch { /* A hostile code getter is never evidence. */ }
+  try {
+    const value = error?.name;
+    if (typeof value === 'string' && diagnosticKinds.has(value)) kind = value;
+  } catch { /* A hostile name getter is never evidence. */ }
+  return Object.freeze({ operation: safeOperation, code, kind });
+}
+function formatIntegrityDiagnostic(value) {
+  let operation, code, kind;
+  try { operation = value?.operation; code = value?.code; kind = value?.kind; }
+  catch { return null; }
+  if (!integrityOperations.has(operation)
+      || !(integrityCodes.has(code) || errnoCodes.has(code) || diagnosticNodeCodes.has(code) || code === 'UNCLASSIFIED')
+      || !(diagnosticKinds.has(kind) || kind === 'OTHER')) return null;
+  return `DESKTOP_INTEGRITY ${operation} ${code} ${kind}`;
+}
+function parseIntegrityLine(line) {
+  if (typeof line !== 'string' || line.length > 256) return null;
+  const parts = line.split(' ');
+  if (parts.length !== 4 || parts[0] !== 'DESKTOP_INTEGRITY') return null;
+  const [, operation, code, kind] = parts;
+  if (!integrityOperations.has(operation)
+      || !(integrityCodes.has(code) || errnoCodes.has(code) || diagnosticNodeCodes.has(code) || code === 'UNCLASSIFIED')
+      || !(diagnosticKinds.has(kind) || kind === 'OTHER')) return null;
+  return { operation, code, kind };
+}
 function parseStartupLine(line) {
   if (typeof line !== 'string' || line.length > 256) return null;
   const parts = line.split(' ');
@@ -79,4 +120,5 @@ function parseShutdownLine(line) {
   return null;
 }
 
-module.exports = Object.freeze({ RuntimeIntegrityError, integrityError, startupFailureCode, parseStartupLine, parseShutdownLine, INTEGRITY_CODES });
+module.exports = Object.freeze({ RuntimeIntegrityError, integrityError, startupFailureCode, integrityDiagnostic,
+  formatIntegrityDiagnostic, parseIntegrityLine, parseStartupLine, parseShutdownLine, INTEGRITY_CODES, INTEGRITY_OPERATIONS });

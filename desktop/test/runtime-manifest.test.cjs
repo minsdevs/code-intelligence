@@ -111,6 +111,15 @@ test('a stream read failure retains the fixed IO classification and closes the o
   assert.equal(closed, 1);
 });
 
+test('failure observer sees the original injected IO failure exactly once before normalization', async t => {
+  const f = fixture(t), observed = [];
+  const failure = Object.assign(new Error('private-sentinel'), { code: 'EMFILE' });
+  const validate = validatorWithIO({ async lstat() { throw failure; } });
+  await assert.rejects(validate(f.root, f.manifest, { ...platform, onFailure(operation, error) { observed.push({ operation, error }); } }),
+    expected('RUNTIME_IO_EMFILE'));
+  assert.deepEqual(observed, [{ operation: 'LSTAT', error: failure }]);
+});
+
 for (const corrupt of [false, true]) test(`close failure ${corrupt ? 'does not mask the first hash failure' : 'still refuses an otherwise valid inventory'}`, async t => {
   const f = fixture(t); let closed = 0;
   if (corrupt) fs.writeFileSync(path.join(f.root, 'sample.txt'), 'different bytes');
@@ -121,6 +130,23 @@ for (const corrupt of [false, true]) test(`close failure ${corrupt ? 'does not m
   } });
   await assert.rejects(validate(f.root, f.manifest, platform), expected(corrupt ? 'RUNTIME_INVENTORY_HASH' : 'RUNTIME_IO_EIO'));
   assert.equal(closed, 1);
+});
+
+test('observer throw never replaces the original failure or close precedence', async t => {
+  const f = fixture(t); fs.writeFileSync(path.join(f.root, 'sample.txt'), 'different bytes');
+  const validate = validatorWithIO({ async open(...args) {
+    const handle = await fs.promises.open(...args);
+    return { stat: handle.stat.bind(handle), createReadStream: handle.createReadStream.bind(handle),
+      async close() { await handle.close(); throw Object.assign(new Error('private-close'), { code: 'EIO' }); } };
+  } });
+  await assert.rejects(validate(f.root, f.manifest, { ...platform, onFailure() { throw new Error('observer-private'); } }),
+    expected('RUNTIME_INVENTORY_HASH'));
+});
+
+test('successful verification does not invoke the failure observer', async t => {
+  const f = fixture(t); let calls = 0;
+  assert.equal(await validateRuntimeManifest(f.root, f.manifest, { ...platform, onFailure() { calls++; } }), f.manifest);
+  assert.equal(calls, 0);
 });
 
 test('a modified diagnostic instance is reconstructed without its message, cause, path or extra properties', () => {
@@ -154,6 +180,61 @@ test('startup diagnostic vocabulary rejects arbitrary values, suffixes, fields a
   assert.equal(diagnostics.startupFailureCode(hostile), 'MAIN_STARTUP_FAILED');
   expected('RUNTIME_INTEGRITY_FAILED')(diagnostics.integrityError(hostile));
   expected('RUNTIME_INTEGRITY_FAILED')(new diagnostics.RuntimeIntegrityError('private-sentinel'));
+});
+
+test('integrity failure protocol exposes only fixed operation code and kind values', () => {
+  const failure = Object.assign(new Error('private /Users/secret'), { code: 'EIO' });
+  const value = diagnostics.integrityDiagnostic('STREAM', failure);
+  assert.deepEqual(value, { operation: 'STREAM', code: 'EIO', kind: 'Error' });
+  const line = diagnostics.formatIntegrityDiagnostic(value);
+  assert.equal(line, 'DESKTOP_INTEGRITY STREAM EIO Error');
+  assert.deepEqual(diagnostics.parseIntegrityLine(line), value);
+  assert.equal(diagnostics.parseIntegrityLine('DESKTOP_INTEGRITY STREAM PRIVATE Error'), null);
+  assert.doesNotMatch(JSON.stringify(value), /private|secret|Users/);
+});
+
+test('integrity diagnostic hostile getters are sampled once and never escape', () => {
+  let codeReads = 0, nameReads = 0;
+  const hostile = { get code() { codeReads++; throw new Error('private-code'); },
+    get name() { nameReads++; throw new Error('private-name'); } };
+  assert.deepEqual(diagnostics.integrityDiagnostic('OPEN', hostile), { operation: 'OPEN', code: 'UNCLASSIFIED', kind: 'OTHER' });
+  assert.equal(codeReads, 1); assert.equal(nameReads, 1);
+});
+
+test('diagnostic formatting snapshots getters once and cannot emit a changing private value', () => {
+  const reads = { operation: 0, code: 0, kind: 0 };
+  const value = Object.fromEntries([]);
+  for (const [name, first] of Object.entries({ operation: 'OPEN', code: 'EIO', kind: 'Error' })) {
+    Object.defineProperty(value, name, { get() { return ++reads[name] === 1 ? first : '/private-sentinel'; } });
+  }
+  assert.equal(diagnostics.formatIntegrityDiagnostic(value), 'DESKTOP_INTEGRITY OPEN EIO Error');
+  assert.deepEqual(reads, { operation: 1, code: 1, kind: 1 });
+  assert.equal(diagnostics.formatIntegrityDiagnostic({ get operation() { throw new Error('private'); } }), null);
+});
+
+test('a mutating or asynchronously rejecting observer cannot change the primary integrity failure', async t => {
+  const f = fixture(t);
+  const failure = Object.assign(new Error('private-original'), { code: 'EIO' });
+  const validate = validatorWithIO({ async lstat() { throw failure; } });
+  await assert.rejects(validate(f.root, f.manifest, { ...platform, onFailure(_operation, original) {
+    original.code = 'EPERM';
+    return Promise.reject(new Error('private-observer'));
+  } }), expected('RUNTIME_IO_EIO'));
+  await new Promise(resolve => setImmediate(resolve));
+});
+
+test('early integrity observation retains only the first fixed record despite oversized or private stderr', () => {
+  const child = { stderr: new PassThrough() }, report = {};
+  const stop = observeStartup(child, report, () => {});
+  child.stderr.write('x'.repeat(1024) + 'DESKTOP_INTEGRITY OPEN EIO Error\n');
+  child.stderr.write('DESKTOP_INTEGRITY OPEN private-token Error\n');
+  child.stderr.write('DESKTOP_INTE'); child.stderr.write('GRITY STREAM EINVAL Error\r\n');
+  child.stderr.write('DESKTOP_STARTUP MANIFEST FAILED RUNTIME_INTEGRITY_FAILED\n');
+  child.stderr.write('DESKTOP_INTEGRITY CLOSE EIO Error\n');
+  assert.deepEqual(report.integrityFailure, { operation: 'STREAM', code: 'EINVAL', kind: 'Error' });
+  assert.equal(report.startup.code, 'RUNTIME_INTEGRITY_FAILED');
+  assert.doesNotMatch(JSON.stringify(report), /private|token/);
+  stop(); child.stderr.end();
 });
 
 test('finite stream/argument/abort diagnostics retain a cause category without exporting raw details', () => {

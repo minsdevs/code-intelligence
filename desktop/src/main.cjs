@@ -34,7 +34,8 @@ const { createWindowsBoundary } = require('./windows-native-boundary.cjs');
 const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 const { writeStorageFile } = require('./windows-storage-files.cjs');
 const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
-const { RuntimeIntegrityError, integrityError, startupFailureCode } = require('./startup-diagnostics.cjs');
+const { RuntimeIntegrityError, integrityError, startupFailureCode,
+  integrityDiagnostic, formatIntegrityDiagnostic } = require('./startup-diagnostics.cjs');
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
 const packageMetadata = require('../package.json');
 
@@ -298,7 +299,10 @@ async function verifyRuntimeIntegrity() {
       || !manifest.files || typeof manifest.files !== 'object') {
     throw new RuntimeIntegrityError('RUNTIME_MANIFEST_PATH');
   }
-  await validateRuntimeManifest(root, manifest);
+  await validateRuntimeManifest(root, manifest, { onFailure(operation, error) {
+    const line = formatIntegrityDiagnostic(integrityDiagnostic(operation, error));
+    if (line) console.error(line);
+  } });
   manifest.runtime = {
     ...(manifest.runtime.cache ? { cache: manifest.runtime.cache } : {}),
     postgresBin: assertRuntimeRelativePath(manifest.runtime.postgresBin, 'PostgreSQL bin path'),

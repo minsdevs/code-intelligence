@@ -172,6 +172,7 @@ async function main(argv = process.argv.slice(2)) {
       sample.pid = owner.process().pid; sample.sdkCaptureMs = Math.round(performance.now() - started);
       sampler = startMemorySampler(owner.process(), fd, sequence, started);
       stopObserving = observeStartup(owner.process(), diagnostics, () => {
+        if (diagnostics.integrityFailure) sample.integrityFailure ??= diagnostics.integrityFailure;
         if (diagnostics.startup?.phase !== lastPhase && sample.startupPhases.length < 32) {
           lastPhase = diagnostics.startup?.phase;
           if (lastPhase) sample.startupPhases.push({ phase: lastPhase, state: diagnostics.startup.state,
@@ -211,6 +212,7 @@ async function main(argv = process.argv.slice(2)) {
         sample.cleanupFailure = 'NO_CAPTURED_CHILD'; failure ||= 'STARTUP_SDK_TIMEOUT';
       }
       stopObserving?.(); sample.memory = memory ?? null;
+      if (diagnostics.integrityFailure) sample.integrityFailure ??= diagnostics.integrityFailure;
       sample.status = failure ? 'FAIL' : 'PASS'; sample.failure = failure;
       sample.totalMs = Math.round(performance.now() - started); save();
       console.log(JSON.stringify({ sequence, status: sample.status, readyMs: sample.readyMs,
