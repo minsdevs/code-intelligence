@@ -284,6 +284,18 @@ function relocateMacLibraries(prefix) {
   }
   return summary;
 }
+// Raw automation messages can contain paths or page data; persist only a fixed signal.
+const FAILURE_SIGNALS = [
+  [/Execution context was destroyed/, 'RENDERER_CONTEXT_DESTROYED'],
+  [/Target page, context or browser has been closed|Target closed|has been closed/, 'TARGET_CLOSED'],
+  [/Failed to fetch|NetworkError|net::ERR_|ECONNRESET|ECONNREFUSED|socket hang up/, 'NETWORK_FAILED'],
+  [/is not valid JSON|Unexpected token|Unexpected end of JSON/, 'JSON_INVALID'],
+  [/Timeout \d+ms exceeded|timed out/i, 'OPERATION_TIMEOUT'],
+];
+function failureSignal(error) {
+  const message = typeof error?.message === 'string' ? error.message.slice(0, 4096) : '';
+  return FAILURE_SIGNALS.find(([pattern]) => pattern.test(message))?.[1] ?? null;
+}
 function recordFailure(report, error) {
   report.status = 'FAIL';
   report.failure ||= { category: error.name === 'AssertionError' ? 'assertion' : 'native-step-failed',
@@ -291,7 +303,8 @@ function recordFailure(report, error) {
       : /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code || '') ? error.code
         : error.name === 'TimeoutError' ? 'NATIVE_UI_TIMEOUT' : 'NATIVE_ACCEPTANCE_STEP_FAILED',
     phase: report.phase,
-    exitStatus: Number.isInteger(error.exitStatus) ? error.exitStatus : null, command: error.commandEvidence || null };
+    exitStatus: Number.isInteger(error.exitStatus) ? error.exitStatus : null, command: error.commandEvidence || null,
+    errorName: /^[A-Za-z]{1,40}$/.test(error.name || '') ? error.name : null, signal: failureSignal(error) };
   return report.failure;
 }
 function recordProvisioningFailure({ work, step, exitCode, artifact }) {

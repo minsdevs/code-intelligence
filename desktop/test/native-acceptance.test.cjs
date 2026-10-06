@@ -417,3 +417,24 @@ test('native linker diagnostics explain reproduced Darwin test-module driver fla
   });
   assert.equal(JSON.stringify(result).includes('private-token'), false);
 });
+
+test('step failures keep their code and add only a fixed signal without raw message text', () => {
+  const { recordFailure } = require('../scripts/native-acceptance.cjs');
+  const cases = [
+    [new Error('page.evaluate: TypeError: Failed to fetch https://127.0.0.1:1/private?token=secret'), 'NETWORK_FAILED', 'Error'],
+    [new Error('page.evaluate: Execution context was destroyed, most likely because of a navigation'), 'RENDERER_CONTEXT_DESTROYED', 'Error'],
+    [new Error('Target page, context or browser has been closed /Users/private'), 'TARGET_CLOSED', 'Error'],
+    [new SyntaxError('Unexpected token < in JSON at position 0'), 'JSON_INVALID', 'SyntaxError'],
+    [new Error('unclassified /Users/private/secret'), null, 'Error'],
+  ];
+  for (const [error, signal, errorName] of cases) {
+    const report = { phase: 'real-main-backup' };
+    assert.deepEqual(recordFailure(report, error), { category: 'native-step-failed', code: 'NATIVE_ACCEPTANCE_STEP_FAILED',
+      phase: 'real-main-backup', exitStatus: null, command: null, errorName, signal });
+    assert.equal(JSON.stringify(report).includes('private'), false); assert.equal(JSON.stringify(report).includes('secret'), false);
+  }
+  const coded = { phase: 'x' }; recordFailure(coded, new Error('NATIVE_BACKUP_TIMEOUT'));
+  assert.equal(coded.failure.code, 'NATIVE_BACKUP_TIMEOUT'); assert.equal(coded.failure.signal, null);
+  const weird = { phase: 'x' }; const odd = new Error('x'); odd.name = 'Bad name/with path'; recordFailure(weird, odd);
+  assert.equal(weird.failure.errorName, null);
+});
