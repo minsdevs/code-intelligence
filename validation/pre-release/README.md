@@ -269,3 +269,34 @@ reproduced with unchanged synthetic files; no retry or integrity exception is
 introduced. Node tests retain injectable filesystem failures in both runtime
 modes. The read-only diagnostic runner temporarily observes both promise
 namespaces, records bounded fixed metadata only and restores its wrappers.
+
+## Journal replay work and native lease costs
+
+```sh
+env -i HOME="$HOME" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C \
+  node validation/pre-release/run-journal-replay-probe.cjs \
+  --app '<original-repository>/.native-product-<candidate>/Code Intelligence Validation.app' \
+  --journal-replay-probe
+```
+
+This new diagnostic uses the current Node journal/keyring modules and a verified
+retained candidate's control JAR/JRE. It creates three fresh synthetic histories
+of 1, 65 and 257 records through public journal operations, keeps AI OFF and
+reopens each history once. The timed open includes journal lease acquisition,
+latch authentication, replay and the appended restart latch. Key API durations
+include keyring checks; nested wrapper timings must not be added to them.
+
+The branded native owner-lock provider and its actual ChildProcesses are retained.
+Only protocol operation counts and aggregate key API timings are observed; no
+key bytes, protocol arguments, journal records or error messages are reported.
+Each JVM uses a new synthetic HOME, temporary directory and working directory.
+Journal and keyring closure must complete before provider closure, and actual
+helper close events are required. A cleanup failure remains FAIL; no observed
+numeric PID authorizes signalling. Synthetic files are private and retained under
+`validation/local/journal-replay/`.
+
+This is not an Electron launch, application-database test, actual Keychain test,
+pure replay CPU measurement or whole-app performance acceptance. It uses only
+zero-liability USER_OFF records. The fixture's owner-directory checks add harness
+overhead, and one observation per size is not a p95 benchmark. The candidate is
+unchanged, no new app is built, and existing release SLOs remain separate.

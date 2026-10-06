@@ -33,6 +33,15 @@ existing regressions but is not yet packaged: observed free space was 6.11GiB,
 below the unchanged 8GiB build floor. The old candidate's native results do not
 validate those new markers or establish a performance improvement.
 
+The later [journal cost follow-up](docs/audit/journal-replay-performance-2026-10-06.md)
+measures 1/65/257-record synthetic histories with actual Java lease workers and
+overlaps three independent POSIX metadata reads while retaining every check.
+At `85f889e`, 41 affected regressions and four new concurrency cases pass; the
+new diagnostic has 15 passing tests. The 257-record observation fell from 949 to
+784ms with identical key/lease counts, but this is one sequential observation
+per size, not whole-app acceptance. No new package exists; the 8GiB build-space
+requirement and prior full-app performance failures remain open.
+
 The [initial Docker integration follow-up](docs/audit/docker-integration-2026-10-06.md)
 removed the earlier Docker-unavailable execution blocker. The current continuation
 verifies 1,665 backend passes with12 explicit skips,12 actual-analyzer/PostgreSQL

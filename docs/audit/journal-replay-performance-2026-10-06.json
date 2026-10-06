@@ -1,0 +1,261 @@
+{
+  "format": 1,
+  "observedAt": "2026-10-06T06:57:09.251Z",
+  "releaseVerdict": "NO_GO",
+  "scope": "journal-open-diagnostic-and-posix-lease-read-concurrency",
+  "implementation": {
+    "commit": "85f889e0081da98fe42690ac957d32b2745dfcb3",
+    "sourceFile": "desktop/src/native-owner-locks.cjs",
+    "sourceSha256": "54871ecfefcab91be4320255a39542b934c89d4b3232333fab9d3fa96c519fd1",
+    "sourceFingerprint": "f4bdf522884446fa9eb2c690c8d644e5f4211b6fec7e0f44679b12cd5f1c417d",
+    "changedProductSourceFiles": [
+      "desktop/src/native-owner-locks.cjs"
+    ],
+    "windowsPathUnchanged": true,
+    "metadataAndProtocolChecksRetained": true,
+    "newCandidateBuilt": false
+  },
+  "diagnostic": {
+    "before": {
+      "path": "validation/local/journal-replay/probe-KjaeIG/result.json",
+      "sha256": "e926e1a7fde16f27e0df2b842966291eb83c2493ec9de5a670513a49cd7f9290",
+      "sourceCommit": "336893f1c4d07ada5fb902439187dd65583ab16d",
+      "sourceFingerprint": "98670ce51a90af617d0ebe703809b47b2b2a1e8e52f0fa988474d4f73d0a1e00"
+    },
+    "after": {
+      "path": "validation/local/journal-replay/probe-ptGfUk/result.json",
+      "sha256": "36dab21ca4e3635ec4ef822c11f89e3c7cbf69892e726f3c75521da83b8f5c3a",
+      "sourceCommit": "85f889e0081da98fe42690ac957d32b2745dfcb3",
+      "sourceFingerprint": "f4bdf522884446fa9eb2c690c8d644e5f4211b6fec7e0f44679b12cd5f1c417d"
+    },
+    "sameRunnerSha256": "4516b5634cdf75a010125e2163ca0178e1bcd959c5a7a76a3c98155b900fe7f6",
+    "sameTrackedSupplyIdentities": {
+      ".native-product-tZgvV7/Code Intelligence Validation.app/Contents/Resources/runtime/runtime-manifest.json": "9a0dc937af6891df7acb4af681cd8e7ea482e88d50426c8a147202199538e7f7",
+      ".native-product-tZgvV7/Code Intelligence Validation.app/Contents/Resources/app.asar": "448d246faecb0efc2a648a9c9d3a1026f7e3657af1261519f6713889d5f70899",
+      ".native-product-tZgvV7/Code Intelligence Validation.app/Contents/Resources/runtime/jre/bin/java": "f872335c0936fab552ae50b701c8f25736ab930001d5419bcae664631fcd85b8",
+      ".native-product-tZgvV7/Code Intelligence Validation.app/Contents/Resources/runtime/backend/code-intelligence-control.jar": "70b516885b3c50487cf1937022975b616c99ec176a5632ee3bf9e032946b15b0"
+    },
+    "postRunFullInventoryScan": false,
+    "nativeSupplyCandidate": ".native-product-tZgvV7/Code Intelligence Validation.app",
+    "nativeSupplyBuildSequence": "1791264249607",
+    "eachRunNormalHelperExits": 9,
+    "cases": [
+      {
+        "records": 1,
+        "beforeOpenMs": 153.01433300000008,
+        "afterOpenMs": 155.8336250000002,
+        "observedReductionMs": -2.8192920000001322,
+        "observedReductionPercent": -1.842501904707274,
+        "beforeKeyLookupMs": 16.941417,
+        "afterKeyLookupMs": 16.305585000000065,
+        "keyLookupCalls": 5,
+        "currentKeyIdCalls": 2,
+        "availabilityCalls": 7,
+        "protocol": {
+          "purpose-keyring": {
+            "ACQUIRE": 0,
+            "CHECK": 14,
+            "RELEASE": 0
+          },
+          "ai-journal": {
+            "ACQUIRE": 1,
+            "CHECK": 8,
+            "RELEASE": 0
+          }
+        },
+        "beforeAndAfter": {
+          "cleanupConfirmed": true,
+          "eachDirectNormalExits": 3,
+          "keyCopiesCleared": true,
+          "previousPrefixPreserved": true,
+          "aiOff": true,
+          "nonzeroObligations": false
+        }
+      },
+      {
+        "records": 65,
+        "beforeOpenMs": 343.15949999999975,
+        "afterOpenMs": 318.82916600000044,
+        "observedReductionMs": 24.33033399999931,
+        "observedReductionPercent": 7.090094839280081,
+        "beforeKeyLookupMs": 203.18908000000465,
+        "afterKeyLookupMs": 177.0024159999948,
+        "keyLookupCalls": 69,
+        "currentKeyIdCalls": 2,
+        "availabilityCalls": 71,
+        "protocol": {
+          "purpose-keyring": {
+            "ACQUIRE": 0,
+            "CHECK": 142,
+            "RELEASE": 0
+          },
+          "ai-journal": {
+            "ACQUIRE": 1,
+            "CHECK": 8,
+            "RELEASE": 0
+          }
+        },
+        "beforeAndAfter": {
+          "cleanupConfirmed": true,
+          "eachDirectNormalExits": 3,
+          "keyCopiesCleared": true,
+          "previousPrefixPreserved": true,
+          "aiOff": true,
+          "nonzeroObligations": false
+        }
+      },
+      {
+        "records": 257,
+        "beforeOpenMs": 948.9826249999987,
+        "afterOpenMs": 784.3637920000001,
+        "observedReductionMs": 164.61883299999863,
+        "observedReductionPercent": 17.346875344530027,
+        "beforeKeyLookupMs": 789.8197490000093,
+        "afterKeyLookupMs": 640.7351279999984,
+        "keyLookupCalls": 261,
+        "currentKeyIdCalls": 2,
+        "availabilityCalls": 263,
+        "protocol": {
+          "purpose-keyring": {
+            "ACQUIRE": 0,
+            "CHECK": 526,
+            "RELEASE": 0
+          },
+          "ai-journal": {
+            "ACQUIRE": 1,
+            "CHECK": 8,
+            "RELEASE": 0
+          }
+        },
+        "beforeAndAfter": {
+          "cleanupConfirmed": true,
+          "eachDirectNormalExits": 3,
+          "keyCopiesCleared": true,
+          "previousPrefixPreserved": true,
+          "aiOff": true,
+          "nonzeroObligations": false
+        }
+      }
+    ],
+    "observationCountPerSizePerImplementation": 1,
+    "randomized": false,
+    "wholeApplicationPerformance": false
+  },
+  "validation": [
+    {
+      "path": "validation/local/journal-replay/unit-nekFxu/result.json",
+      "sha256": "4f75f5bb647fa125868b6fa8c9008a6ab59e230d74cec3c33dcc1954ed3f2510",
+      "log": {
+        "path": "validation/local/journal-replay/unit-nekFxu/tests.tap",
+        "sha256": "e89899e758620742b8d63e04b89b94d51a297e6274f857783a5994bcf93c7dd8"
+      },
+      "scope": "new-journal-probe-only",
+      "totals": {
+        "tests": 15,
+        "pass": 15,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "execution": {
+        "status": 0,
+        "signal": null,
+        "errorCode": null,
+        "timedOut": false,
+        "directExitObserved": true
+      },
+      "sources": {
+        "validation/pre-release/run-journal-replay-probe.cjs": "4516b5634cdf75a010125e2163ca0178e1bcd959c5a7a76a3c98155b900fe7f6",
+        "validation/pre-release/test/journal-replay-probe.test.cjs": "a49fb6d492faa36afa69ef09a0f19ce8a87c411ca158995a07ff579cea6ea8f0"
+      }
+    },
+    {
+      "path": "validation/local/journal-replay/lease-regression-yLdI6h/result.json",
+      "sha256": "f252f8510832f7bec21b4ba415bc29550c02029f8f8d46b448af545a31c2b533",
+      "log": {
+        "path": "validation/local/journal-replay/lease-regression-yLdI6h/tests.tap",
+        "sha256": "e366b7edfab1d6c3b77b7fe1a2f21c9073cb2e8691cbd3034046a04b1d96e8fd"
+      },
+      "scope": "changed-lease-path-validation-regressions",
+      "totals": {
+        "tests": 41,
+        "pass": 41,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "execution": {
+        "status": 0,
+        "signal": null,
+        "errorCode": null,
+        "timedOut": false,
+        "directExitObserved": true
+      },
+      "sources": {
+        "desktop/src/native-owner-locks.cjs": "54871ecfefcab91be4320255a39542b934c89d4b3232333fab9d3fa96c519fd1",
+        "desktop/test/native-owner-locks.test.cjs": "b07229c22ea34a73565e36dd3e9c41343728212e762cc4fe79aa22fc16760814",
+        "desktop/test/native-owner-locks-exceptions.test.cjs": "c86cf1552386a71b472097ea24f95528d87980f7031d0f06bd584cd6ac66fc23",
+        "desktop/test/safety-keyring-integration.test.cjs": "4f86e494da89debd9f4265ebede7cfc0e41dee5cf156c29358312b2f49924e56"
+      }
+    },
+    {
+      "path": "validation/local/journal-replay/metadata-unit-EIO5n8/result.json",
+      "sha256": "15ba58a45891fdee46680bfcdbac5cf59746daab81c769598d72e575a91a8984",
+      "log": {
+        "path": "validation/local/journal-replay/metadata-unit-EIO5n8/tests.tap",
+        "sha256": "35d9f2f9e3595db5ab56526126ed98d2da3afc41daee3d8bac7f579d9fcb2944"
+      },
+      "scope": "new-metadata-concurrency-boundaries",
+      "totals": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "execution": {
+        "status": 0,
+        "signal": null,
+        "errorCode": null,
+        "timedOut": false,
+        "directExitObserved": true
+      },
+      "sources": {
+        "desktop/src/native-owner-locks.cjs": "54871ecfefcab91be4320255a39542b934c89d4b3232333fab9d3fa96c519fd1",
+        "desktop/test/native-owner-locks-metadata.test.cjs": "d4cdc223b9ed712b40e01e0fe40a3aef8443509fdd154f005fabe6a8679b0ad8"
+      }
+    }
+  ],
+  "capacity": {
+    "status": "BLOCKED",
+    "code": "MAC_BUILD_DISK_SPACE",
+    "availableBytes": "6535139328",
+    "requiredFreeBytes": "8589934592",
+    "policy": "Conservative free-space floor; not a disk reservation or measured build size."
+  },
+  "previousCandidateAcceptance": {
+    "ledger": {
+      "path": "docs/audit/startup-resource-follow-up-2026-10-06.json",
+      "sha256": "744919d642cf07b0e55176dc0f4df79aebe9f62a068a9c1925bd8505e4b22e25"
+    },
+    "candidate": "tZgvV7",
+    "p95ReadyMs": 12544,
+    "maxIdleRssKiB": 1745680,
+    "startupLimitMs": 10000,
+    "idleLimitKiB": 1572864,
+    "status": "FAIL",
+    "newSourceContainedInCandidate": false
+  },
+  "limitations": [
+    "Single sequential observations with fresh zero-liability histories; not p95 or a universal improvement claim.",
+    "Whole open includes helper acquisition, latch verification and writes. Key timings are inclusive of nested checks.",
+    "Owner-directory assertions add harness overhead. Native JVM leases are real, but Electron, application DB and actual Keychain are not exercised.",
+    "All pending POSIX metadata reads join before failure handling; concurrency has no new wall-clock deadline.",
+    "Absolute-path checks remain non-atomic against same-user path replacement.",
+    "Only four pinned supply identities are rehashed at the end; a repeated full-runtime inventory is not claimed.",
+    "New package, full-app functionality/recovery, twenty-run SLOs and all remaining release acceptance are outstanding."
+  ]
+}
