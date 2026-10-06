@@ -259,13 +259,19 @@ for (const [name, change] of [
   const f = await fixture(t, false); await change(f); await rejects(createBackupProductState(f.options)); assert.equal(f.calls.length, 0);
 });
 for (const patch of [{ systemIdentifier: '18446744073709551616' }, { systemIdentifier: 123 }, { dataDirectory: '/injected' },
-  { startEpochSeconds: '1' }, { port: PORT + 1 }, { database: 'wrong' }, { user: 'other' }, { sessionUser: 'other' }]) {
+  { startEpochSeconds: '1' }, { startEpochSeconds: String(BigInt(START) - 1n) }, { startEpochSeconds: String(BigInt(START) + 3n) },
+  { startEpochSeconds: Number(START) }, { port: PORT + 1 }, { database: 'wrong' }, { user: 'other' }, { sessionUser: 'other' }]) {
   test(`initial SQL origin mismatch ${Object.keys(patch)[0]} is refused`, async t => {
     const f = await fixture(t, false); f.controls.originPatch = patch;
     await rejects(createBackupProductState(f.options)); assert.equal(f.calls.length, 1);
     assert.equal(f.calls[0].writes.length, 1); assert.equal(f.calls[0].committed, false);
   });
 }
+for (const skew of [1n, 2n]) test(`SQL postmaster start ${skew}s after the lock-file start is the same owned origin`, async t => {
+  const f = await fixture(t, false); const later = String(BigInt(START) + skew); f.controls.originPatch = { startEpochSeconds: later };
+  const adapter = await createBackupProductState(f.options); t.after(() => adapter.close());
+  assert.equal(f.calls.length, 1); assert.equal((await adapter.verifyOrigin()).startEpochSeconds, later);
+});
 test('later cluster system identifier change blocks all mutation SQL and permanently invalidates controller', async t => {
   const f = await fixture(t); f.controls.system = '123';
   await rejects(f.adapter.revokeCredentials({ database: 'codeintel' }), 'ORIGIN');

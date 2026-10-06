@@ -42,6 +42,16 @@ function absolute(value) {
       || !path.isAbsolute(value) || path.resolve(value) !== value) fail('INVALID');
   return value;
 }
+// postmaster.pid records the postmaster's process start time; pg_postmaster_start_time() is set
+// later, after shared memory and sockets exist. Their whole seconds differ when that interval
+// crosses a second boundary (3 of 80 owned starts in a local reproduction). Accept only this
+// bounded forward skew; an earlier SQL start time or a larger gap is still a different origin.
+const POSTMASTER_START_SKEW_SECONDS = 2n;
+function startMatches(sqlSeconds, lockSeconds) {
+  if (!matches(sqlSeconds, /^[1-9][0-9]{0,12}$/) || !matches(lockSeconds, /^[1-9][0-9]{0,12}$/)) return false;
+  const skew = BigInt(sqlSeconds) - BigInt(lockSeconds);
+  return skew >= 0n && skew <= POSTMASTER_START_SKEW_SECONDS;
+}
 function decimal(value, max = MAX) {
   if (!matches(value, /^[1-9][0-9]{0,19}$/) || BigInt(value) > max) fail('INVALID'); return value;
 }
@@ -232,7 +242,7 @@ async function createBackupProductState(options) {
     exact(value, ['kind', 'systemIdentifier', 'dataDirectory', 'startEpochSeconds', 'port', 'database', 'user', 'sessionUser']);
     decimal(value.systemIdentifier, 18446744073709551615n);
     if (value.kind !== 'origin' || (options.windowsBoundary ? typeof value.dataDirectory !== 'string' || path.resolve(value.dataDirectory) !== expectedDataDirectory : value.dataDirectory !== expectedDataDirectory)
-        || value.startEpochSeconds !== initialLocal.lock.startEpochSeconds || value.port !== port
+        || !startMatches(value.startEpochSeconds, initialLocal.lock.startEpochSeconds) || value.port !== port
         || value.database !== db || value.user !== user || value.sessionUser !== user
         || (origin && value.systemIdentifier !== origin.systemIdentifier)) { invalidated = true; fail('ORIGIN'); }
     return Object.freeze({ systemIdentifier: value.systemIdentifier, dataDirectory: expectedDataDirectory,
