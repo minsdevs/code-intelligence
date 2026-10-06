@@ -665,7 +665,11 @@ async function startRuntime() {
   // Helpers are spawned before the backend, so a helper spawn failure still prevents the backend
   // spawn. Only readiness waits overlap backend JVM startup, which first reaches Redis after
   // Tomcat starts and never calls the analyzer during startup.
-  const helpersReady = await Promise.all([spawnRedis(), spawnAnalyzer()]);
+  // Both spawns settle before a failure propagates, so a stop that follows sees every registered child.
+  const spawned = await Promise.allSettled([spawnRedis(), spawnAnalyzer()]);
+  const spawnFailure = spawned.find(result => result.status === 'rejected');
+  if (spawnFailure) throw spawnFailure.reason;
+  const helpersReady = spawned.map(result => result.value);
   if (quitting) throw new Error('Runtime is shutting down.');
   assertSafetyReady();
   noteStartup('BACKEND');
