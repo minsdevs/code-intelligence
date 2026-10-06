@@ -292,6 +292,8 @@ const FAILURE_SIGNALS = [
   [/is not valid JSON|Unexpected token|Unexpected end of JSON/, 'JSON_INVALID'],
   [/Timeout \d+ms exceeded|timed out/i, 'OPERATION_TIMEOUT'],
 ];
+const ERROR_NAMES = new Set(['Error', 'TypeError', 'SyntaxError', 'RangeError', 'ReferenceError', 'AssertionError',
+  'TimeoutError', 'AbortError']);
 function failureSignal(error) {
   const message = typeof error?.message === 'string' ? error.message.slice(0, 4096) : '';
   return FAILURE_SIGNALS.find(([pattern]) => pattern.test(message))?.[1] ?? null;
@@ -304,7 +306,7 @@ function recordFailure(report, error) {
         : error.name === 'TimeoutError' ? 'NATIVE_UI_TIMEOUT' : 'NATIVE_ACCEPTANCE_STEP_FAILED',
     phase: report.phase,
     exitStatus: Number.isInteger(error.exitStatus) ? error.exitStatus : null, command: error.commandEvidence || null,
-    errorName: /^[A-Za-z]{1,40}$/.test(error.name || '') ? error.name : null, signal: failureSignal(error) };
+    errorName: ERROR_NAMES.has(error.name) ? error.name : null, signal: failureSignal(error) };
   return report.failure;
 }
 function recordProvisioningFailure({ work, step, exitCode, artifact }) {

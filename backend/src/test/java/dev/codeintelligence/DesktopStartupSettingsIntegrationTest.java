@@ -91,11 +91,6 @@ class DesktopStartupSettingsIntegrationTest {
 
     @Test
     void apiDocumentationIsNotServed() {
-        restTestClient
-                .get()
-                .uri("/v3/api-docs")
-                .exchange()
-                .expectStatus()
-                .value(status -> assertThat(status).isNotEqualTo(200));
+        restTestClient.get().uri("/v3/api-docs").exchange().expectStatus().isNotFound();
     }
 }
