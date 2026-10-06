@@ -298,7 +298,7 @@ test('READDIR metadata construction failure cannot replace the captured public f
   } finally { crypto.createHash = originalCreate; }
 });
 
-test('all files share one read buffer per invocation and concurrent invocations remain isolated', async t => {
+test('read buffers belong to bounded slots of one invocation and concurrent invocations remain isolated', async t => {
   const f = fixture(t), second = fixture(t);
   for (const item of [f, second]) for (const [name, bytes] of [['empty.txt', ''], ['multi.txt', 'z'.repeat(200000)]]) {
     fs.writeFileSync(path.join(item.root, name), bytes);
@@ -316,8 +316,44 @@ test('all files share one read buffer per invocation and concurrent invocations 
   } });
   await Promise.all([validate(f.root, f.manifest, platform), validate(second.root, second.manifest, platform)]);
   assert.equal(opened.get(f.root), 3); assert.equal(opened.get(second.root), 3);
-  assert.equal(buffers.get(f.root).size, 1); assert.equal(buffers.get(second.root).size, 1);
-  assert.notEqual([...buffers.get(f.root)][0], [...buffers.get(second.root)][0]);
+  for (const root of [f.root, second.root]) assert(buffers.get(root).size >= 1 && buffers.get(root).size <= 3);
+  for (const buffer of buffers.get(f.root)) assert.equal(buffers.get(second.root).has(buffer), false);
+});
+
+function manyFiles(t, count) {
+  const f = fixture(t);
+  for (let i = 0; i < count; i++) {
+    const name = `many/${String(i).padStart(3, '0')}.txt`, bytes = 'x'.repeat(i + 1);
+    fs.mkdirSync(path.join(f.root, 'many'), { recursive: true }); fs.writeFileSync(path.join(f.root, name), bytes);
+    f.manifest.files[name] = sha(bytes);
+  }
+  return f;
+}
+
+test('content verification overlaps a bounded number of files and hashes every inventory entry', async t => {
+  const f = manyFiles(t, 40); let open = 0, peak = 0, opened = 0;
+  const validate = validatorWithIO({ async open(...args) {
+    const handle = await fs.promises.open(...args); open++; opened++; peak = Math.max(peak, open);
+    await new Promise(resolve => setImmediate(resolve));
+    return { stat: handle.stat.bind(handle), read: handle.read.bind(handle),
+      async close() { open--; await handle.close(); } };
+  } });
+  assert.equal(await validate(f.root, f.manifest, platform), f.manifest);
+  assert.equal(opened, 41); assert.equal(open, 0); assert(peak > 1 && peak <= 8);
+});
+
+test('a content failure closes every in-flight handle and reports the earliest failed entry', async t => {
+  const f = manyFiles(t, 40), observed = [];
+  fs.writeFileSync(path.join(f.root, 'many/005.txt'), 'tampered'); fs.writeFileSync(path.join(f.root, 'many/030.txt'), 'tampered');
+  let open = 0, opened = 0;
+  const validate = validatorWithIO({ async open(...args) {
+    const handle = await fs.promises.open(...args); open++; opened++;
+    return { stat: handle.stat.bind(handle), read: handle.read.bind(handle),
+      async close() { await new Promise(resolve => setImmediate(resolve)); open--; await handle.close(); } };
+  } });
+  await assert.rejects(validate(f.root, f.manifest, { ...platform, onFailure(operation) { observed.push(operation); } }),
+    expected('RUNTIME_INVENTORY_HASH'));
+  assert.equal(open, 0); assert(opened < 41); assert.deepEqual(observed, ['HASH']);
 });
 
 for (const value of [-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, undefined, 65537]) {

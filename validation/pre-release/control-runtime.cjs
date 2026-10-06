@@ -167,4 +167,60 @@ async function verifyControlRuntime({ jarFile, provenanceFile, classRoot }) {
   return { jarSha256, provenanceSha256: sha256(provenanceBytes), classesCount: compiled.size, entriesCount: entries.length, dependencies, licenses };
 }
 
-module.exports = Object.freeze({ verifyControlRuntime });
+// Compare every non-directory shaded member against the three hash-bound archives
+// already embedded in the backend. No cache lookup, download or archive extraction.
+async function verifyControlSourceMembers({ jarFile, provenanceFile, classRoot, backendJarFile }) {
+  const verified = await verifyControlRuntime({ jarFile, provenanceFile, classRoot });
+  const jar = canonicalFile(jarFile, MAX_JAR);
+  if (sha256(jar) !== verified.jarSha256) fail('CONTROL_JAR_HASH');
+  const backend = canonicalFile(backendJarFile, 256 * 1024 * 1024);
+  const usage = budget();
+  const outer = preflightZip(backend, usage).entries;
+  const outerByName = new Map(outer.map(entry => [entry.name, entry]));
+  const expected = new Map();
+  const add = (name, digest) => {
+    if (expected.has(name)) fail('CONTROL_SOURCE_COLLISION');
+    expected.set(name, digest);
+  };
+  for (const [name, digest] of compiledClasses(classRoot)) add(name, digest);
+  const excluded = name => name === 'META-INF/MANIFEST.MF' || name === 'module-info.class'
+    || /^META-INF\/versions\/[^/]+\/module-info\.class$/.test(name)
+    || /^META-INF\/[^/]*\.(?:SF|RSA|DSA)$/.test(name)
+    || /^META-INF\/[^/]*(?:LICENSE|NOTICE)[^/]*$/.test(name);
+  const expectedLicenses = [], archives = [];
+  let sourceMembers = 0;
+  for (const dependency of verified.dependencies) {
+    const member = outerByName.get('BOOT-INF/lib/' + dependency.fileName);
+    if (!member || member.directory) fail('CONTROL_SOURCE_ARCHIVE_MISSING');
+    const bytes = zipEntryBytes(backend, member, usage, MAX_JAR);
+    if (sha256(bytes) !== dependency.sha256) fail('CONTROL_SOURCE_ARCHIVE_HASH');
+    const entries = preflightZip(bytes, usage).entries;
+    if (entries.length > 10000 || entries.reduce((sum, entry) => sum + entry.size, 0) > 64 * 1024 * 1024) fail('CONTROL_JAR_LIMIT');
+    let copiedMembers = 0, omittedMembers = 0, relocatedLicenses = 0;
+    for (const entry of entries) {
+      if (entry.directory) continue;
+      const value = zipEntryBytes(bytes, entry, usage, 4 * 1024 * 1024);
+      const digest = sha256(value); sourceMembers++;
+      if (!excluded(entry.name)) { add(entry.name, digest); copiedMembers++; }
+      else omittedMembers++;
+      if (entry.name.startsWith('META-INF/') && /LICENSE|NOTICE/i.test(path.posix.basename(entry.name))) {
+        const name = `META-INF/licenses/${dependency.groupId}/${dependency.artifactId}/${dependency.version}/${entry.name.slice('META-INF/'.length)}`;
+        add(name, digest); expectedLicenses.push(name); relocatedLicenses++;
+      }
+    }
+    archives.push({ ...dependency, copiedMembers, omittedMembers, relocatedLicenses });
+  }
+  if (JSON.stringify(expectedLicenses.sort()) !== JSON.stringify([...verified.licenses].sort())) fail('CONTROL_SOURCE_LICENSE_SET');
+  const targetUsage = budget(), entries = preflightZip(jar, targetUsage).entries;
+  const regular = entries.filter(entry => !entry.directory && entry.name !== 'META-INF/MANIFEST.MF');
+  if (regular.length !== expected.size) fail('CONTROL_SOURCE_MEMBER_SET');
+  for (const entry of regular) {
+    if (!expected.has(entry.name)) fail('CONTROL_SOURCE_MEMBER_SET');
+    if (sha256(zipEntryBytes(jar, entry, targetUsage, 4 * 1024 * 1024)) !== expected.get(entry.name)) fail('CONTROL_SOURCE_MEMBER_BYTES');
+  }
+  return { ...verified, backendJarSha256: sha256(backend), allShadedRegularMembersVerified: true,
+    comparedRegularMembers: regular.length, sourceArchiveMembers: sourceMembers, sourceArchives: archives,
+    scope: 'Exact regular-file set and bytes against hash-bound backend dependency archives; generated manifest checked separately; not whole-product SBOM or license-obligation acceptance' };
+}
+
+module.exports = Object.freeze({ verifyControlRuntime, verifyControlSourceMembers });

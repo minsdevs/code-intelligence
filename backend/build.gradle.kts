@@ -28,6 +28,7 @@ repositories {
 // with older transitive members. See docs/audit/pre-release-candidate-2026-10-05.md.
 dependencyManagement {
     imports {
+        mavenBom("org.springframework:spring-framework-bom:7.0.9")
         mavenBom("com.fasterxml.jackson:jackson-bom:2.21.7")
         mavenBom("tools.jackson:jackson-bom:3.1.7")
         mavenBom("io.netty:netty-bom:4.2.17.Final")

@@ -148,6 +148,11 @@ async function fullStage(t, { pkgOutside = false, elf = false, wrongJava = false
   for (const name of pgNames) fs.chmodSync(write(pgBin, name, bytes), 0o755);
   const redis = write(root, 'selected/redis-server', bytes); fs.chmodSync(redis, 0o755);
   write(repo, 'backend/build/libs/synthetic.jar', 'synthetic jar');
+  // The standalone control runtime and its build proof are staged with the backend since dac77cc.
+  const controlJar = write(repo, 'backend/build/libs/code-intelligence-control.jar', 'synthetic control jar');
+  write(repo, 'backend/build/libs/code-intelligence-control-provenance.json', JSON.stringify({ format: 1,
+    kind: 'DESKTOP_CONTROL_RUNTIME', mainClass: 'dev.codeintelligence.desktop.DesktopControlApplication',
+    jarSha256: crypto.createHash('sha256').update(fs.readFileSync(controlJar)).digest('hex') }));
   write(repo, 'backend/src/main/resources/db/migration/V1__synthetic.sql', '-- synthetic');
   write(repo, 'analyzers/ts-analyzer/dist/index.js', '// synthetic');
   for (const name of ['package.json', 'package-lock.json']) write(repo, `analyzers/ts-analyzer/${name}`, '{}');
@@ -189,7 +194,7 @@ async function fullStage(t, { pkgOutside = false, elf = false, wrongJava = false
     await vm.runInNewContext(`(async () => { 'use strict';
       ${source.replace(/^import .*;\n/gm, '').replaceAll('import.meta.url', 'moduleURL')}
     })()`, {
-      fs, path, crypto, fileURLToPath, execFileSync, runtimeStage: { createRuntimeStage, requireBuildSequence: require('../scripts/runtime-stage.cjs').requireBuildSequence },
+      fs, path, crypto, fileURLToPath, execFileSync, Buffer, runtimeStage: { createRuntimeStage, requireBuildSequence: require('../scripts/runtime-stage.cjs').requireBuildSequence },
       nativePolicy: policyWrapper, moduleURL: pathToFileURL(path.join(desktop, 'scripts/stage-runtime.mjs')).href,
       process: { env, platform: 'darwin', arch: 'arm64', stdout: { write() {} }, stderr: { write() {} }, on(name, handler) { assert.equal(name, 'exit'); exit.push(handler); } },
       console: { log() {} },

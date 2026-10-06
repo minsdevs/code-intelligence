@@ -122,9 +122,29 @@ now recompiled; its staged dist is replaced as an exact file set and read back
 against the updated runtime manifest. Native/JRE and installed analyzer dependencies
 are reused only after baseline inventory/signature and analyzer package/lock
 compatibility checks. Current Java classes, migrations, static assets, analyzer
-outputs and packaged desktop sources are read back. A new app is created;
+outputs and packaged desktop sources are read back. When the analyzer package or
+lock changes, a fresh private production tree is installed from the prefilled
+`validation/local/pre-release-cache/npm` cache with offline, ignore-scripts,
+omit-dev and no-bin-links options. Empty private npm configurations avoid inherited
+credentials. Its package/lock identities and complete regular-file inventory are
+checked before replacing the staged analyzer; the old staged tree is preserved.
+A failed second rename attempts rollback only while the original parent and old
+tree identities match and the destination is absent. It never overwrites a new
+destination, and the original failure remains primary. A new app is created;
 the baseline is not changed. This is an ad-hoc directory build, never a release,
 Developer ID/notarized app, automatic update or existing-profile migration.
+
+The verified-runtime reuse builder now has a separate space policy from full
+native provisioning. Full provisioning retains its 8GiB floor. Candidate reuse
+measures the actual logical dependency/source/runtime/Electron copy sizes, adds
+production-install, Java/static/temp and generated-output allowances plus 2GiB
+headroom, and rounds upward to 64MiB. The complete calculation and measured
+fingerprints are recorded in the build report; source and dependency copies must
+match those fingerprints. At completion, at least 2GiB must still be available.
+This is a planning allowance, not reserved disk space, a physical-allocation
+prediction or a hard write bound. It can exceed 8GiB for larger inputs. Earlier
+candidate reports retain the old fixed-floor decision. Startup, RSS, integrity
+and release-acceptance limits are unchanged by this build-policy revision.
 
 `run-product-candidate.cjs --app '<candidate>'` reuses the complete native product
 runner on fresh synthetic sources/profiles. Use a clean child environment as in
@@ -158,6 +178,15 @@ historical/current snapshot contracts and the post-restore/delete transition.
 The final package-entry guard and job-completion/shutdown changes are included
 in j5EJLB, whose own results are recorded separately. Do not advertise analysis-only
 mode or an older candidate as full acceptance of newer source changes.
+
+Native step failures keep their fixed `code` and add `errorName` plus a fixed
+`signal` (renderer context destroyed, target closed, network, JSON, timeout or
+`null`); raw automation messages, paths and page data are still never saved.
+
+Since `cf1f0e0` the startup markers mean: `CACHE_AND_ANALYZER` covers spawning
+Redis and the analyzer, and `BACKEND_HEALTH` covers the overlapping readiness of
+Redis, the analyzer and the backend. Compare phase durations across that commit
+only with this change in mind; total ready time is unaffected by the relabelling.
 
 `run-integrity-diagnostic.cjs --app '<candidate>'` observes bounded read-only
 runtime-inventory failures inside one fresh Electron process. It never changes
@@ -257,11 +286,20 @@ JAR and its provenance, and requires non-Windows guarded ownership. Legacy bundl
 without this marker retain their earlier helper entrypoint. The backend service
 and backup-source worker still use the full application JAR.
 
-The offline builder awaits `verifyControlRuntime` before staging and again after
-packaging. It validates bounded ZIP contents, own compiled classes, manifest,
-declared dependency set and license coverage. This is not full shaded-member
-provenance, a complete SBOM or an independent license audit. Existing staged
-control files are preserved before replacement; the baseline app is never edited.
+The offline builder now awaits `verifyControlSourceMembers` before staging and
+again after packaging. It includes the existing bounded ZIP, compiled-class,
+manifest and dependency checks, then compares every ordinary shaded file and
+relocated license with the three exact, hash-bound dependency archives inside
+the compiled backend JAR. Missing, additional, renamed, conflicting or changed
+members are rejected. No archive is extracted and no cache or registry is queried.
+The packaged backend is connected to that compiled input by the existing
+non-static-entry readback and candidate JAR hash. The generated manifest is
+validated separately; empty directory entries are not source-file comparisons.
+This does not establish a complete product SBOM, upstream trust or all license
+obligations. Older build reports retain their narrower verification scope.
+Existing staged control files are preserved before replacement; the baseline app
+is never edited. The source-member regression suite is
+`node --test validation/pre-release/test/control-source-members.test.cjs`.
 
 Runtime inventory checks use Electron's `original-fs` native promise APIs for the
 physical unpacked runtime tree. This avoids a callback-stat reentry mechanism
@@ -300,3 +338,8 @@ pure replay CPU measurement or whole-app performance acceptance. It uses only
 zero-liability USER_OFF records. The fixture's owner-directory checks add harness
 overhead, and one observation per size is not a p95 benchmark. The candidate is
 unchanged, no new app is built, and existing release SLOs remain separate.
+
+Since `d9d74cd` replay verifies each key id before its first use and again after
+the last record, so the runner expects history-independent counts: six MAC-key
+fetches, eight wrapper availability checks and sixteen keyring lease CHECKs per
+open. Earlier reports retain their `N+4`/`N+6`/`2(N+6)` counts and runner hashes.

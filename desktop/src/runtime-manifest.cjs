@@ -9,6 +9,7 @@ const crypto = require('node:crypto');
 const { Buffer } = require('node:buffer');
 const { runtimeRelativePath } = require('./runtime-platform.cjs');
 const { RuntimeIntegrityError, integrityError } = require('./startup-diagnostics.cjs');
+const CONTENT_SLOTS = 8;
 // Structural/integrity gate used before any bundled helper executes. Build-time PE
 // closure and provenance are separately verified before the manifest is published.
 async function validateRuntimeManifest(root, manifest, { platform = process.platform, arch = process.arch, onFailure } = {}) {
@@ -16,7 +17,7 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
   const relativePath = (raw, label) => {
     try { return runtimeRelativePath(raw, label, platform); } catch { invalid('RUNTIME_MANIFEST_PATH'); }
   };
-  let operation = 'STRUCTURE', readBuffer, failureRelative = null, failureAbsolute = null, failureKindBefore = null;
+  let operation = 'STRUCTURE', failureRelative = null, failureAbsolute = null, failureKindBefore = null;
   try {
   if (!manifest || manifest.format !== 1 || !manifest.files || Array.isArray(manifest.files)) invalid();
   if (manifest.platform !== platform || manifest.arch !== arch) invalid('RUNTIME_MANIFEST_PLATFORM');
@@ -38,7 +39,7 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
     const relative = relativePath(manifest.runtime?.[key], 'PostgreSQL layout');
     if (!relative.startsWith('postgres/')) invalid('RUNTIME_MANIFEST_PATH');
   }
-  const seen = new Set(), allNames = new Set(); let count = 0;
+  const seen = new Set(), allNames = new Set(), files = []; let count = 0;
   const stamp = stat => [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs, stat.nlink].join(':');
   async function visit(relative, depth) {
     if (++count > 100000 || depth > 64) invalid('RUNTIME_INVENTORY_LIMIT');
@@ -62,19 +63,24 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
     if (stat.size > 512n * 1024n * 1024n) invalid('RUNTIME_INVENTORY_LIMIT');
     if (relative === 'runtime-manifest.json') return;
     if (!Object.hasOwn(manifest.files, relative)) invalid('RUNTIME_INVENTORY_UNEXPECTED');
-    operation = 'OPEN';
+    files.push({ relative, absolute, stat });
+  }
+  // Content checks are independent per file; overlap their IO waits with a fixed
+  // number of slots instead of awaiting thousands of reads strictly in sequence.
+  async function verifyFile({ relative, absolute, stat }, slot) {
+    slot.operation = 'OPEN';
     const handle = await fs.promises.open(absolute, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
     let readFailed = false;
     try {
-      operation = 'HANDLE_STAT_PRE';
+      slot.operation = 'HANDLE_STAT_PRE';
       if (stamp(await handle.stat({ bigint: true })) !== stamp(stat)) invalid('RUNTIME_INVENTORY_CHANGED');
-      operation = 'READ';
+      slot.operation = 'READ';
       const hash = crypto.createHash('sha256');
       const size = Number(stat.size);
       if (!Number.isSafeInteger(size) || size < 0 || size > 512 * 1024 * 1024) invalid('RUNTIME_INVENTORY_LIMIT');
-      // One buffer belongs to this verification invocation, not to each file
-      // or to a module-global pool shared with concurrent verifications.
-      const buffer = readBuffer ??= Buffer.allocUnsafe(64 * 1024);
+      // One buffer belongs to one slot of this verification invocation, not to each
+      // file or to a module-global pool shared with concurrent verifications.
+      const buffer = slot.buffer ??= Buffer.allocUnsafe(64 * 1024);
       let position = 0;
       while (position < size) {
         const length = Math.min(buffer.length, size - position);
@@ -87,22 +93,38 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
       const extra = (await handle.read(buffer, 0, 1, size))?.bytesRead;
       if (!Number.isSafeInteger(extra) || extra < 0 || extra > 1) invalid('RUNTIME_NODE_RANGE');
       if (extra !== 0) invalid('RUNTIME_INVENTORY_CHANGED');
-      operation = 'HASH';
+      slot.operation = 'HASH';
       if (hash.digest('hex') !== manifest.files[relative]) invalid('RUNTIME_INVENTORY_HASH');
-      operation = 'HANDLE_STAT_POST';
+      slot.operation = 'HANDLE_STAT_POST';
       if (stamp(await handle.stat({ bigint: true })) !== stamp(stat)) invalid('RUNTIME_INVENTORY_CHANGED');
-      operation = 'LSTAT_POST';
+      slot.operation = 'LSTAT_POST';
       if (stamp(await fs.promises.lstat(absolute, { bigint: true })) !== stamp(stat)) invalid('RUNTIME_INVENTORY_CHANGED');
     } catch (error) { readFailed = true; throw error; }
     finally {
       // A failed close must not replace an already observed integrity/read error.
-      const previous = operation; operation = 'CLOSE';
+      const previous = slot.operation; slot.operation = 'CLOSE';
       try { await handle.close(); } catch (error) { if (!readFailed) throw error; }
-      finally { if (readFailed) operation = previous; }
+      finally { if (readFailed) slot.operation = previous; }
     }
     seen.add(relative);
   }
   await visit('', 0);
+  operation = 'OPEN';
+  // Every slot finishes and closes its current file before a failure is reported;
+  // the earliest failed inventory entry is reported, as in sequential order.
+  let next = 0, failure;
+  await Promise.all(Array.from({ length: Math.min(CONTENT_SLOTS, files.length) }, async () => {
+    const slot = { operation: 'OPEN', buffer: undefined };
+    while (!failure && next < files.length) {
+      const index = next++;
+      try { await verifyFile(files[index], slot); }
+      catch (error) {
+        if (!failure || index < failure.index) failure = { index, error, operation: slot.operation };
+        return;
+      }
+    }
+  }));
+  if (failure) { operation = failure.operation; throw failure.error; }
   operation = 'FINALIZE';
   if (seen.size !== expected.length) invalid('RUNTIME_INVENTORY_MISSING');
   if (manifest.controlProtocol === 1) for (const name of ['backend/code-intelligence-control.jar',

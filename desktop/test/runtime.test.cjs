@@ -295,9 +295,10 @@ function startupHarness(changes = {}) {
     verifyRuntimeIntegrity = async () => ({buildSequence:'100', runtime:{postgresBin:'postgres/bin', postgresLib:'postgres/lib'}});
     encryptedJson = () => []; freePort = async () => 43219; binary = (...parts) => parts.join('/');
     startPostgres = async () => { calls.push('postgres.start'); };
-    startRedis = async () => { calls.push('redis.start'); };
-    startAnalyzer = async () => { calls.push('analyzer.start'); };
-    startBackend = async () => { calls.push('backend.start'); };
+    spawnRedis = async () => { calls.push('redis.start'); return async () => {}; };
+    spawnAnalyzer = async () => { calls.push('analyzer.start'); return async () => {}; };
+    spawnBackend = async () => { calls.push('backend.start'); };
+    waitForBackendHealth = async () => {}; restoreAuthorizedRoots = async () => {};
     createWindow = () => { calls.push('window.create'); };`);
   return { ...h, calls, safety };
 }
@@ -381,7 +382,7 @@ test('corrupt B stops startup before core runtime, renderer, or IPC registration
 
 test('initial backend failure closes safety even when there are no child handles', async () => {
   const h = startupHarness();
-  h.run("startBackend = async () => { calls.push('backend.failed'); throw new Error('synthetic startup failure'); }");
+  h.run("spawnBackend = async () => { calls.push('backend.failed'); throw new Error('synthetic startup failure'); }");
   await h.run('withRuntimeOperation(startApplication)'); await h.run('shutdownPromise');
   assert.equal(h.run('children.size'), 0);
   assert.equal(h.calls.filter(item => item === 'safety.close').length, 1);
@@ -517,8 +518,9 @@ test('backend restart retains the same safety facade and latches before stopping
     safetyLifecycle.latch = async () => { calls.push('latch'); };
     safetyLifecycle.close = async () => { calls.push('close'); };
     stopChild = async name => { calls.push('stop:' + name); };
-    startPostgres = async () => {}; startRedis = async () => {}; startAnalyzer = async () => {};
-    startBackend = async () => { calls.push('backend.start'); };`);
+    startPostgres = async () => {}; spawnRedis = async () => async () => {}; spawnAnalyzer = async () => async () => {};
+    spawnBackend = async () => { calls.push('backend.start'); }; waitForBackendHealth = async () => {};
+    restoreAuthorizedRoots = async () => {};`);
   const status = await h.handlers.get('runtime:restart')({});
   assert.equal(status.ready, true); assert.equal(status.aiOff, true);
   assert.equal(h.run('originalSafety === safetyLifecycle'), true);
@@ -719,4 +721,39 @@ test('shutdown refuses to remove an IPC directory whose ownership identity chang
   await assert.rejects(h.run('shutdownRuntime()'), { code: 'SAFETY_RECOVERY_REQUIRED' });
   assert.equal(h.ipcDirectories.has(directory), true);
   assert.equal(h.run('shutdownComplete'), false);
+});
+
+test('a helper spawn failure prevents the backend spawn and authorized-root restoration', async () => {
+  const h = harness(); h.context.calls = [];
+  h.run(`startPostgres = async () => {};
+    spawnRedis = async () => { throw new Error('synthetic redis spawn failure'); };
+    spawnAnalyzer = async () => { calls.push('analyzer.spawn'); return async () => {}; };
+    spawnBackend = async () => { calls.push('backend.spawn'); }; waitForBackendHealth = async () => { calls.push('backend.wait'); };
+    restoreAuthorizedRoots = async () => { calls.push('roots'); };`);
+  await assert.rejects(h.run('startRuntime()'), /synthetic redis spawn failure/);
+  for (const call of ['backend.spawn', 'backend.wait', 'roots']) assert.equal(h.context.calls.includes(call), false);
+  assert.equal(h.run('runtime.ready'), false);
+});
+
+test('a helper readiness failure cancels the overlapping backend wait before authorized roots are restored', async () => {
+  const h = harness(); h.context.calls = [];
+  h.run(`startPostgres = async () => {};
+    spawnRedis = async () => async () => { throw new Error('synthetic redis readiness failure'); };
+    spawnAnalyzer = async () => async () => { calls.push('analyzer.ready'); };
+    spawnBackend = async () => { calls.push('backend.spawn'); };
+    waitForBackendHealth = async signal => {
+      while (!signal.aborted) await Promise.resolve();
+      calls.push('backend.cancelled'); throw new Error('Backend readiness wait was cancelled');
+    };
+    restoreAuthorizedRoots = async () => { calls.push('roots'); };`);
+  await assert.rejects(h.run('startRuntime()'), /synthetic redis readiness failure/);
+  assert.deepEqual(h.context.calls.filter(call => call !== 'analyzer.ready'), ['backend.spawn', 'backend.cancelled']);
+  assert.equal(h.run('runtime.ready'), false);
+});
+
+test('a cancelled readiness wait stops before probing again', async () => {
+  const h = harness(); h.context.calls = [];
+  await assert.rejects(h.run(`waitUntil(async () => { calls.push('probe'); return false; }, 'Synthetic', 60000, { aborted: true })`),
+    /Synthetic readiness wait was cancelled/);
+  assert.deepEqual(h.context.calls, []);
 });

@@ -12,6 +12,10 @@ server:
         http-only: true
         same-site: lax
 spring:
+  # Single-user desktop: keep peak pool capacity but open idle PostgreSQL backends on demand.
+  datasource:
+    hikari:
+      minimum-idle: 2
   ssl:
     bundle:
       pem:
@@ -19,8 +23,27 @@ spring:
           options:
             enabled-protocols: TLSv1.3,TLSv1.2
   data:
+    jpa:
+      repositories:
+        # Build the EntityManagerFactory on the bootstrap executor while the rest of the context starts.
+        bootstrap-mode: deferred
     redis:
       password: ${REDIS_PASSWORD:}
       ssl:
         enabled: true
         bundle: desktopredis
+      # Redis holds sessions and job pub/sub only; there are no Redis repositories to scan.
+      repositories:
+        enabled: false
+# The desktop API has no schema or UI consumers; do not serve them behind the capability token.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+management:
+  health:
+    readinessstate:
+      # Health stays OUT_OF_SERVICE until ApplicationReadyEvent, so deferred repository or
+      # EntityManagerFactory failures and startup recovery cannot hide behind an early UP.
+      enabled: true

@@ -231,7 +231,9 @@ async function createServiceTransport({ userData, ports, getApiToken, windowsBou
   const materials = {};
   const now = Date.now(), notBefore = new Date(now - 60000), notAfter = new Date(now + 365 * 86400000);
   // Each service has a separate trust root. Sidecars receive no CA signing key.
-  for (const name of ['postgres', 'redis', 'analyzer', 'backend']) {
+  // Key generation runs on the crypto thread pool, so the independent services are
+  // issued together; private keys are exported and written below in fixed order.
+  const issued = await Promise.all(['postgres', 'redis', 'analyzer', 'backend'].map(async name => {
     const caKeys = await crypto.webcrypto.subtle.generateKey(algorithm, false, ['sign', 'verify']);
     const authority = await x509.X509CertificateGenerator.createSelfSigned({
       serialNumber: `01${crypto.randomBytes(15).toString('hex')}`, name: `CN=Code Intelligence ${name} CA`,
@@ -254,7 +256,10 @@ async function createServiceTransport({ userData, ports, getApiToken, windowsBou
         await x509.AuthorityKeyIdentifierExtension.create(caKeys.publicKey, false, crypto.webcrypto)
       ]
     }, crypto.webcrypto);
-    const pem = certificate.toString('pem'), caPem = authority.toString('pem');
+    return { name, keys, pem: certificate.toString('pem'), caPem: authority.toString('pem') };
+  }));
+  for (const { name, keys, pem, caPem } of issued) {
+    check();
     const der = Buffer.from(await crypto.webcrypto.subtle.exportKey('pkcs8', keys.privateKey));
     keyBytes.add(der);
     let keyPem;

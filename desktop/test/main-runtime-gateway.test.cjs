@@ -1098,7 +1098,7 @@ test('owned protocol startup binds one native provider and guardians before any 
   const backend = h.guardians.find(value => value.args.includes('--spring.profiles.active=desktop'));
   assert.equal(path.basename(h.controls.ownerLockOptions.jarPath), 'code-intelligence.jar');
   for (const guardian of h.guardians) assert.equal(path.basename(guardian.jarPath), 'code-intelligence.jar');
-  assert(backend); assert.deepEqual([...backend.args.slice(0, 2)], ['-Xms64m', '-Xmx2048m']);
+  assert(backend); assert.deepEqual([...backend.args.slice(0, 3)], ['-Xms64m', '-Xmx2048m', '-XX:+UseSerialGC']);
   assert.equal(path.basename(backend.jarPath), 'code-intelligence.jar');
   assert.equal(path.basename(h.controls.ownerLockOptions.jarPath), 'code-intelligence.jar');
   assert.equal(backend.args.some(value => value.startsWith('-XX:MaxRAMPercentage=')), false);
@@ -1136,7 +1136,7 @@ test('verified control protocol selects the small helper JAR while the analysis 
   const backend = h.guardians.find(value => value.args.includes('--spring.profiles.active=desktop'));
   assert(backend);
   assert.equal(path.basename(backend.args[backend.args.indexOf('-jar') + 1]), 'code-intelligence.jar');
-  assert.deepEqual([...backend.args.slice(0, 2)], ['-Xms64m', '-Xmx2048m']);
+  assert.deepEqual([...backend.args.slice(0, 3)], ['-Xms64m', '-Xmx2048m', '-XX:+UseSerialGC']);
   assert.equal(h.ownedBootstrap[0].every(byte => byte === 0), true);
   assert.ok(h.events.indexOf('ownerLocks.open') < h.events.indexOf('safety.open'));
   await h.shutdown();

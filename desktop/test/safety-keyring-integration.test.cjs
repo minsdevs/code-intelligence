@@ -10,10 +10,10 @@ const { initializePurposeKeyring, openPurposeKeyring } = require('../src/purpose
 const { initializeSafetyJournal, openSafetyJournal } = require('../src/safety-journal.cjs');
 
 // Synthetic authenticated wrapper only. Does not use Electron, a real keychain, or installed data.
-function wrapper() {
+function wrapper(counts) {
   const wrappingKey = Buffer.alloc(32, 93);
   return {
-    async isAvailable() { return true; },
+    async isAvailable() { counts.isAvailable++; return true; },
     async wrap(bytes) {
       const nonce = crypto.randomBytes(12);
       const cipher = crypto.createCipheriv('aes-256-gcm', wrappingKey, nonce);
@@ -35,8 +35,9 @@ function assertCleared(issued) {
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'ci-safety-key-interop-'));
   await fs.chmod(root, 0o700);
+  const counts = { isAvailable: 0 };
   const options = { safetyRoot: path.join(root, 'safety'), restoreRoots: [path.join(root, 'data')],
-    installationId: 'synthetic-keyring_journal-interop', wrapper: wrapper() };
+    installationId: 'synthetic-keyring_journal-interop', wrapper: wrapper(counts) };
   const holder = { keyring: null }; const keyrings = []; const journals = []; const issued = [];
   t.after(async () => {
     for (const journal of journals) await journal.close().catch(() => {});
@@ -49,7 +50,7 @@ async function fixture(t) {
       currentKeyId: purpose => holder.keyring.currentKeyId(purpose),
       async getMacKey(id, purpose) {
         const ownedCopy = await holder.keyring.getMacKey(id, purpose);
-        issued.push(ownedCopy); return ownedCopy;
+        issued.push(ownedCopy); await f.afterKey?.(); return ownedCopy;
       },
     },
     clock: () => Date.parse('2026-10-03T12:00:00Z'),
@@ -57,7 +58,7 @@ async function fixture(t) {
     verifySettlement: async settlement => ({ ...settlement, verified: true }),
     verifyActivation: async () => true,
   };
-  const f = { options, journalOptions, issued, holder,
+  const f = { options, journalOptions, issued, holder, counts,
     log: path.join(options.safetyRoot, 'ai-journal', 'events.log'),
     async initialize() { const journal = await initializeSafetyJournal(journalOptions); journals.push(journal); return journal; },
     async open() { const journal = await openSafetyJournal(journalOptions); journals.push(journal); return journal; },
@@ -126,3 +127,41 @@ test('unavailable real keyring fails journal operations closed after all previou
   assert.equal(journal.snapshot().aiOff, true); assert.equal(journal.snapshot().recoveryOnly, true);
   assertCleared(f.issued);
 });
+
+test('real keyring verifications per journal open stay constant as replayed history grows', async t => {
+  const verifications = [];
+  for (const latches of [1, 48]) {
+    const f = await fixture(t); let journal = await f.initialize();
+    for (let index = 0; index < latches; index++) await journal.latch();
+    await journal.close(); const before = f.counts.isAvailable; journal = await f.open();
+    // Every keyring verification checks wrapper availability exactly once.
+    verifications.push(f.counts.isAvailable - before);
+    assert.equal(journal.snapshot().sequence, latches + 2); await journal.close(); assertCleared(f.issued);
+  }
+  assert.deepEqual(verifications, [8, 8]);
+});
+
+for (const change of ['wrapped keyring file', 'owner lock']) {
+  test(`real keyring ${change} change during replay fails the open closed before restart writes`, async t => {
+    const f = await fixture(t); const journal = await f.initialize();
+    for (let index = 0; index < 8; index++) await journal.latch();
+    await journal.close(); const log = await fs.readFile(f.log);
+    const latch = await fs.readFile(path.join(f.options.safetyRoot, 'ai-off.json'));
+    const directory = path.join(f.options.safetyRoot, 'purpose-keyring'); let issued = 0;
+    f.afterKey = async () => {
+      // Copy 1 authenticates the latch; copy 2 is replay's first verified key use.
+      if (++issued !== 2) return;
+      if (change === 'owner lock') {
+        const file = path.join(directory, 'owner.lock'); const bytes = await fs.readFile(file);
+        await fs.unlink(file); await fs.writeFile(file, bytes, { mode: 0o600 });
+      } else {
+        const time = new Date(Date.now() + 5000); await fs.utimes(path.join(directory, 'purpose-keyring.wrapped'), time, time);
+      }
+    };
+    await assert.rejects(f.open(), error => error.code === 'KEY_UNAVAILABLE' && error.aiOff && error.recoveryOnly);
+    assert.equal(issued, 2); assert.deepEqual(await fs.readFile(f.log), log);
+    assert.deepEqual(await fs.readFile(path.join(f.options.safetyRoot, 'ai-off.json')), latch);
+    await assert.rejects(f.holder.keyring.currentKeyId('safety'), { code: 'PURPOSE_KEYRING_CLOSED' });
+    assertCleared(f.issued);
+  });
+}

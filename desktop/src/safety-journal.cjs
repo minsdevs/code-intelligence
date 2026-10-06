@@ -210,29 +210,34 @@ class Journal {
     if (!Number.isSafeInteger(now) || now < 0 || now > MAX_TIME) fail('CLOCK_INVALID');
     return now;
   }
-  async mac(keyId, value, domain) {
-    let key; let provided;
+  async macKey(keyId) {
+    let provided;
     try {
       // The trusted main adapter transfers ownership of a fresh copy, never its retained key.
       provided = await this.options.keyProvider.getMacKey(keyId, 'safety');
       if (!Buffer.isBuffer(provided) || provided.length !== 32) fail('KEY_UNAVAILABLE');
-      key = Buffer.from(provided);
+      return Buffer.from(provided);
+    } catch { fail('KEY_UNAVAILABLE'); }
+    finally { if (Buffer.isBuffer(provided)) provided.fill(0); }
+  }
+  async mac(keyId, value, domain, keys) {
+    // Only replay passes keys: its own verified copies, cleared when that replay ends.
+    const key = keys?.get(keyId) || await this.macKey(keyId);
+    try {
+      keys?.set(keyId, key);
       return crypto.createHmac('sha256', key).update(`CI-SAFETY-${domain}-1\0${this.options.installationId}\0`).update(canonical(value)).digest('hex');
     } catch { fail('KEY_UNAVAILABLE'); }
-    finally {
-      key?.fill(0);
-      if (Buffer.isBuffer(provided)) provided.fill(0);
-    }
+    finally { if (!keys) key.fill(0); }
   }
   async signed(value, domain) {
     const keyId = identifier(await this.options.keyProvider.currentKeyId('safety'));
     const body = { ...value, keyId };
     return { ...body, mac: await this.mac(keyId, body, domain) };
   }
-  async authenticate(value, domain) {
+  async authenticate(value, domain, keys) {
     const { mac, ...body } = value;
     hash(mac); identifier(value.keyId);
-    const expected = await this.mac(value.keyId, body, domain);
+    const expected = await this.mac(value.keyId, body, domain, keys);
     if (!crypto.timingSafeEqual(Buffer.from(mac, 'hex'), Buffer.from(expected, 'hex'))) fail('MAC_INVALID');
   }
   async syncDirectory(directory, prefix) {
@@ -530,6 +535,18 @@ class Journal {
     this.state.sequence = record.sequence; this.state.headHash = digest(frame); this.bytes += frame.length;
   }
   async replay() {
+    // Each key id is verified by the keyring before its first use and again after the last record,
+    // not per record. Copies never outlive this replay.
+    const keys = new Map();
+    try {
+      await this.replayRecords(keys);
+      for (const [keyId, key] of keys) {
+        const current = await this.macKey(keyId);
+        try { if (!crypto.timingSafeEqual(current, key)) fail('KEY_UNAVAILABLE'); } finally { current.fill(0); }
+      }
+    } finally { for (const key of keys.values()) key.fill(0); }
+  }
+  async replayRecords(keys) {
     let bytes;
     if (this.storage) {
       const loaded = await readStorageFile(this.storage, 'ai-journal/events.log', this.limits.logBytes);
@@ -549,7 +566,7 @@ class Journal {
       if (value.major !== MAJOR) fail('INCOMPATIBLE_MAJOR');
       if (!encoded.equals(Buffer.from(canonical(value)))) fail('RECORD_INVALID');
       if (value.sequence !== this.state.sequence + 1 || value.sequence > this.limits.records || value.previousHash !== this.state.headHash) fail('CHAIN_INVALID');
-      await this.authenticate(value, 'RECORD');
+      await this.authenticate(value, 'RECORD', keys);
       if (!this.state.initialized && value.event?.type !== 'GENESIS') fail('GENESIS_INVALID');
       this.apply(value.event, value.atMs);
       this.state.sequence = value.sequence;

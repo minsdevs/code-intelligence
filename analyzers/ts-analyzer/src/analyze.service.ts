@@ -1,12 +1,15 @@
 import { BadRequestException, Injectable } from '@nestjs/common'
 import type { AnalyzeFile, AnalyzeRequest, AnalyzeResponse } from './types'
 import { assertContentSize, assertSafeRelativePath } from './paths'
-import { extractTs } from './ts-extractor'
 import { ParserSyntaxError } from './syntax-diagnostics'
+
+// ts-morph carries the TypeScript compiler (~90 MiB resident, ~130 ms to load).
+// Load it for the first analysis request instead of at sidecar startup.
+let extractor: Promise<typeof import('./ts-extractor')> | undefined
 
 @Injectable()
 export class AnalyzeService {
-  analyze(request: AnalyzeRequest): AnalyzeResponse {
+  async analyze(request: AnalyzeRequest): Promise<AnalyzeResponse> {
     if (!request || !Array.isArray(request.files)) {
       throw new BadRequestException('files array is required')
     }
@@ -26,6 +29,7 @@ export class AnalyzeService {
       assertContentSize(file.content)
       return { path, content: file.content }
     })
+    const { extractTs } = await (extractor ??= import('./ts-extractor'))
     try {
       return extractTs(files)
     } catch (error) {
