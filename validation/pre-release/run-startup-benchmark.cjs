@@ -8,8 +8,7 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
-const { execFile, execFileSync } = require('node:child_process');
-const { promisify } = require('node:util');
+const { execFileSync } = require('node:child_process');
 const { ensureOutputParent } = require('./owned-output.cjs');
 const { prepareIsolatedRun } = require('../../desktop/src/isolated-run.cjs');
 const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.cjs');
@@ -17,8 +16,8 @@ const { launchEnvironment, bounded } = require('../../desktop/scripts/packaged-k
 const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
 const { ensureNativeParent } = require('../backup-compatibility/owned-crash.cjs');
-const { parseMemoryTable, memoryForOwner, evaluateStartupSamples } = require('./startup-metrics.cjs');
-const execute = promisify(execFile);
+const { memoryForOwner, evaluateStartupSamples } = require('./startup-metrics.cjs');
+const { readProcessTable, readOwnerMemory } = require('./process-memory.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const RUNS = 20;
 const SAMPLE_INTERVAL_MS = 100;
@@ -38,30 +37,39 @@ function argumentsFor(argv) {
   assert(typeof argv[1] === 'string' && path.isAbsolute(argv[1]) && !/[\x00-\x1f\x7f]/.test(argv[1]));
   return { app: argv[1] };
 }
-async function memoryTable() {
-  const { stdout } = await execute('/bin/ps', ['-axo', 'pid=,ppid=,rss='], {
-    timeout: 5000, maxBuffer: 2 * 1024 * 1024,
-    env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' },
-  });
-  return parseMemoryTable(stdout);
+function parsePowerSource(text) {
+  if (typeof text !== 'string' || Buffer.byteLength(text) > 8192) return 'UNKNOWN';
+  const matches = [...text.matchAll(/^Now drawing from '(AC|Battery) Power'\s*$/gm)];
+  return matches.length === 1 ? matches[0][1] === 'AC' ? 'AC' : 'BATTERY' : 'UNKNOWN';
 }
-
+function observePowerSource() {
+  try {
+    return parsePowerSource(execFileSync('/usr/bin/pmset', ['-g', 'batt'], {
+      encoding: 'utf8', timeout: 5000, maxBuffer: 8192,
+      env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' },
+    }));
+  } catch { return 'UNKNOWN'; }
+}
+function acObservedAtRunBoundaries(initial, samples) {
+  return initial === 'AC' && samples.length > 0
+    && samples.every(sample => sample?.powerAtStart === 'AC' && sample?.powerAtEnd === 'AC');
+}
 function startMemorySampler(child, fd, sequence, started, {
-  read = memoryTable, now = () => performance.now(), intervalMs = SAMPLE_INTERVAL_MS,
+  read = () => readOwnerMemory(child.pid), now = () => performance.now(), intervalMs = SAMPLE_INTERVAL_MS,
   maxCsvBytes = MAX_RESOURCE_CSV_BYTES, maxSamples = 2000,
 } = {}) {
   assert(Number.isSafeInteger(maxCsvBytes) && maxCsvBytes > 0 && maxCsvBytes <= MAX_RESOURCE_CSV_BYTES);
   assert(Number.isSafeInteger(maxSamples) && maxSamples > 0 && maxSamples <= 2000);
-  let stopped = false, timer, releaseSleep, phase = 'STARTUP', lastAt = null;
+  let stopped = false, timer, releaseSleep, phase = 'STARTUP', lastAt = null, stoppedAt;
   const observed = new Set();
   const result = { samples: 0, idleSamples: 0, peakRssKiB: 0, idlePeakRssKiB: 0,
-    firstSampleDelayMs: null, maximumGapMs: 0, maximumReadMs: 0, missingOwnerSamples: 0,
+    firstSampleDelayMs: null, maximumGapMs: 0, maximumReadMs: 0, trailingGapMs: null, missingOwnerSamples: 0,
     requestedIntervalMs: intervalMs, failure: null,
-    scope: 'Observed owner-tree RSS after SDK child capture; initial capture gap is not sampled',
+    scope: 'PID/PPID discovery then targeted owner-tree RSS; births between queries and the initial SDK capture gap are not sampled',
     resourceFileLimitBytes: maxCsvBytes, sampleLimit: maxSamples };
   const task = (async () => {
     while (!stopped) {
-      const begin = now();
+      const begin = now(), sampledPhase = phase;
       try {
         const table = await read();
         if (stopped) break;
@@ -71,7 +79,7 @@ function startMemorySampler(child, fd, sequence, started, {
           result.missingOwnerSamples++;
           throw new Error('MEMORY_SAMPLE_FAILED');
         }
-        const text = value.processes.map(row => [sequence, Math.round(at - started), phase, row.pid, row.ppid, row.rssKiB].join(',') + '\n').join('');
+        const text = value.processes.map(row => [sequence, Math.round(at - started), sampledPhase, row.pid, row.ppid, row.rssKiB].join(',') + '\n').join('');
         if (result.samples >= maxSamples || fs.fstatSync(fd).size + Buffer.byteLength(text) > maxCsvBytes) {
           result.failure = 'MEMORY_EVIDENCE_LIMIT'; break;
         }
@@ -79,7 +87,7 @@ function startMemorySampler(child, fd, sequence, started, {
         if (lastAt !== null) result.maximumGapMs = Math.max(result.maximumGapMs, at - lastAt);
         lastAt = at; result.samples++;
         result.peakRssKiB = Math.max(result.peakRssKiB, value.rssKiB);
-        if (phase === 'IDLE') {
+        if (sampledPhase === 'IDLE') {
           result.idleSamples++; result.idlePeakRssKiB = Math.max(result.idlePeakRssKiB, value.rssKiB);
         }
         for (const row of value.processes) observed.add(row.pid);
@@ -94,8 +102,12 @@ function startMemorySampler(child, fd, sequence, started, {
   return {
     idle() { phase = 'IDLE'; },
     async stop() {
+      // An unfinished final read must not hide an unobserved tail of the idle window.
+      stoppedAt ??= now();
       stopped = true; clearTimeout(timer); releaseSleep?.();
       await bounded(() => task, 6000, 'MEMORY_SAMPLE_FAILED');
+      result.trailingGapMs = lastAt === null ? null : Math.max(0, stoppedAt - lastAt);
+      if (result.trailingGapMs !== null) result.maximumGapMs = Math.max(result.maximumGapMs, result.trailingGapMs);
       return { ...result, observedPids: [...observed].sort((a, b) => a - b) };
     },
   };
@@ -104,7 +116,7 @@ function startMemorySampler(child, fd, sequence, started, {
 async function confirmObservedGone(pids) {
   const observed = new Set(pids), expires = performance.now() + 10000;
   for (;;) {
-    const remaining = (await memoryTable()).filter(row => observed.has(row.pid));
+    const remaining = (await readProcessTable()).filter(row => observed.has(row.pid));
     if (!remaining.length) return;
     if (performance.now() >= expires) throw new Error('OBSERVED_PROCESSES_REMAIN');
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -129,8 +141,10 @@ async function main(argv = process.argv.slice(2)) {
       .map(name => path.join(os.homedir(), 'Library/Application Support', name)) });
   const requireFrontend = createRequire(path.join(repo, 'frontend/package.json'));
   const { _electron } = requireFrontend('playwright'), { expect } = requireFrontend('@playwright/test');
-  const powerText = execFileSync('/usr/bin/pmset', ['-g', 'batt'], { encoding: 'utf8', timeout: 5000 });
-  const inputs = [__filename, path.join(__dirname, 'startup-metrics.cjs'),
+  const initialPower = observePowerSource();
+  const inputs = [__filename, path.join(__dirname, 'startup-metrics.cjs'), path.join(__dirname, 'process-memory.cjs'),
+    path.join(repo, 'validation/backup-compatibility/owned-crash.cjs'),
+    path.join(repo, 'desktop/src/startup-diagnostics.cjs'),
     path.join(repo, 'desktop/scripts/native-acceptance-electron.cjs'), path.join(repo, 'desktop/src/isolated-run.cjs')];
   const sources = Object.fromEntries(inputs.map(file => [path.relative(repo, file), hash(file)]));
   const report = { format: 1, status: 'RUNNING', scope: 'initialized-empty-synthetic-profile-warm-startup-and-idle',
@@ -147,7 +161,7 @@ async function main(argv = process.argv.slice(2)) {
       osVersion: execFileSync('/usr/bin/sw_vers', ['-productVersion'], { encoding: 'utf8' }).trim(),
       hardware: execFileSync('/usr/sbin/sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim(),
       logicalCpus: os.cpus().length, memoryBytes: os.totalmem(), loadAverageBefore: os.loadavg(),
-      power: powerText.includes("'AC Power'") ? 'AC' : powerText.includes("'Battery Power'") ? 'BATTERY' : 'UNKNOWN' },
+      power: initialPower, powerObservationScope: 'Series start and both boundaries of each run; not continuous monitoring' },
     warmup: null, samples: Array.from({ length: RUNS }, (_, index) => ({ sequence: index + 1, status: 'NOT_RUN',
       readyMs: null, idlePeakRssKiB: null, cleanupConfirmed: false, samplingComplete: false })) };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
@@ -160,6 +174,7 @@ async function main(argv = process.argv.slice(2)) {
       cleanupConfirmed: false, samplingComplete: false, startupPhases: [] };
     if (sequence === 0) report.warmup = sample; else report.samples[sequence - 1] = sample;
     save(); plan.assertIdentity();
+    sample.powerAtStart = observePowerSource();
     const started = performance.now(), expires = started + STARTUP_TIMEOUT_MS;
     const remaining = () => { const ms = Math.floor(expires - performance.now()); if (ms <= 0) throw new Error('STARTUP_TIMEOUT'); return ms; };
     let sdk, owner, stopObserving, sampler, memory, failure = null, lastPhase;
@@ -213,6 +228,7 @@ async function main(argv = process.argv.slice(2)) {
       }
       stopObserving?.(); sample.memory = memory ?? null;
       if (diagnostics.integrityFailure) sample.integrityFailure ??= diagnostics.integrityFailure;
+      sample.powerAtEnd = observePowerSource();
       sample.status = failure ? 'FAIL' : 'PASS'; sample.failure = failure;
       sample.totalMs = Math.round(performance.now() - started); save();
       console.log(JSON.stringify({ sequence, status: sample.status, readyMs: sample.readyMs,
@@ -226,7 +242,9 @@ async function main(argv = process.argv.slice(2)) {
     report.assessment = evaluateStartupSamples(report.samples);
     report.measurementStatus = report.samples.every(sample => sample.status === 'PASS') ? 'COMPLETE' : 'INCOMPLETE';
     report.status = report.assessment.status;
-    if (report.environment.power !== 'AC') { report.status = 'FAIL'; report.environmentGate = 'AC_POWER_NOT_CONFIRMED'; }
+    if (!acObservedAtRunBoundaries(report.environment.power, [report.warmup, ...report.samples])) {
+      report.status = 'FAIL'; report.environmentGate = 'AC_POWER_NOT_CONFIRMED';
+    } else report.environmentGate = 'AC_OBSERVED_AT_RUN_BOUNDARIES';
     for (const [name, expected] of Object.entries(sources)) assert.equal(hash(path.join(repo, name)), expected);
     assert.equal(hash(path.join(app, 'Contents/Resources/app.asar')), report.appAsarSha256);
     assert.equal(hash(manifestFile), report.manifestSha256);
@@ -238,5 +256,5 @@ async function main(argv = process.argv.slice(2)) {
   return report;
 }
 
-module.exports = { argumentsFor, startMemorySampler, confirmObservedGone, main };
+module.exports = { argumentsFor, startMemorySampler, confirmObservedGone, parsePowerSource, observePowerSource, acObservedAtRunBoundaries, main };
 if (require.main === module) main().catch(() => { console.error('STARTUP_BENCHMARK_PREFLIGHT_FAILED'); process.exitCode = 1; });

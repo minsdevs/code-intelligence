@@ -16,8 +16,8 @@ const { launchEnvironment, bounded } = require('../../desktop/scripts/packaged-k
 const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
 const { ensureNativeParent } = require('../backup-compatibility/owned-crash.cjs');
-const { parseMemoryTable, memoryForOwner } = require('./startup-metrics.cjs');
-const { startMemorySampler, confirmObservedGone } = require('./run-startup-benchmark.cjs');
+const { readOwnerMemory } = require('./process-memory.cjs');
+const { startMemorySampler, confirmObservedGone, observePowerSource, acObservedAtRunBoundaries } = require('./run-startup-benchmark.cjs');
 
 const execute = promisify(execFile);
 const RUNS = 3;
@@ -95,13 +95,6 @@ function mergeRoleSnapshot(processes, commandRows, appMetrics, ownerPid, expecte
   });
 }
 
-async function memoryTable() {
-  const { stdout } = await execute('/bin/ps', ['-axo', 'pid=,ppid=,rss='], {
-    timeout: 5000, maxBuffer: MAX_PS_BYTES, env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' },
-  });
-  return parseMemoryTable(stdout);
-}
-
 async function commandTable(pids) {
   const unique = [...new Set(pids)];
   assert(unique.length > 0 && unique.length <= 1024 && unique.every(pid => Number.isSafeInteger(pid) && pid > 0), 'ROLE_TABLE_INVALID');
@@ -132,16 +125,17 @@ async function main(argv = process.argv.slice(2)) {
     redis: path.join(runtime, 'redis/bin/redis-server'),
   };
   const sourceFiles = [__filename, path.join(__dirname, 'run-startup-benchmark.cjs'), path.join(__dirname, 'startup-metrics.cjs'),
+    path.join(__dirname, 'process-memory.cjs'), path.join(repo, 'validation/backup-compatibility/owned-crash.cjs'),
     path.join(repo, 'desktop/scripts/native-acceptance-electron.cjs'), path.join(repo, 'desktop/src/startup-diagnostics.cjs'),
     path.join(repo, 'desktop/src/isolated-run.cjs')];
   const sourceHashes = Object.fromEntries(sourceFiles.map(file => [path.relative(repo, file), hash(file)]));
-  const power = execFileSync('/usr/bin/pmset', ['-g', 'batt'], { encoding: 'utf8', timeout: 5000 });
+  const power = observePowerSource();
   const report = { format: 1, status: 'RUNNING', scope: 'diagnostic-startup-probe-only', acceptanceGate: false,
     requestedWarmRuns: RUNS, warmup: null, samples: Array.from({ length: RUNS }, (_, i) => ({ sequence: i + 1, status: 'NOT_RUN' })),
     claim: plan.claimFile, profile: plan.paths.userData, mockKeychain: true, realAccount: false, originalProfileAccessed: false,
     app, buildSequence: manifest.buildSequence, evidence,
     observedAt: new Date().toISOString(),
-    environment: { power: power.includes("'AC Power'") ? 'AC' : power.includes("'Battery Power'") ? 'BATTERY' : 'UNKNOWN' },
+    environment: { power, powerObservationScope: 'initial and each run start/end; not continuous power telemetry' },
     appAsarSha256: hash(path.join(app, 'Contents/Resources/app.asar')), manifestSha256: hash(manifestFile), sourceHashes,
     roleVocabulary: [...FIXED_ROLES].sort(), executablePathsPersisted: false };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
@@ -152,7 +146,7 @@ async function main(argv = process.argv.slice(2)) {
   async function run(sequence) {
     const sample = { sequence, status: 'RUNNING', readyMs: null, cleanupConfirmed: false, samplingComplete: false, startupPhases: [], roles: [] };
     if (sequence === 0) report.warmup = sample; else report.samples[sequence - 1] = sample;
-    save(); plan.assertIdentity();
+    save(); plan.assertIdentity(); sample.powerAtStart = observePowerSource();
     const started = performance.now(), expires = started + STARTUP_TIMEOUT_MS;
     const remaining = () => { const value = Math.floor(expires - performance.now()); if (value <= 0) throw new Error('STARTUP_TIMEOUT'); return value; };
     let sdk, owner, sampler, memory, stopObserving, failure = null, lastPhase;
@@ -181,13 +175,12 @@ async function main(argv = process.argv.slice(2)) {
       memory = await sampler.stop(); sample.idlePeakRssKiB = memory.idlePeakRssKiB;
       sample.samplingComplete = !memory.failure && memory.samples > 0 && memory.idleSamples >= 20 && memory.maximumGapMs <= 250 && memory.missingOwnerSamples === 0;
       if (!sample.samplingComplete) throw new Error('MEMORY_SAMPLING_INCOMPLETE');
-      const snapshot = memoryForOwner(await memoryTable(), owner.process().pid);
-      if (!snapshot) throw new Error('ROLE_SAMPLE_FAILED');
+      const processes = await readOwnerMemory(owner.process().pid);
       let metrics = [];
       try { metrics = await bounded(() => sdk.evaluate(({ app }) => app.getAppMetrics().map(item => ({ pid: item.pid, type: item.type }))), 5000, 'ROLE_SAMPLE_FAILED'); }
       catch { metrics = []; }
-      const commands = await commandTable(snapshot.processes.map(row => row.pid));
-      sample.roles = mergeRoleSnapshot(snapshot.processes, commands, metrics, owner.process().pid, expected);
+      const commands = await commandTable(processes.map(row => row.pid));
+      sample.roles = mergeRoleSnapshot(processes, commands, metrics, owner.process().pid, expected);
       if (owner.process().exitCode !== null || owner.process().signalCode !== null) throw new Error('STARTUP_PROCESS_EXITED');
     } catch (error) { failure = failureCode(error); }
     finally {
@@ -200,6 +193,7 @@ async function main(argv = process.argv.slice(2)) {
       stopObserving?.();
       if (diagnostics.integrityFailure) sample.integrityFailure ??= diagnostics.integrityFailure;
       if (diagnostics.startup?.state === 'FAILED') sample.startupFailure ??= diagnostics.startup;
+      sample.powerAtEnd = observePowerSource();
       sample.memory = memory ?? null; sample.status = failure ? 'FAIL' : 'PASS'; sample.failure = failure; save();
       console.log(JSON.stringify({ sequence, status: sample.status, readyMs: sample.readyMs,
         idlePeakRssKiB: sample.idlePeakRssKiB ?? null, integrityFailure: sample.integrityFailure ?? null, cleanupConfirmed: sample.cleanupConfirmed }));
@@ -210,6 +204,8 @@ async function main(argv = process.argv.slice(2)) {
   try {
     if (await run(0)) for (let sequence = 1; sequence <= RUNS; sequence++) if (!await run(sequence)) break;
     report.status = report.samples.every(sample => sample.status === 'PASS') ? 'COMPLETE_DIAGNOSTIC' : 'INCOMPLETE_DIAGNOSTIC';
+    report.environmentGate = acObservedAtRunBoundaries(power, [report.warmup, ...report.samples])
+      ? 'AC_OBSERVED_AT_RUN_BOUNDARIES' : 'AC_POWER_NOT_CONFIRMED';
     for (const [name, expectedHash] of Object.entries(sourceHashes)) assert.equal(hash(path.join(repo, name)), expectedHash);
     assert.equal(hash(path.join(app, 'Contents/Resources/app.asar')), report.appAsarSha256); assert.equal(hash(manifestFile), report.manifestSha256);
     report.sourceAndBundleUnchanged = true;

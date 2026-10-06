@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { argumentsFor, startMemorySampler } = require('../run-startup-benchmark.cjs');
+const { argumentsFor, startMemorySampler, parsePowerSource, acObservedAtRunBoundaries } = require('../run-startup-benchmark.cjs');
 
 function output(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'startup-sampler-test-')));
@@ -20,6 +20,21 @@ test('startup measurement requires its fixed twenty-run opt-in and an absolute b
   for (const argv of [[], ['--app', '/synthetic/Validation.app'], ['--app', 'relative', '--warm-startup-20'],
     ['--app', '/app\n', '--warm-startup-20'], ['--app', '/app', '--warm-startup-1'],
     ['--app', '/app', '--warm-startup-20', '--ignore-failure']]) assert.throws(() => argumentsFor(argv));
+});
+
+test('power observation rejects ambiguous/unknown values and checks every run boundary', () => {
+  assert.equal(parsePowerSource("Now drawing from 'AC Power'\n -InternalBattery-0\t80%; charging;"), 'AC');
+  assert.equal(parsePowerSource("Now drawing from 'Battery Power'\n -InternalBattery-0\t80%; discharging;"), 'BATTERY');
+  for (const value of ['', "Now drawing from 'AC Power'\nNow drawing from 'Battery Power'", 'x'.repeat(8193), null]) {
+    assert.equal(parsePowerSource(value), 'UNKNOWN');
+  }
+  const passed = { powerAtStart: 'AC', powerAtEnd: 'AC' };
+  assert.equal(acObservedAtRunBoundaries('AC', [passed, passed]), true);
+  for (const rows of [[], [null], [passed, { ...passed, powerAtEnd: 'BATTERY' }],
+    [passed, { ...passed, powerAtStart: 'UNKNOWN' }], [passed, { status: 'NOT_RUN' }]]) {
+    assert.equal(acObservedAtRunBoundaries('AC', rows), false);
+  }
+  assert.equal(acObservedAtRunBoundaries('BATTERY', [passed]), false);
 });
 
 test('sampler only sums the captured owner tree and keeps idle peaks distinct', async t => {
@@ -48,6 +63,32 @@ test('stop joins a pending read without overlapping or writing after stop', asyn
   const result = await stopped;
   assert.equal(reads, 1); assert.equal(result.samples, 0);
   assert.equal(fs.readFileSync(out.file, 'utf8'), '');
+});
+
+test('a stalled final read remains an unobserved gap and repeated stop keeps the same measurement boundary', async t => {
+  const out = output(t), pending = deferred(), entered = deferred();
+  let now = 0, reads = 0;
+  const rows = [{ pid: 10, ppid: 1, rssKiB: 20 }];
+  const sampler = startMemorySampler({ pid: 10 }, out.fd, 1, 0, {
+    intervalMs: 1, now: () => now,
+    read: () => {
+      if (++reads === 1) return Promise.resolve(rows);
+      entered.resolve();
+      return pending.promise;
+    },
+  });
+  await entered.promise;
+  now = 400;
+  const stopped = sampler.stop();
+  pending.resolve(rows);
+  const result = await stopped;
+  assert.equal(result.samples, 1);
+  assert.equal(result.trailingGapMs, 400);
+  assert.equal(result.maximumGapMs, 400);
+  assert(result.maximumGapMs > 250);
+  now = 2000;
+  assert.equal((await sampler.stop()).trailingGapMs, 400);
+  assert.equal(fs.readFileSync(out.file, 'utf8').trim().split('\n').length, 1);
 });
 
 for (const kind of ['absent', 'zero', 'exception']) test(`invalid memory observation ${kind} is retained as failure`, async t => {
