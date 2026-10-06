@@ -35,6 +35,7 @@ const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 const { writeStorageFile } = require('./windows-storage-files.cjs');
 const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
 const { RuntimeIntegrityError, integrityError, startupFailureCode } = require('./startup-diagnostics.cjs');
+const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
 const packageMetadata = require('../package.json');
 
 const children = new Map();
@@ -567,7 +568,7 @@ async function startBackend({ maintenanceId = '' } = {}) {
   const jar = binary('backend', 'code-intelligence.jar');
   const dataDir = await runtimeDirectory('data', true);
   await openProductionSources();
-  await spawnManaged('backend', java, ['-XX:MaxRAMPercentage=55',
+  await spawnManaged('backend', java, [...BACKEND_JVM_OPTIONS,
     ...(runtime.windowsBoundary ? [`-Dcodeintelligence.windows.runtimeRoot=${runtimeRoot()}`] : []),
     '-jar', jar, '--spring.profiles.active=desktop'], {
     bootstrap: backendBootstrap(),

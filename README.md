@@ -4,7 +4,7 @@
 
 Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
 
-Latest pre-deployment work: [current candidate, validation and remaining release gates](docs/audit/pre-release-continuation-2026-10-06.md).
+Latest pre-deployment work: [JVM budgets, measured startup limits and current candidate](docs/audit/startup-performance-2026-10-06.md).
 The device-origin credential refresh/CAS and revision-bound GitHub consumers are implemented;
 real-account refresh/revoke/SSO and clean-machine installation are not certified by synthetic tests.
 The current candidate is a local ad-hoc Validation build, not a public release. Use the exact
@@ -16,6 +16,14 @@ including source/note/history preservation, recovery and a further normal restar
 Each case passed six recorded checks;79 synthetic contracts passed. Full crash/
 power-loss coverage and real-user database acceptance remain separate.
 
+The latest development candidate is **XIWb8X**, with bounded backend/control JVM
+heaps. It passes36 functional checks and both six-check owner-crash cases. Its
+completed20-run series nevertheless has warm p95 **14.106s** and maximum sampled
+idle RSS **2,030,576KiB**, exceeding10s/1.5GiB. The series began on battery power.
+An earlier incomplete measurement and a separate MANIFEST startup failure remain
+recorded; subsequent successful runs do not establish that failure's root cause.
+Performance/startup stability and formal release are not approved.
+
 The [initial Docker integration follow-up](docs/audit/docker-integration-2026-10-06.md)
 removed the earlier Docker-unavailable execution blocker. The current continuation
 verifies 1,665 backend passes with12 explicit skips,12 actual-analyzer/PostgreSQL
@@ -26,7 +34,7 @@ and signed-release acceptance remain separate.
 
 The [React export-binding follow-up](docs/audit/react-route-binding-2026-10-06.md)
 adds declaration-grounded default/alias routing, conservative unresolved results,
-and same-snapshot stale-link removal. The latest candidate `j5EJLB` contains the
+and same-snapshot stale-link removal. The preceding candidate `j5EJLB` contains the
 validated package-entry guard, job-completion reconciliation and fixed-code
 shutdown diagnostics, with rebuilt Java **and TypeScript analyzer code**.
 `qUMAST`/`Imupzt` and their results remain historical. Dynamic/helper/anonymous/

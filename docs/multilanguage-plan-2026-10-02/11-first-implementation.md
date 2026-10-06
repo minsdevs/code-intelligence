@@ -22,7 +22,7 @@
 [배포 전8단계 진행표](07-delivery-release-gates.md#최신-전체-진행표--보고-기준)의
 최종 후보 판정까지 기록했으며 **정식 출시는 No-Go**다. 실제 계정·전체 crash/원장·
 독립 정확도/성능/사용성·최소 OS/서명 등의 수용 잔여를 완료로 표시하지 않는다.
-상세는 [최신 통합 후보·검증](../audit/pre-release-continuation-2026-10-06.md)을 따른다.
+상세는 [최신 JVM 상한·성능·후보 검증](../audit/startup-performance-2026-10-06.md)을 따른다.
 
 2026-10-06 [Docker 통합 후속](../audit/docker-integration-2026-10-06.md)은 이전 실행환경
 차단을 해소하고 기본 backend1639PASS·명시opt-in skip 분리, 실제 인증13/유지보수9,
@@ -42,6 +42,12 @@ SSE19·backend1665PASS/12명시skip·frontend436·타입/lint·선택desktop212�
 j5EJLB의 실제 복원 두 경계를 SIGKILL로 중단한 뒤 같은 새 프로필을 복구했다.
 소스·메모·암호화 기록 보존과 추가 정상 재시작까지 통과했고 제품 코드는 변경하지
 않았다. 이 두 경계의 통과를 전체 crash/전원손실·기존 실사용 데이터 수용으로 확대하지 않는다.
+
+최신 XIWb8X는 백엔드2GiB·제어용64MiB의 최대 Java 힙을 적용했다. 기능36개 및
+복원 중SIGKILL 두 경계 각6개가 통과했다. 두 후보의 정상 시작20회 측정에서는
+idle RSS가 감소했으나 새 p95 14.106초/최대2030576KiB로 성능 목표는 미충족이다.
+배터리 조건·초기 불완전 측정·별도 원인 미확정MANIFEST 실패도 공개하며,
+JVM 상한 보정을 출시 준비 완료로 해석하지 않는다.
 
 최신 사용자 지시에 따라 **원본 로컬 저장소 `/Users/minseokchae/Dev/code-intelligence`(CoS `/code-intelligence`)에서 기능별 브랜치를 만들어 작업한다.** Orca `main-2`와 별도 clone은 사용하지 않는다. 주요 기능의 구현·검증을 마치면 commit → push → PR → merge까지 진행하고 모든 커밋·병합 메시지에 `[skip ci]`를 붙인다. 이전의 잔여 한도 2% 원격 발행 조건은 폐기됐다. GitHub Actions와 정식 서명·공증·배포는 계속 금지하며 보호 규칙을 우회하지 않는다. 과거 `main-2` 또는 `.cos-pre-release-recovery-20261005` 경로는 당시 증거의 출처이며 현재 작업/실행 지시가 아니다. 원본 설치 앱·DB·Keychain/profile·기존 산출물과 사용자 작업을 보존하고 자동 stash/reset/clean은 하지 않는다.
 

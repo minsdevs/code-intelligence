@@ -163,6 +163,14 @@ exit0에 가려지지 않도록 진단과 검증을 보강했다. 과거 두 nat
 이 결과는1단계의 실제 main-process crash 두 경계를 보완하며, 전원손실·전체C16·
 nonzero 비용원장과 retained-source를 결합한 native crash·실사용 DB 적용은 별도다.
 
+그 다음 [JVM 상한·시작 성능 후속](../audit/startup-performance-2026-10-06.md)에서
+기존 j5EJLB와 새 XIWb8X의 초기화 후 정상 시작을 각각20회 측정했다. 기존 p95
+13.871초/관측idle최대2470048KiB, 새 p95 14.106초/2030576KiB로 두 후보 모두 목표를
+넘었다. 새 후보의 최초 불완전 측정(1FAIL/19NOT_RUN)은 별도 보존하며 두20회 시리즈는
+배터리 조건이다. 새 후보 기능36개·복구 두 경계 각6개·집중229PASS/1의도적skip을
+확인했지만, 별도의 초기MANIFEST 실패는 원인 미확정이다. 성능과 시작 안정성의
+출시 수용을 PASS로 바꾸지 않는다.
+
 **현재 수행 위치는 통합 후보를 고정하고 8단계 출시 전 최종 판정을 기록한 시점이다.
 판정은 No-Go이며, 1–7단계의 필수 출시 수용조건이 모두 완료됐다는 뜻은 아니다.**
 중단 사이 PR92의 비용원장 복구와 PR93의 인증 갱신·소비자 권한 검증이 병합되었고,
@@ -170,8 +178,8 @@ nonzero 비용원장과 retained-source를 결합한 native crash·실사용 DB 
 이전의 ‘1단계에서 진행 중’이라는 보고 위치는 이 후속 수행으로 갱신한다.
 
 최신 후보/원장과 미검증 사유는
-[후속 후보 최종 보고](../audit/pre-release-continuation-2026-10-06.md) 및
-[검증 해시 원장](../audit/pre-release-continuation-validation-2026-10-06.json)을 따른다.
+[시작 성능·현재 후보 보고](../audit/startup-performance-2026-10-06.md) 및
+[검증 해시 원장](../audit/startup-performance-2026-10-06.json)을 따른다.
 제품 A–E 구현, 개발용 앱의 기능 검증, 정식 출시 수용을 구분하며 미검증 항목을
 통과로 세거나 단계 수를 개발 완료율로 환산하지 않는다. 이후 보고에도 전체 수행
 위치, 이번 완료 단위, 남은 조건과 다음 작업을 함께 기록한다.
@@ -182,7 +190,7 @@ nonzero 비용원장과 retained-source를 결합한 native crash·실사용 DB 
 | 2 실제 GitHub 가져오기 | 소비자 권한 검증 구현·회귀 완료 / 실계정 대기 | repo·clone/import·PR metadata에 revision-bound 권한과 결과 게시 검증. 기존 실패 project1의 실제 UI 재분석은 사용자 데이터 적용 조건 충족 후 |
 | 3 인증 수명주기 | refresh/CAS 구현·기본 Docker 인증통합 보완 / 실권한 수용 미완료 | 기존 JDBC6과 별도로 실제 Spring HTTP/JPA/Redis 인증13, 유지보수HTTP9 및 기본backend suite 통과. 실제 GitHub refresh/revoke/SSO와 그 전체운영경로 수용은 별도 |
 | 4 분석·작업 신뢰 | 마지막 binding/완료 알림 수정·회귀 완료 / 독립 수용 미완료 | TS271·실제sidecar12·backend1665PASS/12명시skip, SSE19·frontend436. package-entry 추측 거부·DB 완료 알림 복구와 snapshot 보존 검증. 독립corpus·모든취소/중단/재시도 간 이벤트 경합은 별도 |
-| 5 성능·보안·사용성 | corpus23·현재 후보 제한된 보안 조회 완료 / 전체 수용 미완료 |57개fixture, timedGradle36초/955424KiB; native 대표입력890파일의 단일실행 관찰.20회전체앱p95/RSS·독립보안·사용자 과제·전체공급망은 별도 |
-| 6 새 설치·업데이트 | j5EJLB 제작·일반36개 기록검사 통과 / 실기기 설치 대기 | 최신guard/SSE/종료진단 포함,750class·30분석기파일·43desktop소스 readback.6회 COMPLETE·code0. 새기기·최소OS·정식서명/업데이트와 과거 간헐실패의 원인 확정은 미완료 |
-| 7 배포물·운영 준비 | 현재 후보 해시·문서·정적 inventory·공개 좌표276개 조회 완료 / 운영 조건 잔여 | advisory일치0·미조회jar1을 구분. 완전한 SBOM/라이선스 의무·브라우저/native 공급망·운영 App 외부 설치·지원 주체와 정책 확정 필요 |
+| 5 성능·보안·사용성 | 시작20회 측정 완료 / 실제 목표 초과·배터리 조건으로 수용 실패 | XIWb8X p95 14.106초>10초, 관측idle최대2030576KiB>1572864KiB. 처음1FAIL/19NOT_RUN 측정은 따로 보존. AC·크기별 workload·독립보안·사용자 과제·전체공급망은 별도 |
+| 6 새 설치·업데이트 | XIWb8X 제작·기능36개·복구 두 경계 통과 / 시작 안정성·실기기 수용 미완료 | JVM 역할별 힙 상한,750class·30분석기파일·44desktop소스 readback. 전체기능6회 COMPLETE/code0. 별도MANIFEST 실패 원인 미확정, 새기기·최소OS·정식서명/업데이트 미완료 |
+| 7 배포물·운영 준비 | 새 후보 해시·정적 inventory·동일 의존성 좌표 대조 완료 / 운영 조건 잔여 |276개좌표·제외jar1이 기존과 동일함을 확인. 기존advisory0건은 날짜가 있는 과거 조회이며 새 온라인scan은 아님. 전체SBOM/라이선스·공급망·운영 App/지원정책은 잔여 |
 | **8 출시 최종 판정** | **이번 후보의 No-Go 판정 기록 완료 / 출시 미승인** | 앞선 필수 gate·독립 검토·정식 서명/공증 자격과 최종 공개 승인 전 배포 금지. 미검증을 통과로 바꾸지 않음 |
