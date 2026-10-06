@@ -549,6 +549,11 @@ class EvidenceHistoryIntegrationTest {
                 .as("legacy prune removes the note-pinned snapshot")
                 .isFalse();
         assertThat(fileKept).isFalse();
+        // A surviving legacy snapshot reports unmeasured results, never recorded success.
+        var legacyCoverage = coverage.buildReport(legacy, ids.getLast());
+        assertThat(legacyCoverage.measurementStatus()).isEqualTo("LEGACY_UNMEASURED");
+        assertThat(legacyCoverage.outcomes()).isNull();
+        observed.put("legacyCoverageMeasurementStatus", legacyCoverage.measurementStatus());
         return observed;
     }
 
