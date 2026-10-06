@@ -1,0 +1,325 @@
+{
+  "format": 1,
+  "unit": "startup-acceptance-xb6kxe-2026-10-06",
+  "releaseVerdict": "NO_GO",
+  "stage": 5,
+  "branch": "codex/final-candidate-follow-up-20261006",
+  "priorUnpushedCommits": [
+    "62d7af2",
+    "517ef12",
+    "74a8476",
+    "03fdba1",
+    "2021e9a",
+    "035b334"
+  ],
+  "commits": {
+    "failureSignals": "36c8f61",
+    "parallelInventory": "3771b4f",
+    "concurrentTls": "4cdd873",
+    "readinessPolling": "1a5cfa8",
+    "lazyAnalyzerEngine": "0672cf6",
+    "hikariMinimumIdle": "f87b580",
+    "journalKeyBracketing": "d9d74cd",
+    "journalProbeCounts": "acb553c",
+    "deferredJpaReadiness": "2b1e3d7",
+    "backendSerialGc": "420bce0",
+    "helperReadinessOverlap": "cf1f0e0",
+    "stageTestFixture": "6b91c0f",
+    "originStartSkew": "ecf6344"
+  },
+  "candidate": {
+    "id": "xb6Kxe",
+    "app": ".native-product-xb6Kxe/Code Intelligence Validation.app",
+    "baseline": "tZgvV7",
+    "sourceCommit": "ecf634438d78dbefa9762689825e4d42b625b61b",
+    "sourceWorkingTree": false,
+    "buildSequence": "1791289739000",
+    "status": "PACKAGED_NOT_RELEASED",
+    "appAsarSha256": "72a719b15cadc2a8ffcb63c78a10a93dd5f3f65920f56583c816b3915cb1c472",
+    "manifestSha256": "884885c9d890db82ee87d9b22b3cc9491bd47f234c0cfaaad30651ec73500f55",
+    "compiledJarSha256": "e191c561b9701965775cfd1741f0796649fa62023749d61a29704d3e74bcc76c",
+    "candidateJarSha256": "7f0a61e414de9ad885486acd5ffb28384a936a2fb2524cccf9d52179d4aeaf26",
+    "controlJarSha256": "70b516885b3c50487cf1937022975b616c99ec176a5632ee3bf9e032946b15b0",
+    "controlProvenanceSha256": "24fc8ec1be3a7f5475b2b630e9a566c433f64f606714dffc4cf867e2ad03882e",
+    "controlMembersCompared": 1221,
+    "analyzerCompiledDigest": "5a254bba7914d32157126fdee016a724360c394607dc5070b14f4dce2e682feb",
+    "analyzerProductionDigest": "4940ff72ac96369d01c29f83721edd1840000a4c1f270eab49e270811ee6746e",
+    "capacity": {
+      "status": "READY_FOR_PROVISIONING",
+      "code": null,
+      "root": "/Users/minseokchae/Dev/code-intelligence",
+      "availableBytes": "8192552960",
+      "requiredFreeBytes": "6174015488",
+      "policy": "Conservative free-space floor; not a disk reservation or measured build size.",
+      "sourceBuildPerformed": false,
+      "nativeRuntimeVerified": false,
+      "launchAllowed": false
+    },
+    "capacityAfter": {
+      "status": "READY_FOR_PROVISIONING",
+      "code": null,
+      "root": "/Users/minseokchae/Dev/code-intelligence",
+      "availableBytes": "6403039232",
+      "requiredFreeBytes": "2147483648",
+      "policy": "Conservative free-space floor; not a disk reservation or measured build size.",
+      "sourceBuildPerformed": false,
+      "nativeRuntimeVerified": false,
+      "launchAllowed": false
+    },
+    "formalSigning": false,
+    "notarized": false,
+    "released": false
+  },
+  "supersededCandidate": {
+    "id": "mEbIBC",
+    "sourceCommit": "6b91c0f87bf2754414ad5394266cad032b6e8efe",
+    "buildSequence": "1791288508000",
+    "productResult": "FAIL post-restore POSTGRES MAIN_STARTUP_FAILED (pre-release-final/product-hsvnYr)",
+    "retained": true
+  },
+  "performance": {
+    "evidence": "startup-performance/run-3XPeCJ/result.json",
+    "assessment": {
+      "status": "PASS",
+      "requestedRuns": 20,
+      "completedRuns": 20,
+      "failedRuns": 0,
+      "unexecutedRuns": 0,
+      "p95ReadyMs": 8380,
+      "p95IdleRssKiB": 1522528,
+      "maxIdleRssKiB": 1525200,
+      "failures": []
+    },
+    "measurementStatus": "COMPLETE",
+    "environmentGate": "AC_OBSERVED_AT_RUN_BOUNDARIES",
+    "sourceAndBundleUnchanged": true,
+    "limits": {
+      "startupP95Ms": 10000,
+      "idleRssKiB": 1572864
+    },
+    "readyMs": [
+      8179,
+      7983,
+      8115,
+      7997,
+      7998,
+      7882,
+      7892,
+      8380,
+      8248,
+      8003,
+      8318,
+      8566,
+      8229,
+      8005,
+      7926,
+      7973,
+      7941,
+      8054,
+      8212,
+      8236
+    ],
+    "idlePeakRssKiB": [
+      1499824,
+      1510080,
+      1500704,
+      1492336,
+      1502464,
+      1507664,
+      1522528,
+      1517296,
+      1521184,
+      1509168,
+      1513280,
+      1508560,
+      1512768,
+      1514240,
+      1496288,
+      1501840,
+      1525200,
+      1516352,
+      1501216,
+      1497744
+    ],
+    "initialization": {
+      "readyMs": 8403,
+      "idlePeakRssKiB": 1557072,
+      "assessed": false
+    },
+    "scope": "initialized-empty-synthetic-profile-warm-startup-and-idle",
+    "coldCacheMeasured": false
+  },
+  "previousPerformance": {
+    "tZgvV7": {
+      "evidence": "startup-performance/run-oAD8MS/result.json",
+      "p95ReadyMs": 12544,
+      "maxIdleRssKiB": 1745680,
+      "status": "FAIL"
+    },
+    "SE9wxZ": {
+      "evidence": "startup-performance/run-xqAfYe/result.json",
+      "status": "FAIL",
+      "measurementStatus": "INCOMPLETE",
+      "completedRuns": 9,
+      "failedRuns": 1,
+      "unexecutedRuns": 11
+    }
+  },
+  "functional": {
+    "product": {
+      "evidence": "pre-release-final/product-ziBnjK/result.json",
+      "status": "PASS",
+      "checks": 36,
+      "omittedSuites": [],
+      "completeExits": 6
+    },
+    "ownerCrash": [
+      {
+        "point": "AFTER_SOURCE_RENAME",
+        "evidence": "electron-crash/native-SKhSk7/result.json",
+        "status": "PASS",
+        "checks": 6
+      },
+      {
+        "point": "BEFORE_COMPLETED_CLEANUP",
+        "evidence": "electron-crash/native-E9iGRo/result.json",
+        "status": "PASS",
+        "checks": 6
+      }
+    ],
+    "inventoryLoop": {
+      "evidence": "pre-release-final/integrity-Lh28xe/result.json",
+      "status": "PASS",
+      "validations": 20,
+      "failures": 0
+    }
+  },
+  "originProofReproduction": {
+    "evidence": "startup-performance/pg-origin-TY3f3F/result.json",
+    "runs": 80,
+    "mismatches": 3,
+    "acceptedForwardSkewSeconds": 2,
+    "earlierFailureCause62hLL3": "UNCONFIRMED"
+  },
+  "journalProbe": {
+    "before": "journal-replay/probe-CImDWe/result.json",
+    "after": "journal-replay/probe-EImD7H/result.json",
+    "additionalAgentRunWithTemporaryRunnerCopy": "journal-replay/probe-2fb8xY/result.json",
+    "beforeOpenMs": [
+      147.882,
+      306.361,
+      911.782
+    ],
+    "afterOpenMs": [
+      155.076,
+      151.413,
+      173.719
+    ],
+    "records": [
+      1,
+      65,
+      257
+    ],
+    "beforeGetMacKey": [
+      5,
+      69,
+      261
+    ],
+    "afterGetMacKey": [
+      6,
+      6,
+      6
+    ],
+    "scope": "single sequential observations; not whole-app"
+  },
+  "tests": {
+    "desktopFull": {
+      "tests": 3106,
+      "pass": 3064,
+      "fail": 0,
+      "skipped": 42,
+      "note": "before ecf6344"
+    },
+    "backupProductState": {
+      "tests": 124,
+      "pass": 124
+    },
+    "journalKeyringLeaseGateway": {
+      "tests": 254,
+      "pass": 254
+    },
+    "analyzer": {
+      "tests": 271,
+      "pass": 271,
+      "typecheck": "PASS"
+    },
+    "backend": {
+      "DesktopStartupSettingsIntegrationTest": "3/3",
+      "ApplicationIntegrationTest": "4/4",
+      "DesktopSecurityConfigurationTest": "4/4"
+    },
+    "validationRunners": {
+      "journalReplayProbe": "15/15",
+      "buildCandidate": "11/11",
+      "candidateCapacity": "8/8",
+      "controlSourceMembers": "14/14",
+      "proxyAddrSecurity": "3/3",
+      "nativeAcceptanceAndCloseContract": "38/38"
+    }
+  },
+  "rejected": [
+    "PostgreSQL concurrent with Redis/analyzer (breaks origin/guardian failure contracts)",
+    "fat-jar extraction and AppCDS (packaging/integrity scope)",
+    "control JVM flag tuning (<=6MiB each)",
+    "backend TieredStopAtLevel=1 (previously rejected)"
+  ],
+  "remainingGates": [
+    "real GitHub account, refresh, revoke, SSO",
+    "broader crash/power-loss and existing-user data",
+    "independent security and usability acceptance",
+    "cold-cache and workload-size performance matrix",
+    "complete SBOM, licence and provenance",
+    "clean-machine and minimum-OS install/update",
+    "Developer ID signing and notarization (explicit approval required)"
+  ],
+  "rawReferences": {
+    "pre-release-candidate/build-ID4Exo/result.json": "1c4ad16013f675eaf6fc76819d2b54570c8eaba3532f77f035047dd6f7888979",
+    "pre-release-candidate/build-d06GaR/result.json": "389b6ff22d78662abebaab95ab5dce1561dd34f769e53b317558ee6da8aa4668",
+    "pre-release-final/product-ziBnjK/result.json": "91bdc34cdb6c09a0e9a8efd7fefaf669f3d9e9e0837de55693fbfe7abb40b86f",
+    "pre-release-final/product-hsvnYr/result.json": "2ac154e43accab927a84901ad56c1c22ece2b5339337ed82d2146c4dad892dde",
+    "pre-release-final/product-l27WNZ/result.json": "a04b36b9258080245d2386d7e23c1e8900fc1c046922cb595693898762e44271",
+    "electron-crash/native-SKhSk7/result.json": "a288f238ae67bc1d6372a561265e41dd3fb62971d49cee1cbad1a24f27cfc2d7",
+    "electron-crash/native-E9iGRo/result.json": "05f26b770d10001c66647d1efdc46992c8f024de32817408de23ee00cdb0a307",
+    "pre-release-final/integrity-Lh28xe/result.json": "43b294b6e8b66fe97963b2bd233ddeaf0cbae18fd0a5bb94621379d5f4dff224",
+    "startup-performance/run-3XPeCJ/result.json": "5e83fa423ffe78fb9f33db8d9bb3879d7cdf7f05f5ea7efa6041045fd8bed1b5",
+    "startup-performance/run-xqAfYe/result.json": "658ab5cc2e654ade5d19320c62f0a6f1d3cae80a4c0f1acf34bb1cab06c11064",
+    "startup-probe/run-SYz5BB/result.json": "5c644cc7fcdc2607cddf47bbd48b7b9718c0f6f88b29bbba4ba95ec541f30b38",
+    "startup-probe/run-ZSNlsb/result.json": "71792715f396bb6bdc39e07eebbea0c36394018dd15d2c26c42c2d5a324329d4",
+    "journal-replay/probe-CImDWe/result.json": "1aca5ced67ac01a8e9f46a1ee1d0b9baf1f08e66d46f5fef1c9bcc0a3be05a9e",
+    "journal-replay/probe-2fb8xY/result.json": "352a7f7caa404a8b9c773ae2d60768a13275e972778db309208a857d6c5e81ca",
+    "journal-replay/probe-EImD7H/result.json": "a448ca25bc5a8cdd4c7355061773cfbe187a61c17ccd9e986ecea8baa45af8e0",
+    "startup-performance/pg-origin-TY3f3F/result.json": "125d51b31fca1ffa85d9883f1eb073f61a1405994070c2fce6a409345df06af6",
+    "startup-performance/micro-measurements-20261006.json": "cd9aa4f12af24bf15b16ed8f697e47c05b99657f2b1ad3b183ed16b3552d493c",
+    "final-candidate/retirement-dWdjfs/result.json": "a914e510c64dc799cb567fae3147b06432e427f2024027c8b4e863083061a473",
+    "final-candidate/retirement-tmp-Lly8t5/result.json": "d7959885826a10e96be1485732e6c5d4c6dd13b012b0df0925a3a89febd3c4e8",
+    "final-candidate/retirement-ew8man/result.json": "b1811751bf7aa1d1bf6deadb7d4514e57f7c22380c0924dac3658306c1e4001f",
+    "final-candidate/retirement-V6PGlN/result.json": "162cbcc82f6e8de53a5ea0b7c1fcfc5bc73d6636aed2ba9e4b22ad280aad520e",
+    "final-candidate/retirement-tfDZkP/result.json": "63992f1096502434d852644494f2563e2d542883e3e8e000a38f4f47782fdc79"
+  },
+  "independentReview": {
+    "scope": "035b334..HEAD read-only subagent review with focused test reruns",
+    "p1": 0,
+    "p2": 0,
+    "p3Deferred": [
+      "cached rejected analyzer engine import",
+      "errorName not a fixed vocabulary",
+      "earliest-failure test does not distinguish entries",
+      "50ms pg_isready spawnSync polling on restart paths",
+      "job pub/sub subscription delay if Redis is slower than backend Tomcat",
+      "BACKEND_HEALTH failure now includes helper readiness",
+      "pre-existing first-rejection Promise.all for helper spawns",
+      "api-docs assertion is != 200"
+    ],
+    "deferredTo": "follow-up unit with its own candidate"
+  }
+}

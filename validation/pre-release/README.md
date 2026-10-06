@@ -179,6 +179,15 @@ The final package-entry guard and job-completion/shutdown changes are included
 in j5EJLB, whose own results are recorded separately. Do not advertise analysis-only
 mode or an older candidate as full acceptance of newer source changes.
 
+Native step failures keep their fixed `code` and add `errorName` plus a fixed
+`signal` (renderer context destroyed, target closed, network, JSON, timeout or
+`null`); raw automation messages, paths and page data are still never saved.
+
+Since `cf1f0e0` the startup markers mean: `CACHE_AND_ANALYZER` covers spawning
+Redis and the analyzer, and `BACKEND_HEALTH` covers the overlapping readiness of
+Redis, the analyzer and the backend. Compare phase durations across that commit
+only with this change in mind; total ready time is unaffected by the relabelling.
+
 `run-integrity-diagnostic.cjs --app '<candidate>'` observes bounded read-only
 runtime-inventory failures inside one fresh Electron process. It never changes
 validator outcomes, runtime bytes or manifest hashes.20 validations in one process
@@ -329,3 +338,8 @@ pure replay CPU measurement or whole-app performance acceptance. It uses only
 zero-liability USER_OFF records. The fixture's owner-directory checks add harness
 overhead, and one observation per size is not a p95 benchmark. The candidate is
 unchanged, no new app is built, and existing release SLOs remain separate.
+
+Since `d9d74cd` replay verifies each key id before its first use and again after
+the last record, so the runner expects history-independent counts: six MAC-key
+fetches, eight wrapper availability checks and sixteen keyring lease CHECKs per
+open. Earlier reports retain their `N+4`/`N+6`/`2(N+6)` counts and runner hashes.

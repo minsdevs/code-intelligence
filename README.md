@@ -4,7 +4,7 @@
 
 Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
 
-Latest packaged candidate: [physical runtime metadata, standalone control JAR and current candidate](docs/audit/startup-resource-follow-up-2026-10-06.md).
+Latest packaged candidate: [startup and idle-memory acceptance on xb6Kxe](docs/audit/startup-acceptance-xb6kxe-2026-10-06.md).
 The device-origin credential refresh/CAS and revision-bound GitHub consumers are implemented;
 real-account refresh/revoke/SSO and clean-machine installation are not certified by synthetic tests.
 The current candidate is a local ad-hoc Validation build, not a public release. Use the exact
@@ -16,7 +16,19 @@ including source/note/history preservation, recovery and a further normal restar
 Each case passed six recorded checks;79 synthetic contracts passed. Full crash/
 power-loss coverage and real-user database acceptance remain separate.
 
-The latest development candidate is **tZgvV7**, built from `69c2ad8`. It uses a
+The latest development candidate is **xb6Kxe**, built from clean `ecf6344`. It
+removes measured startup work (parallel inventory content checks and TLS issuance,
+50ms readiness polling, history-independent journal key checks, deferred JPA
+bootstrap behind readiness-gated health, helper readiness overlapping backend
+startup), lowers idle memory (lazy analyzer engine, two idle PostgreSQL connections,
+serial backend collector) and fixes an origin proof that rejected about 4% of
+genuine PostgreSQL starts. It passes the full36-check product sequence, both
+six-check owner-crash cases and the twenty-run gate: p95 **8,380ms** and maximum
+sampled idle RSS **1,525,200KiB** (limits 10s/1.5GiB), with AC at every run
+boundary. This is warm, initialized-profile evidence on one Mac, not cold-cache,
+workload, clean-machine or signed-release acceptance. **Formal release remains NO_GO.**
+
+The previous development candidate was **tZgvV7**, built from `69c2ad8`. It uses a
 small standalone control JAR and native promise metadata for the physical runtime
 inventory. A controlled stat-reentry mechanism was reproduced in Electron before
 that narrow correction; old failures remain retained rather than reclassified.
@@ -28,9 +40,9 @@ all historical failures, real accounts, power loss or signed installation.
 
 The [startup phase follow-up](docs/audit/startup-phase-breakdown-2026-10-06.md)
 merged PR99, completed a fresh three-run diagnostic on unchanged tZgvV7 and added
-backend source/process/health/authorization markers. The new source passes 194
-existing regressions but is not yet packaged: observed free space was 6.11GiB,
-below the unchanged 8GiB build floor. The old candidate's native results do not
+backend source/process/health/authorization markers. The new source passed 194
+existing regressions; it was packaged later (SE9wxZ, then xb6Kxe) once space was
+recovered. The old candidate's native results do not
 validate those new markers or establish a performance improvement.
 
 The later [journal cost follow-up](docs/audit/journal-replay-performance-2026-10-06.md)
@@ -39,8 +51,8 @@ overlaps three independent POSIX metadata reads while retaining every check.
 At `85f889e`, 41 affected regressions and four new concurrency cases pass; the
 new diagnostic has 15 passing tests. The 257-record observation fell from 949 to
 784ms with identical key/lease counts, but this is one sequential observation
-per size, not whole-app acceptance. No new package exists; the 8GiB build-space
-requirement and prior full-app performance failures remain open.
+per size, not whole-app acceptance. This unit packaged nothing; xb6Kxe later
+includes it and records the whole-app result.
 
 The [initial Docker integration follow-up](docs/audit/docker-integration-2026-10-06.md)
 removed the earlier Docker-unavailable execution blocker. The current continuation
