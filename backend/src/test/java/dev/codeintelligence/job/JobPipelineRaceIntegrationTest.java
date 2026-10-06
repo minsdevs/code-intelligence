@@ -631,12 +631,12 @@ class JobPipelineRaceIntegrationTest {
         long job = api.reanalyze(p.projectId());
         gate.awaitEntered();
         try (SseReader stream = new SseReader("/api/jobs/" + job + "/events")) {
-            assertThat(stream.await(line -> line.contains("\"status\":\"RUNNING\""), Duration.ofSeconds(20)))
+            assertThat(stream.await(line -> "RUNNING".equals(jobStatusOf(line)), Duration.ofSeconds(20)))
                     .isTrue();
             publisher.dropAll(true);
             gate.release();
             assertThat(awaitTerminal(job)).isEqualTo("DONE");
-            assertThat(stream.await(line -> line.contains("\"status\":\"DONE\""), Duration.ofSeconds(5)))
+            assertThat(stream.await(line -> "DONE".equals(jobStatusOf(line)), Duration.ofSeconds(5)))
                     .as("a lost terminal message is not re-sent to an open stream")
                     .isFalse();
             assertThat(stream.closed()).isFalse();
@@ -645,12 +645,20 @@ class JobPipelineRaceIntegrationTest {
         }
         assertThat(api.job(job).get("status")).isEqualTo("DONE");
         try (SseReader late = new SseReader("/api/jobs/" + job + "/events")) {
-            assertThat(late.await(line -> line.contains("\"status\":\"DONE\""), Duration.ofSeconds(20)))
+            assertThat(late.await(line -> "DONE".equals(jobStatusOf(line)), Duration.ofSeconds(20)))
                     .isTrue();
             Awaitility.await().atMost(Duration.ofSeconds(20)).until(late::closed);
         }
         assertThat(currentSnapshot(p.projectId())).isEqualTo(snapshotOf(job));
         assertThat(activeJobs(p.projectId())).isZero();
+    }
+
+    /** The job-level status of an SSE data line (the first status field precedes the steps). */
+    private static String jobStatusOf(String line) {
+        if (!line.startsWith("data:")) return null;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\\\?\"status\\\\?\":\\\\?\"([A-Z]+)")
+                .matcher(line);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     /** Minimal SSE line reader over the real HTTP endpoint with the test session. */
