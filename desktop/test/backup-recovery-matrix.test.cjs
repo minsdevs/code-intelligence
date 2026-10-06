@@ -194,7 +194,7 @@ test('crafted journal faults change only the intended bytes and keep every origi
   assert.deepEqual(major.subarray(0, bytes.length), bytes); assert.equal(frames.length, 3);
   assert.equal(frames[2].value.major, 2); assert.equal(frames[2].value.sequence, frames[1].value.sequence + 1);
   assert.equal(frames[2].value.previousHash, crypto.createHash('sha256').update(frames[1].bytes).digest('hex'));
-  assert.deepEqual(FAULTS, ['torn-tail', 'corrupt-mac', 'incompatible-major', 'latch-major', 'missing']);
+  assert.deepEqual(FAULTS, ['torn-tail', 'corrupt-mac', 'incompatible-major', 'latch-major', 'missing', 'format2-archive', 'container-v2']);
   assert.throws(() => faultedJournal('missing', bytes));
 });
 

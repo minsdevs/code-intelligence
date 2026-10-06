@@ -29,7 +29,9 @@ const SETTLED_MICRO_USD = '210'; // ceil((1000 * 150000 + 100 * 600000) / 1e6) f
 
 // Crafted B-area faults applied to the synthetic profile while the app is stopped. Each models
 // a damaged or newer-major journal that the packaged binary must refuse without repairing it.
-const FAULTS = Object.freeze(['torn-tail', 'corrupt-mac', 'incompatible-major', 'latch-major', 'missing']);
+// The last two are old-archive selections through the real IPC/picker path rather than B faults.
+const FAULTS = Object.freeze(['torn-tail', 'corrupt-mac', 'incompatible-major', 'latch-major', 'missing',
+  'format2-archive', 'container-v2']);
 
 function argumentsFor(argv) {
   assert(Array.isArray(argv) && (argv.length === 4 || argv.length === 5));
@@ -618,7 +620,46 @@ async function main(argv) {
     }
     return observed;
   }
+  async function runArchiveRefusal(fault) {
+    deadline = createDeadline();
+    const result = { fault, status: 'RUNNING', startedAt: new Date().toISOString() }; report.results.push(result); save();
+    const stable = permanentState(), records = recordPrefix(), journal = journalPrefix(), dirs = recoveryDirectories();
+    let file;
+    if (fault === 'format2-archive') {
+      // A legacy format-2 directory cannot be chosen in the .cibackup file picker; model a user
+      // renaming its manifest so the current reader itself must refuse the old format.
+      const legacy = path.join(output, 'legacy-format2'); fs.mkdirSync(legacy, { mode: 0o700 });
+      const manifest = Buffer.from(JSON.stringify({ format: 2, installationId: 'synthetic-legacy-installation',
+        createdAt: new Date().toISOString(), files: { 'database.dump': sha('synthetic legacy dump') } }));
+      fs.writeFileSync(path.join(legacy, 'database.dump'), 'synthetic legacy dump', { mode: 0o600 });
+      file = path.join(legacy, 'legacy-format2.cibackup'); fs.writeFileSync(file, manifest, { flag: 'wx', mode: 0o600 });
+    } else {
+      const bytes = fs.readFileSync(backups.B1); Buffer.from('CIBAK002').copy(bytes, 0);
+      file = path.join(output, 'container-v2.cibackup'); fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
+    }
+    const selectedHash = digest(file);
+    await navigate('/settings');
+    result.outcome = await withPicker('restore', file, () => perform(() => page.evaluate(async () => {
+      try { await window.codeIntelligenceDesktop.restore(); return { resolved: true }; }
+      catch (error) {
+        const message = String(error?.message);
+        return { resolved: false, input: message.includes('Choose an intact encrypted backup from this installation.'),
+          incompatible: message.includes('This backup is not compatible with this app.'),
+          recoveryRequired: message.includes('Preserved recovery data requires inspection') };
+      }
+    }), 240000)); save();
+    assert.deepEqual(result.outcome, { resolved: false, input: true, incompatible: false, recoveryRequired: false }, 'ARCHIVE_NOT_REFUSED_AS_INPUT');
+    await healthy();
+    assert.equal(journalPrefix().bytes, journal.bytes, 'MAINTENANCE_LATCH_APPENDED'); assertPrefix(journal);
+    assert.equal(Object.keys(recordPrefix()).length, Object.keys(records).length, 'RECOVERY_RECORD_APPENDED'); verifyRecordPrefix(records);
+    assert.deepEqual(recoveryDirectories(), dirs, 'RECOVERY_SCRATCH_LEFT'); assert.deepEqual(permanentState(), stable);
+    assert.equal(digest(file), selectedHash);
+    await verifyState(current, { recordFloor: records, journalFloor: journal, stable });
+    result.status = 'PASS'; result.finishedAt = new Date().toISOString(); save();
+    check(fault + ':refused-as-input-before-maintenance');
+  }
   async function runFault(fault) {
+    if (['format2-archive', 'container-v2'].includes(fault)) return runArchiveRefusal(fault);
     deadline = createDeadline();
     const result = { fault, status: 'RUNNING', startedAt: new Date().toISOString() }; report.results.push(result); save();
     phase('stop-before-' + fault); await close();
