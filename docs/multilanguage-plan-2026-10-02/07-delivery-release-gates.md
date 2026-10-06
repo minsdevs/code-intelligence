@@ -203,7 +203,9 @@ PostgreSQL 시작의 약4%를 거부하던 원점 검사(80회 중3회 재현)�
 xb6Kxe는 전체 기능36개(omitted없음·6회 COMPLETE/code0), 강제종료 두 경계 각6개,
 Electron 내 런타임 검증20회와 20회 성능 게이트(p95 8,380ms, idle 최대1,525,200KiB,
 전 회차 AC)를 통과했다. 같은 성능 변경의 mEbIBC는 복원 후 재시작에서 FAIL로 보존하고,
-62hLL3 백업 단계 실패의 정확한 원인은 미확정으로 둔다.
+62hLL3 백업 단계 실패의 정확한 원인은 미확정으로 둔다. 독립 리뷰의 P3 수정을 반영한
+[1lvULq 후속](../audit/review-follow-up-1lvulq-2026-10-06.md)(`9211e88`)도 기능36개·강제종료 두 경계·
+런타임 검증20회·20회 게이트(p95 8,466ms, idle 최대1,519,408KiB)를 통과했다.
 
 | 단계 | 현재 상태 | 완료 근거 또는 남은 조건 |
 | --- | --- | --- |
@@ -211,7 +213,7 @@ Electron 내 런타임 검증20회와 20회 성능 게이트(p95 8,380ms, idle �
 | 2 실제 GitHub 가져오기 | 소비자 권한 검증 구현·회귀 완료 / 실계정 대기 | repo·clone/import·PR metadata에 revision-bound 권한과 결과 게시 검증. 기존 실패 project1의 실제 UI 재분석은 사용자 데이터 적용 조건 충족 후 |
 | 3 인증 수명주기 | refresh/CAS 구현·기본 Docker 인증통합 보완 / 실권한 수용 미완료 | 기존 JDBC6과 별도로 실제 Spring HTTP/JPA/Redis 인증13, 유지보수HTTP9 및 기본backend suite 통과. 실제 GitHub refresh/revoke/SSO와 그 전체운영경로 수용은 별도 |
 | 4 분석·작업 신뢰 | 마지막 binding/완료 알림 수정·회귀 완료 / 독립 수용 미완료 | TS271·실제sidecar12·backend1665PASS/12명시skip, SSE19·frontend436. package-entry 추측 거부·DB 완료 알림 복구와 snapshot 보존 검증. 독립corpus·모든취소/중단/재시도 간 이벤트 경합은 별도 |
-| 5 성능·보안·사용성 | xb6Kxe warm 시작·idle RSS 20회 게이트 PASS / 나머지 수용 미완료 | run-3XPeCJ 20/20, p95 8,380ms≤10초, idle p95 1,522,528KiB·최대1,525,200KiB≤1,572,864KiB, 전 회차 경계 AC·소스/후보 불변·운영오류/미실행0. 이전 tZgvV7 run-oAD8MS FAIL(12.544초, 1,745,680KiB)은 보존. cold cache·크기별 workload·직렬 GC의 대형 분석 영향·독립보안·사용자 과제·전체공급망 수용은 별도 |
+| 5 성능·보안·사용성 | xb6Kxe·1lvULq warm 시작·idle RSS 20회 게이트 PASS / 나머지 수용 미완료 | 1lvULq run-uvEMJ8 20/20(p95 8,466ms, 최대1,519,408KiB). xb6Kxe run-3XPeCJ 20/20, p95 8,380ms≤10초, idle p95 1,522,528KiB·최대1,525,200KiB≤1,572,864KiB, 전 회차 경계 AC·소스/후보 불변·운영오류/미실행0. 이전 tZgvV7 run-oAD8MS FAIL(12.544초, 1,745,680KiB)은 보존. cold cache·크기별 workload·직렬 GC의 대형 분석 영향·독립보안·사용자 과제·전체공급망 수용은 별도 |
 | 6 새 설치·업데이트 | 현재 소스 xb6Kxe 패키징·기능36개·복구 두 경계 통과 / 정식 설치 수용 미완료 | `ecf6344` 무변경 작업트리, Java 재컴파일·JAR readback·제어 멤버1,221개·분석기 production 의존성 검증 후 ad-hoc Validation 앱 제작. 새기기·최소OS·정식서명/업데이트와 모든 과거 시작 실패 원인 확인은 미완료 |
 | 7 배포물·운영 준비 | 현재 후보 해시·정적 inventory·제어 JAR provenance 확인 / 운영 조건 잔여 | 별도 제어 클래스6개·의존성3개·라이선스/notice9개 확인. 현재 정적 inventory는 completeSbom=false이며 shaded 멤버 전체 출처 대조·전체 라이선스 의무 완료를 뜻하지 않음. 새 온라인 advisory scan 없이 과거 결과를 보존. 전체공급망·운영 App/지원정책은 잔여 |
 | **8 출시 최종 판정** | **이번 후보의 No-Go 판정 기록 완료 / 출시 미승인** | 앞선 필수 gate·독립 검토·정식 서명/공증 자격과 최종 공개 승인 전 배포 금지. 미검증을 통과로 바꾸지 않음 |

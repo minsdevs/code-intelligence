@@ -79,8 +79,9 @@ JVM 상한 보정을 출시 준비 완료로 해석하지 않는다.
 분석 엔진은 첫 분석 때 로드한다. PostgreSQL 원점 검사는 lock 파일과 SQL 시작 시각의
 기록 시점 차이를 최대2초 허용한다(80회 중3회 오거부 재현). `ecf6344`의 xb6Kxe는 전체
 기능36개, 강제종료 두 경계, 20회 성능 게이트(p95 8,380ms, idle 최대1,525,200KiB)를
-통과했다. 현재 위치는 5단계 성능 게이트 통과 후 나머지 5~8단계 수용 조건 대기이며,
-정식 출시 판정은 No-Go다.
+통과했다. 리뷰 P3 수정을 반영한 [1lvULq](../audit/review-follow-up-1lvulq-2026-10-06.md)도 같은
+검증과 20회 게이트(p95 8,466ms, idle 최대1,519,408KiB)를 통과했다. 현재 위치는 5단계 성능 게이트
+통과 후 나머지 5~8단계 수용 조건 대기이며, 정식 출시 판정은 No-Go다.
 
 최신 사용자 지시에 따라 **원본 로컬 저장소 `/Users/minseokchae/Dev/code-intelligence`(CoS `/code-intelligence`)에서 기능별 브랜치를 만들어 작업한다.** Orca `main-2`와 별도 clone은 사용하지 않는다. 주요 기능의 구현·검증을 마치면 commit → push → PR → merge까지 진행하고 모든 커밋·병합 메시지에 `[skip ci]`를 붙인다. 이전의 잔여 한도 2% 원격 발행 조건은 폐기됐다. GitHub Actions와 정식 서명·공증·배포는 계속 금지하며 보호 규칙을 우회하지 않는다. 과거 `main-2` 또는 `.cos-pre-release-recovery-20261005` 경로는 당시 증거의 출처이며 현재 작업/실행 지시가 아니다. 원본 설치 앱·DB·Keychain/profile·기존 산출물과 사용자 작업을 보존하고 자동 stash/reset/clean은 하지 않는다.
 
