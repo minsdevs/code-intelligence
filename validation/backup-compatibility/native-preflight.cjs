@@ -15,6 +15,7 @@ const { launchEnvironment } = require('../../desktop/scripts/packaged-keychain-a
 const { createDeadline, closeOwnedApplication, observeStartup } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.cjs');
 const { bounded } = require('../../desktop/scripts/packaged-keychain-acceptance.cjs');
+const { withDropConfirmation } = require('../pre-release/drop-confirmation.cjs');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const digest = file => sha(fs.readFileSync(file));
 
@@ -131,12 +132,16 @@ async function main(argv) {
     await launch(); phase('import-owned-fixture'); await navigate('/import');
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
     await perform(() => expect(picker).toBeVisible()); const box = await perform(() => picker.boundingBox()); assert(box);
-    const cdp = await perform(() => page.context().newCDPSession(page)); let dragFailure;
-    try { for (const type of ['dragEnter', 'dragOver', 'drop']) await perform(() => cdp.send('Input.dispatchDragEvent', {
-      type, x: box.x + box.width / 2, y: box.y + box.height / 2, data: { items: [], files: [fixture], dragOperationsMask: 1 } })); }
-    catch (error) { dragFailure = error; throw error; }
-    finally { try { await bounded(() => cdp.detach(), 5000, 'DRAG_DETACH_TIMEOUT'); } catch (error) { if (!dragFailure) throw error; } }
-    await perform(() => page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click());
+    // SEC-M-02: main grants the drop only after its native confirmation; answered once and verified.
+    const { confirmation } = await withDropConfirmation(app, fixture, async () => {
+      const cdp = await perform(() => page.context().newCDPSession(page)); let dragFailure;
+      try { for (const type of ['dragEnter', 'dragOver', 'drop']) await perform(() => cdp.send('Input.dispatchDragEvent', {
+        type, x: box.x + box.width / 2, y: box.y + box.height / 2, data: { items: [], files: [fixture], dragOperationsMask: 1 } })); }
+      catch (error) { dragFailure = error; throw error; }
+      finally { try { await bounded(() => cdp.detach(), 5000, 'DRAG_DETACH_TIMEOUT'); } catch (error) { if (!dragFailure) throw error; } }
+      await perform(() => page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click());
+    });
+    (report.dropConfirmations ??= []).push(confirmation); save();
     const [created] = await perform(() => Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local' && r.request().method() === 'POST'),
       page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click()]));

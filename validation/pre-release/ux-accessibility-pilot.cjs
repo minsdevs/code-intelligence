@@ -20,6 +20,7 @@ const { readProcessTable } = require('./process-memory.cjs');
 const { descendants } = require('../backup-compatibility/owned-crash.cjs');
 const { writeFixture } = require('./ux-fixtures.cjs');
 const audit = require('./ux-page-audit.cjs');
+const { withDropConfirmation } = require('./drop-confirmation.cjs');
 
 const runFile = promisify(execFile);
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -395,11 +396,16 @@ async function main(argv = process.argv.slice(2)) {
     const target = page.getByRole('button', { name: 'Choose folder', exact: true });
     await expect(target).toBeVisible();
     const bounds = await target.boundingBox();
-    const session = await page.context().newCDPSession(page);
-    try {
-      const data = { items: [], files: [folder], dragOperationsMask: 1 };
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await session.send('Input.dispatchDragEvent', { type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
-    } finally { await session.detach(); }
+    // The preview button appears only after main granted the drop (SEC-M-02 confirmation answered once).
+    const { confirmation } = await withDropConfirmation(app, folder, async () => {
+      const session = await page.context().newCDPSession(page);
+      try {
+        const data = { items: [], files: [folder], dragOperationsMask: 1 };
+        for (const type of ['dragEnter', 'dragOver', 'drop']) await session.send('Input.dispatchDragEvent', { type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
+      } finally { await session.detach(); }
+      await expect(page.getByRole('button', { name: '가져올 파일 미리보기', exact: true })).toBeVisible();
+    });
+    (report.dropConfirmations ??= []).push(confirmation); save();
   }
   async function awaitJob(id, timeoutMs = 240000) {
     const deadline = Date.now() + timeoutMs;

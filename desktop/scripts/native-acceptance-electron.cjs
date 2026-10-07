@@ -6,6 +6,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
 const { parseStartupLine, parseShutdownLine, parseIntegrityLine } = require('../src/startup-diagnostics.cjs');
+const { expectedServices: adapterServices } = require('../../validation/pre-release/adapter-mode.cjs');
+const { withDropConfirmation } = require('../../validation/pre-release/drop-confirmation.cjs');
 
 function bounded(operation, timeoutMs, code) {
   let timer;
@@ -152,6 +154,8 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     : createRequire(path.join(desktop, 'package.json'))('electron');
   const runtimeDirectory = packaged ? path.join(report.appBundle, 'Contents', 'Resources', 'runtime')
     : path.join(desktop, 'stage', 'runtime');
+  // ADR-01: an xpc-required bundle runs no persistent ts-analyzer child; a development app is legacy-http.
+  const expectedServices = packaged ? adapterServices(report.appBundle) : ['backend', 'postgres', 'redis', 'ts-analyzer'];
   const desktopPackage = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8'));
   const packageName = desktopPackage.name;
   let validationPlan;
@@ -226,7 +230,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     const status = await step('native-runtime-status', () => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()));
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null);
     assert.equal(status.aiOff, true, 'Provider egress must remain disabled for synthetic acceptance');
-    assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
+    assert.deepEqual([...status.services].sort(), expectedServices);
     const productDataRoot = process.platform === 'win32' ? path.join(userData, 'private') : userData;
     const dataState = fs.lstatSync(productDataRoot);
     assert.ok(dataState.isDirectory() && !dataState.isSymbolicLink(), 'Real product private-data directory required');
@@ -410,7 +414,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     const status = await perform(() => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()));
     assert.equal(status.ready, true); assert.equal(status.error, null); assert.equal(status.recoveryOnly, false);
     assert.equal(status.aiOff, true); assert.equal(status.backupAvailable, true); assert.equal(status.restoreAvailable, true);
-    assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
+    assert.deepEqual([...status.services].sort(), expectedServices);
   };
   const restoreArchive = async (file, expectedSource, expectedSnapshot) => {
     const recovery = path.join(report.productDataRoot, 'recovery');
@@ -452,26 +456,32 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
     await perform(() => expect(picker).toBeVisible());
     const bounds = await perform(() => picker.boundingBox()); assert.ok(bounds);
-    const cdp = await perform(() => page.context().newCDPSession(page));
-    let dragFailure;
-    report.importStage = 'AUTHORIZE_DRAG';
-    try {
-      // Chromium supplies the real on-disk File via its native drag protocol.
-      // The unmodified UI calls preload -> folder:authorize -> the real folder policy.
-      const data = { items: [], files: [folder], dragOperationsMask: 1 };
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await perform(() => cdp.send('Input.dispatchDragEvent', {
-        type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data
-      }));
-    } catch (error) { dragFailure = error; throw error; }
-    finally {
-      try { await bounded(cdp.detach(), 5000, 'NATIVE_CDP_CLOSE_TIMEOUT'); }
-      catch (error) { if (!dragFailure) throw error; }
-    }
-    report.importStage = 'PREVIEW';
-    const [previewResponse] = await perform(() => Promise.all([
-      page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local/preview' && response.request().method() === 'POST', { timeout: deadline.limit() }),
-      page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click(),
-    ]));
+    // SEC-M-02: main grants the drop only after its native confirmation of the canonical folder.
+    // Only that dialog's answer is controlled; it must be requested exactly once for this folder.
+    const { result: previewResponse, confirmation } = await withDropConfirmation(app, folder, async () => {
+      const cdp = await perform(() => page.context().newCDPSession(page));
+      let dragFailure;
+      report.importStage = 'AUTHORIZE_DRAG';
+      try {
+        // Chromium supplies the real on-disk File via its native drag protocol.
+        // The unmodified UI calls preload -> folder:authorize -> the real folder policy.
+        const data = { items: [], files: [folder], dragOperationsMask: 1 };
+        for (const type of ['dragEnter', 'dragOver', 'drop']) await perform(() => cdp.send('Input.dispatchDragEvent', {
+          type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data
+        }));
+      } catch (error) { dragFailure = error; throw error; }
+      finally {
+        try { await bounded(cdp.detach(), 5000, 'NATIVE_CDP_CLOSE_TIMEOUT'); }
+        catch (error) { if (!dragFailure) throw error; }
+      }
+      report.importStage = 'PREVIEW';
+      const [response] = await perform(() => Promise.all([
+        page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local/preview' && response.request().method() === 'POST', { timeout: deadline.limit() }),
+        page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click(),
+      ]));
+      return response;
+    });
+    (report.dropConfirmations ??= []).push(confirmation);
     report.importHttp = { preview: previewResponse.status() };
     assert.ok(previewResponse.ok());
     const preview = await perform(() => previewResponse.json());

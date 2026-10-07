@@ -22,6 +22,7 @@ const { observePowerSource, acObservedAtRunBoundaries, confirmObservedGone } = r
 const { SIZE_CLASSES, generateWorkload, hashTree, mutateWorkload } = require('./workload-fixture.cjs');
 const { SLO, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplete } = require('./workload-metrics.cjs');
 const { expectedServices } = require('./adapter-mode.cjs');
+const { withDropConfirmation } = require('./drop-confirmation.cjs');
 
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 // `delete` is a diagnostic row (project deletion time), not an SLO row; it runs only on request.
@@ -164,7 +165,7 @@ async function main(argv = process.argv.slice(2)) {
   const requireFrontend = createRequire(path.join(repo, 'frontend/package.json'));
   const { _electron } = requireFrontend('playwright'), { expect } = requireFrontend('@playwright/test');
   const inputs = [__filename, path.join(__dirname, 'workload-metrics.cjs'), path.join(__dirname, 'workload-fixture.cjs'),
-    path.join(__dirname, 'startup-metrics.cjs'), path.join(__dirname, 'process-memory.cjs'),
+    path.join(__dirname, 'startup-metrics.cjs'), path.join(__dirname, 'process-memory.cjs'), path.join(__dirname, 'drop-confirmation.cjs'),
     path.join(__dirname, 'run-startup-benchmark.cjs'), path.join(repo, 'desktop/scripts/native-acceptance-electron.cjs'),
     path.join(repo, 'desktop/src/isolated-run.cjs')];
   const sources = Object.fromEntries(inputs.map(file => [path.relative(repo, file), hash(file)]));
@@ -215,7 +216,7 @@ async function main(argv = process.argv.slice(2)) {
     return page;
   }
 
-  function driver(page) {
+  function driver(page, sdk) {
     const api = async (route, method = 'GET', timeoutMs = 60000) => {
       const result = await bounded(() => page.evaluate(async ({ route, method }) => {
         const desktop = window.codeIntelligenceDesktop;
@@ -292,7 +293,8 @@ async function main(argv = process.argv.slice(2)) {
         await new Promise(resolve => setTimeout(resolve, intervalMs));
       }
     })();
-    return { api, timedGets, navigate, watch, markClick, marks, waitMark, pollJob };
+    const confirmDrop = (folder, action) => withDropConfirmation(sdk, folder, action);
+    return { api, timedGets, navigate, watch, markClick, marks, waitMark, pollJob, confirmDrop };
   }
 
   async function importAndPreview(page, d, folder, measurement) {
@@ -300,16 +302,21 @@ async function main(argv = process.argv.slice(2)) {
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
     await expect(picker).toBeVisible();
     const bounds = await picker.boundingBox(); assert.ok(bounds);
-    const cdp = await page.context().newCDPSession(page);
-    try {
-      // Chromium's native drag protocol supplies the real folder; the unmodified UI calls
-      // preload -> folder:authorize -> the product's folder policy.
-      const data = { items: [], files: [folder], dragOperationsMask: 1 };
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.send('Input.dispatchDragEvent', {
-        type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
-    } finally { await bounded(cdp.detach(), 5000, 'PREVIEW_FAILED').catch(() => {}); }
     const button = page.getByRole('button', { name: '가져올 파일 미리보기', exact: true });
-    await expect(button).toBeVisible();
+    // The preview button appears only after main granted the drop, so the SEC-M-02 confirmation is
+    // answered and verified before any timed mark starts.
+    const { confirmation } = await d.confirmDrop(folder, async () => {
+      const cdp = await page.context().newCDPSession(page);
+      try {
+        // Chromium's native drag protocol supplies the real folder; the unmodified UI calls
+        // preload -> folder:authorize -> the product's folder policy.
+        const data = { items: [], files: [folder], dragOperationsMask: 1 };
+        for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.send('Input.dispatchDragEvent', {
+          type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
+      } finally { await bounded(cdp.detach(), 5000, 'PREVIEW_FAILED').catch(() => {}); }
+      await expect(button).toBeVisible();
+    });
+    (report.dropConfirmations ??= []).push(confirmation);
     await d.watch('previewAck', { kind: 'button', text: '검사 중…' });
     await d.watch('previewShown', { kind: 'region', label: '확인할 가져오기 미리보기' });
     await d.markClick('previewClick');
@@ -539,7 +546,7 @@ async function main(argv = process.argv.slice(2)) {
       const page = await stage('STARTUP_FAILED', () => ready(sdk, launched.remaining));
       run.readyMs = Math.round(performance.now() - started);
       if (sequence > 0) {
-        const d = driver(page);
+        const d = driver(page, sdk);
         let analysisFailure = null;
         if (options.rows[0] === 'preview') {
           const row = run.rows.preview = { status: 'RUNNING', metrics: {}, failure: null };

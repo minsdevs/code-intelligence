@@ -28,6 +28,7 @@ const { launchEnvironment } = require('../../desktop/scripts/packaged-keychain-a
 const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
 const { confirmObservedGone } = require('./run-startup-benchmark.cjs');
+const { withDropConfirmation } = require('./drop-confirmation.cjs');
 
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const hash = file => sha(fs.readFileSync(file));
@@ -173,12 +174,15 @@ async function main(argv = process.argv.slice(2)) {
     await page.evaluate(() => { history.pushState(null, '', '/import'); dispatchEvent(new PopStateEvent('popstate')); });
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true }); await expect(picker).toBeVisible();
     const box = await picker.boundingBox(); assert.ok(box);
-    const cdp = await page.context().newCDPSession(page);
-    try {
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.send('Input.dispatchDragEvent', {
-        type, x: box.x + box.width / 2, y: box.y + box.height / 2, data: { items: [], files: [folder], dragOperationsMask: 1 } });
-    } finally { await cdp.detach().catch(() => {}); }
-    await page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click();
+    const { confirmation } = await withDropConfirmation(sdk, folder, async () => {
+      const cdp = await page.context().newCDPSession(page);
+      try {
+        for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.send('Input.dispatchDragEvent', {
+          type, x: box.x + box.width / 2, y: box.y + box.height / 2, data: { items: [], files: [folder], dragOperationsMask: 1 } });
+      } finally { await cdp.detach().catch(() => {}); }
+      await page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click();
+    });
+    check('drop-confirmation', confirmation);
     await expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible({ timeout: 60000 });
     const [created] = await Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local' && r.request().method() === 'POST', { timeout: 120000 }),

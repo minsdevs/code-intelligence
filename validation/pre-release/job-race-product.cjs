@@ -23,6 +23,7 @@ const { copySource } = require('../../desktop/scripts/native-acceptance.cjs');
 const { validateLocalEnvironment, requireExecutionContext } = require('../../desktop/scripts/native-acceptance-context.cjs');
 const { closeValidatedApplication, observeStartup } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { adapterMode, expectedServices } = require('./adapter-mode.cjs');
+const { withDropConfirmation } = require('./drop-confirmation.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -256,15 +257,19 @@ async function main(argv = process.argv.slice(2)) {
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
     await expect(picker).toBeVisible().catch(() => { throw new Error('IMPORT_PICKER_NOT_VISIBLE'); });
     const bounds = await picker.boundingBox(); assert(bounds, 'PICKER_NOT_VISIBLE');
-    const cdp = await page.context().newCDPSession(page);
-    try {
-      const data = { items: [], files: [folder], dragOperationsMask: 1 };
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.send('Input.dispatchDragEvent', {
-        type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
-    } finally { await cdp.detach().catch(() => {}); }
-    const [preview] = await Promise.all([
-      page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local/preview' && r.request().method() === 'POST', { timeout: 120000 }),
-      page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click()]);
+    const { result: preview, confirmation } = await withDropConfirmation(app, folder, async () => {
+      const cdp = await page.context().newCDPSession(page);
+      try {
+        const data = { items: [], files: [folder], dragOperationsMask: 1 };
+        for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.send('Input.dispatchDragEvent', {
+          type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
+      } finally { await cdp.detach().catch(() => {}); }
+      const [response] = await Promise.all([
+        page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local/preview' && r.request().method() === 'POST', { timeout: 120000 }),
+        page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click()]);
+      return response;
+    });
+    (report.dropConfirmations ??= []).push(confirmation);
     assert(preview.ok(), 'IMPORT_PREVIEW_FAILED');
     await expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible({ timeout: 60000 });
     const [created] = await Promise.all([

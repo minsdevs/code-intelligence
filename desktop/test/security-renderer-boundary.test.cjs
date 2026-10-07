@@ -306,6 +306,31 @@ test('a confirmed drop whose canonical folder changes before the grant is refuse
   await assert.rejects(invoke(h, 'folder:authorize', h.trusted(), h.folder), /changed/);
 });
 
+// Runner contract: validation drivers answer this confirmation through
+// validation/pre-release/drop-confirmation.cjs. Its serialized installer must accept exactly what
+// the real main.cjs asks for a dropped folder, and refuse (grant nothing) for any other folder.
+test('the validation drop-confirmation installer matches the real main-process confirmation', async () => {
+  const { DROP_CONFIRMATION, installDropConfirmation, verifyDropConfirmation } = require('../../validation/pre-release/drop-confirmation.cjs');
+  const install = (h, detail) => h.run(`(${installDropConfirmation.toString()})({ dialog }, ${JSON.stringify({ ...DROP_CONFIRMATION, detail })})`);
+  const accepted = loadMain();
+  const grant = { path: accepted.folder, grant: 'g'.repeat(64), expiresAt: '2026-10-07T10:15:00Z' };
+  accepted.respond(grant);
+  const handle = install(accepted, accepted.folder);
+  assert.deepEqual(JSON.parse(JSON.stringify(await invoke(accepted, 'folder:authorize', accepted.trusted(), accepted.folder))), grant);
+  const requests = JSON.parse(JSON.stringify(handle.restore()));
+  assert.deepEqual(verifyDropConfirmation(requests, { ...DROP_CONFIRMATION, detail: accepted.folder }),
+    { requests: 1, accepted: true, canonicalPath: accepted.folder, title: 'Analyze this folder?', defaultAnswerRefuses: true });
+  assert.equal(accepted.requests.length, 1);
+  assert.equal(accepted.dialogs.length, 0, 'the synthetic OS dialog was never reached');
+
+  const refused = loadMain();
+  const other = install(refused, '/somewhere/else');
+  assert.equal(await invoke(refused, 'folder:authorize', refused.trusted(), refused.folder), null, 'another folder is refused');
+  assert.equal(refused.requests.length, 0, 'a refused confirmation reaches no backend grant');
+  assert.throws(() => verifyDropConfirmation(JSON.parse(JSON.stringify(other.restore())), { ...DROP_CONFIRMATION, detail: '/somewhere/else' }),
+    /^Error: DROP_CONFIRMATION_MISMATCH$/);
+});
+
 // SEC-L-01: a blob: URL inherits the origin of its inner https URL, so an origin-only allowlist
 // handed the OS a non-https scheme. assertExternalUrl also requires the https: protocol.
 test('external open and window.open refuse non-https schemes that inherit an allowlisted origin', async () => {
