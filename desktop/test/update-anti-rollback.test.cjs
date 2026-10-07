@@ -93,7 +93,9 @@ test('a corrupted safety journal fails closed to recovery-only instead of trusti
 // build raises the floor, so a manually reinstalled older build cannot open the migrated profile.
 test('after a newer build has started on a profile, an older build is refused without a signed recovery manifest', darwin, async t => {
   const p = await profile(t);
-  assert.deepEqual({ ...await p.run('200') }, { highWaterBuild: '200', lastManifestSerial: 0 });
+  const started = await p.run('200');
+  assert.deepEqual([started.highWaterBuild, started.lastManifestSerial], ['200', 0]);
+  assert(Number.isSafeInteger(started.journal.sequence) && /^[0-9a-f]{64}$/.test(started.journal.headHash), 'journal pointer for the update checkpoint');
   await assert.rejects(p.start('199'), { code: 'SAFETY_RECOVERY_REQUIRED' });
   await assert.rejects(p.start('20'), { code: 'SAFETY_RECOVERY_REQUIRED' }, 'numeric, not lexical, comparison');
   // A newer build whose start fails before its backend is healthy (for example a failed schema
@@ -134,7 +136,8 @@ test('the floor has one sanctioned exception: a verified signed recovery manifes
   // Only the verifier's own frozen result is accepted; a look-alike object or an update manifest is not.
   await assert.rejects(newer.sanctionRecoveryRollback({ ...verified }), { code: 'SAFETY_RECOVERY_REQUIRED' });
   await assert.rejects(newer.recordAcceptedManifest(verified), { code: 'SAFETY_RECOVERY_REQUIRED' });
-  assert.deepEqual({ ...await newer.sanctionRecoveryRollback(verified) }, { highWaterBuild: '199', lastManifestSerial: 7 });
+  const sanctioned = await newer.sanctionRecoveryRollback(verified);
+  assert.deepEqual([sanctioned.highWaterBuild, sanctioned.lastManifestSerial], ['199', 7]);
   await assert.rejects(newer.sanctionRecoveryRollback(verified), { code: 'SAFETY_RECOVERY_REQUIRED' }, 'a serial is consumed once');
   assert.throws(() => verify(recoveryEnvelope(), newer), { code: 'UPDATE_MANIFEST_REPLAYED' });
   await newer.close();

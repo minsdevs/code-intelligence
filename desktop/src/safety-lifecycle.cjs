@@ -354,7 +354,8 @@ async function openSafetyLifecycle({ userData, safeStorage, installationId, runn
     // G-UPDATE area-B state: the anti-rollback floor and the last consumed manifest serial.
     const updateState = () => {
       const state = journal.snapshot();
-      return Object.freeze({ highWaterBuild: state.minimumVersion, lastManifestSerial: state.lastManifestSerial });
+      return Object.freeze({ highWaterBuild: state.minimumVersion, lastManifestSerial: state.lastManifestSerial,
+        journal: Object.freeze({ sequence: state.sequence, headHash: state.headHash }) });
     };
     if (createBackupRuntime) {
       const keyProvider = Object.freeze({
