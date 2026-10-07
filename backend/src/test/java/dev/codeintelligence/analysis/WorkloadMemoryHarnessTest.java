@@ -97,6 +97,7 @@ class WorkloadMemoryHarnessTest {
             }
         }
         System.out.println("[workload-memory] steps " + rows);
+        System.out.println("[workload-memory] digest " + digest(ctx.snapshotId().orElseThrow()));
         String explainLog = System.getProperty("workload.explain-log");
         if (explainLog != null) Files.writeString(Path.of(explainLog), postgres.getLogs());
         assertThat(jdbc.queryForObject(
@@ -104,6 +105,58 @@ class WorkloadMemoryHarnessTest {
                         String.class,
                         ctx.snapshotId().orElseThrow()))
                 .isEqualTo("READY");
+    }
+
+    /**
+     * Order-independent digests of the analysis output (no generated ids), so two runs of the same
+     * tree can be compared for identical results.
+     */
+    private Map<String, Object> digest(long snapshot) {
+        Map<String, String> rows = new LinkedHashMap<>();
+        rows.put("nodes", """
+                select concat_ws('|', n.node_type, n.natural_key, n.name, f.path, n.line_start, n.line_end,
+                                 n.area_type, n.metadata::text)
+                from graph_nodes n left join files f on f.id = n.file_id where n.snapshot_id = ?
+                """);
+        rows.put("edges", """
+                select concat_ws('|', s.natural_key, t.natural_key, e.edge_type, e.confidence, e.metadata::text)
+                from graph_edges e join graph_nodes s on s.id = e.source_node_id
+                join graph_nodes t on t.id = e.target_node_id where e.snapshot_id = ?
+                """);
+        rows.put("nodeEvidence", """
+                select concat_ws('|', n.natural_key, v.kind, v.file_path, v.line_start, v.line_end, v.excerpt)
+                from evidence_links l join graph_nodes n on n.id = l.subject_id
+                join evidences v on v.id = l.evidence_id
+                where l.subject_type = 'GRAPH_NODE' and n.snapshot_id = ?
+                """);
+        rows.put("files", """
+                select concat_ws('|', path, analysis_status, analysis_reason, analysis_targeted)
+                from files where snapshot_id = ?
+                """);
+        rows.put("featureLinks", """
+                select concat_ws('|', f.name, f.description, f.confidence, n.natural_key, l.role)
+                from features f left join feature_links l on l.feature_id = f.id
+                left join graph_nodes n on n.id = l.node_id where f.snapshot_id = ?
+                """);
+        rows.put("flowSteps", """
+                select concat_ws('|', f.kind, f.name, e.natural_key, s.seq, n.natural_key, s.description)
+                from flows f left join graph_nodes e on e.id = f.entry_node_id
+                left join flow_steps s on s.flow_id = f.id left join graph_nodes n on n.id = s.node_id
+                where f.snapshot_id = ?
+                """);
+        rows.put("findings", """
+                select concat_ws('|', a.area_type, a.category, a.severity, a.title, a.detail, n.natural_key)
+                from analysis_findings a left join graph_nodes n on n.id = a.node_id where a.snapshot_id = ?
+                """);
+        Map<String, Object> digests = new LinkedHashMap<>();
+        rows.forEach((name, sql) -> digests.put(
+                name,
+                jdbc.queryForObject(
+                        "select count(*) || ':' || coalesce(md5(string_agg(r, E'\\n' order by r)), '-') from (" + sql
+                                + ") d(r)",
+                        String.class,
+                        snapshot)));
+        return digests;
     }
 
     /** The desktop analyzes a synthetic single-commit repository (RetainedRunWorkspace); so does the harness. */
