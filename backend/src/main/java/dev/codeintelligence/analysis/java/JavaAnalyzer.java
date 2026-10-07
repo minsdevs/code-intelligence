@@ -180,9 +180,11 @@ public class JavaAnalyzer implements CodeAnalyzer {
                 CombinedTypeSolver.ExceptionHandlers.IGNORE_NONE, List.of(), cache(JavaAnalyzer::solvedTrees));
         for (Path root : sourceRoots) {
             if (Files.isDirectory(root)) {
+                // The solver only reads declarations from its own trees; without their token lists
+                // (call-site spans come from the analyzer's trees) each parse allocates and keeps less.
                 typeSolver.add(new JavaParserTypeSolver(
                         root,
-                        new JavaParser(new ParserConfiguration()),
+                        new JavaParser(new ParserConfiguration().setStoreTokens(false)),
                         cache((Path file, Optional<CompilationUnit> tree) -> tree.isPresent() ? 1 : 0),
                         cache((Path directory, List<CompilationUnit> trees) -> trees.size()),
                         cache(JavaAnalyzer::solvedTrees)));
