@@ -14,6 +14,7 @@ public class TsAnalyzerClient {
 
     private final TsAnalyzerProperties properties;
     private final RestClient restClient;
+    private final HttpClient httpClient;
     private final TsAnalyzerControlClient controlClient;
 
     public TsAnalyzerClient(TsAnalyzerProperties properties, RestClient.Builder restClientBuilder) {
@@ -22,16 +23,21 @@ public class TsAnalyzerClient {
         this.controlClient = properties.controlled() ? new TsAnalyzerControlClient(properties) : null;
         if (!properties.enabled() || controlClient != null) {
             this.restClient = null;
+            this.httpClient = null;
             return;
         }
-        HttpClient httpClient = transport(properties).build();
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
-        factory.setReadTimeout(Duration.ofSeconds(properties.timeoutSeconds()));
+        this.httpClient = transport(properties).build();
         this.restClient = restClientBuilder
                 .clone()
                 .baseUrl(properties.baseUrl())
-                .requestFactory(factory)
+                .requestFactory(requestFactory(timeout()))
                 .build();
+    }
+
+    private JdkClientHttpRequestFactory requestFactory(Duration readTimeout) {
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
+        factory.setReadTimeout(readTimeout);
+        return factory;
     }
 
     static HttpClient.Builder transport(TsAnalyzerProperties properties) {
@@ -53,17 +59,29 @@ public class TsAnalyzerClient {
         return properties.enabled();
     }
 
+    /** The configured bound of one analyzer request. */
+    public Duration timeout() {
+        return Duration.ofSeconds(properties.timeoutSeconds());
+    }
+
     public TsAnalyzeDtos.Response analyze(TsAnalyzeDtos.Request request) {
+        return analyze(request, timeout());
+    }
+
+    /** Sends one request bounded by {@code timeout} instead of the configured {@link #timeout()}. */
+    public TsAnalyzeDtos.Response analyze(TsAnalyzeDtos.Request request, Duration timeout) {
         if (controlClient != null) {
-            return controlClient.analyze(request);
+            return controlClient.analyze(request, timeout);
         }
         if (restClient == null) {
             return TsAnalyzeDtos.Response.EMPTY;
         }
         byte[] payload = TsRequestBudget.encode(request);
+        RestClient client = timeout.equals(timeout())
+                ? restClient
+                : restClient.mutate().requestFactory(requestFactory(timeout)).build();
         try {
-            TsAnalyzeDtos.Response body = restClient
-                    .post()
+            TsAnalyzeDtos.Response body = client.post()
                     .uri("/analyze")
                     .headers(headers -> {
                         if (properties.pinnedTls()) headers.setBearerAuth(properties.authToken());

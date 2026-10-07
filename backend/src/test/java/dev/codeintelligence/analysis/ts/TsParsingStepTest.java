@@ -75,7 +75,7 @@ class TsParsingStepTest {
         TsParsingStep step = step(files);
         List<TsAnalyzeDtos.SessionCommand> commands = new ArrayList<>();
         String id = "0123456789abcdef0123456789abcdef";
-        when(client.analyze(any())).thenAnswer(invocation -> {
+        org.mockito.stubbing.Answer<TsAnalyzeDtos.Response> analyzer = invocation -> {
             TsAnalyzeDtos.Request request = invocation.getArgument(0);
             TsAnalyzeDtos.SessionCommand command = request.session();
             assertThat(request.files()).isEmpty();
@@ -85,7 +85,10 @@ class TsParsingStepTest {
                 case "page" -> page(id, "page", command.page(), "ts:0010.ts#Second");
                 default -> reply(new TsAnalyzeDtos.SessionReply(id, command.op(), command.seq(), null, null));
             };
-        });
+        };
+        when(client.analyze(any())).thenAnswer(analyzer);
+        // The sealed project's analyze command carries its own, size-scaled timeout.
+        when(client.analyze(any(), any())).thenAnswer(analyzer);
         var persisted = ArgumentCaptor.forClass(dev.codeintelligence.analysis.core.AnalysisResult.class);
 
         step.run(new TestJobContext(1, 2, 3L, root));
@@ -172,6 +175,7 @@ class TsParsingStepTest {
         when(statement.query(any(RowMapper.class))).thenReturn(query);
         when(query.list()).thenReturn(files);
         when(client.enabled()).thenReturn(true);
+        when(client.timeout()).thenReturn(java.time.Duration.ofSeconds(30));
         when(client.analyze(any())).thenReturn(TsAnalyzeDtos.Response.EMPTY);
         return new TsParsingStep(
                 client, jdbc, persistence, new AnalysisProperties(20_000, 1_048_576, 10_000, 5, 1_000, 0.5));

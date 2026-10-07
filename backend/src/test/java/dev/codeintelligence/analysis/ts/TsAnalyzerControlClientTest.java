@@ -183,6 +183,25 @@ class TsAnalyzerControlClientTest {
         }
     }
 
+    /** The packaged path of the sealed session's analyze command, which has its own longer bound. */
+    @Test
+    void aRequestWithItsOwnTimeoutOutlastsTheConfiguredOne() throws Exception {
+        try (var main = new FakeDesktopMain(request -> {
+            try {
+                Thread.sleep(1_500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return bytes("{\"ok\":true,\"result\":{}}");
+        })) {
+            var client = main.client(1);
+            assertThatThrownBy(() -> client.analyze(new TsAnalyzeDtos.Request(List.of())))
+                    .isExactlyInstanceOf(TsAnalyzerException.class);
+            assertThat(client.analyze(new TsAnalyzeDtos.Request(List.of()), java.time.Duration.ofSeconds(3)))
+                    .isNotNull();
+        }
+    }
+
     @Test
     void anInterruptedJobThreadEndsTheExchangeAndKeepsItsInterruptStatus() throws Exception {
         try (var main = new FakeDesktopMain(request -> null)) {

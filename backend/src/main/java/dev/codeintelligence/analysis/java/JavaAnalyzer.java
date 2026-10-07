@@ -30,11 +30,16 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
+import com.github.javaparser.resolution.model.SymbolReference;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
+import com.github.javaparser.symbolsolver.cache.GuavaCache;
+import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.Weigher;
 import dev.codeintelligence.analysis.core.AnalysisContext;
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
@@ -77,6 +82,14 @@ public class JavaAnalyzer implements CodeAnalyzer {
     private static final int EXCERPT_LEN = 80;
     /** Candidate sets above this size are not published as candidates (T00 candidate contract). */
     private static final int MAX_CANDIDATES = 5;
+    /**
+     * Syntax trees each symbol solver cache may pin (unsolved names and missing files weigh
+     * nothing). The solver's default caches are unbounded: every solved type pins the tree that
+     * declares it, and a name that is not a project type (String, a library annotation) parses
+     * every file of the package it is looked up from, so one solver held a second tree of nearly
+     * every project file. Evicted trees are parsed again on their next use.
+     */
+    static final int SOLVER_CACHED_TREES = 128;
 
     @Override
     public boolean supports(FileInventory inventory) {
@@ -90,30 +103,44 @@ public class JavaAnalyzer implements CodeAnalyzer {
         Collector collector = new Collector();
         Set<Path> sourceRoots = JavaSourceRoots.find(ctx.clonePath());
         collector.projectTypes.addAll(JavaSourceRoots.projectTypes(sourceRoots));
+        // Each pass needs every file's results from the previous one, but a syntax tree with its
+        // tokens costs about 80x its source in heap. Retaining all of them exhausted the 2 GiB
+        // backend heap at 26 MB of Java (G-PERF medium), so every pass parses again, one file at
+        // a time, and only the parsed file list is kept.
         JavaParser parser = createParser(sourceRoots);
-        List<ParsedUnit> units = new ArrayList<>();
+        try {
+            analyze(ctx, parser, collector);
+        } finally {
+            releaseFacades();
+        }
+        return collector.toResult();
+    }
+
+    private void analyze(AnalysisContext ctx, JavaParser parser, Collector collector) {
+        List<InventoriedFile> parsed = new ArrayList<>();
         for (InventoriedFile file :
                 ctx.inventory().files().stream().filter(JavaAnalyzer::isJava).toList()) {
             JobCancellation.checkpoint();
+            ParsedUnit unit;
             try {
-                units.add(parseFile(ctx, parser, file));
+                unit = parseFile(ctx, parser, file);
             } catch (Exception e) {
                 log.warn("Skipping Java file {}: {}", file.path(), e.toString());
                 collector.evidences.add(parseFailure(file, e, ctx.clonePath()));
                 collector.outcomes.put(
                         file.path(), new FileAnalysisOutcome(file.path(), "FAILED", "JAVA_PARSE_FAILED"));
+                continue;
             }
-        }
-        for (ParsedUnit unit : units) {
-            JobCancellation.checkpoint();
             registerTypes(unit, collector);
+            parsed.add(file);
         }
-        for (ParsedUnit unit : units) {
+        for (InventoriedFile file : parsed) {
             JobCancellation.checkpoint();
-            visitMembers(unit, collector);
+            visitMembers(reparse(ctx, parser, file), collector);
         }
-        for (ParsedUnit unit : units) {
+        for (InventoriedFile file : parsed) {
             JobCancellation.checkpoint();
+            ParsedUnit unit = reparse(ctx, parser, file);
             visitCalls(unit, collector);
             collector.outcomes.put(
                     unit.file.path(),
@@ -122,7 +149,6 @@ public class JavaAnalyzer implements CodeAnalyzer {
                             collector.unresolvedFiles.contains(unit.file.path()) ? "PARTIAL" : "SUCCESS",
                             collector.unresolvedFiles.contains(unit.file.path()) ? "UNRESOLVED_CALLS" : "JAVA_PARSED"));
         }
-        return collector.toResult();
     }
 
     private static boolean isJava(InventoriedFile file) {
@@ -130,11 +156,17 @@ public class JavaAnalyzer implements CodeAnalyzer {
                 || file.path().toLowerCase(Locale.ROOT).endsWith(".java");
     }
 
-    private JavaParser createParser(Set<Path> sourceRoots) {
-        CombinedTypeSolver typeSolver = new CombinedTypeSolver();
+    private static JavaParser createParser(Set<Path> sourceRoots) {
+        CombinedTypeSolver typeSolver = new CombinedTypeSolver(
+                CombinedTypeSolver.ExceptionHandlers.IGNORE_NONE, List.of(), cache(JavaAnalyzer::solvedTrees));
         for (Path root : sourceRoots) {
             if (Files.isDirectory(root)) {
-                typeSolver.add(new JavaParserTypeSolver(root));
+                typeSolver.add(new JavaParserTypeSolver(
+                        root,
+                        new JavaParser(new ParserConfiguration()),
+                        cache((Path file, Optional<CompilationUnit> tree) -> tree.isPresent() ? 1 : 0),
+                        cache((Path directory, List<CompilationUnit> trees) -> trees.size()),
+                        cache(JavaAnalyzer::solvedTrees)));
             }
         }
         typeSolver.add(new ReflectionTypeSolver(true));
@@ -142,6 +174,41 @@ public class JavaAnalyzer implements CodeAnalyzer {
         configuration.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
         configuration.setSymbolResolver(new JavaSymbolSolver(typeSolver));
         return new JavaParser(configuration);
+    }
+
+    /** Like the solver's own size-limited caches (softly held values, least recently used evicted), by weight. */
+    private static <K, V> GuavaCache<K, V> cache(Weigher<K, V> trees) {
+        // One segment: Guava splits the weight budget per segment, so a large package would never fit.
+        return GuavaCache.create(CacheBuilder.newBuilder()
+                .concurrencyLevel(1)
+                .softValues()
+                .maximumWeight(SOLVER_CACHED_TREES)
+                .weigher(trees)
+                .build());
+    }
+
+    private static int solvedTrees(String name, SymbolReference<ResolvedReferenceTypeDeclaration> type) {
+        return type.isSolved() ? 1 : 0;
+    }
+
+    /**
+     * JavaParserFacade keeps a facade per type solver in a static WeakHashMap whose values reference
+     * their keys, so each analysis' solver and its caches would stay reachable after it returns.
+     * Facades hold no results of their own; another running analysis just gets a new one.
+     */
+    private static void releaseFacades() {
+        synchronized (JavaParserFacade.class) {
+            JavaParserFacade.clearInstances();
+        }
+    }
+
+    /** A later pass over a file that parsed in the first pass; the analysis workspace is read-only. */
+    private ParsedUnit reparse(AnalysisContext ctx, JavaParser parser, InventoriedFile file) {
+        try {
+            return parseFile(ctx, parser, file);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("Java source changed during analysis: " + file.path(), e);
+        }
     }
 
     private ParsedUnit parseFile(AnalysisContext ctx, JavaParser parser, InventoriedFile file) {
@@ -371,7 +438,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
         String methodKey = NaturalKeys.javaMethod(ownerFqcn, methodName, params);
         collector.put(GraphNodeDraft.of(
                 GraphNodeType.METHOD, methodKey, methodName, filePath, lineStart(callable), lineEnd(callable)));
-        collector.projectMethods.put(methodKey, methodName);
+        collector.projectMethod(methodKey, methodName);
         if (callable instanceof MethodDeclaration method
                 && !method.isStatic()
                 && method.getBody().isPresent()) {
@@ -467,10 +534,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
             collector.edge(callerKey, targetKey, GraphEdgeType.CALLS, EdgeConfidence.POSSIBLE, metadata);
             return;
         }
-        List<String> candidates = collector.projectMethods.entrySet().stream()
-                .filter(entry -> entry.getValue().equals(methodName))
-                .map(Map.Entry::getKey)
-                .toList();
+        List<String> candidates = List.copyOf(collector.projectMethodsByName.getOrDefault(methodName, Set.of()));
         if (candidates.isEmpty()) {
             return;
         }
@@ -753,7 +817,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
                     .withMetadata(metadata));
         }
         collector.edge(NaturalKeys.javaType(ownerFqcn), key, GraphEdgeType.DECLARES, EdgeConfidence.CONFIRMED);
-        collector.projectMethods.putIfAbsent(key, methodName);
+        collector.projectMethod(key, methodName);
     }
 
     private GraphNodeType nodeTypeOf(TypeDeclaration<?> type) {
@@ -839,7 +903,11 @@ public class JavaAnalyzer implements CodeAnalyzer {
         private final Map<String, FileAnalysisOutcome> outcomes = new LinkedHashMap<>();
         private final Set<String> unresolvedFiles = new java.util.HashSet<>();
         private final Set<String> projectTypes = new java.util.LinkedHashSet<>();
-        private final Map<String, String> projectMethods = new LinkedHashMap<>();
+        /**
+         * Project method keys by method name, in first-declaration order. Unresolved calls look their
+         * name up here; scanning every project method per call was quadratic (G-PERF medium).
+         */
+        private final Map<String, Set<String>> projectMethodsByName = new java.util.HashMap<>();
         /** Interfaces and abstract classes declared in project source. */
         private final Set<String> virtualTypes = new java.util.HashSet<>();
         /** Direct extends/implements targets of each project type. */
@@ -865,6 +933,12 @@ public class JavaAnalyzer implements CodeAnalyzer {
             boolean candidateSourced = candidate.filePath() != null && candidate.lineStart() != null;
             boolean existingSourced = existing.filePath() != null && existing.lineStart() != null;
             return candidateSourced && !existingSourced;
+        }
+
+        void projectMethod(String key, String name) {
+            projectMethodsByName
+                    .computeIfAbsent(name, ignored -> new java.util.LinkedHashSet<>())
+                    .add(key);
         }
 
         boolean hasType(String fqcn) {
