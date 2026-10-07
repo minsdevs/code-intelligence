@@ -124,10 +124,12 @@ async function packagedRun({ repo, app, runtime, report, save }) {
   const { launchEnvironment, bounded } = require('../../desktop/scripts/packaged-keychain-acceptance.cjs');
   const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
   const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
-  const { ensureNativeParent } = require('../backup-compatibility/owned-crash.cjs');
   const { readOwnerMemory } = require('./process-memory.cjs');
   const { confirmObservedGone } = require('./run-startup-benchmark.cjs');
-  const plan = prepareIsolatedRun({ parentDirectory: ensureNativeParent(repo), runtimeDirectory: runtime, purpose: 'automation',
+  // A fresh short parent keeps the profile's Unix socket paths within the macOS limit from any
+  // worktree depth (isolated-run socket budget), as run-integrity-diagnostic.cjs does.
+  const parent = fs.mkdtempSync('/private/tmp/cilp-');
+  const plan = prepareIsolatedRun({ parentDirectory: parent, runtimeDirectory: runtime, purpose: 'automation',
     forbiddenRoots: ['Code Intelligence', 'Code Intelligence Validation'].map(name => path.join(os.homedir(), 'Library/Application Support', name)) });
   const { _electron } = createRequire(path.join(repo, 'frontend/package.json'))('playwright');
   const { expect } = createRequire(path.join(repo, 'frontend/package.json'))('@playwright/test');
@@ -174,6 +176,9 @@ async function packagedRun({ repo, app, runtime, report, save }) {
       run.exit = { code: owner.process().exitCode, signal: owner.process().signalCode, shutdown: diagnostics.shutdown?.state ?? null };
     }
     stopObserving?.();
+    // The synthetic profile is not evidence; remove it unless a process might still use it.
+    run.profileRemoved = !owner || run.cleanupConfirmed === true;
+    if (run.profileRemoved) fs.rmSync(parent, { recursive: true, force: true });
     run.startup = diagnostics.startup ?? null;
     run.status = failure ? 'FAIL' : (run.mappingFindings.length || run.executablesOutsideBundle.length) ? 'FAIL' : 'PASS';
     run.failure = failure; save();
