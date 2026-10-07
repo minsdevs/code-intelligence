@@ -1,0 +1,18 @@
+import org.gradle.api.tasks.testing.Test
+
+// Applied after docker-integration.init.gradle by accuracy-export.cjs. It only passes the
+// T00 corpus/output locations to the opt-in exporter test; it changes no task, filter or threshold.
+def corpus = new File(System.getenv('ACCURACY_T00_CORPUS') ?: '')
+def output = new File(System.getenv('ACCURACY_T00_OUTPUT') ?: '')
+if (!corpus.isAbsolute() || !corpus.isFile() || !output.isAbsolute() || output.exists()
+        || !output.parentFile.isDirectory()) {
+    throw new GradleException('ACCURACY_EXPORT_PATHS_REQUIRED')
+}
+allprojects {
+    tasks.withType(Test).configureEach {
+        if (name == 'accuracyTest') {
+            systemProperty 'accuracy.t00.corpus', corpus.path
+            systemProperty 'accuracy.t00.output', output.path
+        }
+    }
+}
