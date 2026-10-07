@@ -1,6 +1,7 @@
 package dev.codeintelligence.analysis.ts;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,7 +29,32 @@ public final class TsAnalyzeDtos {
 
     public record FilePayload(String path, String content) {}
 
-    public record Request(List<FilePayload> files) {}
+    /** One whole-project request, or a session command (03 §6) whose files travel inside it. */
+    public record Request(
+            List<FilePayload> files,
+            @JsonInclude(JsonInclude.Include.NON_NULL) SessionCommand session) {
+        public Request(List<FilePayload> files) {
+            this(files, null);
+        }
+
+        static Request session(SessionCommand command) {
+            return new Request(List.of(), command);
+        }
+    }
+
+    /** {@code fileCount}/{@code bytes}/{@code digest} describe the manifest; {@code files} is one chunk. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record SessionCommand(
+            String op,
+            String id,
+            Integer seq,
+            Integer page,
+            List<FilePayload> files,
+            Integer fileCount,
+            Long bytes,
+            String digest) {}
+
+    public record SessionReply(String id, String op, Integer seq, Integer page, Integer pages) {}
 
     public record ComponentReference(String name, String filePath, Integer lineStart, Integer lineEnd) {}
 
@@ -148,7 +174,37 @@ public final class TsAnalyzeDtos {
             List<SemanticNodeHit> nodes,
             List<SemanticEdgeHit> edges,
             List<UnresolvedCallHit> unresolvedCalls,
-            List<FileAnalysisOutcome> fileOutcomes) {
+            List<FileAnalysisOutcome> fileOutcomes,
+            SessionReply session) {
+        public Response(
+                List<RouteHit> routes,
+                List<SymbolHit> components,
+                List<SymbolHit> hooks,
+                List<SymbolHit> stores,
+                List<ApiCallHit> apiCalls,
+                List<ImportHit> imports,
+                List<SymbolHit> symbols,
+                List<EndpointHit> endpoints,
+                List<SemanticNodeHit> nodes,
+                List<SemanticEdgeHit> edges,
+                List<UnresolvedCallHit> unresolvedCalls,
+                List<FileAnalysisOutcome> fileOutcomes) {
+            this(
+                    routes,
+                    components,
+                    hooks,
+                    stores,
+                    apiCalls,
+                    imports,
+                    symbols,
+                    endpoints,
+                    nodes,
+                    edges,
+                    unresolvedCalls,
+                    fileOutcomes,
+                    null);
+        }
+
         public Response(
                 List<RouteHit> routes,
                 List<SymbolHit> components,
@@ -193,6 +249,27 @@ public final class TsAnalyzeDtos {
             nodes = nodes == null ? List.of() : List.copyOf(nodes);
             edges = edges == null ? List.of() : List.copyOf(edges);
             unresolvedCalls = unresolvedCalls == null ? List.of() : List.copyOf(unresolvedCalls);
+        }
+
+        /** Concatenates result pages in order, which restores the analyzer's single result. */
+        static Response concat(List<Response> pages) {
+            return new Response(
+                    flatten(pages, Response::routes),
+                    flatten(pages, Response::components),
+                    flatten(pages, Response::hooks),
+                    flatten(pages, Response::stores),
+                    flatten(pages, Response::apiCalls),
+                    flatten(pages, Response::imports),
+                    flatten(pages, Response::symbols),
+                    flatten(pages, Response::endpoints),
+                    flatten(pages, Response::nodes),
+                    flatten(pages, Response::edges),
+                    flatten(pages, Response::unresolvedCalls),
+                    flatten(pages, Response::fileOutcomes));
+        }
+
+        private static <T> List<T> flatten(List<Response> pages, java.util.function.Function<Response, List<T>> part) {
+            return pages.stream().flatMap(page -> part.apply(page).stream()).toList();
         }
     }
 }
