@@ -190,7 +190,9 @@ class WorkloadMemoryHarnessTest {
         }
 
         long committed() {
-            return heapPools.stream().mapToLong(pool -> pool.getUsage().getCommitted()).sum();
+            return heapPools.stream()
+                    .mapToLong(pool -> pool.getUsage().getCommitted())
+                    .sum();
         }
 
         long fullGcs() {
