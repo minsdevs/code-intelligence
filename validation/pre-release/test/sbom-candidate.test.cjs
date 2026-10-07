@@ -15,6 +15,7 @@ const { crc32 } = require('../inventory-candidate.cjs');
 
 const sha256 = value => crypto.createHash('sha256').update(value).digest('hex');
 const RT = 'Contents/Resources/runtime/';
+const SVC = 'Contents/XPCServices/AdapterSupervisor.xpc/';
 
 // ---------------------------------------------------------------- Mach-O fixtures
 function stringCommand(cmd, value, fixed = 4) {
@@ -189,14 +190,30 @@ test('file attribution maps every known bundle path family and leaves unknown fi
     [RT + 'ts-analyzer/node_modules/typescript/lib/typescript.js']: 'analyzer-npm',
     [RT + 'ts-analyzer/dist/index.js']: 'first-party:ts-analyzer',
     [RT + 'backend/backup-migrations/V1__baseline.sql']: 'first-party:backend',
+    // ADR-01 xpc-required: the supervisor service, its worker Electron copy and the moved analyzer.
+    'Contents/MacOS/adapter-bridge': 'first-party:adapter-supervisor',
+    [SVC + 'Contents/MacOS/AdapterSupervisor']: 'first-party:adapter-supervisor',
+    [SVC + 'Contents/Info.plist']: 'first-party:packaging',
+    [SVC + 'Contents/_CodeSignature/CodeResources']: 'first-party:packaging',
+    [SVC + 'Contents/MacOS/adapter-node']: 'electron',
+    [SVC + 'Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework']: 'electron',
+    [SVC + 'Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib']: 'ffmpeg',
+    [SVC + 'Contents/Frameworks/Electron Framework.framework/Versions/A/_CodeSignature/CodeResources']: 'first-party:packaging',
+    [SVC + 'Contents/Frameworks/Squirrel.framework/Versions/A/Squirrel']: 'squirrel-mac',
+    [SVC + 'Contents/Resources/ts-analyzer/node_modules/typescript/lib/typescript.js']: 'analyzer-npm',
+    [SVC + 'Contents/Resources/ts-analyzer/dist/stdio.js']: 'first-party:ts-analyzer',
   };
   for (const [rel, expected] of Object.entries(cases)) assert.equal(sbom.attributeFile(rel), expected, rel);
   for (const rel of ['Contents/Frameworks/Unknown.framework/Unknown', RT + 'postgres/bin/pg_ctl_evil', RT + 'postgres/lib/libunknown.dylib',
-    RT + 'node/bin/node', 'Contents/Resources/extra.bin']) assert.equal(sbom.attributeFile(rel), null, rel);
+    RT + 'node/bin/node', 'Contents/Resources/extra.bin', SVC + 'Contents/Resources/test/probe', SVC + 'Contents/MacOS/other',
+    SVC + 'Contents/Frameworks/Unknown.framework/Unknown', SVC + 'Contents/Frameworks/Code Intelligence Validation Helper.app/Contents/MacOS/x'])
+    assert.equal(sbom.attributeFile(rel), null, rel);
   assert.equal(sbom.attributeBackendMember('BOOT-INF/lib/a-1.jar'), 'nested-jar');
   assert.equal(sbom.attributeBackendMember('BOOT-INF/classes/static/assets/index.js'), 'first-party:frontend');
   assert.equal(sbom.attributeBackendMember('org/springframework/boot/loader/launch/JarLauncher.class'), 'spring-boot-loader');
   assert.equal(sbom.attributeBackendMember('com/evil/Injected.class'), null);
+  for (const name of ['package.json', 'src/main.cjs', 'build/update-keys.json']) assert.equal(sbom.firstPartyAsarMember(name), true, name);
+  for (const name of ['build/other.json', 'node_modules/x/package.json', 'update-keys.json']) assert.equal(sbom.firstPartyAsarMember(name), false, name);
 });
 
 test('npm helpers resolve nested package roots and declared licence expressions', () => {

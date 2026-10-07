@@ -1,0 +1,43 @@
+{
+  "app": ".native-product-ADR01STAGE (staged, removed)",
+  "status": "SBOM_WRITTEN",
+  "counts": {
+    "bundleFiles": 5655,
+    "symlinks": 28,
+    "symlinksOutsideBundle": 0,
+    "attributedRows": 8651,
+    "unattributed": 3,
+    "components": 351,
+    "componentsByKind": {
+      "first-party": 7,
+      "electron": 1,
+      "electron-part": 9,
+      "jre": 1,
+      "native-runtime": 5,
+      "native-embedded": 8,
+      "maven": 154,
+      "npm": 127,
+      "npm-bundled": 39
+    },
+    "controlJar": {
+      "members": 1222,
+      "firstParty": 6,
+      "dependency": 1206,
+      "relocatedLicences": 9,
+      "manifest": 1,
+      "unattributed": []
+    },
+    "frontendStaticAssets": 123,
+    "frontendDeclaredComponents": 38
+  },
+  "unattributed": [
+    "Contents/XPCServices/AdapterSupervisor.xpc/Contents/Resources/test/node-probe.cjs",
+    "Contents/XPCServices/AdapterSupervisor.xpc/Contents/Resources/test/probe",
+    "Contents/Resources/app.asar!/build/update-keys.json"
+  ],
+  "completeSbom": false,
+  "electronAdapterWorkerCopy": {
+    "location": "Contents/XPCServices/AdapterSupervisor.xpc/Contents/Frameworks/Electron Framework.framework/",
+    "version": "44.4.5"
+  }
+}

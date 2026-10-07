@@ -22,6 +22,7 @@ const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.
 const { copySource } = require('../../desktop/scripts/native-acceptance.cjs');
 const { validateLocalEnvironment, requireExecutionContext } = require('../../desktop/scripts/native-acceptance-context.cjs');
 const { closeValidatedApplication, observeStartup } = require('../../desktop/scripts/native-acceptance-electron.cjs');
+const { adapterMode, expectedServices } = require('./adapter-mode.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -30,8 +31,9 @@ const ACTIVE = ['QUEUED', 'RUNNING', 'CANCELLING'];
 const CHANGED_FILE = 'frontend/src/api/jobs.ts';
 
 // Serialized into the app's Electron main process. Captures the next analyzer/backend owners
-// registered by main (Map#set on its child registry) and restores Map#set once both are seen.
-function installOwnerCapture({ app }, { userData }) {
+// registered by main (Map#set on its child registry) and restores Map#set once all are seen.
+// An xpc-required app registers no analyzer child, so only the backend is expected there.
+function installOwnerCapture({ app }, { userData, names = ['backend', 'ts-analyzer'] }) {
   if (app.getPath('userData') !== userData || app.getName() !== 'Code Intelligence Acceptance') {
     throw new Error('OWNER_CAPTURE_PROFILE_MISMATCH');
   }
@@ -40,9 +42,9 @@ function installOwnerCapture({ app }, { userData }) {
     && typeof value.stopped === 'function' && value.termination instanceof Promise
     && typeof Object.getOwnPropertyDescriptor(value, 'actualProcess')?.get === 'function';
   function capture(key, value) {
-    if ((key === 'ts-analyzer' || key === 'backend') && isOwner(value)) {
+    if (names.includes(key) && isOwner(value)) {
       captured[key] = value;
-      if (captured['ts-analyzer'] && captured.backend && Map.prototype.set === capture) Map.prototype.set = original;
+      if (names.every(name => captured[name]) && Map.prototype.set === capture) Map.prototype.set = original;
     }
     return Reflect.apply(original, this, [key, value]);
   }
@@ -65,6 +67,44 @@ function installOwnerCapture({ app }, { userData }) {
   };
 }
 
+// Serialized into the app's Electron main process (xpc-required). Main starts one adapter-bridge
+// child per analysis session; this records the ChildProcess handles main itself spawns for the
+// bundled bridge, and kill() signals the only live one through that handle. No PID is looked up.
+function installBridgeCapture(electron, { userData }) {
+  const { app } = electron;
+  if (app.getPath('userData') !== userData || app.getName() !== 'Code Intelligence Acceptance') {
+    throw new Error('OWNER_CAPTURE_PROFILE_MISMATCH');
+  }
+  const prototype = (electron.childProcess ?? process.getBuiltinModule('node:child_process')).ChildProcess.prototype;
+  const original = prototype.spawn, captured = [];
+  function spawn(options) {
+    const result = Reflect.apply(original, this, [options]);
+    if (typeof options?.file === 'string' && options.file.endsWith('/Contents/MacOS/adapter-bridge')) captured.push(this);
+    return result;
+  }
+  prototype.spawn = spawn;
+  return {
+    restore() { if (prototype.spawn === spawn) prototype.spawn = original; return captured.length; },
+    sessions() { return captured.length; },
+    async kill(waitMs = 30000) {
+      // TS_PARSING reads its payload before the analysis session starts; wait for that session.
+      let live = [];
+      for (const end = Date.now() + waitMs; ; await new Promise(resolve => setTimeout(resolve, 50))) {
+        live = captured.filter(child => child.exitCode === null && child.signalCode === null);
+        if (live.length || Date.now() >= end) break;
+      }
+      if (live.length !== 1) throw new Error(live.length ? 'BRIDGE_NOT_UNIQUE' : 'BRIDGE_NOT_RUNNING');
+      const [bridge] = live;
+      const exited = new Promise(resolve => bridge.once('exit', (code, signal) => resolve({ exitCode: code, signal })));
+      if (bridge.kill('SIGKILL') !== true) throw new Error('OWNER_SIGNAL_NOT_SENT');
+      let timer;
+      const proof = await Promise.race([exited, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('OWNER_EXIT_TIMEOUT')), 30000); })])
+        .finally(() => clearTimeout(timer));
+      return { ...proof, sessions: captured.length };
+    },
+  };
+}
+
 async function main(argv = process.argv.slice(2)) {
   assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64');
   assert(argv.length === 2 && argv[0] === '--app', 'JOB_RACE_PRODUCT_ARGUMENTS');
@@ -73,6 +113,8 @@ async function main(argv = process.argv.slice(2)) {
   assert.equal(path.dirname(path.dirname(appBundle)), repo); assert.equal(path.basename(appBundle), 'Code Intelligence Validation.app');
   assert.match(path.basename(path.dirname(appBundle)), /^\.native-product-[A-Za-z0-9]+$/);
   const runtimeDirectory = path.join(appBundle, 'Contents/Resources/runtime');
+  const isolated = adapterMode(appBundle) === 'xpc-required', services = expectedServices(appBundle).join();
+  const owners = isolated ? ['backend'] : ['backend', 'ts-analyzer'];
   const manifestFile = path.join(runtimeDirectory, 'runtime-manifest.json'), manifest = JSON.parse(fs.readFileSync(manifestFile));
   await validateRuntimeManifest(runtimeDirectory, manifest);
   execFileSync('/usr/bin/codesign', ['--verify', '--strict', '--deep', appBundle], { timeout: 30000, stdio: 'pipe' });
@@ -98,7 +140,8 @@ async function main(argv = process.argv.slice(2)) {
   const report = { format: 1, status: 'RUNNING', scope: 'G-JOB packaged-app cancel/kill/delete/restart races',
     appBundle, manifestSha256: hash(manifestFile), appAsarSha256: hash(path.join(appBundle, 'Contents/Resources/app.asar')),
     driverSha256: hash(__filename), revision, executionContext: context.evidence, validationProfile: plan.paths.userData,
-    sample: { files: copied.files, sha256: copied.sha256 }, mockKeychain: true, realAccount: false, checks: [],
+    sample: { files: copied.files, sha256: copied.sha256 }, adapterIsolation: isolated ? 'xpc-required' : 'legacy-http',
+    mockKeychain: true, realAccount: false, checks: [],
     scenarios: {}, launches: [], timingNote: 'elapsed values are single observations on a shared machine, not SLO results' };
   const resultFile = path.join(evidence, 'result.json');
   const save = () => fs.writeFileSync(resultFile, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
@@ -139,7 +182,7 @@ async function main(argv = process.argv.slice(2)) {
       let status; try { status = await runtimeStatus(); } catch { status = null; }
       if (status && !status.ready) down = true;
       if (status?.ready && status.error === null && status.recoveryOnly === false && (!sawDown || down)
-        && [...status.services].sort().join() === 'backend,postgres,redis,ts-analyzer') return { observedNotReady: down };
+        && [...status.services].sort().join() === services) return { observedNotReady: down };
       if (status?.recoveryOnly) throw new Error('RUNTIME_RECOVERY_REQUIRED');
       await sleep(250);
     }
@@ -296,34 +339,46 @@ async function main(argv = process.argv.slice(2)) {
       statusAfterCancelRequest: afterCancel.status, deleteWhileCancelling, job: jobView(raceEnd) };
     report.checks.push('delete-refused-while-running-and-cancelling', 'api-cancel-keeps-previous-result-current');
 
-    // B: SIGKILL of the analyzer child (app-owned) while TS_PARSING is in flight.
+    // B: SIGKILL of the analyzer child (app-owned) while TS_PARSING is in flight. In an xpc-required app the
+    // analysis runs in a supervisor session reached through main's adapter-bridge child: killing that bridge
+    // ends the session (the supervisor kills its worker) and the job fails ADAPTER_ISOLATION_UNAVAILABLE,
+    // without a runtime restart.
     phase('analyzer-owner-kill');
-    let capture = await app.evaluateHandle(installOwnerCapture, { userData: plan.paths.userData });
+    let capture = await app.evaluateHandle(installOwnerCapture, { userData: plan.paths.userData, names: owners });
     try {
       await page.evaluate(() => window.codeIntelligenceDesktop.restartRuntime());
       await waitReady('after-ipc-restart');
-      assert.deepEqual(await capture.evaluate(h => h.captured()), ['backend', 'ts-analyzer'], 'OWNERS_NOT_CAPTURED');
+      assert.deepEqual(await capture.evaluate(h => h.captured()), owners, 'OWNERS_NOT_CAPTURED');
     } finally { await capture.evaluate(h => h.restore()).catch(() => {}); }
-    const analyzerJob = await uiReanalysis(projectId, 'b');
-    const analyzerAt = await awaitJob(analyzerJob, job => running('TS_PARSING')(job) && (stepOf(job, 'TS_PARSING').progressPct ?? 0) >= 20, 'B_TS_PARSING');
-    const next = await app.evaluateHandle(installOwnerCapture, { userData: plan.paths.userData });
-    const analyzerKill = await capture.evaluate(h => h.kill('ts-analyzer'));
-    const analyzerRecovery = await waitReady('after-analyzer-kill', { sawDown: true });
+    const bridges = isolated ? await app.evaluateHandle(installBridgeCapture, { userData: plan.paths.userData }) : null;
+    let analyzerJob, analyzerAt, analyzerKill, analyzerRecovery, next;
+    try {
+      analyzerJob = await uiReanalysis(projectId, 'b');
+      analyzerAt = await awaitJob(analyzerJob, job => running('TS_PARSING')(job) && (stepOf(job, 'TS_PARSING').progressPct ?? 0) >= 20, 'B_TS_PARSING');
+      next = await app.evaluateHandle(installOwnerCapture, { userData: plan.paths.userData, names: owners });
+      analyzerKill = isolated ? await bridges.evaluate(h => h.kill()) : await capture.evaluate(h => h.kill('ts-analyzer'));
+      analyzerRecovery = await waitReady('after-analyzer-kill', { sawDown: !isolated });
+    } finally { await bridges?.evaluate(h => h.restore()).catch(() => {}); }
     const analyzerEnd = await awaitJob(analyzerJob, terminal, 'B_TERMINAL');
     assert.equal(analyzerEnd.status, 'FAILED', 'B_NOT_FAILED');
+    if (isolated) assert.equal(analyzerEnd.failureCode, 'ADAPTER_ISOLATION_UNAVAILABLE', 'B_FAILURE_CODE');
     await assertPrevious(projectId, baseline, 'B');
-    assert.deepEqual(await next.evaluate(h => h.captured()), ['backend', 'ts-analyzer'], 'RESTART_OWNERS_NOT_CAPTURED');
+    if (!isolated) assert.deepEqual(await next.evaluate(h => h.captured()), owners, 'RESTART_OWNERS_NOT_CAPTURED');
     report.scenarios.analyzerKill = { progressAtKill: stepOf(analyzerAt, 'TS_PARSING').progressPct, kill: analyzerKill,
-      appObservedNotReady: analyzerRecovery.observedNotReady, job: jobView(analyzerEnd) };
-    report.checks.push('analyzer-sigkill-mid-request-terminal-no-orphan-lock-previous-result-intact');
+      killed: isolated ? 'adapter-bridge' : 'ts-analyzer', appObservedNotReady: analyzerRecovery.observedNotReady, job: jobView(analyzerEnd) };
+    report.checks.push(isolated ? 'adapter-bridge-sigkill-mid-request-fails-job-with-isolation-code-runtime-stays-ready-previous-result-intact'
+      : 'analyzer-sigkill-mid-request-terminal-no-orphan-lock-previous-result-intact');
 
     // C: SIGKILL of the backend child (app-owned) mid-analysis; app's own restart + startup recovery.
     phase('backend-owner-kill');
+    if (isolated) { await next.evaluate(h => h.restore()).catch(() => {}); next = await app.evaluateHandle(installOwnerCapture,
+      { userData: plan.paths.userData, names: owners }); await page.evaluate(() => window.codeIntelligenceDesktop.restartRuntime());
+      await waitReady('before-backend-kill'); assert.deepEqual(await next.evaluate(h => h.captured()), owners, 'OWNERS_NOT_CAPTURED'); }
     capture = next;
     const backendJob = await uiReanalysis(projectId, 'c');
     const backendAt = await awaitJob(backendJob, job => job.status === 'RUNNING'
       && ['DONE'].includes(stepOf(job, 'IMPORT').status) && runningStep(job) !== null, 'C_RUNNING');
-    const after = await app.evaluateHandle(installOwnerCapture, { userData: plan.paths.userData });
+    const after = await app.evaluateHandle(installOwnerCapture, { userData: plan.paths.userData, names: owners });
     const backendKill = await capture.evaluate(h => h.kill('backend'));
     const backendRecovery = await waitReady('after-backend-kill', { sawDown: true });
     const backendEnd = await awaitJob(backendJob, terminal, 'C_TERMINAL');
@@ -379,5 +434,5 @@ async function main(argv = process.argv.slice(2)) {
   console.log(JSON.stringify({ status: report.status, evidence, phase: report.phase, checks: report.checks.length }));
   if (report.status !== 'PASS') process.exitCode = 1;
 }
-module.exports = { main, installOwnerCapture };
+module.exports = { main, installBridgeCapture, installOwnerCapture };
 if (require.main === module) main().catch(() => { console.error('JOB_RACE_PRODUCT_REFUSED'); process.exitCode = 1; });

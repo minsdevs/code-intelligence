@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const crypto = require('node:crypto');
 const { VALIDATION_AI_PROVIDER_ORIGIN, argumentsForCandidate, candidatePackagerConfig, replaceAnalyzerBuild,
-  replaceAnalyzerRuntime } = require('../build-candidate.cjs');
+  replaceAnalyzerRuntime, stageAdapterSupervisor } = require('../build-candidate.cjs');
 const { validationProviderTarget } = require('../../../desktop/src/ai-https-transport.cjs');
 const { requireValidationOnlyProviderVariant } = require('../../../desktop/scripts/desktop-build-gate.cjs');
 const sha = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -194,3 +194,73 @@ test('rollback never overwrites a target that appears after the second analyzer 
   assert.equal(fs.readFileSync(path.join(f.root, 'previous-analyzer-runtime/dist/stale.js'), 'utf8'), 'old');
   assert.equal(fs.existsSync(path.join(f.root, 'prepared-analyzer-runtime')), true);
 });
+
+test('xpc-required is an explicit, exact build option; the default stays legacy-http', () => {
+  assert.deepEqual(argumentsForCandidate(['--app', '/synthetic/app', '--build-sequence', '7', '--adapter-isolation', 'xpc-required']),
+    { app: '/synthetic/app', buildSequence: '7', adapterIsolation: 'xpc-required' });
+  assert.equal(argumentsForCandidate(['--app', '/synthetic/app', '--build-sequence', '7']).adapterIsolation, undefined);
+  for (const extra of [['--adapter-isolation', 'legacy-http'], ['--adapter-isolation', 'XPC-REQUIRED'], ['--adapter', 'xpc-required'],
+    ['--adapter-isolation'], ['--adapter-isolation', 'xpc-required', '--again']]) {
+    assert.throws(() => argumentsForCandidate(['--app', '/synthetic/app', '--build-sequence', '7', ...extra]), undefined, extra.join(' '));
+  }
+});
+
+function supervisorFixture(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-adapter-candidate-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.chmodSync(root, 0o700);
+  const desktop = path.join(root, 'desktop'), runtime = path.join(desktop, 'stage/runtime');
+  for (const file of ['ts-analyzer/dist/stdio.js', 'ts-analyzer/package.json', 'ts-analyzer/node_modules/x/index.js', 'jre/bin/java']) {
+    fs.mkdirSync(path.dirname(path.join(runtime, file)), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(runtime, file), file);
+  }
+  const files = Object.fromEntries(['ts-analyzer/dist/stdio.js', 'ts-analyzer/package.json', 'ts-analyzer/node_modules/x/index.js', 'jre/bin/java']
+    .map(file => [file, sha(path.join(runtime, file))]));
+  const calls = [];
+  const supervisor = {
+    compile(output) { calls.push(['compile', output]); fs.mkdirSync(output); return output; },
+    async assembleService(options) {
+      calls.push(['assemble', options]);
+      const bundle = path.join(options.destination, 'AdapterSupervisor.xpc');
+      fs.mkdirSync(path.join(bundle, 'Contents/Resources'), { recursive: true });
+      fs.cpSync(options.analyzer, path.join(bundle, 'Contents/Resources/ts-analyzer'), { recursive: true });
+      return bundle;
+    },
+  };
+  const plan = { workRoot: root, assertIdentity() { assert.equal(fs.realpathSync(root), root); } };
+  return { root, desktop, runtime, manifest: { format: 1, files }, calls, supervisor, plan };
+}
+
+test('the xpc-required stage moves the analyzer into the supervisor service and out of the runtime manifest', async t => {
+  const f = supervisorFixture(t);
+  const result = await stageAdapterSupervisor({ plan: f.plan, runtime: f.runtime, desktop: f.desktop, manifest: f.manifest,
+    appId: 'dev.codeintelligence.desktop.validation', version: '0.1.0', supervisor: f.supervisor });
+  const destination = path.join(f.desktop, 'stage/adapter-supervisor');
+  assert.deepEqual(f.calls.map(([name]) => name), ['compile', 'assemble']);
+  assert.deepEqual(f.calls[1][1], { destination, binaries: path.join(destination, 'bin'), analyzer: path.join(f.runtime, 'ts-analyzer'),
+    appId: 'dev.codeintelligence.desktop.validation', version: '0.1.0', electronApp: path.join(f.desktop, 'node_modules/electron/dist/Electron.app') });
+  assert.deepEqual(Object.keys(result.manifest.files), ['jre/bin/java']);
+  assert.equal(result.manifest.format, 1);
+  assert.equal(fs.existsSync(path.join(f.runtime, 'ts-analyzer')), false);
+  assert.equal(fs.readFileSync(path.join(destination, 'AdapterSupervisor.xpc/Contents/Resources/ts-analyzer/dist/stdio.js'), 'utf8'), 'ts-analyzer/dist/stdio.js');
+  assert.deepEqual([result.evidence.adapterIsolation, result.evidence.runtimeFilesRemoved], ['xpc-required', 3]);
+  assert.equal(f.manifest.files['ts-analyzer/dist/stdio.js'] !== undefined, true, 'the input manifest is not mutated');
+});
+
+test('the xpc-required stage refuses a reused stage, a changed analyzer copy or a manifest that disagrees with the analyzer', async t => {
+  const reused = supervisorFixture(t);
+  fs.mkdirSync(path.join(reused.desktop, 'stage/adapter-supervisor'));
+  await assert.rejects(stageAdapterSupervisor({ ...reused, appId: 'a', version: '1' }), /ADAPTER_SUPERVISOR_STAGE_EXISTS/);
+  const changed = supervisorFixture(t);
+  const assemble = changed.supervisor.assembleService;
+  changed.supervisor.assembleService = async options => {
+    const bundle = await assemble(options); fs.writeFileSync(path.join(bundle, 'Contents/Resources/ts-analyzer/dist/stdio.js'), 'changed'); return bundle;
+  };
+  await assert.rejects(stageAdapterSupervisor({ ...changed, appId: 'a', version: '1' }), /ADAPTER_SUPERVISOR_ANALYZER_COPY_CHANGED/);
+  assert.ok(fs.existsSync(path.join(changed.runtime, 'ts-analyzer')), 'the runtime analyzer stays until the copy is proven');
+  const drift = supervisorFixture(t);
+  delete drift.manifest.files['ts-analyzer/package.json'];
+  await assert.rejects(stageAdapterSupervisor({ ...drift, appId: 'a', version: '1' }), /ADAPTER_SUPERVISOR_ANALYZER_INVENTORY/);
+  assert.ok(fs.existsSync(path.join(drift.runtime, 'ts-analyzer')));
+});
+

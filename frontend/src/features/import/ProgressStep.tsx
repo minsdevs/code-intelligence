@@ -314,6 +314,7 @@ function JobProgress({
   const needsSourceFix = retryNeedsSourceFix || job?.failureCode === 'TS_SYNTAX_ERROR'
   const needsNewAnalysis = retryNeedsNewAnalysis || job?.failureCode === 'RETRY_SOURCE_UNVERIFIED'
   const needsGithubLogin = job?.failureCode === 'GITHUB_REAUTHENTICATION_REQUIRED'
+  const isolationUnavailable = job?.failureCode === 'ADAPTER_ISOLATION_UNAVAILABLE'
 
   return (
     <div className="flex max-w-xl flex-col gap-4">
@@ -398,6 +399,9 @@ function JobProgress({
                 {t('progress.backToProject')}
               </Link>
             </>
+          )}
+          {job?.status === 'FAILED' && isolationUnavailable && (
+            <p className="mt-2 text-[13px] text-ink-muted">{t('progress.isolationUnavailable')}</p>
           )}
           {job?.status === 'FAILED' && needsNewAnalysis && (
             <p className="mt-2 text-[13px] text-ink-muted">{t('analysis.checkpointChanged')}</p>

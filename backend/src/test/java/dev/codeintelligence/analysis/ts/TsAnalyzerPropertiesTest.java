@@ -114,4 +114,36 @@ class TsAnalyzerPropertiesTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> new TsAnalyzerProperties("file:///etc/passwd", 30))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    private static final String CAPABILITY = "c3".repeat(32);
+
+    @Test
+    void desktopControlSocketBindsFromTheEnvironmentAndExcludesTheHttpAnalyzer() {
+        var bound = new Binder(new MapConfigurationPropertySource(Map.of(
+                        "app.ts-analyzer.control-socket", "/var/folders/xy/T/ci-adapter-AbC123/control.sock",
+                        "app.ts-analyzer.control-capability", CAPABILITY)))
+                .bind("app.ts-analyzer", Bindable.of(TsAnalyzerProperties.class))
+                .get();
+        assertThat(bound.enabled()).isTrue();
+        assertThat(bound.controlled()).isTrue();
+        assertThat(bound.pinnedTls()).isFalse();
+        assertThat(bound.toString()).doesNotContain(CAPABILITY).contains("controlled=true");
+        assertThat(new TsAnalyzerProperties("http://127.0.0.1:3040", 30).controlled()).isFalse();
+        for (String[] invalid : new String[][] {
+            {"http://127.0.0.1:3040", "", "", "/tmp/c.sock", CAPABILITY},
+            {"", PIN, TOKEN, "/tmp/c.sock", CAPABILITY},
+            {"", "", "", "relative/c.sock", CAPABILITY},
+            {"", "", "", "/tmp/" + "d".repeat(99), CAPABILITY},
+            {"", "", "", "/tmp/c\0.sock", CAPABILITY},
+            {"", "", "", "/tmp/c.sock", CAPABILITY.toUpperCase()},
+            {"", "", "", "/tmp/c.sock", "c3"},
+            {"", "", "", "", CAPABILITY},
+        }) {
+            assertThatThrownBy(() -> new TsAnalyzerProperties(invalid[0], 30, invalid[1], invalid[2], invalid[3], invalid[4]))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageNotContaining(CAPABILITY)
+                    .hasMessageNotContaining(TOKEN);
+        }
+        assertThat(new TsAnalyzerProperties("", 30, "", "", "/tmp/" + "d".repeat(98), CAPABILITY).controlled()).isTrue();
+    }
 }

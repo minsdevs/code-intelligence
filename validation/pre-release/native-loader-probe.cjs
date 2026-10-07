@@ -18,6 +18,7 @@ const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
 const { spawnSync, execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const { expectedServices } = require('./adapter-mode.cjs');
 
 const execute = promisify(execFile);
 const STRIPPED_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
@@ -161,7 +162,7 @@ async function packagedRun({ repo, app, runtime, report, save }) {
     const status = await bounded(() => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()), remaining(), 'STARTUP_TIMEOUT');
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null);
     run.services = [...status.services].sort();
-    assert.deepEqual(run.services, ['backend', 'postgres', 'redis', 'ts-analyzer']);
+    assert.deepEqual(run.services, expectedServices(app));
     const processes = await readOwnerMemory(owner.process().pid);
     const pids = processes.map(row => row.pid);
     const { stdout } = await execute('/bin/ps', ['-p', pids.join(','), '-o', 'pid=,comm='], { timeout: 5000, env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' } });

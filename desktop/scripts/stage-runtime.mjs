@@ -5,6 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import runtimeStage from './runtime-stage.cjs';
 import nativePolicy from './native-runtime-policy.cjs';
+import adapterSupervisor from './adapter-supervisor.cjs';
+import adapterIsolation from '../src/adapter-isolation.cjs';
 
 const desktop = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const root = path.resolve(desktop, '..');
@@ -280,6 +282,22 @@ copy(path.join(root, 'analyzers', 'ts-analyzer', 'dist'), path.join(analyzerStag
 copy(path.join(root, 'analyzers', 'ts-analyzer', 'package.json'), path.join(analyzerStage, 'package.json'));
 copy(path.join(root, 'analyzers', 'ts-analyzer', 'package-lock.json'), path.join(analyzerStage, 'package-lock.json'));
 exec('npm', ['ci', '--omit=dev', '--ignore-scripts'], guardStageDestination(analyzerStage));
+
+// ADR-01 `xpc-required`: the analyzer runs only as a worker inside the adapter supervisor's XPC
+// bundle, which afterPack places in Contents/XPCServices and the signing hook signs. It is staged
+// beside the runtime (the service needs framework symlinks, which the runtime tree forbids) and the
+// runtime itself no longer carries the analyzer.
+const packageMetadata = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8'));
+if (adapterIsolation.adapterIsolationMode(packageMetadata) === 'xpc-required') {
+  const adapterStage = path.join(stageDirectory, 'adapter-supervisor');
+  fs.rmSync(adapterStage, { recursive: true, force: true });
+  fs.mkdirSync(adapterStage, { mode: 0o700 });
+  adapterSupervisor.compile(path.join(adapterStage, 'bin'));
+  await adapterSupervisor.assembleService({ destination: adapterStage, binaries: path.join(adapterStage, 'bin'),
+    electronApp: path.join(desktop, 'node_modules', 'electron', 'dist', 'Electron.app'), analyzer: analyzerStage,
+    appId: packageMetadata.build.appId, version: packageMetadata.version });
+  fs.rmSync(guardStageDestination(analyzerStage), { recursive: true });
+}
 
 const javaHome = process.env.JAVA_HOME || output('/usr/libexec/java_home', ['-v', '21']);
 const jlink = path.join(javaHome, 'bin', 'jlink');

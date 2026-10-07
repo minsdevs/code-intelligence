@@ -7,6 +7,8 @@ const { execFileSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 const { validateRuntimeManifest } = require('../src/runtime-manifest.cjs');
 const { isMachOHeader } = require('./native-runtime-policy.cjs');
+const { adapterIsolationMode } = require('../src/adapter-isolation.cjs');
+const adapterSupervisor = require('./adapter-supervisor.cjs');
 
 const MANIFEST = 'runtime-manifest.json';
 function reject(code) { throw Object.assign(new Error(code), { code }); }
@@ -116,10 +118,38 @@ async function signRuntime(runtimeRoot, options) {
   return signedManifest;
 }
 
+function infoValue(app, key) {
+  return execFileSync('/usr/bin/plutil', ['-extract', key, 'raw', '-o', '-', path.join(app, 'Contents', 'Info.plist')],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+}
+
+/**
+ * ADR-01: signs the adapter supervisor service and bridge inner-first and records their hashes in
+ * the runtime manifest, which main attests before any analysis. A build that requires XPC isolation
+ * cannot be signed without them.
+ */
+function signAdapterSupervisor(app, options, metadata = require('../package.json')) {
+  const contents = path.join(app, 'Contents');
+  const present = fs.existsSync(path.join(contents, adapterSupervisor.SERVICE_DIRECTORY));
+  if (adapterIsolationMode(metadata) !== 'xpc-required') {
+    if (present) reject('MAC_ADAPTER_SUPERVISOR_UNEXPECTED');
+    return null;
+  }
+  if (!present || !fs.existsSync(path.join(contents, adapterSupervisor.BRIDGE))) reject('MAC_ADAPTER_SUPERVISOR_REQUIRED');
+  const section = adapterSupervisor.signService({ app, identity: options.identity, keychain: options.keychain,
+    appId: infoValue(app, 'CFBundleIdentifier'), version: infoValue(app, 'CFBundleShortVersionString') });
+  const manifestPath = path.join(contents, 'Resources', 'runtime', MANIFEST);
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  fs.writeFileSync(manifestPath, JSON.stringify({ ...manifest, adapterSupervisor: section }, null, 2) + '\n');
+  return section;
+}
+
 async function sign(options) {
   const app = path.resolve(options.app);
   if (!app.endsWith('.app') || fs.lstatSync(app).isSymbolicLink()) reject('MAC_APP_BUNDLE_REQUIRED');
   const runtime = path.join(app, 'Contents', 'Resources', 'runtime');
+  const adapter = signAdapterSupervisor(app, options);
+  const adapterPaths = adapter ? [adapterSupervisor.SERVICE_DIRECTORY, adapterSupervisor.BRIDGE].map(relative => path.join(app, 'Contents', relative)) : [];
   const signedManifest = await signRuntime(runtime, options);
   const ignored = options.ignore;
   const binaries = options.binaries || [];
@@ -127,8 +157,9 @@ async function sign(options) {
   const { signAsync } = builderRequire()('@electron/osx-sign');
   await signAsync({
     ...options, strictVerify: true,
-    binaries: binaries.filter(file => !inside(runtime, file)),
-    ignore: file => inside(runtime, file) || Boolean(ignored?.(file)),
+    binaries: binaries.filter(file => !inside(runtime, file) && !adapterPaths.some(root => inside(root, file))),
+    // The service and bridge keep their own entitlements; the outer signature only seals them.
+    ignore: file => inside(runtime, file) || adapterPaths.some(root => inside(root, file)) || Boolean(ignored?.(file)),
   });
   // The outer signature seals the final manifest and must not re-sign the runtime a second time.
   await validateRuntimeManifest(runtime, signedManifest);
@@ -140,3 +171,4 @@ async function sign(options) {
 module.exports = sign;
 module.exports.signRuntime = signRuntime;
 module.exports.validateMacBuild = validateMacBuild;
+module.exports.signAdapterSupervisor = signAdapterSupervisor;

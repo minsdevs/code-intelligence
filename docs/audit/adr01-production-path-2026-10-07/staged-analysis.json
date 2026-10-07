@@ -1,0 +1,263 @@
+{
+  "format": 1,
+  "scope": "ADR-01 staged xpc-required app, ad-hoc signatures (not a candidate)",
+  "app": "/Users/minseokchae/Dev/ciw/adr01/validation/local/adr01-stage/Code Intelligence Validation.app",
+  "expectUnavailable": false,
+  "observedAt": "2026-10-07T10:21:55.199Z",
+  "mockKeychain": true,
+  "realAccount": false,
+  "checks": {
+    "services": [
+      "backend",
+      "postgres",
+      "redis"
+    ],
+    "job": {
+      "status": "DONE",
+      "failureCode": null,
+      "error": null,
+      "tsParsing": "DONE"
+    },
+    "processes": [
+      {
+        "comm": "adapter-bridge",
+        "parent": "app"
+      },
+      {
+        "comm": "AdapterSupervisor",
+        "parent": "launchd"
+      },
+      {
+        "comm": "adapter-node",
+        "parent": "AdapterSupervisor"
+      },
+      {
+        "comm": "adapter-bridge",
+        "parent": "app"
+      },
+      {
+        "comm": "AdapterSupervisor",
+        "parent": "launchd"
+      },
+      {
+        "comm": "adapter-node",
+        "parent": "AdapterSupervisor"
+      }
+    ],
+    "graph": {
+      "total": 9,
+      "nodes": [
+        [
+          "CONFIG",
+          "package.json",
+          "package.json"
+        ],
+        [
+          "FILE",
+          "package.json",
+          "package.json"
+        ],
+        [
+          "FILE",
+          "App.tsx",
+          "src/App.tsx"
+        ],
+        [
+          "COMPONENT",
+          "App",
+          "src/App.tsx"
+        ],
+        [
+          "METHOD",
+          "App",
+          "src/App.tsx"
+        ],
+        [
+          "FILE",
+          "api.ts",
+          "src/api.ts"
+        ],
+        [
+          "METHOD",
+          "loadItems",
+          "src/api.ts"
+        ],
+        [
+          "FILE",
+          "tsconfig.json",
+          "tsconfig.json"
+        ],
+        [
+          "DIRECTORY",
+          "src",
+          null
+        ]
+      ],
+      "files": [
+        {
+          "path": "package.json",
+          "language": "json",
+          "analysisStatus": "UNMEASURED",
+          "analysisReason": "PARSER_NOT_MEASURED"
+        },
+        {
+          "path": "src/App.tsx",
+          "language": "typescript",
+          "analysisStatus": "SUCCESS",
+          "analysisReason": "TS_PARSED"
+        },
+        {
+          "path": "src/api.ts",
+          "language": "typescript",
+          "analysisStatus": "PARTIAL",
+          "analysisReason": "UNRESOLVED_CALLS"
+        },
+        {
+          "path": "tsconfig.json",
+          "language": "json",
+          "analysisStatus": "UNMEASURED",
+          "analysisReason": "PARSER_NOT_MEASURED"
+        }
+      ]
+    },
+    "adapterIsolationLog": [],
+    "denialProbes": {
+      "probe": {
+        "status": 0,
+        "lines": [
+          {
+            "label": "supervisor-child",
+            "pid": 34397,
+            "sandboxed": 1,
+            "readOutsideFile": "DENIED(Operation not permitted)",
+            "createOutsideFile": "DENIED(Operation not permitted)",
+            "tcpConnectLoopback": "DENIED(Operation not permitted)",
+            "tcpListenLoopback": "DENIED(Operation not permitted)",
+            "udpSendLoopback": "DENIED(Operation not permitted)",
+            "dnsResolve": "nodename nor servname provided, or not known"
+          }
+        ],
+        "stderr": ""
+      },
+      "nodeProbe": {
+        "status": 0,
+        "lines": [
+          {
+            "worker": "node 24.21.0 (electron 44.4.5)",
+            "tcpListen": "DENIED(EPERM)",
+            "userHome": "DENIED(EPERM)"
+          },
+          {
+            "label": "node-grandchild",
+            "pid": 34414,
+            "sandboxed": 1,
+            "readOutsideFile": "DENIED(Operation not permitted)",
+            "createOutsideFile": "DENIED(Operation not permitted)",
+            "tcpConnectLoopback": "DENIED(Operation not permitted)",
+            "tcpListenLoopback": "DENIED(Operation not permitted)",
+            "udpSendLoopback": "DENIED(Operation not permitted)",
+            "dnsResolve": "nodename nor servname provided, or not known"
+          }
+        ],
+        "stderr": ""
+      },
+      "unknownWorker": {
+        "status": 70,
+        "stderr": "ADAPTER_BRIDGE WORKER_UNKNOWN"
+      },
+      "listenerPayloadsFromProbes": [],
+      "writeTargetCreated": false
+    }
+  },
+  "startup": {
+    "phase": "READY",
+    "state": "RUNNING"
+  },
+  "shutdownTrace": [
+    {
+      "phase": "QUEUED",
+      "state": "RUNNING",
+      "elapsedMs": 0
+    },
+    {
+      "phase": "STOPPING",
+      "state": "RUNNING",
+      "elapsedMs": 0
+    },
+    {
+      "phase": "SAFETY_OFF",
+      "state": "RUNNING",
+      "elapsedMs": 1
+    },
+    {
+      "phase": "BACKEND",
+      "state": "RUNNING",
+      "elapsedMs": 57
+    },
+    {
+      "phase": "ANALYZER",
+      "state": "RUNNING",
+      "elapsedMs": 942
+    },
+    {
+      "phase": "REDIS",
+      "state": "RUNNING",
+      "elapsedMs": 942
+    },
+    {
+      "phase": "POSTGRES",
+      "state": "RUNNING",
+      "elapsedMs": 1436
+    },
+    {
+      "phase": "SOURCES",
+      "state": "RUNNING",
+      "elapsedMs": 1961
+    },
+    {
+      "phase": "SAFETY",
+      "state": "RUNNING",
+      "elapsedMs": 1966
+    },
+    {
+      "phase": "CONNECTIONS",
+      "state": "RUNNING",
+      "elapsedMs": 2095
+    },
+    {
+      "phase": "OWNER_LOCKS",
+      "state": "RUNNING",
+      "elapsedMs": 2096
+    },
+    {
+      "phase": "TRANSPORT",
+      "state": "RUNNING",
+      "elapsedMs": 2096
+    },
+    {
+      "phase": "STORAGE",
+      "state": "RUNNING",
+      "elapsedMs": 2096
+    },
+    {
+      "phase": "PRIVATE_IPC",
+      "state": "RUNNING",
+      "elapsedMs": 2097
+    },
+    {
+      "phase": "COMPLETE",
+      "state": "COMPLETE",
+      "elapsedMs": 2097
+    }
+  ],
+  "shutdown": {
+    "phase": "COMPLETE",
+    "state": "COMPLETE",
+    "elapsedMs": 2097
+  },
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "adapterProcessesAfterExit": 0
+}

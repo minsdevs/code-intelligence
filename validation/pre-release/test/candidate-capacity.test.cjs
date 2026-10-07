@@ -68,3 +68,10 @@ test('the pure calculation does not mutate its input and the provisioning floor 
   assert.deepEqual(input, before);
   assert.equal(MINIMUM_FREE_BYTES, 8n * 1024n ** 3n);
 });
+
+test('an xpc-required candidate adds two worker Electron rewrites to the allowance', () => {
+  const base = candidateSpaceBudget(valid()), isolated = candidateSpaceBudget(valid(), { adapterSupervisor: true });
+  assert.equal(isolated.breakdown.adapterSupervisorAllowanceBytes, String(2n * 512n * 1024n ** 2n));
+  assert.equal(base.breakdown.adapterSupervisorAllowanceBytes, undefined);
+  assert.equal(BigInt(isolated.breakdown.unroundedRequiredBytes) - BigInt(base.breakdown.unroundedRequiredBytes), 2n * 512n * 1024n ** 2n);
+});

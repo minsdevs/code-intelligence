@@ -14,6 +14,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { ensureOutputParent } = require('./owned-output.cjs');
+const { adapterMode, analyzerInstall } = require('./adapter-mode.cjs');
 
 const DRIVER = String.raw`
 'use strict';
@@ -123,11 +124,23 @@ function main(argv = process.argv.slice(2)) {
   assert.equal(path.basename(argv[1]), 'Code Intelligence Validation.app');
   const repo = fs.realpathSync(path.resolve(__dirname, '../..')), app = fs.realpathSync(argv[1]);
   assert.equal(path.dirname(path.dirname(app)), repo);
-  const executable = path.join(app, 'Contents/MacOS/Code Intelligence Validation');
-  const installDir = path.join(app, 'Contents/Resources/runtime/ts-analyzer');
+  const installDir = analyzerInstall(app);
+  // xpc-required: the app binary has RunAsNode off and the worker Electron copy is inherit-signed (it
+  // traps outside the supervisor sandbox), so the same Electron version from the repository runs the
+  // packaged analyzer here. The OS sandbox itself is checked by adapter-supervisor-native.test.cjs.
+  const mode = adapterMode(app);
+  let executable = path.join(app, 'Contents/MacOS/Code Intelligence Validation'), nodeRuntime = 'packaged app binary (RunAsNode)';
+  if (mode === 'xpc-required') {
+    const electron = path.join(repo, 'desktop/node_modules/electron');
+    const packaged = execFileSync('/usr/bin/plutil', ['-extract', 'CFBundleVersion', 'raw', '-o', '-', path.join(app,
+      'Contents/XPCServices/AdapterSupervisor.xpc/Contents/Frameworks/Electron Framework.framework/Resources/Info.plist')], { encoding: 'utf8' }).trim();
+    assert.equal(JSON.parse(fs.readFileSync(path.join(electron, 'package.json'), 'utf8')).version, packaged, 'ELECTRON_VERSION_MISMATCH');
+    executable = path.join(electron, 'dist/Electron.app/Contents/MacOS/Electron');
+    nodeRuntime = `repository Electron ${packaged} (same version as the packaged worker)`;
+  }
   const evidence = fs.mkdtempSync(path.join(ensureOutputParent(repo, 'validation/local/security-internal-review'), 'analyzer-'));
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gate-sec-analyzer-')));
-  const report = { format: 1, scope: 'packaged ts-analyzer source-execution contract (not OS sandbox C15)', app,
+  const report = { format: 1, scope: 'packaged ts-analyzer source-execution contract (not OS sandbox C15)', app, adapterIsolation: mode, nodeRuntime,
     analyzerDistSha256: crypto.createHash('sha256').update(fs.readFileSync(path.join(installDir, 'dist/analyze.service.js'))).digest('hex'),
     probeSha256: crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'), observedAt: new Date().toISOString() };
   try {
