@@ -8,6 +8,7 @@ import dev.codeintelligence.analysis.core.GraphNodeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeType;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.NaturalKeys;
+import dev.codeintelligence.job.JobCancellation;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import java.util.ArrayList;
@@ -59,6 +60,7 @@ public class GraphBuildStep implements JobStep {
         List<GraphEdgeDraft> edges = new ArrayList<>();
         Set<String> directories = new LinkedHashSet<>();
         for (InventoriedFile file : files) {
+            JobCancellation.checkpoint();
             String path = file.path().replace('\\', '/');
             addAncestors(directories, path);
             String area = AreaPathTagger.tag(path);

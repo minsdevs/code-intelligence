@@ -5,6 +5,7 @@ import dev.codeintelligence.evidence.EvidenceKind;
 import dev.codeintelligence.evidence.EvidenceService;
 import dev.codeintelligence.evidence.EvidenceSubjects;
 import dev.codeintelligence.evidence.NewEvidence;
+import dev.codeintelligence.job.JobCancellation;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import org.springframework.core.annotation.Order;
@@ -56,6 +57,7 @@ public class FileInventoryStep implements JobStep {
                     .param("snapshotId", snapshotId)
                     .update();
             for (InventoriedFile file : result.files()) {
+                JobCancellation.checkpoint();
                 jdbc.sql("""
                                 insert into files (snapshot_id, path, language, size, line_count, content_hash, analysis_status, analysis_reason)
                                 values (:snapshotId, :path, :language, :size, :lineCount, :contentHash, :status, :reason)

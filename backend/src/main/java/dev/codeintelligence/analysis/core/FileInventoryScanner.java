@@ -1,5 +1,6 @@
 package dev.codeintelligence.analysis.core;
 
+import dev.codeintelligence.job.JobCancellation;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -34,6 +35,7 @@ public class FileInventoryScanner {
             treeWalk.addTree(commit.getTree());
             treeWalk.setRecursive(true);
             while (treeWalk.next()) {
+                JobCancellation.checkpoint();
                 // Gitlinks refer to commits in another repository, not blobs in this object database.
                 if (FileMode.GITLINK.equals(treeWalk.getFileMode(0))) {
                     skippedSubmodules++;
