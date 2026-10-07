@@ -133,6 +133,7 @@ export const en: Record<string, string> = {
   'progress.retry': 'Retry',
   'progress.retrying': 'Retrying…',
   'progress.syntaxFix': 'Fix the source syntax errors, then start a new analysis from the project. Retrying this snapshot would analyze the same broken source.',
+  'progress.isolationUnavailable': 'The isolated analysis environment could not be verified, so the TypeScript/JavaScript analyzer did not run. It never runs outside that environment. Reinstall or update the app, then retry.',
   'progress.backToProject': 'Back to project',
 
   // ── import wizard: areas ────────────────────────────────────────────────
@@ -667,6 +668,7 @@ export const ko: Record<string, string> = {
   'progress.retry': '다시 시도',
   'progress.retrying': '재시도 중…',
   'progress.syntaxFix': '소스의 구문 오류를 수정한 뒤 새 분석을 시작하세요. 같은 스냅샷을 재시도하면 수정 전 소스를 다시 분석합니다.',
+  'progress.isolationUnavailable': '격리된 분석 환경을 확인할 수 없어 TypeScript/JavaScript 분석기를 실행하지 않았습니다. 분석기는 이 환경 밖에서 실행되지 않습니다. 앱을 다시 설치하거나 업데이트한 뒤 재시도하세요.',
   'progress.backToProject': '프로젝트로 돌아가기',
 
   'areas.title': '영역 선택',
