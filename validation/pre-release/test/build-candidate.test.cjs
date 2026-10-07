@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const crypto = require('node:crypto');
 const { VALIDATION_AI_PROVIDER_ORIGIN, argumentsForCandidate, candidatePackagerConfig, replaceAnalyzerBuild,
-  replaceAnalyzerRuntime, replaceBackupMigrations, stageAdapterSupervisor } = require('../build-candidate.cjs');
+  replaceAnalyzerRuntime, replaceBackupMigrations, stageAdapterSupervisor, SOURCE_COPY_INPUTS } = require('../build-candidate.cjs');
 const { validationProviderTarget } = require('../../../desktop/src/ai-https-transport.cjs');
 const { requireValidationOnlyProviderVariant } = require('../../../desktop/scripts/desktop-build-gate.cjs');
 const sha = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -306,4 +306,14 @@ test('a reused runtime refuses changed, removed or out-of-order migrations', t =
   assert.throws(() => replaceBackupMigrations(early.plan, early.runtime, early.source, early.manifest), /BACKUP_MIGRATION_ORDER/);
   const odd = migrationFixture(t); fs.writeFileSync(path.join(odd.source, 'notes.txt'), 'x');
   assert.throws(() => replaceBackupMigrations(odd.plan, odd.runtime, odd.source, odd.manifest), /BACKUP_MIGRATION_NAME/);
+});
+
+test('the copied desktop carries every source the packaging hooks read, including the adapter supervisor', () => {
+  const desktop = Object.fromEntries(SOURCE_COPY_INPUTS)['desktop'];
+  const repoDesktop = path.join(__dirname, '../../../desktop');
+  // afterPack/sign hooks run from the copied desktop and resolve desktop/native/adapter-supervisor beside scripts/.
+  const hook = fs.readFileSync(path.join(repoDesktop, 'scripts/adapter-supervisor.cjs'), 'utf8');
+  assert.match(hook, /path\.join\(__dirname, '\.\.', 'native', 'adapter-supervisor'\)/);
+  assert.ok(fs.existsSync(path.join(repoDesktop, 'native/adapter-supervisor/entitlements/worker-adhoc.plist')));
+  assert.ok(desktop.includes('native'), 'desktop/native must be copied into the candidate work tree');
 });

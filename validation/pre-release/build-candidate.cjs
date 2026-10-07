@@ -25,7 +25,7 @@ const VALIDATION_AI_PROVIDER_ORIGIN = 'http://127.0.0.1:47613';
 const VALIDATION_APP_ID = 'dev.codeintelligence.desktop.validation';
 const SOURCE_COPY_INPUTS = [
   ['frontend', ['src', 'public', 'index.html', 'package.json', 'package-lock.json']],
-  ['desktop', ['src', 'scripts', 'build', 'package.json', 'package-lock.json']],
+  ['desktop', ['src', 'scripts', 'build', 'native', 'package.json', 'package-lock.json']],
   ['analyzers/ts-analyzer', ['src', 'package.json', 'package-lock.json', 'tsconfig.json']],
 ];
 
@@ -502,5 +502,5 @@ function candidatePackagerConfig(baseBuild, output, desktop) {
     npmRebuild: false, nodeGypRebuild: false, buildDependenciesFromSource: false, electronDist: path.join(desktop, 'node_modules/electron/dist') };
 }
 module.exports = { VALIDATION_AI_PROVIDER_ORIGIN, argumentsForCandidate, candidatePackagerConfig, replaceAnalyzerBuild, replaceBackupMigrations,
-  replaceAnalyzerRuntime, stageAdapterSupervisor, main };
+  replaceAnalyzerRuntime, stageAdapterSupervisor, SOURCE_COPY_INPUTS, main };
 if (require.main === module) main().catch(error => { console.error(error.code || error.name); process.exitCode = 1; });
