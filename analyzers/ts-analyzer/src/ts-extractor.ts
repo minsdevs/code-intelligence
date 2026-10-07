@@ -2,10 +2,11 @@ import { Node, Project, type SourceFile, SyntaxKind, ts } from 'ts-morph'
 import type { AnalyzeFile, AnalyzeResponse, ApiCallHit, EndpointHit, RouteHit, SymbolHit } from './types'
 import { isTsJs } from './paths'
 import { extractGeneric } from './generic-extractor'
-import { extractSemanticGraph } from './semantic-extractor'
+import { extractSemanticGraph, phaseRecorder, type SliceScope } from './semantic-extractor'
 import { assertParseable } from './syntax-diagnostics'
 import { createReactComponentResolver } from './react-component-binding'
 import { forEachDescendantOfKinds } from './walk'
+import { extractSliced } from './ts-slices'
 
 const HTTP_METHODS: Record<string, true> = {
   GET: true,
@@ -27,8 +28,45 @@ const STORE_FACTORIES_BY_SOURCE: Record<string, string[]> = {
   pinia: ['defineStore'],
 }
 
-export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
+/**
+ * Above this much TS/JS source one compiler program outgrows the analysis memory budget (about
+ * 70 MiB of process memory per MiB of source: medium 25 MiB peaks near 2.0 GiB, the large class's
+ * 100 MiB near 6.4 GiB), so the manifest is extracted in slices instead (ts-slices.ts).
+ */
+export const SINGLE_PROGRAM_BYTES = 16 * 1024 * 1024
+
+export type ExtractOptions = {
+  singleProgramBytes?: number
+  sliceProgramBytes?: number
+  /** Observes each sliced program's size (tests). */
+  onProgram?: (program: { files: number; bytes: number }) => void
+}
+
+export function extractTs(files: AnalyzeFile[], options: ExtractOptions = {}): AnalyzeResponse {
   const tsFiles = files.filter((file) => isTsJs(file.path))
+  const bytes = tsFiles.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0)
+  if (bytes > (options.singleProgramBytes ?? SINGLE_PROGRAM_BYTES)) {
+    return extractSliced(files, tsFiles, options.sliceProgramBytes, options.onProgram)
+  }
+  const project = createProgramProject(tsFiles)
+  assertParseable(project, project.getSourceFiles())
+  const output = extractProgram(files, project)
+  output.symbols.push(...extractGeneric(files))
+  return assembleResponse(tsFiles, output)
+}
+
+export type ProgramOutput = {
+  routes: RouteHit[]
+  endpoints: EndpointHit[]
+  components: SymbolHit[]
+  hooks: SymbolHit[]
+  stores: SymbolHit[]
+  apiCalls: ApiCallHit[]
+  symbols: SymbolHit[]
+  semantic: ReturnType<typeof extractSemanticGraph>
+}
+
+export function createProgramProject(programFiles: AnalyzeFile[]): Project {
   const project = new Project({
     useInMemoryFileSystem: true,
     skipAddingFilesFromTsConfig: true,
@@ -46,10 +84,14 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
       strict: false,
     },
   })
-  for (const file of tsFiles) {
+  for (const file of programFiles) {
     project.createSourceFile(file.path, file.content, { overwrite: true, scriptKind: scriptKind(file.path) })
   }
+  return project
+}
 
+/** All extractor passes over one program; with a slice scope only owned files report facts. */
+export function extractProgram(files: AnalyzeFile[], project: Project, scope?: SliceScope): ProgramOutput {
   const routes: RouteHit[] = []
   const endpoints: EndpointHit[] = []
   const components: SymbolHit[] = []
@@ -57,28 +99,36 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
   const stores: SymbolHit[] = []
   const apiCalls: ApiCallHit[] = []
   const symbols: SymbolHit[] = []
+  const within = phaseRecorder(scope, [routes, endpoints, components, hooks, stores, apiCalls, symbols])
 
   const sourceFiles = project.getSourceFiles()
-  assertParseable(project, sourceFiles)
   const httpBindings: HttpBindings = {
     inputSources: new Set(sourceFiles),
     globalFetchShadowed: sourceFiles.some(hasGlobalFetchBinding),
   }
   const componentDeclarations = new Map<Node, SymbolHit>()
   for (const source of sourceFiles) {
-    collectDeclarations(source, source.getFilePath().replace(/^\//, ''), components, hooks, stores, componentDeclarations)
+    const filePath = source.getFilePath().replace(/^\//, '')
+    within(1, filePath, () => collectDeclarations(source, filePath, components, hooks, stores, componentDeclarations))
   }
-  const resolveComponent = createReactComponentResolver(sourceFiles, files, componentDeclarations)
+  const resolveComponent = createReactComponentResolver(sourceFiles, files, componentDeclarations, scope)
   for (const source of sourceFiles) {
     const filePath = source.getFilePath().replace(/^\//, '')
-    collectRoutes(source, filePath, routes, resolveComponent)
-    collectVueRouter(source, filePath, routes)
-    collectFileBasedRoutes(source, filePath, routes, endpoints, symbols)
-    collectApiCalls(source, filePath, apiCalls, httpBindings)
+    if (scope && !scope.owned.has(filePath)) continue
+    within(2, filePath, () => {
+      collectRoutes(source, filePath, routes, resolveComponent)
+      collectVueRouter(source, filePath, routes)
+      collectFileBasedRoutes(source, filePath, routes, endpoints, symbols)
+      collectApiCalls(source, filePath, apiCalls, httpBindings)
+    })
   }
-  symbols.push(...extractGeneric(files))
-  const semantic = extractSemanticGraph(project, files)
-  endpoints.push(...semantic.endpoints)
+  const semantic = extractSemanticGraph(project, files, scope)
+  return { routes, endpoints, components, hooks, stores, apiCalls, symbols, semantic }
+}
+
+export function assembleResponse(tsFiles: AnalyzeFile[], output: ProgramOutput): AnalyzeResponse {
+  const { routes, semantic } = output
+  const endpoints = [...output.endpoints, ...semantic.endpoints]
   const routeCounts = new Map<string, number>()
   for (const route of routes) routeCounts.set(route.path, (routeCounts.get(route.path) ?? 0) + 1)
   for (const route of routes) if (route.componentResolution && routeCounts.get(route.path)! > 1) {
@@ -92,12 +142,12 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
       reason: unresolvedFiles.has(file.path) ? 'UNRESOLVED_CALLS' : 'TS_PARSED',
     })),
     routes,
-    components,
-    hooks,
-    stores,
-    apiCalls,
+    components: output.components,
+    hooks: output.hooks,
+    stores: output.stores,
+    apiCalls: output.apiCalls,
     imports: semantic.imports,
-    symbols,
+    symbols: output.symbols,
     endpoints,
     nodes: semantic.nodes,
     edges: semantic.edges,

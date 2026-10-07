@@ -96,206 +96,324 @@ const TYPEORM_OPERATIONS: Record<string, true> = {
   createQueryBuilder: true,
 }
 
-export function extractSemanticGraph(project: Project, files: AnalyzeFile[]): SemanticResult {
-  const sourceFiles = project.getSourceFiles()
-  const pathSet = new Set(sourceFiles.map((source) => filePathOf(source)))
-  const resolveImport = createImportResolver(files, pathSet)
-  const bindingsByFile = new Map<string, Map<string, ImportBinding>>()
-  const imports: ImportHit[] = []
-  for (const source of sourceFiles) {
-    const filePath = filePathOf(source)
-    const bindings = collectImportBindings(source)
-    bindingsByFile.set(filePath, bindings)
-    collectResolvedImports(source, filePath, resolveImport, imports)
-  }
+/**
+ * One program of a sliced whole-manifest extraction (ts-slices.ts). The program holds the owned
+ * files, every file they resolve to and every global-scope file; facts are reported for owned
+ * files only, every emission is kept (the merge dedupes in whole-manifest order), and the
+ * manifest-wide Nest facts come from the first pass instead of this program.
+ */
+export type SliceScope = {
+  owned: Set<string>
+  /** Every TS/JS path of the manifest, so resolution matches one whole-manifest program. */
+  pathSet: Set<string>
+  inProgram: Set<string>
+  /** The owned file whose facts are being collected. */
+  current: string | null
+  /** A fact of the current file needed a file outside this program; it is re-run with more context. */
+  outside(target: string): void
+  /**
+   * Items `[start, list.length)` of `list` were emitted for `filePath` in `phase`. Phases number the
+   * whole-program passes in their order: 1-2 ts-extractor, 3-7 semantic (imports, declarations,
+   * Nest modules, calls, re-exports).
+   */
+  mark(list: unknown[], phase: number, filePath: string, start: number): void
+  manifest?: ManifestFacts
+}
 
+/** Manifest-wide inputs of the Nest passes: provider registrations in order and the global prefix. */
+export type ManifestFacts = {
+  providers: { filePath: string; token: string; ref: DeclarationRef }[]
+  providerMethods: Map<string, DeclarationRef>
+  prefixFacts: Map<string, GlobalPrefixFacts>
+}
+
+export type GlobalPrefixFacts = { unknown: boolean; applications: number; invalid: boolean; prefixes: string[] }
+
+export function extractSemanticGraph(project: Project, files: AnalyzeFile[], scope?: SliceScope): SemanticResult {
+  const sourceFiles = project.getSourceFiles()
+  const owned = scope ? sourceFiles.filter((source) => scope.owned.has(filePathOf(source))) : sourceFiles
+  const resolveImport = scopedResolver(createImportResolver(files, scope?.pathSet ?? new Set(sourceFiles.map((source) => filePathOf(source)))), scope)
+  const imports: ImportHit[] = []
   const nodes: SemanticNodeHit[] = []
   const edges: SemanticEdgeHit[] = []
   const endpoints: EndpointHit[] = []
   const unresolvedCalls: UnresolvedCallHit[] = []
-  const classesByName = new Map<string, DeclarationRef[]>()
-  const declarationsByFileAndName = new Map<string, DeclarationRef>()
-  const methodsByOwnerAndName = new Map<string, DeclarationRef>()
+  const within = phaseRecorder(scope, [imports, nodes, edges, endpoints, unresolvedCalls])
   const nodeKeys = new Set<string>()
   const edgeKeys = new Set<string>()
-
+  // A slice keeps every emission: which duplicate wins depends on whole-manifest order.
   const addNode = (node: SemanticNodeHit): void => {
-    if (!nodeKeys.has(node.key)) {
+    if (scope) nodes.push(node)
+    else if (!nodeKeys.has(node.key)) {
       nodeKeys.add(node.key)
       nodes.push(node)
     }
   }
   const addEdge = (edge: SemanticEdgeHit): void => {
     const key = JSON.stringify([edge.sourceKey, edge.targetKey, edge.type])
-    if (!edgeKeys.has(key)) {
+    if (scope) edges.push(edge)
+    else if (!edgeKeys.has(key)) {
       edgeKeys.add(key)
       edges.push(edge)
     }
   }
 
+  const bindingsByFile = new Map<string, Map<string, ImportBinding>>()
   for (const source of sourceFiles) {
     const filePath = filePathOf(source)
-    const bindings = bindingsByFile.get(filePath) ?? new Map()
-    for (const declaration of source.getClasses()) {
-      const name = declaration.getName()
-      if (!name) continue
-      const moduleDecorator = findImportedDecorator(declaration.getDecorators(), bindings, NEST_COMMON, 'Module')
-      const controllerDecorator = findImportedDecorator(declaration.getDecorators(), bindings, NEST_COMMON, 'Controller')
-      const injectableDecorator = findImportedDecorator(declaration.getDecorators(), bindings, NEST_COMMON, 'Injectable')
-      const entityDecorator = findImportedDecorator(declaration.getDecorators(), bindings, 'typeorm', 'Entity')
-      const key = symbolKey(filePath, name)
-      const validation = collectValidationMetadata(declaration, bindings)
-      const nestRole = moduleDecorator ? 'MODULE' : controllerDecorator ? 'CONTROLLER' : injectableDecorator ? 'PROVIDER' : null
-      const type = moduleDecorator ? 'MODULE' : entityDecorator ? 'DB_ENTITY' : 'CLASS'
-      const metadata: Record<string, unknown> = {
-        exported: declaration.isExported() || declaration.isDefaultExport(),
-      }
-      if (nestRole) metadata.nestRole = nestRole
-      if (validation.length > 0) metadata.validation = validation
-      if (entityDecorator) {
-        metadata.orm = 'TYPEORM'
-        metadata.table = staticString(entityDecorator.getArguments()[0]) ?? name
-      }
-      addNode(hit(key, type, name, filePath, declaration, 'BACKEND', metadata))
-      addEdge(edge(fileKey(filePath), key, 'CONTAINS', 'CONFIRMED', filePath, declaration, { relation: 'DECLARES' }))
-      addRef(classesByName, name, { key, name, filePath, classDeclaration: declaration })
-      declarationsByFileAndName.set(refKey(filePath, name), { key, name, filePath, classDeclaration: declaration })
-
-      for (const method of declaration.getMethods()) {
-        const methodName = method.getName()
-        const methodKey = symbolKey(filePath, `${name}.${methodName}`)
-        const methodMetadata: Record<string, unknown> = {
-          async: method.isAsync(),
-          parameters: method.getParameters().map((parameter) => ({
-            name: parameter.getName(),
-            type: parameter.getTypeNode()?.getText() ?? null,
-            decorators: parameter.getDecorators().map((decorator) => importedDecoratorName(decorator, bindings)?.name ?? decorator.getName()),
-          })),
-          returnType: method.getReturnTypeNode()?.getText() ?? null,
-        }
-        addNode(hit(methodKey, 'METHOD', methodName, filePath, method, 'BACKEND', methodMetadata))
-        addEdge(edge(key, methodKey, 'DECLARES', 'CONFIRMED', filePath, method, {}))
-        methodsByOwnerAndName.set(`${key}.${methodName}`, { key: methodKey, name: methodName, filePath })
-      }
-    }
-
-    for (const declaration of source.getInterfaces()) {
-      const name = declaration.getName()
-      const key = symbolKey(filePath, name)
-      addNode(hit(key, 'INTERFACE', name, filePath, declaration, 'BACKEND', {
-        exported: declaration.isExported() || declaration.isDefaultExport(),
-      }))
-      addEdge(edge(fileKey(filePath), key, 'CONTAINS', 'CONFIRMED', filePath, declaration, { relation: 'DECLARES' }))
-      declarationsByFileAndName.set(refKey(filePath, name), { key, name, filePath })
-    }
-
-    for (const declaration of source.getTypeAliases()) {
-      const name = declaration.getName()
-      const key = symbolKey(filePath, name)
-      addNode(hit(key, 'INTERFACE', name, filePath, declaration, 'BACKEND', {
-        exported: declaration.isExported() || declaration.isDefaultExport(),
-        declarationKind: 'TYPE_ALIAS',
-      }))
-      addEdge(edge(fileKey(filePath), key, 'CONTAINS', 'CONFIRMED', filePath, declaration, { relation: 'DECLARES' }))
-      declarationsByFileAndName.set(refKey(filePath, name), { key, name, filePath })
-    }
-
-    for (const declaration of source.getFunctions()) {
-      const name = declaration.getName()
-      if (!name) continue
-      const key = symbolKey(filePath, name)
-      addNode(hit(key, 'METHOD', name, filePath, declaration, areaFor(filePath), {
-        declarationKind: 'FUNCTION',
-        exported: declaration.isExported() || declaration.isDefaultExport(),
-        async: declaration.isAsync(),
-      }))
-      addEdge(edge(fileKey(filePath), key, 'CONTAINS', 'CONFIRMED', filePath, declaration, { relation: 'DECLARES' }))
-      const ref = { key, name, filePath, functionDeclaration: declaration }
-      declarationsByFileAndName.set(refKey(filePath, name), ref)
-      if (declaration.isDefaultExport()) declarationsByFileAndName.set(refKey(filePath, 'default'), ref)
-    }
+    bindingsByFile.set(filePath, collectImportBindings(source))
+    if (!scope || scope.owned.has(filePath)) within(3, filePath, () => collectResolvedImports(source, filePath, resolveImport, imports))
+  }
+  const { classesByName, declarationsByFileAndName, methodsByOwnerAndName } =
+    collectDeclarations(sourceFiles, bindingsByFile, within, addNode, addEdge)
+  for (const [key, method] of scope?.manifest?.providerMethods ?? []) {
+    if (!methodsByOwnerAndName.has(key)) methodsByOwnerAndName.set(key, method)
   }
 
-  const providerTargets = collectNestModules(
-    sourceFiles,
-    bindingsByFile,
-    resolveImport,
-    declarationsByFileAndName,
-    classesByName,
-    addNode,
-    addEdge,
-  )
-  const globalPrefix = findGlobalPrefix(sourceFiles)
-
-  for (const source of sourceFiles) {
+  let providerTargets = new Map<string, DeclarationRef>()
+  for (const source of owned) {
     const filePath = filePathOf(source)
-    const bindings = bindingsByFile.get(filePath) ?? new Map()
-    for (const declaration of source.getClasses()) {
-      const className = declaration.getName()
-      if (!className) continue
-      const classKey = symbolKey(filePath, className)
-      const controller = findImportedDecorator(declaration.getDecorators(), bindings, NEST_COMMON, 'Controller')
-      const controllerPath = controller ? decoratorPath(controller) : null
-      const injectionTargets = constructorInjectionTargets(
-        declaration,
-        bindings,
-        filePath,
-        resolveImport,
-        declarationsByFileAndName,
-        classesByName,
-        providerTargets,
-      )
-      for (const target of injectionTargets.values()) {
-        addEdge(edge(classKey, target.key, 'DEPENDS_ON', target.confidence, filePath, target.node, {
-          relation: 'INJECTS',
-          token: target.token,
-        }))
-      }
-      collectCrossCuttingEdges(declaration.getDecorators(), classKey, filePath, bindings, resolveImport, declarationsByFileAndName, classesByName, addEdge)
-      collectMiddlewareEdges(declaration, classKey, filePath, bindings, resolveImport, declarationsByFileAndName, classesByName, addEdge)
+    within(5, filePath, () => {
+      collectNestModules([source], bindingsByFile, resolveImport, declarationsByFileAndName, classesByName, addNode, addEdge, providerTargets)
+    })
+  }
+  if (scope?.manifest) {
+    providerTargets = new Map()
+    for (const provider of scope.manifest.providers) providerTargets.set(provider.token, provider.ref)
+  }
+  const globalPrefix = combineGlobalPrefix(scope?.manifest
+    ? scope.manifest.prefixFacts.values()
+    : sourceFiles.map(globalPrefixFacts(new Map())))
 
-      for (const method of declaration.getMethods()) {
-        const methodKey = symbolKey(filePath, `${className}.${method.getName()}`)
-        collectCrossCuttingEdges(method.getDecorators(), methodKey, filePath, bindings, resolveImport, declarationsByFileAndName, classesByName, addEdge)
-        if (controller) {
-          collectControllerEndpoints(
+  for (const source of owned) {
+    const filePath = filePathOf(source)
+    within(6, filePath, () => {
+      const bindings = bindingsByFile.get(filePath) ?? new Map()
+      for (const declaration of source.getClasses()) {
+        const className = declaration.getName()
+        if (!className) continue
+        const classKey = symbolKey(filePath, className)
+        const controller = findImportedDecorator(declaration.getDecorators(), bindings, NEST_COMMON, 'Controller')
+        const controllerPath = controller ? decoratorPath(controller) : null
+        const injectionTargets = constructorInjectionTargets(
+          declaration,
+          bindings,
+          filePath,
+          resolveImport,
+          declarationsByFileAndName,
+          classesByName,
+          providerTargets,
+        )
+        for (const target of injectionTargets.values()) {
+          addEdge(edge(classKey, target.key, 'DEPENDS_ON', target.confidence, filePath, target.node, {
+            relation: 'INJECTS',
+            token: target.token,
+          }))
+        }
+        collectCrossCuttingEdges(declaration.getDecorators(), classKey, filePath, bindings, resolveImport, declarationsByFileAndName, classesByName, addEdge)
+        collectMiddlewareEdges(declaration, classKey, filePath, bindings, resolveImport, declarationsByFileAndName, classesByName, addEdge)
+
+        for (const method of declaration.getMethods()) {
+          const methodKey = symbolKey(filePath, `${className}.${method.getName()}`)
+          collectCrossCuttingEdges(method.getDecorators(), methodKey, filePath, bindings, resolveImport, declarationsByFileAndName, classesByName, addEdge)
+          if (controller) {
+            collectControllerEndpoints(
+              method,
+              classKey,
+              methodKey,
+              controllerPath,
+              globalPrefix,
+              filePath,
+              bindings,
+              endpoints,
+              addEdge,
+              unresolvedCalls,
+            )
+          }
+          collectCallableCalls(
             method,
             classKey,
             methodKey,
-            controllerPath,
-            globalPrefix,
             filePath,
-            bindings,
-            endpoints,
+            injectionTargets,
+            methodsByOwnerAndName,
+            resolveImport,
+            declarationsByFileAndName,
+            addNode,
             addEdge,
             unresolvedCalls,
           )
         }
-        collectCallableCalls(
-          method,
-          classKey,
-          methodKey,
-          filePath,
-          injectionTargets,
-          methodsByOwnerAndName,
-          resolveImport,
-          declarationsByFileAndName,
-          addNode,
-          addEdge,
-          unresolvedCalls,
-        )
       }
-    }
-    for (const declaration of source.getFunctions()) {
-      const name = declaration.getName()
-      if (!name || !declaration.getBody()) continue
-      collectCallableCalls(declaration, '', symbolKey(filePath, name), filePath, new Map(), new Map(),
-        resolveImport, declarationsByFileAndName, addNode, addEdge, unresolvedCalls)
-    }
+      for (const declaration of source.getFunctions()) {
+        const name = declaration.getName()
+        if (!name || !declaration.getBody()) continue
+        collectCallableCalls(declaration, '', symbolKey(filePath, name), filePath, new Map(), new Map(),
+          resolveImport, declarationsByFileAndName, addNode, addEdge, unresolvedCalls)
+      }
+    
+    })
   }
 
-  collectReExports(sourceFiles, resolveImport, imports, addEdge)
+  for (const source of owned) {
+    const filePath = filePathOf(source)
+    within(7, filePath, () => collectReExports([source], resolveImport, imports, addEdge))
+  }
   return { endpoints, imports, nodes, edges, unresolvedCalls }
+}
+
+/**
+ * First pass of a sliced extraction: the Nest provider registrations, provider class methods and
+ * global-prefix facts of the owned files, which every later slice needs whole-manifest.
+ */
+export function collectManifestFacts(project: Project, files: AnalyzeFile[], scope: SliceScope, facts: ManifestFacts): void {
+  const sourceFiles = project.getSourceFiles()
+  const resolveImport = scopedResolver(createImportResolver(files, scope.pathSet), scope)
+  const bindingsByFile = new Map(sourceFiles.map((source) => [filePathOf(source), collectImportBindings(source)]))
+  const ignore = (): void => {}
+  const { classesByName, declarationsByFileAndName, methodsByOwnerAndName } =
+    collectDeclarations(sourceFiles, bindingsByFile, (_phase, _file, run) => run(), ignore, ignore)
+  const prefixFacts = globalPrefixFacts(new Map())
+  for (const source of sourceFiles) {
+    const filePath = filePathOf(source)
+    if (!scope.owned.has(filePath)) continue
+    scope.current = filePath
+    try {
+      const providers = new Map<string, DeclarationRef>()
+      collectNestModules([source], bindingsByFile, resolveImport, declarationsByFileAndName, classesByName, ignore, ignore, providers,
+        (token, ref) => facts.providers.push({ filePath, token, ref: { key: ref.key, name: ref.name, filePath: ref.filePath } }))
+      for (const ref of providers.values()) {
+        for (const [key, method] of methodsByOwnerAndName) if (key.startsWith(`${ref.key}.`)) facts.providerMethods.set(key, method)
+      }
+      facts.prefixFacts.set(filePath, prefixFacts(source))
+    } finally { scope.current = null }
+  }
+}
+
+function scopedResolver(resolve: Resolver, scope: SliceScope | undefined): Resolver {
+  if (!scope) return resolve
+  return (specifier, fromPath) => {
+    const resolved = resolve(specifier, fromPath)
+    if (resolved && !scope.inProgram.has(resolved)) scope.outside(resolved)
+    return resolved
+  }
+}
+
+export function phaseRecorder(scope: SliceScope | undefined, lists: unknown[][]):
+  (phase: number, filePath: string, run: () => void) => void {
+  return (phase, filePath, run) => {
+    if (!scope) {
+      run()
+      return
+    }
+    const starts = lists.map((list) => list.length)
+    const previous = scope.current
+    scope.current = filePath
+    try { run() } finally { scope.current = previous }
+    lists.forEach((list, index) => scope.mark(list, phase, filePath, starts[index]))
+  }
+}
+
+function collectDeclarations(
+  sourceFiles: SourceFile[],
+  bindingsByFile: Map<string, Map<string, ImportBinding>>,
+  within: (phase: number, filePath: string, run: () => void) => void,
+  addNode: (node: SemanticNodeHit) => void,
+  addEdge: (edge: SemanticEdgeHit) => void,
+): {
+  classesByName: Map<string, DeclarationRef[]>
+  declarationsByFileAndName: Map<string, DeclarationRef>
+  methodsByOwnerAndName: Map<string, DeclarationRef>
+} {
+  const classesByName = new Map<string, DeclarationRef[]>()
+  const declarationsByFileAndName = new Map<string, DeclarationRef>()
+  const methodsByOwnerAndName = new Map<string, DeclarationRef>()
+  for (const source of sourceFiles) {
+    const filePath = filePathOf(source)
+    within(4, filePath, () => {
+      const bindings = bindingsByFile.get(filePath) ?? new Map()
+      for (const declaration of source.getClasses()) {
+        const name = declaration.getName()
+        if (!name) continue
+        const moduleDecorator = findImportedDecorator(declaration.getDecorators(), bindings, NEST_COMMON, 'Module')
+        const controllerDecorator = findImportedDecorator(declaration.getDecorators(), bindings, NEST_COMMON, 'Controller')
+        const injectableDecorator = findImportedDecorator(declaration.getDecorators(), bindings, NEST_COMMON, 'Injectable')
+        const entityDecorator = findImportedDecorator(declaration.getDecorators(), bindings, 'typeorm', 'Entity')
+        const key = symbolKey(filePath, name)
+        const validation = collectValidationMetadata(declaration, bindings)
+        const nestRole = moduleDecorator ? 'MODULE' : controllerDecorator ? 'CONTROLLER' : injectableDecorator ? 'PROVIDER' : null
+        const type = moduleDecorator ? 'MODULE' : entityDecorator ? 'DB_ENTITY' : 'CLASS'
+        const metadata: Record<string, unknown> = {
+          exported: declaration.isExported() || declaration.isDefaultExport(),
+        }
+        if (nestRole) metadata.nestRole = nestRole
+        if (validation.length > 0) metadata.validation = validation
+        if (entityDecorator) {
+          metadata.orm = 'TYPEORM'
+          metadata.table = staticString(entityDecorator.getArguments()[0]) ?? name
+        }
+        addNode(hit(key, type, name, filePath, declaration, 'BACKEND', metadata))
+        addEdge(edge(fileKey(filePath), key, 'CONTAINS', 'CONFIRMED', filePath, declaration, { relation: 'DECLARES' }))
+        addRef(classesByName, name, { key, name, filePath, classDeclaration: declaration })
+        declarationsByFileAndName.set(refKey(filePath, name), { key, name, filePath, classDeclaration: declaration })
+
+        for (const method of declaration.getMethods()) {
+          const methodName = method.getName()
+          const methodKey = symbolKey(filePath, `${name}.${methodName}`)
+          const methodMetadata: Record<string, unknown> = {
+            async: method.isAsync(),
+            parameters: method.getParameters().map((parameter) => ({
+              name: parameter.getName(),
+              type: parameter.getTypeNode()?.getText() ?? null,
+              decorators: parameter.getDecorators().map((decorator) => importedDecoratorName(decorator, bindings)?.name ?? decorator.getName()),
+            })),
+            returnType: method.getReturnTypeNode()?.getText() ?? null,
+          }
+          addNode(hit(methodKey, 'METHOD', methodName, filePath, method, 'BACKEND', methodMetadata))
+          addEdge(edge(key, methodKey, 'DECLARES', 'CONFIRMED', filePath, method, {}))
+          methodsByOwnerAndName.set(`${key}.${methodName}`, { key: methodKey, name: methodName, filePath })
+        }
+      }
+
+      for (const declaration of source.getInterfaces()) {
+        const name = declaration.getName()
+        const key = symbolKey(filePath, name)
+        addNode(hit(key, 'INTERFACE', name, filePath, declaration, 'BACKEND', {
+          exported: declaration.isExported() || declaration.isDefaultExport(),
+        }))
+        addEdge(edge(fileKey(filePath), key, 'CONTAINS', 'CONFIRMED', filePath, declaration, { relation: 'DECLARES' }))
+        declarationsByFileAndName.set(refKey(filePath, name), { key, name, filePath })
+      }
+
+      for (const declaration of source.getTypeAliases()) {
+        const name = declaration.getName()
+        const key = symbolKey(filePath, name)
+        addNode(hit(key, 'INTERFACE', name, filePath, declaration, 'BACKEND', {
+          exported: declaration.isExported() || declaration.isDefaultExport(),
+          declarationKind: 'TYPE_ALIAS',
+        }))
+        addEdge(edge(fileKey(filePath), key, 'CONTAINS', 'CONFIRMED', filePath, declaration, { relation: 'DECLARES' }))
+        declarationsByFileAndName.set(refKey(filePath, name), { key, name, filePath })
+      }
+
+      for (const declaration of source.getFunctions()) {
+        const name = declaration.getName()
+        if (!name) continue
+        const key = symbolKey(filePath, name)
+        addNode(hit(key, 'METHOD', name, filePath, declaration, areaFor(filePath), {
+          declarationKind: 'FUNCTION',
+          exported: declaration.isExported() || declaration.isDefaultExport(),
+          async: declaration.isAsync(),
+        }))
+        addEdge(edge(fileKey(filePath), key, 'CONTAINS', 'CONFIRMED', filePath, declaration, { relation: 'DECLARES' }))
+        const ref = { key, name, filePath, functionDeclaration: declaration }
+        declarationsByFileAndName.set(refKey(filePath, name), ref)
+        if (declaration.isDefaultExport()) declarationsByFileAndName.set(refKey(filePath, 'default'), ref)
+      }
+    
+    })
+  }
+  return { classesByName, declarationsByFileAndName, methodsByOwnerAndName }
 }
 
 function collectImportBindings(source: SourceFile): Map<string, ImportBinding> {
@@ -498,8 +616,13 @@ function collectNestModules(
   classesByName: Map<string, DeclarationRef[]>,
   addNode: (node: SemanticNodeHit) => void,
   addEdge: (edge: SemanticEdgeHit) => void,
-): Map<string, DeclarationRef> {
-  const providers = new Map<string, DeclarationRef>()
+  providers: Map<string, DeclarationRef>,
+  onProvider?: (token: string, ref: DeclarationRef) => void,
+): void {
+  const register = (token: string, ref: DeclarationRef): void => {
+    providers.set(token, ref)
+    onProvider?.(token, ref)
+  }
   for (const source of sourceFiles) {
     const filePath = filePathOf(source)
     const bindings = bindingsByFile.get(filePath) ?? new Map()
@@ -537,7 +660,7 @@ function collectNestModules(
             if (implementation) {
               const ref = resolveExpressionRef(implementation, filePath, bindings, resolveImport, declarations, classesByName)
               if (ref) {
-                providers.set(normalizeToken(token), ref)
+                register(normalizeToken(token), ref)
                 addEdge(edge(tokenKey, ref.key, 'DEPENDS_ON', 'CONFIRMED', filePath, expression, {
                   relation: providerRelation(expression),
                 }))
@@ -551,12 +674,11 @@ function collectNestModules(
           addEdge(edge(moduleKey, ref.key, type, 'CONFIRMED', filePath, expression, {
             relation: `NEST_MODULE_${propertyName.toUpperCase()}`,
           }))
-          if (propertyName === 'providers') providers.set(normalizeToken(ref.name), ref)
+          if (propertyName === 'providers') register(normalizeToken(ref.name), ref)
         }
       }
     }
   }
-  return providers
 }
 
 function propertyExpressions(object: Node, name: string): Expression[] {
@@ -973,30 +1095,47 @@ function collectReExports(
   }
 }
 
-function findGlobalPrefix(sourceFiles: SourceFile[]): string | null {
-  const calls = sourceFiles.flatMap((source) => source.getDescendantsOfKind(SyntaxKind.CallExpression))
-  const applications = new Set<CallExpression>()
-  for (const call of calls) {
-    const factory = factoryCreation(call)
-    if (factory === 'UNKNOWN') return null
-    if (factory === 'NEST') applications.add(call)
+/**
+ * Per-file part of the Nest global prefix. Proven applications and prefixes only ever come from the
+ * file's own declarations (or global scripts), so the manifest result combines per-file facts.
+ */
+function globalPrefixFacts(origins: Map<Node, ApplicationOrigin>): (source: SourceFile) => GlobalPrefixFacts {
+  return (source) => {
+    const facts: GlobalPrefixFacts = { unknown: false, applications: 0, invalid: false, prefixes: [] }
+    const calls = source.getDescendantsOfKind(SyntaxKind.CallExpression)
+    for (const call of calls) {
+      const factory = factoryCreation(call)
+      if (factory === 'UNKNOWN') facts.unknown = true
+      if (factory === 'NEST') facts.applications += 1
+    }
+    for (const call of calls) {
+      const expression = call.getExpression()
+      if (!Node.isPropertyAccessExpression(expression) || expression.getName() !== 'setGlobalPrefix') continue
+      // A proven application is always a NestFactory.create call, i.e. one of the counted applications.
+      const application = applicationOrigin(expression.getExpression(), origins)
+      if (application === 'UNKNOWN') facts.invalid = true
+      if (!application || application === 'UNKNOWN') continue
+      const prefix = staticString(call.getArguments()[0])
+      // Options (e.g. excluded routes) and dynamic values require wider analysis.
+      if (prefix === null || call.getArguments().length !== 1) facts.invalid = true
+      else facts.prefixes.push(prefix)
+    }
+    return facts
+  }
+}
+
+function combineGlobalPrefix(files: Iterable<GlobalPrefixFacts>): string | null {
+  let applications = 0
+  let invalid = false
+  const prefixes = new Set<string>()
+  for (const facts of files) {
+    if (facts.unknown) return null
+    applications += facts.applications
+    invalid ||= facts.invalid
+    for (const prefix of facts.prefixes) prefixes.add(prefix)
   }
   // There is no controller-to-bootstrap ownership proof for multiple applications yet.
-  if (applications.size > 1) return null
-  const prefixes = new Set<string>()
-  const origins = new Map<Node, ApplicationOrigin>()
-  for (const call of calls) {
-    const expression = call.getExpression()
-    if (!Node.isPropertyAccessExpression(expression) || expression.getName() !== 'setGlobalPrefix') continue
-    const application = applicationOrigin(expression.getExpression(), origins)
-    if (application === 'UNKNOWN') return null
-    if (!application) continue
-    if (!applications.has(application)) return null
-    const prefix = staticString(call.getArguments()[0])
-    // Options (e.g. excluded routes) and dynamic values require wider analysis.
-    if (prefix === null || call.getArguments().length !== 1) return null
-    prefixes.add(prefix)
-  }
+  if (applications > 1 || invalid) return null
   return prefixes.size > 1 ? null : prefixes.values().next().value ?? ''
 }
 

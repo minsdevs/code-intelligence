@@ -1,6 +1,6 @@
 import { Node, SyntaxKind, ts, type SourceFile } from 'ts-morph'
 import type { AnalyzeFile, RouteComponentResolution, SymbolHit } from './types'
-import { createImportResolver } from './semantic-extractor'
+import { createImportResolver, type SliceScope } from './semantic-extractor'
 import { forEachDescendantOfKinds } from './walk'
 
 type ExportRef = { node?: Node; local?: string; source?: string; imported?: string; typeOnly?: boolean }
@@ -19,10 +19,16 @@ const WRITE_KINDS = [SyntaxKind.BinaryExpression, SyntaxKind.PrefixUnaryExpressi
  * are deliberately not linked even when a source position would distinguish them.
  */
 export function createReactComponentResolver(
-  sources: SourceFile[], files: AnalyzeFile[], declarations: Map<Node, SymbolHit>,
+  sources: SourceFile[], files: AnalyzeFile[], declarations: Map<Node, SymbolHit>, scope?: SliceScope,
 ): (initializer: Node | undefined) => RouteComponentResolution {
   const modules = new Map(sources.map(source => [filePath(source), indexModule(source)]))
-  const resolveImport = createImportResolver(files, new Set(modules.keys()), { allowPackageFallback: false })
+  const resolveModule = createImportResolver(files, scope?.pathSet ?? new Set(modules.keys()), { allowPackageFallback: false })
+  // A slice reports a chain that leaves its program; the route file is re-run with more context.
+  const resolveImport = (specifier: string, fromPath: string): string | null => {
+    const resolved = resolveModule(specifier, fromPath)
+    if (resolved && scope && !scope.inProgram.has(resolved)) scope.outside(resolved)
+    return resolved
+  }
   const occurrences = new Map<string, number>()
   for (const hit of declarations.values()) occurrences.set(keyOf(hit), (occurrences.get(keyOf(hit)) ?? 0) + 1)
   const written = writtenBindings(sources)
