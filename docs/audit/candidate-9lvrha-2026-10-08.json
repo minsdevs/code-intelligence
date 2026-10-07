@@ -1,0 +1,227 @@
+{
+  "format": 1,
+  "date": "2026-10-08",
+  "integrationBranch": "codex/product-fixes-20261007",
+  "base": "c6750fe",
+  "decisions": {
+    "G-COST D4": "default personal-data masking",
+    "G-RECOVERY format2": "documented refusal satisfies the row",
+    "G-ACCURACY D1": "INFERRED implementation candidates",
+    "G-PERF sizes": "support up to large (50k/200MiB)",
+    "G-COST PK-08": "validation-build-only loopback provider"
+  },
+  "candidate": {
+    "id": "9lVRha",
+    "sourceCommit": "52e2e33",
+    "buildSequence": "1791383066676",
+    "baseline": "tZgvV7",
+    "adapterIsolation": "xpc-required",
+    "evidence": "validation/local/pre-release-candidate/build-gFIP8F",
+    "resultSha256": "0d8d14246d780296328aa1028513123862f1e36e530ed97c0a21ca0c46975cca",
+    "formalSigning": false,
+    "notarized": false,
+    "released": false,
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/build-candidate.cjs --app \"$PWD/.native-product-tZgvV7/Code Intelligence Validation.app\" --build-sequence 1791383066676 --adapter-isolation xpc-required",
+    "failedBuilds": [
+      {
+        "evidence": "build-xRFxPR",
+        "failure": "ENOENT (reused runtime lacked V28/V29)",
+        "fixedBy": "c4543e5"
+      },
+      {
+        "evidence": "build-K1WkCC",
+        "failure": "ERR_ASSERTION (codesign: desktop/native entitlements not copied)",
+        "fixedBy": "52e2e33",
+        "partialAppRemoved": "REMOVED-PARTIAL-APP.json"
+      }
+    ]
+  },
+  "regression": {
+    "commit": "cfaa3ae",
+    "evidence": "validation/local/post-merge-20261007c",
+    "frontend": {
+      "tests": 480,
+      "pass": 480
+    },
+    "runners": {
+      "tests": 392,
+      "pass": 392
+    },
+    "desktop": {
+      "tests": 3300,
+      "pass": 3255,
+      "fail": 0,
+      "skipped": 45
+    },
+    "backendDocker": {
+      "evidence": "docker-integration/backend-kQ0Ryh",
+      "tests": 1979,
+      "pass": 1947,
+      "fail": 0,
+      "skipped": 32
+    },
+    "events": {
+      "evidence": "docker-integration/events-S6HSUh",
+      "tests": 19,
+      "pass": 19
+    },
+    "earlierFailedRun": {
+      "commit": "5b8f8f8",
+      "evidence": "validation/local/post-merge-20261007b",
+      "desktopFail": 76,
+      "backend": "spotlessJavaCheck FAILED, then 2 guard failures (backend-AsxfT4)"
+    }
+  },
+  "native": [
+    {
+      "check": "product",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-product-candidate.cjs --app \"$PWD/.native-product-9lVRha/Code Intelligence Validation.app\"",
+      "status": "PASS",
+      "checks": 36,
+      "evidence": "pre-release-final/product-QePxxg",
+      "resultSha256": "5197bbba1f6f96a8f27307ae7d7af3fdfdf24e6f9fec11ba3126431ef33c8c90",
+      "earlierFailures": [
+        "product-ctVtUN",
+        "product-1cePjC",
+        "product-q7HoSE"
+      ]
+    },
+    {
+      "check": "owner-crash AFTER_SOURCE_RENAME",
+      "status": "PASS",
+      "checks": 6,
+      "evidence": "electron-crash/native-sWM2DE",
+      "resultSha256": "a0ebd5a14dce654132d383b9547a4ca16224488465b084f1554315e3f2d0f462",
+      "earlierFailures": [
+        "native-pNrf1I"
+      ]
+    },
+    {
+      "check": "owner-crash BEFORE_COMPLETED_CLEANUP",
+      "status": "PASS",
+      "checks": 6,
+      "evidence": "electron-crash/native-GSpJqB",
+      "resultSha256": "f196294b418e7123e58ca3a1a3030d4e5f18505a0d1af7a7f9baff23d215eb85",
+      "earlierFailures": [
+        "native-U5jvVP"
+      ]
+    },
+    {
+      "check": "job-race-product",
+      "status": "PASS",
+      "checks": 8,
+      "evidence": "job-race/product-Jqgh1b",
+      "resultSha256": "351108b1d7cae28d4142710d357126dccc49f067e7c3214d3316a05dbb33304b",
+      "earlierFailures": [
+        "product-NpRQ7h"
+      ]
+    },
+    {
+      "check": "cost-egress-packaged-probe",
+      "status": "PASS",
+      "evidence": "cost-egress-packaged/probe-dtdojr"
+    },
+    {
+      "check": "cost-egress-packaged-ask (PK-08)",
+      "status": "PASS",
+      "checks": 9,
+      "evidence": "cost-egress-packaged-ask/ask-1o388T",
+      "resultSha256": "255d042267abcccf39be132b873bafec19effdaba56b0438995696068bea7833",
+      "earlierFailures": [
+        "ask-acfmrV"
+      ]
+    },
+    {
+      "check": "security-packaged-probe",
+      "status": "COMPLETE",
+      "evidence": "security-internal-review/packaged-DYHJTN",
+      "resultSha256": "957a8541b2b126f6f512583d6e79f49477a1822a117bf1df8ebef6dc6f147688",
+      "earlierRuns": [
+        {
+          "evidence": "packaged-X0R1qs",
+          "outcome": "hung 60 min, stopped by coordinator"
+        }
+      ]
+    },
+    {
+      "check": "ux-accessibility-pilot",
+      "status": "COMPLETED",
+      "states": 190,
+      "errors": 0,
+      "contrastFailures": 0,
+      "evidence": "pre-release-ux/ux-79C3XN",
+      "resultSha256": "0769c043f4d391b47e1eba67d6d4d5a2b7896e58837af1a43fbfeed585f92c8d",
+      "earlierRuns": [
+        "ux-757r1b"
+      ]
+    },
+    {
+      "check": "startup --warm-startup-20",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-startup-benchmark.cjs --app \"$PWD/.native-product-9lVRha/Code Intelligence Validation.app\" --warm-startup-20",
+      "status": "PASS",
+      "runs": 20,
+      "p95ReadyMs": 7908,
+      "p95IdleRssKiB": 1343728,
+      "maxIdleRssKiB": 1346352,
+      "evidence": "startup-performance/run-QOZD9P",
+      "resultSha256": "063859f68f44c12a3a024a6f59f54f28e5634fd62551089f385cf1d831ddb4dc",
+      "earlierRuns": [
+        {
+          "evidence": "run-pYYlyE",
+          "status": "FAIL",
+          "reason": "run 4 samplingComplete false (gap 316 ms); 16 not executed"
+        }
+      ]
+    },
+    {
+      "check": "workload small --series-20",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-9lVRha/Code Intelligence Validation.app\" --class small --series-20",
+      "status": "PASS",
+      "runs": 20,
+      "p95AnalysisMs": 22043,
+      "maxAnalysisMs": 22344,
+      "analysisPeakRssKiB": {
+        "min": 2441664,
+        "max": 2511568
+      },
+      "refreshMs": {
+        "min": 21073,
+        "max": 24030
+      },
+      "cancelReleaseMs": {
+        "min": 228,
+        "max": 1380
+      },
+      "cancelUiAckMs": "-19..-14 (runner timing defect, not evidence)",
+      "loadAtRunStart": {
+        "min": 2.98,
+        "max": 13.14
+      },
+      "evidence": "workload-performance/run-oH16Fl",
+      "resultSha256": "b16aadf91eb7e7a23a84966e6d5d4071786a16ca21a729b6787c46b511eebb9c",
+      "resourceSamplesSha256": "c53ff66eeae9a790a838d6f8a1fcd25e49fc96f7adcdd75c4f16373a277931f4"
+    },
+    {
+      "check": "workload medium --smoke-1",
+      "status": "FAIL",
+      "failure": "ANALYSIS_FAILED: backend OutOfMemoryError Java heap space (-Xmx2048m)",
+      "peakRssKiB": 3589792,
+      "evidence": [
+        "workload-performance/run-abPyCb",
+        "workload-performance/run-u8ObYG"
+      ],
+      "logs": "run-u8ObYG/profile-logs"
+    },
+    {
+      "check": "workload large --smoke-1",
+      "status": "NOT_RUN",
+      "reason": "DISK_SPACE_LOW: free 5,819,265,024 < required 6,442,450,944"
+    }
+  ],
+  "retirements": [
+    "final-candidate/retirement-182e8f",
+    "final-candidate/retirement-e75cb7",
+    "final-candidate/retirement-67f035"
+  ],
+  "releaseVerdict": "NO_GO"
+}
