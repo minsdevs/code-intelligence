@@ -58,18 +58,18 @@ R0/R1 engineering 작업 합계는66–112 집중 인일이다. [공개18셀의 
 
 | Gate | PASS의 증거 | 금지되는 대체 증거 | 현재 |
 |---|---|---|---|
-| G-IMPORT | C05 및 실제 picker→preview→snapshot, secret/size/race0 | 작은 fixture copy 성공만 | NOT RUN |
-| G-EVIDENCE | immutable source/edge span/coverage partition/GC/legacy migration100% | inventory count | NOT RUN |
-| G-JOB | 실제 worker/DB cancel·delete·retry·power loss·fencing | UI 취소 버튼만 | NOT RUN |
-| G-ACCURACY | 06 cell thresholds+negative0+blind real-repo review | parser 성공/테스트 총수 | NOT RUN |
-| G-PERF | 05의 지원 크기별20회 p95/full RSS·quota·latency | backend 단일 process RSS | NOT RUN |
-| G-SEC | 권한·IPC·egress·source execution·credential redaction 독립 검토 High0 및 signed helper C15 OS 거부 증거 | 암호화 라이브러리/별도 JVM 존재 | NOT RUN |
-| G-COST | fake provider C13/C16, 모든 entrypoint/restore 보수원장·safety journal/latch | 이미 청구된 chat 합산 | NOT RUN |
+| G-IMPORT | C05 및 실제 picker→preview→snapshot, secret/size/race0 | 작은 fixture copy 성공만 | 부분 실행·미통과(2026-10-07): C05 71건 중70 통과, packaged import 점검 통과. path grant 만료/nonce 없음·submodule 작업트리 복사(Medium) 미해결, 실제 OS 대화상자 클릭 미실행. [import-safety-matrix](../audit/import-safety-matrix-2026-10-07.md) |
+| G-EVIDENCE | immutable source/edge span/coverage partition/GC/legacy migration100% | inventory count | 부분 실행·미통과(2026-10-07): C06 사실 4,313건·V1→V27 migration walk 통과. CONFIG/MIGRATION span 한 줄 초과·v0 pin 정리·capability coverage 미저장(Medium) 미해결. [evidence-integrity-matrix](../audit/evidence-integrity-matrix-2026-10-07.md) |
+| G-JOB | 실제 worker/DB cancel·delete·retry·power loss·fencing | UI 취소 버튼만 | 부분 실행·미통과(2026-10-07): stale worker fencing 결함(High) 수정, worker/DB 경합60·LA8ZS9 packaged 경합8 통과. 실행 중 단계 10초 취소(T03) FAIL, 전원 차단 BLOCKED. [job-race-matrix](../audit/job-race-matrix-2026-10-07.md) |
+| G-ACCURACY | 06 cell thresholds+negative0+blind real-repo review | parser 성공/테스트 총수 | 측정 도구·개발 기준선만(2026-10-07): 독립 평가 주석0건으로 cell 판정 BLOCKED. 개발 자료에서 Java call-site span·abstention 등 실패 기록. [accuracy-baseline](../audit/accuracy-baseline-2026-10-07.md) |
+| G-PERF | 05의 지원 크기별20회 p95/full RSS·quota·latency | backend 단일 process RSS | 부분 실행·미통과(2026-10-07): retained-source 시간 산입 결함(High) 수정, LA8ZS9 small 20회 시리즈는 [통합 기록](../audit/release-gate-units-la8zs9-2026-10-07.md) 참조. medium/large는 제품 한도(TS 요청·max-files)로 BLOCKED. [workload-performance](../audit/workload-performance-2026-10-07.md) |
+| G-SEC | 권한·IPC·egress·source execution·credential redaction 독립 검토 High0 및 signed helper C15 OS 거부 증거 | 암호화 라이브러리/별도 JVM 존재 | 내부 검토만(2026-10-07): Git filter driver 실행(High) 수정. ADR-01 격리 미구현(High), CSP·fuse·renderer 경로 승인·redirect 자격증명(Medium) 미해결. 독립 검토·C15 BLOCKED. [security-internal-review](../audit/security-internal-review-2026-10-07.md) |
+| G-COST | fake provider C13/C16, 모든 entrypoint/restore 보수원장·safety journal/latch | 이미 청구된 chat 합산 | 부분 실행·미통과(2026-10-07): C13 행69 통과, 연결 URI 비밀번호 노출(High) 수정 후 LA8ZS9 packaged 첫 실행 probe 통과. 개인정보 마스킹 부재(Medium)·shipped fake-provider 경로 없음·독립 검토 미완료. [cost-egress-matrix](../audit/cost-egress-matrix-2026-10-07.md) |
 | G-OAUTH | O1 App으로 signed desktop→선택 public/private repo→expiry/refresh/revoke/SSO | mock OAuth/token 존재 | O1 개발 App 등록·설치 완료; 실계정 전체 수명주기/갱신/서명 앱은 미완료 |
-| G-RECOVERY | 실제 packaged app format2/3 정상·오류·C16 모든 crash 상태, DB+source hash·notes/task 일치·vault/journal 비역행 | 단독 PostgreSQL rollback | NOT RUN |
-| G-NATIVE | O2 서명/notary/staple, clean macOS matrix, install→local+GitHub→flow→source | 개발 Mac의 기존 .app | BLOCKED O2 |
-| G-UPDATE | signed manifest/artifact·거짓서명/다운그레이드거부·schema crash→복원 | electron-builder 옵션 존재 | BLOCKED O2 |
-| G-UX | 01의 사용자 과제7/8, false certainty0, 접근성 | headless API mock2 | NOT RUN |
+| G-RECOVERY | 실제 packaged app format2/3 정상·오류·C16 모든 crash 상태, DB+source hash·notes/task 일치·vault/journal 비역행 | 단독 PostgreSQL rollback | 부분 실행·미통과(2026-10-07): 1lvULq에서 C16 SIGKILL 경계26/26(첫 시도 실패1 보존)·journal fault5·구 archive 거부 통과. 전원 손실 NOT RUN, format2 정상 복원·실사용 프로필·구버전 binary BLOCKED. [recovery-crash-matrix](../audit/recovery-crash-matrix-2026-10-07.md) |
+| G-NATIVE | O2 서명/notary/staple, clean macOS matrix, install→local+GitHub→flow→source | 개발 Mac의 기존 .app | BLOCKED O2. 2026-10-07 서명 준비 점검(Mach-O100 inside-out·외부 참조0)과 단일 Mac loader 근사 통과, entitlements 과다(Medium). [native-update-readiness](../audit/native-update-readiness-2026-10-07.md) |
+| G-UPDATE | signed manifest/artifact·거짓서명/다운그레이드거부·schema crash→복원 | electron-builder 옵션 존재 | BLOCKED O2 및 미구현: 제품 updater·migration checkpoint·rollback floor 없음(High). fixture 키 계약 리허설만 통과 |
+| G-UX | 01의 사용자 과제7/8, false certainty0, 접근성 | headless API mock2 | 자동 점검만(2026-10-07): 관계 판정 표시·빈 결과 문구·진행 알림(High) 수정. 이 중 F1·F4 문구와 진행 알림은 LA8ZS9 pilot에서 관측, F2·F3은 단위 시험만. flow/impact 판정(F5/F6 High)·대비·포커스 미해결, 사용자8명 시험 BLOCKED. [ux-accessibility](../audit/ux-accessibility-2026-10-07.md) |
 
 release 승인은 필수 gate 전부 PASS+미해결 Critical/High0+공개 지원 셀과 결과 일치. AI를 첫 배포에서 숨겨 내보내기로 결정해도 G-COST 생략은 default OFF만으로 정당화하지 않고 모든 호출 진입점 disabled 증거가 필요하다. GitHub gate 실패를 숨기고 원래 제품으로 출시하지 않는다. local-only 별도 preview는 사용자에게 명시적으로 별도 범위 승인받을 때만 가능하다.
 
@@ -207,13 +207,22 @@ Electron 내 런타임 검증20회와 20회 성능 게이트(p95 8,380ms, idle �
 [1lvULq 후속](../audit/review-follow-up-1lvulq-2026-10-06.md)(`9211e88`)도 기능36개·강제종료 두 경계·
 런타임 검증20회·20회 게이트(p95 8,466ms, idle 최대1,519,408KiB)를 통과했다.
 
+2026-10-07에는 출시 gate 단위10개를 각 작업트리에서 실행하고, 조정자가 단위별 핵심
+명령을 다시 실행해 확인한 뒤 충돌 없이 병합했다. 병합 후 frontend 타입 검사와 backend
+Spotless 결함2건을 고쳤고, frontend449·검증 러너368·backend1,852PASS(환경 경로 1건, 단독
+67/67)·events19가 통과했다. desktop은 3,150PASS이며 실패2건은 부하 중 시간 초과(단독 통과)와
+main에서도 같은 기존 실패다. 깨끗한 `19300fa`의 [LA8ZS9](../audit/release-gate-units-la8zs9-2026-10-07.md)는
+기능36개·강제종료 두 경계·20회 시작 게이트(p95 8,734ms, idle 최대1,513,568KiB)를 통과했고,
+펜싱 수정이 들어간 packaged 작업 경합8·비용 첫 실행 probe·UX pilot·고지 포함 SBOM을 확인했다.
+각 gate의 행별 결과와 미해결 High는 위 §3 표와 단위 감사를 따르며 완료된 gate는 없다.
+
 | 단계 | 현재 상태 | 완료 근거 또는 남은 조건 |
 | --- | --- | --- |
-| 1 데이터 복구 안정화 | tZgvV7의 Electron SIGKILL 두 경계·복구·추가 정상 재시작 완료 / 전체 수용 미완료 | 각6개 점검과 source92/91·메모·암호화 기록 보존 확인. 실제 Electron에서 파일 메타데이터 재진입 문제를 재현하고 좁게 보정했으나 모든 과거 오류의 원인 확정은 아님. 기존 비용 검증은 별도이며 전체C16·전원손실·nonzero비용+retained-source 결합 native crash·실사용 DB/locale 수용은 잔여 |
+| 1 데이터 복구 안정화 | 1lvULq C16 SIGKILL 경계26/26·journal fault·구 archive 거부 통과, LA8ZS9 두 경계 재통과 / 전체 수용 미완료 | nonzero 비용원장과 보관 소스를 결합한 실제 Electron 강제종료·같은 프로필 복구·추가 재시작 확인(첫 시도 실패1 보존). 전원 손실 NOT RUN, format2 정상 복원 정책·실사용 DB/locale·구버전 binary는 BLOCKED. 남은 Low: 중단 시 복호화 payload 잔존·구 archive 분류·추가 DB 잔존 |
 | 2 실제 GitHub 가져오기 | 소비자 권한 검증 구현·회귀 완료 / 실계정 대기 | repo·clone/import·PR metadata에 revision-bound 권한과 결과 게시 검증. 기존 실패 project1의 실제 UI 재분석은 사용자 데이터 적용 조건 충족 후 |
 | 3 인증 수명주기 | refresh/CAS 구현·기본 Docker 인증통합 보완 / 실권한 수용 미완료 | 기존 JDBC6과 별도로 실제 Spring HTTP/JPA/Redis 인증13, 유지보수HTTP9 및 기본backend suite 통과. 실제 GitHub refresh/revoke/SSO와 그 전체운영경로 수용은 별도 |
-| 4 분석·작업 신뢰 | 마지막 binding/완료 알림 수정·회귀 완료 / 독립 수용 미완료 | TS271·실제sidecar12·backend1665PASS/12명시skip, SSE19·frontend436. package-entry 추측 거부·DB 완료 알림 복구와 snapshot 보존 검증. 독립corpus·모든취소/중단/재시도 간 이벤트 경합은 별도 |
-| 5 성능·보안·사용성 | xb6Kxe·1lvULq warm 시작·idle RSS 20회 게이트 PASS / 나머지 수용 미완료 | 1lvULq run-uvEMJ8 20/20(p95 8,466ms, 최대1,519,408KiB). xb6Kxe run-3XPeCJ 20/20, p95 8,380ms≤10초, idle p95 1,522,528KiB·최대1,525,200KiB≤1,572,864KiB, 전 회차 경계 AC·소스/후보 불변·운영오류/미실행0. 이전 tZgvV7 run-oAD8MS FAIL(12.544초, 1,745,680KiB)은 보존. cold cache·크기별 workload·직렬 GC의 대형 분석 영향·독립보안·사용자 과제·전체공급망 수용은 별도 |
-| 6 새 설치·업데이트 | 현재 소스 xb6Kxe 패키징·기능36개·복구 두 경계 통과 / 정식 설치 수용 미완료 | `ecf6344` 무변경 작업트리, Java 재컴파일·JAR readback·제어 멤버1,221개·분석기 production 의존성 검증 후 ad-hoc Validation 앱 제작. 새기기·최소OS·정식서명/업데이트와 모든 과거 시작 실패 원인 확인은 미완료 |
-| 7 배포물·운영 준비 | 현재 후보 해시·정적 inventory·제어 JAR provenance 확인 / 운영 조건 잔여 | 별도 제어 클래스6개·의존성3개·라이선스/notice9개 확인. 현재 정적 inventory는 completeSbom=false이며 shaded 멤버 전체 출처 대조·전체 라이선스 의무 완료를 뜻하지 않음. 새 온라인 advisory scan 없이 과거 결과를 보존. 전체공급망·운영 App/지원정책은 잔여 |
+| 4 분석·작업 신뢰 | stale worker fencing(High) 수정·packaged 경합 통과 / 독립 수용 미완료 | worker/DB 경합60·LA8ZS9 packaged8, C05 70/71·C06 사실4,313·migration walk 통과. 실행 중 단계 10초 취소(T03), CONFIG/MIGRATION span·v0 pin·capability coverage, Java call-site span·abstention·interface dispatch 판정 미해결. 독립 주석·blind review는 사람 필요 |
+| 5 성능·보안·사용성 | LA8ZS9 warm 시작·idle RSS 20회 게이트 PASS / 나머지 수용 미완료 | LA8ZS9 run-S5I7cy 20/20(p95 8,734ms, idle 최대1,513,568KiB, 전 회차 AC). 이전 1lvULq·xb6Kxe 통과와 tZgvV7 FAIL 기록은 보존. G-PERF small 20회는 [통합 기록](../audit/release-gate-units-la8zs9-2026-10-07.md), medium/large는 제품 한도로 BLOCKED. G-SEC 내부 검토 High1 수정·High1(ADR-01) 미해결, G-COST C13 69행 통과·개인정보 마스킹 결정 필요, G-UX false-certainty 일부 수정·F5/F6 미해결 |
+| 6 새 설치·업데이트 | LA8ZS9 패키징·기능36개·복구 두 경계 통과, 서명 준비 점검 통과 / 정식 설치·업데이트 미구현·미수용 | `19300fa` 무변경 작업트리에서 ad-hoc Validation 앱 제작. Mach-O100 서명 계획·외부 참조0·단일 Mac loader 근사 통과. 제품 updater·migration checkpoint·rollback floor(High) 미구현, Developer ID·공증·새 기기/최소OS는 사용자 자격·장비 필요 |
+| 7 배포물·운영 준비 | 완전 SBOM(미귀속0)·고지 포함 패키징 / 라이선스 의무·운영 조건 잔여 | CycloneDX 1.5 구성요소350, LA8ZS9에 Electron/Chromium 라이선스·제3자 고지 포함(원문 없음96→15). Redis·JRE source offer·FFmpeg는 법률 판단, JRE 공급 기록·jmh-core 포함 정리 필요. 2026-10-07 온라인 advisory 재조회 0건(이전 결과 보존). 지원정책·설치/복구 안내·릴리스노트·운영 App 소유는 잔여 |
 | **8 출시 최종 판정** | **이번 후보의 No-Go 판정 기록 완료 / 출시 미승인** | 앞선 필수 gate·독립 검토·정식 서명/공증 자격과 최종 공개 승인 전 배포 금지. 미검증을 통과로 바꾸지 않음 |
