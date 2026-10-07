@@ -20,7 +20,6 @@ const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.
 const { launchEnvironment } = require('../../desktop/scripts/packaged-keychain-acceptance.cjs');
 const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
-const { ensureNativeParent } = require('../backup-compatibility/owned-crash.cjs');
 const { readOwnerMemory } = require('./process-memory.cjs');
 const { confirmObservedGone } = require('./run-startup-benchmark.cjs');
 
@@ -67,7 +66,10 @@ async function main(argv = process.argv.slice(2)) {
     return [name, { packaged, current, identical: packaged === current }];
   }));
   const evidence = fs.mkdtempSync(path.join(ensureOutputParent(repo, 'validation/local/cost-egress-packaged'), 'probe-'));
-  const plan = prepareIsolatedRun({ parentDirectory: ensureNativeParent(repo), runtimeDirectory: runtime, purpose: 'automation',
+  // The worktree path is too long for the private Unix-socket budget of the isolated profile, so the
+  // profile lives under a fresh short parent (same convention as run-integrity-diagnostic.cjs).
+  const parent = fs.mkdtempSync('/private/tmp/cicp-');
+  const plan = prepareIsolatedRun({ parentDirectory: parent, runtimeDirectory: runtime, purpose: 'automation',
     forbiddenRoots: ['Code Intelligence', 'Code Intelligence Validation'].map(name => path.join(os.homedir(), 'Library/Application Support', name)) });
   const report = { format: 1, status: 'RUNNING', scope: 'packaged-first-run-ai-entry-points', app,
     buildSequence: manifest.buildSequence, appAsarSha256: hash(asarFile), manifestSha256: hash(manifestFile),
@@ -150,6 +152,8 @@ async function main(argv = process.argv.slice(2)) {
       report.exit = { code: owner.process().exitCode, signal: owner.process().signalCode, shutdown: diagnostics.shutdown ?? null };
     }
     stopObserving?.();
+    // The synthetic profile is not evidence; remove this run's own parent only after the app is confirmed gone.
+    if (report.cleanupConfirmed) { fs.rmSync(parent, { recursive: true, force: true }); report.profileRemoved = true; }
     try { assert.equal(hash(asarFile), report.appAsarSha256); assert.equal(hash(manifestFile), report.manifestSha256); report.bundleUnchanged = true; }
     catch { report.bundleUnchanged = false; report.status = 'FAIL'; }
     save();
