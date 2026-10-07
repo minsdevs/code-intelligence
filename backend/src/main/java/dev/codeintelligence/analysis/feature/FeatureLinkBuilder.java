@@ -148,18 +148,19 @@ final class FeatureLinkBuilder {
             }
         }
         included.addAll(extra);
+        // Files of included ENTITY-layer nodes, collected once: a table added here shares its file
+        // with one of them, so it never adds a file that was not already matched.
+        Set<String> entityFiles = new HashSet<>();
+        for (Long id : included) {
+            GraphNode other = nodesById.get(id);
+            if (other != null && "ENTITY".equals(other.layer()) && other.filePath() != null)
+                entityFiles.add(other.filePath());
+        }
         for (GraphNode node : nodesById.values()) {
-            if (!"DB_ENTITY".equals(node.nodeType()) || node.filePath() == null) {
-                continue;
-            }
-            for (Long id : Set.copyOf(included)) {
-                GraphNode other = nodesById.get(id);
-                if (other != null
-                        && "ENTITY".equals(other.layer())
-                        && node.filePath().equals(other.filePath())) {
-                    included.add(node.id());
-                    break;
-                }
+            if ("DB_ENTITY".equals(node.nodeType())
+                    && node.filePath() != null
+                    && entityFiles.contains(node.filePath())) {
+                included.add(node.id());
             }
         }
     }
