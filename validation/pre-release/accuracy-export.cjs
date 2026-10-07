@@ -106,7 +106,8 @@ async function main(argv = process.argv.slice(2)) {
         { name: 'backend-classes', path: 'backend/build/classes/java/main', ...build.backendClassesTree },
         { name: 'backend-resources', path: 'backend/build/resources/main', ...build.backendResourcesTree },
         { name: 'ts-analyzer-dist', path: 'analyzers/ts-analyzer/dist', ...report.tsAnalyzerDist },
-        { name: 'ts-analyzer-accuracy-server', path: 'analyzers/ts-analyzer/accuracy-server.cjs', kind: 'FILE', files: 1, sha256: report.tsAnalyzerServerSha256 },
+        // Component digests share the tree-digest framing (a FILE hashes "name\tsha256\n"), as the runner re-checks them.
+        { name: 'ts-analyzer-accuracy-server', path: 'analyzers/ts-analyzer/accuracy-server.cjs', ...treeDigest(path.join(analyzerDirectory, 'accuracy-server.cjs')) },
       ], javaVersion: build.javaVersion };
     const dumpMap = new Map(build.fixtures.map(id => [id, JSON.parse(fs.readFileSync(path.join(dumps, id + '.dump.json'), 'utf8'))]));
     report.dumpSha256 = Object.fromEntries(build.fixtures.map(id => [id, hash(path.join(dumps, id + '.dump.json'))]));

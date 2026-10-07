@@ -39,7 +39,9 @@ const SYMBOL_CELL = { java: 'J-S', ts: 'T-S', js: 'JS-S', sql: 'SQL-S' };
 const CALL_CELL = { java: 'J-C', ts: 'T-C', js: 'JS-C' };
 const UI_CELL = { ts: 'T-UI', js: 'JS-UI' };
 const JAVA_SYMBOLS = new Set(['CLASS', 'INTERFACE', 'ENUM', 'RECORD', 'ANNOTATION', 'METHOD']);
-const SYNTAX_REASONS = new Set(['JAVA_PARSE_FAILED', 'PROJECT_SYNTAX_REJECTED']);
+// Only a per-file parse failure is a file-level syntax verdict. PROJECT_SYNTAX_REJECTED marks every
+// submitted TS/JS file alike (TsParsingStep), so it does not say which file is invalid: no verdict.
+const SYNTAX_REASONS = new Set(['JAVA_PARSE_FAILED']);
 // Product reason vocabulary -> annotation-guide vocabulary (validation/t00/ANNOTATING.md).
 const UNRESOLVED_REASON = { DYNAMIC_MEMBER: 'DYNAMIC_TARGET', UNRESOLVED_TARGET: 'UNRESOLVED_TARGET' };
 
@@ -107,7 +109,8 @@ function readFixture(corpusFile, reference) {
   return { manifest, sources };
 }
 
-function convertFixture(fixture, dump) {
+// Observation ids are unique across the whole bundle, so each fixture gets its own id prefix.
+function convertFixture(fixture, dump, idPrefix = 'p') {
   const { manifest, sources } = fixture, cells = new Set(manifest.capabilities);
   const eligible = new Map(manifest.eligibility.map(item => [item.path + '\n' + item.cellId, item]));
   const audit = { fixtureId: manifest.fixtureId, dumpPath: dump.path, executionState: dump.executionState,
@@ -138,7 +141,7 @@ function convertFixture(fixture, dump) {
     if (!span) { audit.evidence.factsWithoutValidSpan.push({ cellId, path: file, origin }); return; }
     audit.evidence.factsWithSpan++;
     bump(audit.emitted, cellId);
-    facts.push({ observationId: 'p' + String(++sequence).padStart(5, '0'), cellId, kind: fact.kind, relationKind: fact.relationKind,
+    facts.push({ observationId: idPrefix + String(++sequence).padStart(5, '0'), cellId, kind: fact.kind, relationKind: fact.relationKind,
       source: { path: file, sha256: source.meta.sha256, namespace: source.meta.namespace, start: span.start, end: span.end },
       resolution: fact.resolution, targets: fact.targets ?? [], valid: fact.valid ?? null, diagnostics: fact.diagnostics ?? [],
       reasonCode: fact.reasonCode ?? null });
@@ -157,9 +160,8 @@ function convertFixture(fixture, dump) {
     const whole = { start: 0, end: source.bytes.length };
     if (['SUCCESS', 'PARTIAL'].includes(row.analysisStatus)) emit(cellId, file, whole, { kind: 'PARSER', relationKind: 'PARSE', resolution: 'NOT_APPLICABLE', valid: true }, 'file');
     else if (row.analysisStatus === 'FAILED' && SYNTAX_REASONS.has(row.analysisReason)) {
-      if (row.analysisReason === 'PROJECT_SYNTAX_REJECTED') bump(audit.projections, 'parser-project-level-syntax-rejection');
       emit(cellId, file, whole, { kind: 'PARSER', relationKind: 'PARSE', resolution: 'NOT_APPLICABLE', valid: false, diagnostics: ['SYNTAX_ERROR'] }, 'file');
-    } else bump(audit.projections, 'parser-no-verdict-' + row.analysisStatus);
+    } else bump(audit.projections, 'parser-no-verdict-' + row.analysisStatus + (row.analysisReason ? '-' + row.analysisReason : ''));
   }
   // S: declarations with their line evidence.
   for (const node of dump.nodes) {
@@ -327,7 +329,7 @@ function writeBundle({ root, corpus, capabilities, dumps, build, execution }) {
   for (const [fixtureId, fixture] of fixtures) {
     const dump = dumps.get(fixtureId);
     if (!dump) throw Object.assign(new Error('DUMP_MISSING'), { code: 'DUMP_MISSING' });
-    const converted = convertFixture(fixture, dump); runs.push(converted.run); audits.push(converted.audit);
+    const converted = convertFixture(fixture, dump, 'f' + runs.length + '.p'); runs.push(converted.run); audits.push(converted.audit);
   }
   const productBuildSha256 = sha256(Buffer.from(stableJson(build)));
   const observations = { contractVersion: '1.0.0', bundleId: 'product-' + execution.nonce.slice(0, 16),
