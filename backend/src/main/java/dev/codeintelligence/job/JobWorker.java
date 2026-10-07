@@ -34,6 +34,7 @@ public class JobWorker {
     private final AppProperties appProperties;
     private final JobWorkspaceProvider workspaces;
     private final MaintenanceGate maintenance;
+    private final AnalysisMemoryWatchdog memory;
     private final SimpleAsyncTaskExecutor executor;
     // Run claims and final transitions of a job are serialized against each other (B4 fencing).
     private final ReentrantLock runOwnership = new ReentrantLock();
@@ -45,7 +46,31 @@ public class JobWorker {
             JobProgressPublisher publisher,
             AppProperties appProperties,
             JobWorkspaceProvider workspaces) {
-        this(repository, pipeline, publisher, appProperties, workspaces, new MaintenanceGate());
+        this(
+                repository,
+                pipeline,
+                publisher,
+                appProperties,
+                workspaces,
+                new MaintenanceGate(),
+                AnalysisMemoryWatchdog.disabled());
+    }
+
+    public JobWorker(
+            JobRepository repository,
+            Pipeline pipeline,
+            JobProgressPublisher publisher,
+            AppProperties appProperties,
+            JobWorkspaceProvider workspaces,
+            MaintenanceGate maintenance) {
+        this(
+                repository,
+                pipeline,
+                publisher,
+                appProperties,
+                workspaces,
+                maintenance,
+                AnalysisMemoryWatchdog.disabled());
     }
 
     @Autowired
@@ -55,13 +80,15 @@ public class JobWorker {
             JobProgressPublisher publisher,
             AppProperties appProperties,
             JobWorkspaceProvider workspaces,
-            MaintenanceGate maintenance) {
+            MaintenanceGate maintenance,
+            AnalysisMemoryWatchdog memory) {
         this.repository = repository;
         this.pipeline = pipeline;
         this.publisher = publisher;
         this.appProperties = appProperties;
         this.workspaces = workspaces;
         this.maintenance = maintenance;
+        this.memory = memory;
         this.executor = new SimpleAsyncTaskExecutor("job-");
         this.executor.setVirtualThreads(true);
     }
@@ -108,9 +135,17 @@ public class JobWorker {
             runOwnership.unlock();
         }
         try {
+            // 05 §4: no new analysis work starts while the owner tree is above the memory limit.
+            if (!memory.admits()) {
+                repository.markJobFailed(
+                        jobId, AnalysisMemoryLimitException.MESSAGE, AnalysisMemoryLimitException.CODE);
+                publisher.publish(jobId);
+                return;
+            }
             publisher.publish(jobId);
             JobRecord job = repository.findJob(jobId).orElseThrow();
-            try (var workspace = workspaces.open(job)) {
+            try (var workspace = workspaces.open(job);
+                    var watch = memory.watch(run::exceedMemoryLimit)) {
                 Path clonePath = workspace.clonePath();
                 for (JobStepRecord step : repository.findSteps(jobId)) {
                     if (step.status() == StepStatus.DONE || step.status() == StepStatus.SKIPPED) {

@@ -1,6 +1,7 @@
 package dev.codeintelligence.project;
 
 import dev.codeintelligence.source.SourceStoreClient;
+import dev.codeintelligence.source.SourceStoreException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -16,7 +17,10 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Publishes immutable source metadata only after the main-owned blob store acknowledges durability. */
+/**
+ * Publishes immutable source metadata only after the main-owned blob store acknowledges durability:
+ * blobs are staged in vault batches and one barrier covering the whole capture precedes the commit.
+ */
 @Service
 public class LocalSnapshotStore {
     private final SourceStoreClient client;
@@ -65,6 +69,8 @@ public class LocalSnapshotStore {
         private final Instant approvedAt;
         private final LocalSourceManifest digest;
         private final List<Entry> entries = new ArrayList<>();
+        private String session;
+        private long sequence;
         private boolean finished;
 
         private Capture(long projectId, long jobId, LocalSourceBinding binding, Instant approvedAt) {
@@ -93,7 +99,13 @@ public class LocalSnapshotStore {
                 if (!formatter.idFor(Constants.OBJ_BLOB, bytes).name().equals(gitOid))
                     throw LocalSourceApprovalException.sourceChanged();
             }
-            var blob = client.put(projectId, bytes);
+            var staged = client.stage(projectId, bytes);
+            // A reopened vault dropped whatever an earlier session staged but never flushed.
+            if (session == null) session = staged.session();
+            else if (!session.equals(staged.session())) throw SourceStoreException.unavailable();
+            if (staged.sequence() <= sequence) throw SourceStoreException.integrity();
+            sequence = staged.sequence();
+            var blob = staged.blob();
             digest.add(path, bytes.length, HexFormat.of().parseHex(blob.sha256()));
             if (digest.bytes() > binding.selectedBytes()) throw LocalSourceApprovalException.sourceChanged();
             entries.add(new Entry(path, gitOid, blob));
@@ -105,6 +117,7 @@ public class LocalSnapshotStore {
             if (!digest.finish().equals(binding.manifestSha256())
                     || digest.count() != binding.selectedFiles()
                     || digest.bytes() != binding.selectedBytes()) throw LocalSourceApprovalException.sourceChanged();
+            if (session != null) client.barrier(session, sequence);
             return Objects.requireNonNull(transactions.execute(tx -> {
                 jdbc.sql("select id from projects where id=:project for update")
                         .param("project", projectId)

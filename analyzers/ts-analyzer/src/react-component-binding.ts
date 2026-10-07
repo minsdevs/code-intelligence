@@ -1,12 +1,15 @@
 import { Node, SyntaxKind, ts, type SourceFile } from 'ts-morph'
 import type { AnalyzeFile, RouteComponentResolution, SymbolHit } from './types'
-import { createImportResolver } from './semantic-extractor'
+import { createImportResolver, type SliceScope } from './semantic-extractor'
+import { forEachDescendantOfKinds } from './walk'
 
 type ExportRef = { node?: Node; local?: string; source?: string; imported?: string; typeOnly?: boolean }
 type Module = { source: SourceFile; locals: Map<string, Node[]>; exports: Map<string, ExportRef[]> }
 const unresolved: RouteComponentResolution = { status: 'UNRESOLVED', target: null }
 const filePath = (source: SourceFile): string => source.getFilePath().replace(/^\//, '')
 const keyOf = (hit: SymbolHit): string => JSON.stringify([hit.filePath, hit.name])
+const WRITE_KINDS = [SyntaxKind.BinaryExpression, SyntaxKind.PrefixUnaryExpression, SyntaxKind.PostfixUnaryExpression,
+  SyntaxKind.ForOfStatement, SyntaxKind.ForInStatement]
 
 /**
  * Resolve only supplied value declarations. Never run an import, evaluate a helper,
@@ -16,10 +19,16 @@ const keyOf = (hit: SymbolHit): string => JSON.stringify([hit.filePath, hit.name
  * are deliberately not linked even when a source position would distinguish them.
  */
 export function createReactComponentResolver(
-  sources: SourceFile[], files: AnalyzeFile[], declarations: Map<Node, SymbolHit>,
+  sources: SourceFile[], files: AnalyzeFile[], declarations: Map<Node, SymbolHit>, scope?: SliceScope,
 ): (initializer: Node | undefined) => RouteComponentResolution {
   const modules = new Map(sources.map(source => [filePath(source), indexModule(source)]))
-  const resolveImport = createImportResolver(files, new Set(modules.keys()), { allowPackageFallback: false })
+  const resolveModule = createImportResolver(files, scope?.pathSet ?? new Set(modules.keys()), { allowPackageFallback: false })
+  // A slice reports a chain that leaves its program; the route file is re-run with more context.
+  const resolveImport = (specifier: string, fromPath: string): string | null => {
+    const resolved = resolveModule(specifier, fromPath)
+    if (resolved && scope && !scope.inProgram.has(resolved)) scope.outside(resolved)
+    return resolved
+  }
   const occurrences = new Map<string, number>()
   for (const hit of declarations.values()) occurrences.set(keyOf(hit), (occurrences.get(keyOf(hit)) ?? 0) + 1)
   const written = writtenBindings(sources)
@@ -131,7 +140,7 @@ function writtenBindings(sources: SourceFile[]): Set<Node> {
     } else if (Node.isSpreadElement(node)) targets(node.getExpression())
     else if (Node.isBinaryExpression(node) && node.getOperatorToken().getKind() === SyntaxKind.EqualsToken) targets(node.getLeft())
   }
-  for (const source of sources) source.forEachDescendant(node => {
+  for (const source of sources) forEachDescendantOfKinds(source, WRITE_KINDS, node => {
     if (Node.isBinaryExpression(node) && node.getOperatorToken().getKind() >= SyntaxKind.FirstAssignment
       && node.getOperatorToken().getKind() <= SyntaxKind.LastAssignment) targets(node.getLeft())
     else if ((Node.isPrefixUnaryExpression(node) || Node.isPostfixUnaryExpression(node))

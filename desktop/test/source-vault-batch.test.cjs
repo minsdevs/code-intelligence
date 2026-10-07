@@ -1,0 +1,266 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const test = require('node:test');
+const { createSourceVault, openSourceVault, MAX_BATCH_FILES } = require('../src/source-vault.cjs');
+
+const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+const code = expected => error => error?.code === expected;
+// The intent record is published with the vault's atomic writer (temp file flushed, then renamed).
+const BATCH_POINTS = ['batch-intent:file-synced', 'batch:intent-written', 'batch:blob-written', 'batch:blobs-synced',
+  'batch:intent-retired'];
+
+// Synthetic OS wrapping: this key exists only in this disposable test process.
+function syntheticWrapper() {
+  const wrappingKey = crypto.randomBytes(32);
+  return {
+    isAvailable: () => true,
+    wrap(bytes) {
+      const nonce = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv('aes-256-gcm', wrappingKey, nonce);
+      const encrypted = Buffer.concat([cipher.update(bytes), cipher.final()]);
+      return Buffer.concat([nonce, cipher.getAuthTag(), encrypted]);
+    },
+    unwrap(wrapped) {
+      const decipher = crypto.createDecipheriv('aes-256-gcm', wrappingKey, wrapped.subarray(0, 12));
+      decipher.setAuthTag(wrapped.subarray(12, 28));
+      return Buffer.concat([decipher.update(wrapped.subarray(28)), decipher.final()]);
+    },
+  };
+}
+
+async function fixture(t) {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ci-source-batch-test-')));
+  const options = { safetyRoot: path.join(root, 'safety'), sourceRoot: path.join(root, 'sources'),
+    installationId: 'synthetic-installation_01', wrapper: syntheticWrapper() };
+  const handles = [];
+  const f = {
+    root, options,
+    address: ({ projectId, sha256 }) => path.join(options.sourceRoot, String(projectId), sha256),
+    blob: value => path.join(f.address(value), 'blob.bin'),
+    intent: path.join(options.sourceRoot, '.batch-intent'),
+    // A real crash between the intent temp flush and its rename leaves this residue behind.
+    pendingIntent: path.join(options.sourceRoot, `.pending-${'b'.repeat(32)}`),
+    async create(extra = {}) { const v = await createSourceVault({ ...options, ...extra }); handles.push(v); return v; },
+    async open(extra = {}) { const v = await openSourceVault({ ...options, ...extra }); handles.push(v); return v; },
+  };
+  t.after(async () => {
+    for (const handle of handles) await handle.close().catch(() => {});
+    await fs.rm(root, { recursive: true, force: true });
+  });
+  return f;
+}
+const exists = file => fs.lstat(file).then(() => true, error => {
+  if (error.code === 'ENOENT') return false;
+  throw error;
+});
+
+// Counts the operations that reach the disk barrier: every FileHandle.sync (F_FULLFSYNC on macOS)
+// and every rename. The vault resolves both through node:fs/promises at call time.
+async function countDurability(t, root) {
+  const counts = { sync: 0, rename: 0 };
+  const probe = await fs.open(path.join(root, 'probe'), 'w');
+  const prototype = Object.getPrototypeOf(probe);
+  await probe.close();
+  const sync = prototype.sync;
+  const rename = fs.rename;
+  prototype.sync = function counted(...args) { counts.sync += 1; return sync.apply(this, args); };
+  fs.rename = (...args) => { counts.rename += 1; return rename(...args); };
+  t.after(() => { prototype.sync = sync; fs.rename = rename; });
+  return counts;
+}
+
+test('staged blobs become readable and durable only through a barrier of the same vault session', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const inputs = [Buffer.from('first staged source'), Buffer.from('second staged source'), Buffer.from('first staged source')];
+  const receipts = [];
+  for (const bytes of inputs) receipts.push(await vault.stage({ projectId: 3, bytes }));
+  assert.equal(receipts[0].sha256, digest(inputs[0]));
+  assert.equal(receipts[0].projectId, '3');
+  assert.match(receipts[0].session, /^[a-f0-9]{32}$/);
+  assert.deepEqual(receipts.map(r => r.session), Array(3).fill(receipts[0].session));
+  assert.deepEqual(receipts.map(r => r.sequence), [1, 2, 3]);
+  assert.deepEqual(receipts.map(r => r.deduplicated), [false, false, true]);
+  // Below the batch limit nothing is written before the barrier.
+  assert.equal(await exists(path.join(f.options.sourceRoot, '3')), false);
+  await assert.rejects(vault.barrier({ session: receipts[0].session, sequence: 4 }), code('SOURCE_VAULT_ARGUMENT'));
+  await assert.rejects(vault.barrier({ session: 'f'.repeat(32), sequence: 3 }), code('SOURCE_VAULT_MISSING'));
+  const barrier = await vault.barrier({ session: receipts[0].session, sequence: 3 });
+  assert.deepEqual({ ...barrier }, { format: 1, session: receipts[0].session, sequence: 3 });
+  assert.equal(await exists(f.intent), false);
+  assert.equal(vault.info().store.entries, 5); // project + two (address, blob) pairs
+  await vault.close();
+  const reopened = await f.open();
+  assert.deepEqual(await reopened.read(receipts[0]), inputs[0]);
+  assert.deepEqual(await reopened.read(receipts[1]), inputs[1]);
+  assert.equal(reopened.info().store.entries, 5);
+  // A later session cannot claim the earlier session's staged blobs as durable.
+  await assert.rejects(reopened.barrier({ session: receipts[0].session, sequence: 3 }), code('SOURCE_VAULT_MISSING'));
+  // Content that is already committed deduplicates without being written again.
+  const again = await reopened.stage({ projectId: 3, bytes: inputs[1] });
+  assert.equal(again.deduplicated, true);
+  await reopened.barrier(again);
+});
+
+test('an unacknowledged staged batch is lost on close and its old session barrier fails', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const staged = await vault.stage({ projectId: 1, bytes: Buffer.from('never acknowledged') });
+  await vault.close();
+  const reopened = await f.open();
+  await assert.rejects(reopened.read(staged), code('SOURCE_VAULT_MISSING'));
+  await assert.rejects(reopened.barrier(staged), code('SOURCE_VAULT_MISSING'));
+  assert.equal(reopened.info().store.entries, 0);
+});
+
+test('durability calls per import are bounded by batches, not by per-blob renames and directory flushes', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const files = 2 * MAX_BATCH_FILES + 3;
+  const batches = 3;
+  const counts = await countDurability(t, f.root);
+  let last;
+  for (let i = 0; i < files; i += 1) last = await vault.stage({ projectId: 1, bytes: Buffer.from(`source file ${i}`) });
+  await vault.barrier(last);
+  // One rename per batch (the intent record), never one per blob.
+  assert.equal(counts.rename, batches);
+  // Per blob only its new file and address directory inode are flushed (each clean after the
+  // batch's first device flush); the shared root/project/intent flushes are per batch.
+  assert.ok(counts.sync <= 2 * files + 6 * batches, `sync calls ${counts.sync}`);
+  const legacy = { sync: counts.sync, rename: counts.rename };
+  for (let i = 0; i < 10; i += 1) await vault.put({ projectId: 1, bytes: Buffer.from(`legacy file ${i}`) });
+  assert.equal(counts.rename - legacy.rename, 10); // contrast: the per-blob put renames every blob
+  assert.ok(counts.sync - legacy.sync >= 30);
+  await vault.close();
+  const reopened = await f.open();
+  assert.equal(reopened.info().store.entries, 1 + 2 * (files + 10));
+  assert.deepEqual(await reopened.read({ projectId: 1, sha256: digest(Buffer.from('source file 7')), byteSize: 13 }),
+    Buffer.from('source file 7'));
+});
+
+test('reaching the batch limit flushes a complete batch before the barrier is requested', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const receipts = [];
+  for (let i = 0; i <= MAX_BATCH_FILES; i += 1) receipts.push(await vault.stage({ projectId: 1, bytes: Buffer.from(`f${i}`) }));
+  // The first full batch is on disk and intent-free; the last stage is still only in memory.
+  assert.equal(await exists(f.blob(receipts[0])), true);
+  assert.equal(await exists(f.blob(receipts.at(-1))), false);
+  assert.equal(await exists(f.intent), false);
+  await vault.barrier(receipts.at(-1));
+  assert.equal(await exists(f.blob(receipts.at(-1))), true);
+});
+
+for (const point of BATCH_POINTS) test(`batch crash at ${point} leaves the committed state and a recoverable store`, async t => {
+  const f = await fixture(t);
+  let armed = false;
+  const events = [];
+  const vault = await f.create({ fault: event => {
+    if (event.startsWith('batch')) events.push(event);
+    if (armed && event === point) throw new Error('injected crash');
+  } });
+  const legacy = await vault.put({ projectId: 1, bytes: Buffer.from('legacy committed source') });
+  const committed = await vault.stage({ projectId: 1, bytes: Buffer.from('batch committed source') });
+  await vault.barrier(committed);
+  const committedEnvelope = await fs.readFile(f.blob(committed));
+  const fresh = [Buffer.from('interrupted new one'), Buffer.from('interrupted new two')];
+  armed = true; events.length = 0;
+  const staged = [];
+  for (const bytes of fresh) staged.push(await vault.stage({ projectId: 2, bytes }));
+  staged.push(await vault.stage({ projectId: 1, bytes: Buffer.from('batch committed source') }));
+  await assert.rejects(vault.barrier(staged.at(-1)), code('SOURCE_VAULT_IO'));
+  assert.equal(events.at(-1), point);
+  // A failed barrier never acknowledges and the handle requires reopening, like a crash.
+  assert.throws(() => vault.info(), code('SOURCE_VAULT_CLOSED'));
+  await assert.rejects(vault.barrier(staged.at(-1)), code('SOURCE_VAULT_CLOSED'));
+  await vault.close();
+  await fs.writeFile(f.pendingIntent, 'torn intent', { mode: 0o600 });
+
+  const reopened = await f.open();
+  assert.equal(await exists(f.intent), false);
+  assert.equal(await exists(f.pendingIntent), false);
+  assert.deepEqual(await reopened.read(legacy), Buffer.from('legacy committed source'));
+  assert.deepEqual(await reopened.read(committed), Buffer.from('batch committed source'));
+  assert.deepEqual(await fs.readFile(f.blob(committed)), committedEnvelope);
+  const survived = point === 'batch:intent-retired';
+  for (const [index, bytes] of fresh.entries()) {
+    assert.equal(await exists(f.address(staged[index])), survived, `address ${index}`);
+    if (survived) assert.deepEqual(await reopened.read(staged[index]), bytes);
+    else await assert.rejects(reopened.read(staged[index]), code('SOURCE_VAULT_MISSING'));
+  }
+  // Accounting after recovery matches a fresh scan of what remains.
+  const recovered = reopened.info().store;
+  await reopened.close();
+  const scanned = await f.open();
+  assert.deepEqual(scanned.info().store, recovered);
+  // No permanent residue: the same content can be staged and committed again.
+  let last;
+  for (const bytes of fresh) last = await scanned.stage({ projectId: 2, bytes });
+  assert.equal(last.deduplicated, survived);
+  await scanned.barrier(last);
+  for (const [index, bytes] of fresh.entries()) assert.deepEqual(await scanned.read(staged[index]), bytes);
+});
+
+test('other operations flush staged blobs first so a per-blob put never acknowledges non-durable bytes', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const bytes = Buffer.from('staged then put');
+  const staged = await vault.stage({ projectId: 1, bytes });
+  const put = await vault.put({ projectId: 1, bytes });
+  assert.equal(put.deduplicated, true);
+  assert.equal(await exists(f.blob(staged)), true);
+  assert.equal(await exists(f.intent), false);
+  const other = await vault.stage({ projectId: 1, bytes: Buffer.from('staged then read') });
+  assert.deepEqual(await vault.read(other), Buffer.from('staged then read'));
+  // The barrier still confirms the whole session after an implicit flush.
+  assert.equal((await vault.barrier(other)).sequence, 2);
+});
+
+test('a damaged batch intent fails closed without deleting any blob', async t => {
+  const f = await fixture(t);
+  let crash = false;
+  const vault = await f.create({ fault: event => { if (crash && event === 'batch:blobs-synced') throw new Error('injected crash'); } });
+  const committed = await vault.put({ projectId: 1, bytes: Buffer.from('committed') });
+  crash = true;
+  const staged = await vault.stage({ projectId: 1, bytes: Buffer.from('interrupted') });
+  await assert.rejects(vault.barrier(staged), code('SOURCE_VAULT_IO'));
+  await vault.close();
+  const record = JSON.parse(await fs.readFile(f.intent, 'utf8'));
+  record.addresses.push({ projectId: '1', sha256: committed.sha256 });
+  await fs.writeFile(f.intent, JSON.stringify(record), { mode: 0o600 });
+  await assert.rejects(f.open(), code('SOURCE_VAULT_INTEGRITY'));
+  assert.equal(await exists(f.blob(committed)), true);
+  assert.equal(await exists(f.blob(staged)), true);
+});
+
+test('staging honours the store quota before writing and stays unavailable to restore stages', async t => {
+  const f = await fixture(t);
+  const vault = await f.create({ maxStoreEntries: 4 });
+  const first = await vault.stage({ projectId: 1, bytes: Buffer.from('fits') });
+  await assert.rejects(vault.stage({ projectId: 1, bytes: Buffer.from('does not fit') }), code('SOURCE_VAULT_LIMIT'));
+  await vault.barrier(first);
+  assert.equal(vault.info().store.entries, 3);
+  await assert.rejects(vault.stage({ projectId: 1, bytes: 'not bytes' }), code('SOURCE_VAULT_ARGUMENT'));
+  await assert.rejects(vault.barrier({ session: first.session, sequence: 0 }), code('SOURCE_VAULT_ARGUMENT'));
+});
+
+test('deduplicated staged receipts report the key that protects the stored bytes after rotation', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const bytes = Buffer.from('rotated source');
+  const first = await vault.stage({ projectId: 1, bytes });
+  await vault.barrier(first);
+  const rotated = await vault.rotate();
+  assert.notEqual(rotated.activeKeyId, first.keyId);
+  const again = await vault.stage({ projectId: 1, bytes });
+  const twice = await vault.stage({ projectId: 1, bytes });
+  const fresh = await vault.stage({ projectId: 1, bytes: Buffer.from('new under rotated key') });
+  assert.deepEqual([again.keyId, twice.keyId, fresh.keyId], [first.keyId, first.keyId, rotated.activeKeyId]);
+  await vault.barrier(fresh);
+  assert.deepEqual(await vault.exportCiphertext(again).then(value => value.keyId), first.keyId);
+});

@@ -88,4 +88,45 @@ class JobCancellationTest {
                     .isInstanceOf(JobCancelledException.class);
         }
     }
+
+    @Test
+    void aMemoryLimitStopFailsTheStepWithItsRecoveryCodeInsteadOfCancellingIt() {
+        BoundJobCancellation bound = BoundJobCancellation.bind();
+        JobCancellation.checkpoint();
+        bound.exceedMemoryLimit();
+        assertThatThrownBy(JobCancellation::checkpoint)
+                .isInstanceOf(AnalysisMemoryLimitException.class)
+                .isNotInstanceOf(JobCancelledException.class)
+                .satisfies(error -> assertThat(((AnalysisMemoryLimitException) error).failureCode())
+                        .isEqualTo("ANALYSIS_MEMORY_LIMIT"));
+        bound.close();
+        assertThatCode(JobCancellation::checkpoint).doesNotThrowAnyException();
+    }
+
+    @Test
+    void aMemoryLimitStopInterruptsABlockedWorkerCall() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CompletableFuture<BoundJobCancellation> token = new CompletableFuture<>();
+        CompletableFuture<Throwable> outcome = new CompletableFuture<>();
+        Thread.ofVirtual().start(() -> {
+            try (BoundJobCancellation bound = BoundJobCancellation.bind()) {
+                token.complete(bound);
+                JobCancellation.interruptibly(() -> {
+                    entered.countDown();
+                    try {
+                        Thread.sleep(Duration.ofSeconds(30));
+                    } catch (InterruptedException interrupted) {
+                        throw new IllegalStateException("worker request aborted", interrupted);
+                    }
+                    return null;
+                });
+                outcome.complete(null);
+            } catch (Throwable failure) {
+                outcome.complete(failure);
+            }
+        });
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+        token.get(5, TimeUnit.SECONDS).exceedMemoryLimit();
+        assertThat(outcome.get(5, TimeUnit.SECONDS)).isInstanceOf(AnalysisMemoryLimitException.class);
+    }
 }

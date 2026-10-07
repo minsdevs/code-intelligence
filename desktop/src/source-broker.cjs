@@ -12,6 +12,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 const HEX = /^[0-9a-f]{64}$/;
 const PROJECT_ID = /^[1-9][0-9]{0,18}$/;
 const KEY_ID = /^[0-9a-f]{32}$/;
+const SESSION = /^[0-9a-f]{32}$/;
 
 class SourceBrokerError extends Error {
   constructor(code = 'SOURCE_BROKER_UNAVAILABLE') {
@@ -33,22 +34,30 @@ function exactKeys(value, keys) {
 }
 
 function validate(request, authToken) {
-  const fields = ['version', 'requestId', 'auth', 'operation', 'projectId', 'sha256', 'byteSize'];
-  if (request?.operation === 'PUT') fields.push('bytes');
+  // STAGE is a PUT whose durability is acknowledged later by one BARRIER for the whole import.
+  const barrier = request?.operation === 'BARRIER';
+  const fields = barrier ? ['version', 'requestId', 'auth', 'operation', 'session', 'sequence']
+    : ['version', 'requestId', 'auth', 'operation', 'projectId', 'sha256', 'byteSize'];
+  if (request?.operation === 'PUT' || request?.operation === 'STAGE') fields.push('bytes');
   exactKeys(request, fields);
   if (request.version !== 1) reject('SOURCE_BROKER_UNSUPPORTED');
   if (!fullMatch(request.auth, HEX)
       || !crypto.timingSafeEqual(Buffer.from(request.auth, 'hex'), Buffer.from(authToken, 'hex'))) {
     reject('SOURCE_BROKER_UNAUTHORIZED');
   }
-  if (!fullMatch(request.requestId, UUID) || !['PUT', 'READ'].includes(request.operation)
+  if (barrier) {
+    if (!fullMatch(request.requestId, UUID) || !fullMatch(request.session, SESSION)
+        || !Number.isSafeInteger(request.sequence) || request.sequence < 1) reject('SOURCE_BROKER_INVALID');
+    return null;
+  }
+  if (!fullMatch(request.requestId, UUID) || !['PUT', 'STAGE', 'READ'].includes(request.operation)
       || !fullMatch(request.projectId, PROJECT_ID)
       || BigInt(request.projectId) > 9223372036854775807n
       || !fullMatch(request.sha256, HEX)
       || !Number.isSafeInteger(request.byteSize) || request.byteSize < 0 || request.byteSize > MAX_BYTES) {
     reject('SOURCE_BROKER_INVALID');
   }
-  if (request.operation === 'PUT') {
+  if (request.operation !== 'READ') {
     if (typeof request.bytes !== 'string' || request.bytes.length !== 4 * Math.ceil(request.byteSize / 3)) {
       reject('SOURCE_BROKER_INVALID');
     }
@@ -131,6 +140,19 @@ async function createSourceBroker({ socketPath, authToken, vault, timeoutMs = 10
             if (stored.sha256 !== request.sha256 || stored.byteSize !== request.byteSize
                 || stored.projectId !== request.projectId || !fullMatch(stored.keyId, KEY_ID)) reject();
             result = { sha256: stored.sha256, byteSize: stored.byteSize, keyId: stored.keyId };
+          } else if (request.operation === 'STAGE') {
+            if (typeof vault.stage !== 'function') reject('SOURCE_BROKER_UNSUPPORTED');
+            const staged = await vault.stage({ projectId: request.projectId, bytes });
+            if (staged.sha256 !== request.sha256 || staged.byteSize !== request.byteSize
+                || staged.projectId !== request.projectId || !fullMatch(staged.keyId, KEY_ID)
+                || !fullMatch(staged.session, SESSION) || !Number.isSafeInteger(staged.sequence) || staged.sequence < 1) reject();
+            result = { sha256: staged.sha256, byteSize: staged.byteSize, keyId: staged.keyId,
+              session: staged.session, sequence: staged.sequence };
+          } else if (request.operation === 'BARRIER') {
+            if (typeof vault.barrier !== 'function') reject('SOURCE_BROKER_UNSUPPORTED');
+            const settled = await vault.barrier({ session: request.session, sequence: request.sequence });
+            if (settled.session !== request.session || settled.sequence !== request.sequence) reject();
+            result = { session: settled.session, sequence: settled.sequence };
           } else {
             const bytes = await vault.read({ projectId: request.projectId, sha256: request.sha256, byteSize: request.byteSize });
             if (!Buffer.isBuffer(bytes) || bytes.length !== request.byteSize
