@@ -9,6 +9,7 @@ import { CoveragePanel } from './CoveragePanel'
 import ExportButton from './ExportButton'
 import SnapshotComparisonPanel from './SnapshotComparisonPanel'
 import FindingJudgmentEditor from './FindingJudgmentEditor'
+import { ImpactDependentGroups, ImpactOutsideAnalysisSection } from './ImpactGroups'
 import { useT } from '../../lib/i18n'
 import { parseProjectId } from '../../lib/projectId'
 import { useUiStore } from '../../stores/uiStore'
@@ -287,40 +288,20 @@ export default function AnalysisPage() {
               </span>
               <span className="text-[13px] text-ink-muted">정적 관계 기반 참고 점수 {impactQuery.data.riskScore}</span>
             </p>
+            <p className="mt-1 text-xs text-ink-muted">{t('analysis.impact.scoreRule')}</p>
             {impactQuery.data.dependents.length === 0 ? (
               <p className="mt-3 text-[13px] text-ink-muted">{t('analysis.noReverseDeps')}</p>
             ) : (
-              <ol aria-label="Impact dependents" className="mt-3 space-y-1">
-                {impactQuery.data.dependents.map((dep) => (
-                  <li key={`${dep.depth}-${dep.nodeId}-${dep.edgeType}`}>
-                    {dep.filePath ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          navigate(
-                            `/projects/${projectId}/code${codeLocationSearch(dep.filePath!, dep.line, { snapshotId: impactQuery.data?.resolvedSnapshotId, versioned: true })}`,
-                          )
-                        }
-                        className="w-full rounded-md px-1 py-1 text-left hover:bg-surface-2"
-                      >
-                        <span className="block text-[13px] text-ink">{dep.name}</span>
-                        <span className="font-mono text-[11px] text-ink-faint">
-                          d{dep.depth} · {dep.edgeType} · {dep.filePath}
-                          {dep.line != null ? `:${dep.line}` : ''}
-                        </span>
-                      </button>
-                    ) : (
-                      <div className="px-1 py-1">
-                        <span className="block text-[13px] text-ink">{dep.name}</span>
-                        <span className="font-mono text-[11px] text-ink-faint">
-                          d{dep.depth} · {dep.edgeType}
-                        </span>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ol>
+              <ImpactDependentGroups
+                dependents={impactQuery.data.dependents}
+                onOpen={(dep) =>
+                  navigate(
+                    `/projects/${projectId}/code${codeLocationSearch(dep.filePath!, dep.line, { snapshotId: impactQuery.data?.resolvedSnapshotId, versioned: true })}`,
+                  )
+                }
+              />
             )}
+            <ImpactOutsideAnalysisSection outside={impactQuery.data.outsideAnalysis} />
             <button
               type="button"
               onClick={() => {

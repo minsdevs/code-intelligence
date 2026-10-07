@@ -6,9 +6,11 @@ import { getProject } from '../../api/projects'
 import EmptyState from '../../components/EmptyState'
 import EvidenceList from '../../components/EvidenceList'
 import { useT } from '../../lib/i18n'
+import { isConfirmedRelation, relationConfidenceLabel } from '../../lib/relationConfidence'
 import { parseProjectId } from '../../lib/projectId'
 import { codeLocationSearch, parseLineParam, queryError } from '../code/codeLocation'
 import { nodeColor } from '../architecture/layout'
+import type { FlowDetail, FlowStepView } from '../../api/types'
 
 const FLOW_KINDS = ['', 'BACKEND', 'FE_BE', 'INFRA', 'EVENT'] as const
 
@@ -17,6 +19,21 @@ const KIND_COLORS: Record<string, string> = {
   FE_BE: 'text-accent',
   INFRA: 'text-warn',
   EVENT: 'text-danger',
+}
+
+/** A path inherits its weakest step; a step without a recorded relation is not confirmed. */
+function includesInferredStep(detail: FlowDetail): boolean {
+  return (
+    detail.inferredStepIncluded === true ||
+    detail.steps.some((step) => !step.entry && !isConfirmedRelation(step.confidence))
+  )
+}
+
+function stepVerdict(t: (key: string) => string, step: FlowStepView): string {
+  if (step.entry) return t('flows.step.entry')
+  if (!step.confidence) return t('flows.step.noRelation')
+  const label = relationConfidenceLabel(t, step.confidence)
+  return step.relationType ? `${step.relationType} · ${label}` : label
 }
 
 export default function FlowsPage() {
@@ -82,6 +99,7 @@ export default function FlowsPage() {
 
   const listError = queryError(listQuery.error)
   const detail = detailQuery.data
+  const inferredIncluded = detail != null && includesInferredStep(detail)
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @min-[640px]:flex-row">
@@ -160,6 +178,11 @@ export default function FlowsPage() {
                 {detail.kind}
               </span>
             )}
+            {inferredIncluded && (
+              <span className="rounded-full border border-warn px-2 py-0.5 text-[11px] text-warn">
+                {t('flows.inferredBadge')}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-[12px] text-ink-muted">
             {t('flows.stepCount').replace('{count}', String(detail.steps.length))}
@@ -228,6 +251,13 @@ export default function FlowsPage() {
                       </span>
                     )}
                   </div>
+                  <p
+                    className={`mt-0.5 text-[11px] ${
+                      step.entry || isConfirmedRelation(step.confidence) ? 'text-ink-muted' : 'text-warn'
+                    }`}
+                  >
+                    {stepVerdict(t, step)}
+                  </p>
                   {step.description && step.nodeName !== step.description && (
                     <p className="mt-0.5 text-[12px] leading-relaxed text-ink-muted">
                       {step.description}
