@@ -21,6 +21,7 @@ const { readOwnerMemory } = require('./process-memory.cjs');
 const { observePowerSource, acObservedAtRunBoundaries, confirmObservedGone } = require('./run-startup-benchmark.cjs');
 const { SIZE_CLASSES, generateWorkload, hashTree, mutateWorkload } = require('./workload-fixture.cjs');
 const { SLO, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplete } = require('./workload-metrics.cjs');
+const { expectedServices } = require('./adapter-mode.cjs');
 
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 // `delete` is a diagnostic row (project deletion time), not an SLO row; it runs only on request.
@@ -209,7 +210,7 @@ async function main(argv = process.argv.slice(2)) {
     assert.deepEqual(identity, { name: plan.appIdentity.name, profile: plan.paths.userData, packaged: true });
     const status = await bounded(() => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()), remaining(), 'STARTUP_TIMEOUT');
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null); assert.equal(status.aiOff, true);
-    assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
+    assert.deepEqual([...status.services].sort(), expectedServices(app));
     page.setDefaultTimeout(30000);
     return page;
   }

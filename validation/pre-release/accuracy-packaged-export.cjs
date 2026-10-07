@@ -21,6 +21,7 @@ const { validateLocalEnvironment, requireExecutionContext, productPaths, claimEx
 const { closeValidatedApplication, createDeadline, observeStartup } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { treeDigest, readFixture, convertFixture, writeBundle, compareDumps, apiProjection, sha256 } = require('./accuracy-observations.cjs');
 const { evaluate } = require('./accuracy-export.cjs');
+const { expectedServices } = require('./adapter-mode.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const PRODUCT_PATHS = ['backend/src/main', 'backend/build.gradle.kts', 'analyzers/ts-analyzer/src', 'analyzers/ts-analyzer/package.json',
   'analyzers/ts-analyzer/package-lock.json', 'analyzers/tree-analyzer/src', 'desktop/src', 'desktop/package.json', 'frontend/src'];
@@ -142,7 +143,7 @@ async function main(argv = process.argv.slice(2)) {
     const status = await perform(() => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()));
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null);
     assert.equal(status.aiOff, true, 'Provider egress must remain disabled');
-    assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
+    assert.deepEqual([...status.services].sort(), expectedServices(app));
     report.checks.push('packaged-services-ready-ai-off');
     // Batched GETs through the renderer's own API authority (token header; no CSRF needed for GET).
     const get = routes => perform(() => page.evaluate(async routes => {

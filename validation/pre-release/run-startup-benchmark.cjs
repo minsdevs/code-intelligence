@@ -18,6 +18,7 @@ const { captureOwnedApplication } = require('../backup-compatibility/interruptio
 const { ensureNativeParent } = require('../backup-compatibility/owned-crash.cjs');
 const { memoryForOwner, evaluateStartupSamples } = require('./startup-metrics.cjs');
 const { readProcessTable, readOwnerMemory } = require('./process-memory.cjs');
+const { expectedServices } = require('./adapter-mode.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const RUNS = 20;
 const SAMPLE_INTERVAL_MS = 100;
@@ -200,7 +201,7 @@ async function main(argv = process.argv.slice(2)) {
       assert.deepEqual(identity, { name: plan.appIdentity.name, profile: plan.paths.userData, packaged: true });
       const status = await bounded(() => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()), remaining(), 'STARTUP_TIMEOUT');
       assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null); assert.equal(status.aiOff, true);
-      assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
+      assert.deepEqual([...status.services].sort(), expectedServices(app));
       sample.readyMs = Math.round(performance.now() - started);
       sampler.idle(); await new Promise(resolve => setTimeout(resolve, IDLE_WINDOW_MS));
       memory = await sampler.stop();
