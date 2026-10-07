@@ -322,12 +322,12 @@ async function main(argv) {
         type, x: box.x + box.width / 2, y: box.y + box.height / 2, data: { items: [], files: [fixture], dragOperationsMask: 1 } })); }
       catch (error) { dragFailure = error; throw error; }
       finally { try { await bounded(() => cdp.detach(), 5000, 'DRAG_DETACH_TIMEOUT'); } catch (error) { if (!dragFailure) throw error; } }
-      await perform(() => page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click());
+      await perform(() => page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).click());
     });
     (report.dropConfirmations ??= []).push(confirmation); save();
     const [created] = await perform(() => Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local' && r.request().method() === 'POST'),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click()]));
+      page.getByRole('button', { name: /^(Import and analyze the reviewed files|확인한 파일 가져오기 및 분석)$/ }).click()]));
     assert(created.ok()); projectId = (await perform(() => created.json())).project.id;
     await perform(() => expect.poll(async () => (await api('/api/projects/' + projectId)).currentSnapshot?.status, { timeout: 90000 }).toBe('READY'), 90000);
     oldSnapshot = (await api('/api/projects/' + projectId)).currentSnapshot.id; await source(oldSource, oldSnapshot);
@@ -347,12 +347,12 @@ async function main(argv) {
     await healthy(); const selectedHash = digest(selected), keyHash = digest(keyFile), baselinePrefix = journalPrefix();
     check('real-ui-backup-created'); phase('reanalyze-newer-state'); await source(oldSource, oldSnapshot);
     fs.writeFileSync(inputFile, newSource, { mode: 0o600 });
-    await perform(() => page.getByRole('button', { name: '상태 새로고침', exact: true }).click());
-    await perform(() => page.getByRole('button', { name: '변경 사항 미리보기', exact: true }).click());
-    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
+    await perform(() => page.getByRole('button', { name: /^(Refresh status|상태 새로고침)$/ }).click());
+    await perform(() => page.getByRole('button', { name: /^(Preview changes|변경 사항 미리보기)$/ }).click());
+    await perform(() => expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible());
     const [updated] = await perform(() => Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === `/api/projects/${projectId}/reanalyze` && r.request().method() === 'POST'),
-      page.getByRole('button', { name: '변경 확인 후 전체 재분석', exact: true }).click()]));
+      page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click()]));
     assert(updated.ok()); const job = (await perform(() => updated.json())).jobId;
     await perform(() => expect.poll(async () => (await api('/api/jobs/' + job)).status, { timeout: 90000 }).toBe('DONE'), 90000);
     newSnapshot = (await api('/api/projects/' + projectId)).currentSnapshot.id;

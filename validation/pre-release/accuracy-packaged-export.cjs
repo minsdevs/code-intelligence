@@ -178,16 +178,16 @@ async function main(argv = process.argv.slice(2)) {
       } finally { await perform(() => cdp.detach()).catch(() => {}); }
       const [response] = await perform(() => Promise.all([
         page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local/preview' && response.request().method() === 'POST', { timeout: deadline.limit() }),
-        page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click()]));
+        page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).click()]));
       return response;
     });
     report.dropConfirmation = confirmation; save();
     assert(previewResponse.ok(), 'IMPORT_PREVIEW_FAILED');
     report.localImport = (await perform(() => previewResponse.json())).localImport ?? null;
-    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
+    await perform(() => expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible());
     const [created] = await perform(() => Promise.all([
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local' && response.request().method() === 'POST', { timeout: deadline.limit() }),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click()]));
+      page.getByRole('button', { name: /^(Import and analyze the reviewed files|확인한 파일 가져오기 및 분석)$/ }).click()]));
     assert(created.ok(), 'IMPORT_CREATE_FAILED');
     const createdBody = await perform(() => created.json());
     const projectId = createdBody.project.id, jobId = createdBody.jobId;

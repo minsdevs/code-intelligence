@@ -266,15 +266,15 @@ async function main(argv = process.argv.slice(2)) {
       } finally { await cdp.detach().catch(() => {}); }
       const [response] = await Promise.all([
         page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local/preview' && r.request().method() === 'POST', { timeout: 120000 }),
-        page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click()]);
+        page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).click()]);
       return response;
     });
     (report.dropConfirmations ??= []).push(confirmation);
     assert(preview.ok(), 'IMPORT_PREVIEW_FAILED');
-    await expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible({ timeout: 60000 });
+    await expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible({ timeout: 60000 });
     const [created] = await Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local' && r.request().method() === 'POST', { timeout: 120000 }),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click()]);
+      page.getByRole('button', { name: /^(Import and analyze the reviewed files|확인한 파일 가져오기 및 분석)$/ }).click()]);
     assert(created.ok(), 'IMPORT_CREATE_FAILED');
     const body = await created.json();
     return { projectId: body.project.id, jobId: body.jobId };
@@ -282,12 +282,12 @@ async function main(argv = process.argv.slice(2)) {
   async function uiReanalysis(projectId, marker) {
     fs.writeFileSync(path.join(sample, CHANGED_FILE), originalChanged + `\n// job-race ${marker}\n`, { mode: 0o600 });
     await navigate(`/projects/${projectId}/overview`);
-    await page.getByRole('button', { name: '상태 새로고침', exact: true }).click();
-    await page.getByRole('button', { name: '변경 사항 미리보기', exact: true }).click();
-    await expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible({ timeout: 120000 });
+    await page.getByRole('button', { name: /^(Refresh status|상태 새로고침)$/ }).click();
+    await page.getByRole('button', { name: /^(Preview changes|변경 사항 미리보기)$/ }).click();
+    await expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible({ timeout: 120000 });
     const [started] = await Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === `/api/projects/${projectId}/reanalyze` && r.request().method() === 'POST', { timeout: 120000 }),
-      page.getByRole('button', { name: '변경 확인 후 전체 재분석', exact: true }).click()]);
+      page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click()]);
     assert(started.ok(), 'REANALYZE_START_FAILED');
     return (await started.json()).jobId;
   }
