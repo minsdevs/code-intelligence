@@ -1,0 +1,2555 @@
+{
+  "format": 1,
+  "gate": "G-RECOVERY",
+  "unit": "gate-recovery",
+  "date": "2026-10-07",
+  "status": "ROW_LEVEL_EVIDENCE_NOT_A_GATE_VERDICT",
+  "releaseVerdict": "NO_GO",
+  "branch": "worktree-agent-a4870b86d97d6bfbb",
+  "worktree": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-a4870b86d97d6bfbb",
+  "baseCommit": "bcd8081",
+  "productSourcesChanged": false,
+  "candidate": {
+    "name": "1lvULq",
+    "builtFrom": "9211e88d85de0c7f7fa08bd1082bc2e9e5dab941",
+    "path": ".native-product-1lvULq/Code Intelligence Validation.app",
+    "buildSequence": "1791292686000",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+    "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d"
+  },
+  "driver": {
+    "native-recovery-matrix.cjs": "43110a522c44cd5755e1f78d48d7ba9b85723fd9e351435765f6cb0d9bb94ed6",
+    "recovery-boundaries.cjs": "33d48c15f8018fd1b302aa92a4827d971fe05ce29d997cb317f3ff3e56f7e54f"
+  },
+  "commands": [
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-a4870b86d97d6bfbb",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-recovery env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/backup-compatibility/native-recovery-matrix.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\" --points LATCH_BEFORE,LATCH_AFTER,PREPARED_BEFORE,PREPARED_AFTER,MERGED_BEFORE,MERGED_AFTER,SEAL_BEFORE,SEAL_AFTER,SEALED_AFTER --cost",
+      "evidence": "native-Lvlebw",
+      "result": "PASS, 23 checks, 9/9 points"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-a4870b86d97d6bfbb",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-recovery env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/backup-compatibility/native-recovery-matrix.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\" --points STAGED_BEFORE,STAGED_AFTER,DATABASE_SWAPPED_BEFORE,DATABASE_SWAPPED_AFTER,SOURCE_RENAME_AFTER,SOURCES_PUBLISHED_BEFORE,SOURCES_PUBLISHED_AFTER,HEALTH_BEFORE,HEALTH_AFTER --cost",
+      "evidence": "native-jDsa8w",
+      "result": "FAIL at launch-restricted-recovery (SOURCES_PUBLISHED_AFTER), 17 checks, 6 points PASS, HEALTH_* not reached"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-a4870b86d97d6bfbb",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-recovery env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/backup-compatibility/native-recovery-matrix.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\" --points SOURCES_PUBLISHED_AFTER,HEALTH_BEFORE,HEALTH_AFTER --cost",
+      "evidence": "native-jMjVtS",
+      "result": "PASS, 11 checks, 3/3 points"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-a4870b86d97d6bfbb",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-recovery env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/backup-compatibility/native-recovery-matrix.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\" --points COMPLETE_BEFORE,COMPLETE_AFTER,CLEANUP_BEFORE,RETENTION_AFTER,COMPLETED_BEFORE,COMPLETED_AFTER,ACTIVE_CLEAR_BEFORE,ACTIVE_CLEAR_AFTER --cost",
+      "evidence": "native-XLeNLT",
+      "result": "PASS, 21 checks, 8/8 points"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-a4870b86d97d6bfbb",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-recovery env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/backup-compatibility/native-recovery-matrix.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\" --faults torn-tail,corrupt-mac,incompatible-major,latch-major,missing,format2-archive,container-v2",
+      "evidence": "native-vMnYut",
+      "result": "PASS, 13 checks, 7/7 faults"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-a4870b86d97d6bfbb/desktop",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node --test test/backup-runtime.test.cjs test/backup-recovery-matrix.test.cjs",
+      "evidence": "unit-resume-20261007/tests.log",
+      "result": "tests 145, pass 145, fail 0"
+    }
+  ],
+  "unitTests": [
+    {
+      "evidence": "validation/local/recovery-matrix/unit-resume-20261007/tests.log",
+      "sha256": "76a4f1f03af56763cc0066a5982bb3df2ff7eaef956052406387d92c194541d8",
+      "tests": 145,
+      "pass": 145,
+      "fail": 0,
+      "skipped": 0
+    },
+    {
+      "evidence": "validation/local/recovery-matrix/unit-WMgFDV/tests.log",
+      "sha256": "39caf61886ec0b954ef283b68e18a226d2e8756e2a8a4fde2a57def1cc903d08",
+      "scope": "full desktop suite during development (before resume)",
+      "tests": 1879,
+      "pass": 1859,
+      "fail": 0,
+      "skipped": 20
+    }
+  ],
+  "runs": [
+    {
+      "evidence": "validation/local/recovery-matrix/native-AGwHPH",
+      "resultSha256": "f2138de0345f722240f91275c55b6bd6ba20b893800c26c6e48e3156c830cb83",
+      "status": "FAIL",
+      "failure": {
+        "phase": "hold-COMPLETE_AFTER",
+        "code": "Error",
+        "message": null,
+        "captureUnavailable": true
+      },
+      "cost": true,
+      "points": [
+        "SEAL_AFTER",
+        "COMPLETE_AFTER"
+      ],
+      "buildSequence": "1791292686000",
+      "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+      "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+      "driverSha256": "323892b039f3b7373115e2cffb989d6abfa3d82a6976370fe4b47b210afbf790",
+      "boundarySha256": "33d48c15f8018fd1b302aa92a4827d971fe05ce29d997cb317f3ff3e56f7e54f",
+      "launches": 4,
+      "checks": 7,
+      "intentionalSigkills": 2,
+      "cleanExits": 1,
+      "refusalExits": 0,
+      "observedProcessesAtKill": [
+        25,
+        15
+      ],
+      "startupFailures": [],
+      "results": [
+        {
+          "point": "SEAL_AFTER",
+          "status": "PASS",
+          "arrow": "LATCHED->SAFETY_SEALED",
+          "side": "within",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 25,
+          "hit": {
+            "point": "SEAL_AFTER",
+            "label": "MAINTENANCE_SEALED",
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 16,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 149533,
+              "matches": 0
+            },
+            "stageDirectories": [],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "COMPLETE_AFTER",
+          "status": "FAIL",
+          "arrow": "HEALTH_VERIFIED->NORMAL",
+          "side": "within",
+          "prompt": true,
+          "outcome": "RESTORED",
+          "from": "B2",
+          "target": "B1",
+          "crashState": {
+            "activeMarker": null,
+            "records": null,
+            "plaintextSentinel": null,
+            "stageDirectories": null,
+            "inputArchiveMatches": null
+          }
+        }
+      ],
+      "failurePhase": "hold-COMPLETE_AFTER",
+      "cleanupFailed": true,
+      "role": "pre-commit development driver; superseded, not used for any row"
+    },
+    {
+      "evidence": "validation/local/recovery-matrix/native-Lvlebw",
+      "resultSha256": "0b4133be0177c04dc6b8ce2c9d1651bfc95de1ab340e81a42512311d50010f35",
+      "status": "PASS",
+      "failure": null,
+      "cost": true,
+      "points": [
+        "LATCH_BEFORE",
+        "LATCH_AFTER",
+        "PREPARED_BEFORE",
+        "PREPARED_AFTER",
+        "MERGED_BEFORE",
+        "MERGED_AFTER",
+        "SEAL_BEFORE",
+        "SEAL_AFTER",
+        "SEALED_AFTER"
+      ],
+      "buildSequence": "1791292686000",
+      "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+      "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+      "driverSha256": "43110a522c44cd5755e1f78d48d7ba9b85723fd9e351435765f6cb0d9bb94ed6",
+      "boundarySha256": "33d48c15f8018fd1b302aa92a4827d971fe05ce29d997cb317f3ff3e56f7e54f",
+      "launches": 20,
+      "checks": 23,
+      "intentionalSigkills": 10,
+      "cleanExits": 10,
+      "refusalExits": 0,
+      "observedProcessesAtKill": [
+        26,
+        25,
+        25,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+      ],
+      "startupFailures": [],
+      "results": [
+        {
+          "point": "LATCH_BEFORE",
+          "status": "PASS",
+          "arrow": "NORMAL->LATCHED",
+          "side": "before",
+          "prompt": false,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [
+            "incoming"
+          ],
+          "aiSettings": {
+            "keySet": true,
+            "state": "ENABLED"
+          },
+          "recordsAfterRecovery": 14,
+          "hit": {
+            "point": "LATCH_BEFORE",
+            "label": "AI_OFF_LATCH_FILE",
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": null,
+            "records": 14,
+            "plaintextSentinel": {
+              "files": 1,
+              "bytes": 67655,
+              "matches": 0
+            },
+            "stageDirectories": [],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "LATCH_AFTER",
+          "status": "PASS",
+          "arrow": "NORMAL->LATCHED",
+          "side": "after",
+          "prompt": false,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [
+            "incoming"
+          ],
+          "aiSettings": {
+            "keySet": true,
+            "state": "ENABLED"
+          },
+          "recordsAfterRecovery": 14,
+          "hit": {
+            "point": "LATCH_AFTER",
+            "label": "LATCH",
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": null,
+            "records": 14,
+            "plaintextSentinel": {
+              "files": 1,
+              "bytes": 67655,
+              "matches": 0
+            },
+            "stageDirectories": [],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "PREPARED_BEFORE",
+          "status": "PASS",
+          "arrow": "LATCHED->SAFETY_SEALED",
+          "side": "before",
+          "prompt": false,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [
+            "checkpoint",
+            "incoming"
+          ],
+          "aiSettings": {
+            "keySet": true,
+            "state": "ENABLED"
+          },
+          "recordsAfterRecovery": 14,
+          "hit": {
+            "point": "PREPARED_BEFORE",
+            "label": "PREPARED",
+            "ordinal": 1,
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": null,
+            "records": 14,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150583,
+              "matches": 0
+            },
+            "stageDirectories": [],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "RECOVERY_REQUIRED",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "RECOVERY_REQUIRED",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "PREPARED_AFTER",
+          "status": "PASS",
+          "arrow": "LATCHED->SAFETY_SEALED",
+          "side": "within",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 25,
+          "hit": {
+            "point": "PREPARED_AFTER",
+            "label": "PREPARED",
+            "ordinal": 1,
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": null,
+            "records": 15,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150582,
+              "matches": 0
+            },
+            "stageDirectories": [],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "MERGED_BEFORE",
+          "status": "PASS",
+          "arrow": "LATCHED->SAFETY_SEALED",
+          "side": "within",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 36,
+          "hit": {
+            "point": "MERGED_BEFORE",
+            "label": "MERGED",
+            "ordinal": 2,
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 26,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150224,
+              "matches": 0
+            },
+            "stageDirectories": [],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "MERGED_AFTER",
+          "status": "PASS",
+          "arrow": "LATCHED->SAFETY_SEALED",
+          "side": "within",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 48,
+          "hit": {
+            "point": "MERGED_AFTER",
+            "label": "MERGED",
+            "ordinal": 2,
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 38,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150224,
+              "matches": 0
+            },
+            "stageDirectories": [],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "SEAL_BEFORE",
+          "status": "PASS",
+          "arrow": "LATCHED->SAFETY_SEALED",
+          "side": "within",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 60,
+          "hit": {
+            "point": "SEAL_BEFORE",
+            "label": "MAINTENANCE_SEALED",
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 50,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150224,
+              "matches": 0
+            },
+            "stageDirectories": [],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "SEAL_AFTER",
+          "status": "PASS",
+          "arrow": "LATCHED->SAFETY_SEALED",
+          "side": "within",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 71,
+          "hit": {
+            "point": "SEAL_AFTER",
+            "label": "MAINTENANCE_SEALED",
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 62,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150224,
+              "matches": 0
+            },
+            "stageDirectories": [],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "SEALED_AFTER",
+          "status": "PASS",
+          "arrow": "LATCHED->SAFETY_SEALED",
+          "side": "after",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 83,
+          "hit": {
+            "point": "SEALED_AFTER",
+            "label": "SEALED",
+            "ordinal": 3,
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 74,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150224,
+              "matches": 0
+            },
+            "stageDirectories": [],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        }
+      ],
+      "failurePhase": null,
+      "cleanupFailed": null,
+      "role": "chain A"
+    },
+    {
+      "evidence": "validation/local/recovery-matrix/native-jDsa8w",
+      "resultSha256": "7a82a05f1e3905622fe20777976896a5b6eab1fddc5a3ce9f1849aa1e3eb1509",
+      "status": "FAIL",
+      "failure": {
+        "phase": "launch-restricted-recovery",
+        "code": "Error",
+        "message": null
+      },
+      "cost": true,
+      "points": [
+        "STAGED_BEFORE",
+        "STAGED_AFTER",
+        "DATABASE_SWAPPED_BEFORE",
+        "DATABASE_SWAPPED_AFTER",
+        "SOURCE_RENAME_AFTER",
+        "SOURCES_PUBLISHED_BEFORE",
+        "SOURCES_PUBLISHED_AFTER",
+        "HEALTH_BEFORE",
+        "HEALTH_AFTER"
+      ],
+      "buildSequence": "1791292686000",
+      "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+      "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+      "driverSha256": "43110a522c44cd5755e1f78d48d7ba9b85723fd9e351435765f6cb0d9bb94ed6",
+      "boundarySha256": "33d48c15f8018fd1b302aa92a4827d971fe05ce29d997cb317f3ff3e56f7e54f",
+      "launches": 15,
+      "checks": 17,
+      "intentionalSigkills": 8,
+      "cleanExits": 6,
+      "refusalExits": 0,
+      "observedProcessesAtKill": [
+        25,
+        15,
+        15,
+        13,
+        13,
+        13,
+        13,
+        13
+      ],
+      "startupFailures": [],
+      "results": [
+        {
+          "point": "STAGED_BEFORE",
+          "status": "PASS",
+          "arrow": "SAFETY_SEALED->DATA_STAGED",
+          "side": "before",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 26,
+          "hit": {
+            "point": "STAGED_BEFORE",
+            "label": "STAGED",
+            "ordinal": 4,
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 17,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150583,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "repos",
+              "sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "STAGED_AFTER",
+          "status": "PASS",
+          "arrow": "SAFETY_SEALED->DATA_STAGED",
+          "side": "after",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 44,
+          "hit": {
+            "point": "STAGED_AFTER",
+            "label": "STAGED",
+            "ordinal": 4,
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 30,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150221,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "repos",
+              "sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "DATABASE_SWAPPED_BEFORE",
+          "status": "PASS",
+          "arrow": "DATA_STAGED->DATA_RESTORED",
+          "side": "within",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 62,
+          "hit": {
+            "point": "DATABASE_SWAPPED_BEFORE",
+            "label": "DATABASE_SWAPPED",
+            "ordinal": 5,
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 48,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150221,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "repos",
+              "sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "DATABASE_SWAPPED_AFTER",
+          "status": "PASS",
+          "arrow": "DATA_STAGED->DATA_RESTORED",
+          "side": "within",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 81,
+          "hit": {
+            "point": "DATABASE_SWAPPED_AFTER",
+            "label": "DATABASE_SWAPPED",
+            "ordinal": 5,
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 67,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150224,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "repos",
+              "sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "SOURCE_RENAME_AFTER",
+          "status": "PASS",
+          "arrow": "DATA_STAGED->DATA_RESTORED",
+          "side": "within",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 102,
+          "hit": {
+            "point": "SOURCE_RENAME_AFTER",
+            "label": "SAVE_REPOS",
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 87,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150224,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "repos",
+              "sources",
+              "previous-repos"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "SOURCES_PUBLISHED_BEFORE",
+          "status": "PASS",
+          "arrow": "DATA_STAGED->DATA_RESTORED",
+          "side": "within",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 128,
+          "hit": {
+            "point": "SOURCES_PUBLISHED_BEFORE",
+            "label": "SS_PUBLISHED",
+            "ordinal": 11,
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 112,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150224,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "SOURCES_PUBLISHED_AFTER",
+          "status": "FAIL",
+          "arrow": "DATA_STAGED->DATA_RESTORED",
+          "side": "after",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "hit": {
+            "point": "SOURCES_PUBLISHED_AFTER",
+            "label": "SS_PUBLISHED",
+            "ordinal": 11,
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 139,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150224,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          }
+        }
+      ],
+      "failurePhase": "launch-restricted-recovery",
+      "cleanupFailed": true,
+      "role": "chain B (first attempt)"
+    },
+    {
+      "evidence": "validation/local/recovery-matrix/native-jMjVtS",
+      "resultSha256": "f59fefe902a6f3768010d72d53afc87b6bdfa69f71ba6fbd9f903df6f84b1cdd",
+      "status": "PASS",
+      "failure": null,
+      "cost": true,
+      "points": [
+        "SOURCES_PUBLISHED_AFTER",
+        "HEALTH_BEFORE",
+        "HEALTH_AFTER"
+      ],
+      "buildSequence": "1791292686000",
+      "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+      "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+      "driverSha256": "43110a522c44cd5755e1f78d48d7ba9b85723fd9e351435765f6cb0d9bb94ed6",
+      "boundarySha256": "33d48c15f8018fd1b302aa92a4827d971fe05ce29d997cb317f3ff3e56f7e54f",
+      "launches": 8,
+      "checks": 11,
+      "intentionalSigkills": 4,
+      "cleanExits": 4,
+      "refusalExits": 0,
+      "observedProcessesAtKill": [
+        25,
+        13,
+        22,
+        22
+      ],
+      "startupFailures": [],
+      "results": [
+        {
+          "point": "SOURCES_PUBLISHED_AFTER",
+          "status": "PASS",
+          "arrow": "DATA_STAGED->DATA_RESTORED",
+          "side": "after",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 41,
+          "hit": {
+            "point": "SOURCES_PUBLISHED_AFTER",
+            "label": "SS_PUBLISHED",
+            "ordinal": 11,
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 25,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150583,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "HEALTH_BEFORE",
+          "status": "PASS",
+          "arrow": "SAFETY_MERGED->HEALTH_VERIFIED",
+          "side": "before",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 68,
+          "hit": {
+            "point": "HEALTH_BEFORE",
+            "label": "HEALTH_VERIFIED",
+            "ordinal": 12,
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 52,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150221,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "HEALTH_AFTER",
+          "status": "PASS",
+          "arrow": "SAFETY_MERGED->HEALTH_VERIFIED",
+          "side": "after",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 96,
+          "hit": {
+            "point": "HEALTH_AFTER",
+            "label": "HEALTH_VERIFIED",
+            "ordinal": 12,
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 80,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150221,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        }
+      ],
+      "failurePhase": null,
+      "cleanupFailed": null,
+      "role": "chain B rerun of SOURCES_PUBLISHED_AFTER + unreached HEALTH_* points"
+    },
+    {
+      "evidence": "validation/local/recovery-matrix/native-XLeNLT",
+      "resultSha256": "7b258d4185f07f8891a5f0eb33170e888da21fccd7c59167409a5e7b435096b7",
+      "status": "PASS",
+      "failure": null,
+      "cost": true,
+      "points": [
+        "COMPLETE_BEFORE",
+        "COMPLETE_AFTER",
+        "CLEANUP_BEFORE",
+        "RETENTION_AFTER",
+        "COMPLETED_BEFORE",
+        "COMPLETED_AFTER",
+        "ACTIVE_CLEAR_BEFORE",
+        "ACTIVE_CLEAR_AFTER"
+      ],
+      "buildSequence": "1791292686000",
+      "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+      "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+      "driverSha256": "43110a522c44cd5755e1f78d48d7ba9b85723fd9e351435765f6cb0d9bb94ed6",
+      "boundarySha256": "33d48c15f8018fd1b302aa92a4827d971fe05ce29d997cb317f3ff3e56f7e54f",
+      "launches": 18,
+      "checks": 21,
+      "intentionalSigkills": 9,
+      "cleanExits": 9,
+      "refusalExits": 0,
+      "observedProcessesAtKill": [
+        25,
+        22,
+        22,
+        22,
+        22,
+        22,
+        22,
+        22,
+        22
+      ],
+      "startupFailures": [],
+      "results": [
+        {
+          "point": "COMPLETE_BEFORE",
+          "status": "PASS",
+          "arrow": "HEALTH_VERIFIED->NORMAL",
+          "side": "before",
+          "prompt": true,
+          "outcome": "PREVIOUS",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 42,
+          "hit": {
+            "point": "COMPLETE_BEFORE",
+            "label": "MAINTENANCE_COMPLETED",
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 26,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150583,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "COMPLETE_AFTER",
+          "status": "PASS",
+          "arrow": "HEALTH_VERIFIED->NORMAL",
+          "side": "within",
+          "prompt": true,
+          "outcome": "RESTORED",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 63,
+          "hit": {
+            "point": "COMPLETE_AFTER",
+            "label": "MAINTENANCE_COMPLETED",
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 54,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 150221,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "CLEANUP_BEFORE",
+          "status": "PASS",
+          "arrow": "HEALTH_VERIFIED->NORMAL",
+          "side": "within",
+          "prompt": true,
+          "outcome": "RESTORED",
+          "from": "B1",
+          "target": "B2",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 84,
+          "hit": {
+            "point": "CLEANUP_BEFORE",
+            "label": "checkpoint",
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 75,
+            "plaintextSentinel": {
+              "files": 2,
+              "bytes": 152228,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "RETENTION_AFTER",
+          "status": "PASS",
+          "arrow": "HEALTH_VERIFIED->NORMAL",
+          "side": "within",
+          "prompt": true,
+          "outcome": "RESTORED",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 106,
+          "hit": {
+            "point": "RETENTION_AFTER",
+            "label": "RETENTION_READY",
+            "ordinal": 13,
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 97,
+            "plaintextSentinel": {
+              "files": 0,
+              "bytes": 0,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "COMPLETED_BEFORE",
+          "status": "PASS",
+          "arrow": "HEALTH_VERIFIED->NORMAL",
+          "side": "within",
+          "prompt": true,
+          "outcome": "RESTORED",
+          "from": "B1",
+          "target": "B2",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 128,
+          "hit": {
+            "point": "COMPLETED_BEFORE",
+            "label": "COMPLETED",
+            "ordinal": 14,
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 119,
+            "plaintextSentinel": {
+              "files": 0,
+              "bytes": 0,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "COMPLETED_AFTER",
+          "status": "PASS",
+          "arrow": "HEALTH_VERIFIED->NORMAL",
+          "side": "within",
+          "prompt": true,
+          "outcome": "RESTORED",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 148,
+          "hit": {
+            "point": "COMPLETED_AFTER",
+            "label": "COMPLETED",
+            "ordinal": 14,
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 142,
+            "plaintextSentinel": {
+              "files": 0,
+              "bytes": 0,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "ACTIVE_CLEAR_BEFORE",
+          "status": "PASS",
+          "arrow": "HEALTH_VERIFIED->NORMAL",
+          "side": "within",
+          "prompt": true,
+          "outcome": "RESTORED",
+          "from": "B1",
+          "target": "B2",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 168,
+          "hit": {
+            "point": "ACTIVE_CLEAR_BEFORE",
+            "label": "active",
+            "operationCompleted": false,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": true,
+            "records": 163,
+            "plaintextSentinel": {
+              "files": 0,
+              "bytes": 0,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        },
+        {
+          "point": "ACTIVE_CLEAR_AFTER",
+          "status": "PASS",
+          "arrow": "HEALTH_VERIFIED->NORMAL",
+          "side": "after",
+          "prompt": false,
+          "outcome": "RESTORED",
+          "from": "B2",
+          "target": "B1",
+          "orphanPlaintext": [],
+          "aiSettings": {
+            "keySet": false,
+            "state": "OFF"
+          },
+          "recordsAfterRecovery": 183,
+          "hit": {
+            "point": "ACTIVE_CLEAR_AFTER",
+            "label": "active",
+            "operationCompleted": true,
+            "count": 1
+          },
+          "crashState": {
+            "activeMarker": null,
+            "records": 183,
+            "plaintextSentinel": {
+              "files": 0,
+              "bytes": 0,
+              "matches": 0
+            },
+            "stageDirectories": [
+              "previous-repos",
+              "previous-sources"
+            ],
+            "inputArchiveMatches": true
+          },
+          "ledgerAfterRecovery": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          },
+          "ledgerAfterRestart": {
+            "held": "22472",
+            "monthly": "210",
+            "state": "OFF",
+            "providerAttempts": 2,
+            "highWaterMonotonic": true,
+            "foreignRequests": 0
+          }
+        }
+      ],
+      "failurePhase": null,
+      "cleanupFailed": null,
+      "role": "chain C"
+    },
+    {
+      "evidence": "validation/local/recovery-matrix/native-vMnYut",
+      "resultSha256": "dbcd402767a710bb92cb8c910d3043b1d45453f5ed483adc7844e9aad5db798d",
+      "status": "PASS",
+      "failure": null,
+      "cost": false,
+      "points": [],
+      "buildSequence": "1791292686000",
+      "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+      "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+      "driverSha256": "43110a522c44cd5755e1f78d48d7ba9b85723fd9e351435765f6cb0d9bb94ed6",
+      "boundarySha256": "33d48c15f8018fd1b302aa92a4827d971fe05ce29d997cb317f3ff3e56f7e54f",
+      "launches": 11,
+      "checks": 13,
+      "intentionalSigkills": 0,
+      "cleanExits": 6,
+      "refusalExits": 5,
+      "observedProcessesAtKill": [],
+      "startupFailures": [
+        {
+          "phase": "GATEWAY",
+          "state": "FAILED",
+          "code": "SAFETY_RECOVERY_REQUIRED"
+        },
+        {
+          "phase": "GATEWAY",
+          "state": "FAILED",
+          "code": "SAFETY_RECOVERY_REQUIRED"
+        },
+        {
+          "phase": "GATEWAY",
+          "state": "FAILED",
+          "code": "SAFETY_RECOVERY_REQUIRED"
+        },
+        {
+          "phase": "GATEWAY",
+          "state": "FAILED",
+          "code": "SAFETY_RECOVERY_REQUIRED"
+        },
+        {
+          "phase": "GATEWAY",
+          "state": "FAILED",
+          "code": "SAFETY_RECOVERY_REQUIRED"
+        }
+      ],
+      "results": [
+        {
+          "fault": "torn-tail",
+          "status": "PASS",
+          "crashState": {
+            "activeMarker": null,
+            "records": null,
+            "plaintextSentinel": null,
+            "stageDirectories": null,
+            "inputArchiveMatches": null
+          },
+          "refusal": {
+            "code": 0,
+            "signal": null,
+            "startup": {
+              "phase": "GATEWAY",
+              "state": "FAILED",
+              "code": "SAFETY_RECOVERY_REQUIRED"
+            },
+            "dialogs": [
+              "STARTUP_FAILED",
+              "STARTUP_OTHER"
+            ],
+            "forcedKill": null
+          }
+        },
+        {
+          "fault": "corrupt-mac",
+          "status": "PASS",
+          "crashState": {
+            "activeMarker": null,
+            "records": null,
+            "plaintextSentinel": null,
+            "stageDirectories": null,
+            "inputArchiveMatches": null
+          },
+          "refusal": {
+            "code": 0,
+            "signal": null,
+            "startup": {
+              "phase": "GATEWAY",
+              "state": "FAILED",
+              "code": "SAFETY_RECOVERY_REQUIRED"
+            },
+            "dialogs": [
+              "STARTUP_FAILED",
+              "STARTUP_OTHER"
+            ],
+            "forcedKill": null
+          }
+        },
+        {
+          "fault": "incompatible-major",
+          "status": "PASS",
+          "crashState": {
+            "activeMarker": null,
+            "records": null,
+            "plaintextSentinel": null,
+            "stageDirectories": null,
+            "inputArchiveMatches": null
+          },
+          "refusal": {
+            "code": 0,
+            "signal": null,
+            "startup": {
+              "phase": "GATEWAY",
+              "state": "FAILED",
+              "code": "SAFETY_RECOVERY_REQUIRED"
+            },
+            "dialogs": [
+              "STARTUP_FAILED",
+              "STARTUP_OTHER"
+            ],
+            "forcedKill": null
+          }
+        },
+        {
+          "fault": "latch-major",
+          "status": "PASS",
+          "crashState": {
+            "activeMarker": null,
+            "records": null,
+            "plaintextSentinel": null,
+            "stageDirectories": null,
+            "inputArchiveMatches": null
+          },
+          "refusal": {
+            "code": 0,
+            "signal": null,
+            "startup": {
+              "phase": "GATEWAY",
+              "state": "FAILED",
+              "code": "SAFETY_RECOVERY_REQUIRED"
+            },
+            "dialogs": [
+              "STARTUP_FAILED",
+              "STARTUP_OTHER"
+            ],
+            "forcedKill": null
+          }
+        },
+        {
+          "fault": "missing",
+          "status": "PASS",
+          "crashState": {
+            "activeMarker": null,
+            "records": null,
+            "plaintextSentinel": null,
+            "stageDirectories": null,
+            "inputArchiveMatches": null
+          },
+          "refusal": {
+            "code": 0,
+            "signal": null,
+            "startup": {
+              "phase": "GATEWAY",
+              "state": "FAILED",
+              "code": "SAFETY_RECOVERY_REQUIRED"
+            },
+            "dialogs": [
+              "STARTUP_FAILED",
+              "STARTUP_OTHER"
+            ],
+            "forcedKill": null
+          }
+        },
+        {
+          "fault": "format2-archive",
+          "status": "PASS",
+          "outcome": {
+            "resolved": false,
+            "input": true,
+            "incompatible": false,
+            "recoveryRequired": false
+          },
+          "crashState": {
+            "activeMarker": null,
+            "records": null,
+            "plaintextSentinel": null,
+            "stageDirectories": null,
+            "inputArchiveMatches": null
+          }
+        },
+        {
+          "fault": "container-v2",
+          "status": "PASS",
+          "outcome": {
+            "resolved": false,
+            "input": true,
+            "incompatible": false,
+            "recoveryRequired": false
+          },
+          "crashState": {
+            "activeMarker": null,
+            "records": null,
+            "plaintextSentinel": null,
+            "stageDirectories": null,
+            "inputArchiveMatches": null
+          }
+        }
+      ],
+      "failurePhase": null,
+      "cleanupFailed": null,
+      "role": "journal faults and old-archive refusals"
+    }
+  ],
+  "totals": {
+    "nativeLaunches": 76,
+    "manifestStageFailures": 0,
+    "bundleHashesRecheckedAtEnd": true
+  },
+  "matrix": [
+    {
+      "row": 1,
+      "requirement": "C16 crash boundary LATCH_BEFORE",
+      "arrow": "NORMAL->LATCHED (before)",
+      "prompt": false,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw"
+      ]
+    },
+    {
+      "row": 2,
+      "requirement": "C16 crash boundary LATCH_AFTER",
+      "arrow": "NORMAL->LATCHED (after)",
+      "prompt": false,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw"
+      ]
+    },
+    {
+      "row": 3,
+      "requirement": "C16 crash boundary PREPARED_BEFORE",
+      "arrow": "LATCHED->SAFETY_SEALED (before)",
+      "prompt": false,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw"
+      ]
+    },
+    {
+      "row": 4,
+      "requirement": "C16 crash boundary PREPARED_AFTER",
+      "arrow": "LATCHED->SAFETY_SEALED (within)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw"
+      ]
+    },
+    {
+      "row": 5,
+      "requirement": "C16 crash boundary MERGED_BEFORE",
+      "arrow": "LATCHED->SAFETY_SEALED (within)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw"
+      ]
+    },
+    {
+      "row": 6,
+      "requirement": "C16 crash boundary MERGED_AFTER",
+      "arrow": "LATCHED->SAFETY_SEALED (within)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw"
+      ]
+    },
+    {
+      "row": 7,
+      "requirement": "C16 crash boundary SEAL_BEFORE",
+      "arrow": "LATCHED->SAFETY_SEALED (within)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw"
+      ]
+    },
+    {
+      "row": 8,
+      "requirement": "C16 crash boundary SEAL_AFTER",
+      "arrow": "LATCHED->SAFETY_SEALED (within)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw"
+      ]
+    },
+    {
+      "row": 9,
+      "requirement": "C16 crash boundary SEALED_AFTER",
+      "arrow": "LATCHED->SAFETY_SEALED (after)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw"
+      ]
+    },
+    {
+      "row": 10,
+      "requirement": "C16 crash boundary STAGED_BEFORE",
+      "arrow": "SAFETY_SEALED->DATA_STAGED (before)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-jDsa8w"
+      ]
+    },
+    {
+      "row": 11,
+      "requirement": "C16 crash boundary STAGED_AFTER",
+      "arrow": "SAFETY_SEALED->DATA_STAGED (after)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-jDsa8w"
+      ]
+    },
+    {
+      "row": 12,
+      "requirement": "C16 crash boundary DATABASE_SWAPPED_BEFORE",
+      "arrow": "DATA_STAGED->DATA_RESTORED (within)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-jDsa8w"
+      ]
+    },
+    {
+      "row": 13,
+      "requirement": "C16 crash boundary DATABASE_SWAPPED_AFTER",
+      "arrow": "DATA_STAGED->DATA_RESTORED (within)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-jDsa8w"
+      ]
+    },
+    {
+      "row": 14,
+      "requirement": "C16 crash boundary SOURCE_RENAME_AFTER",
+      "arrow": "DATA_STAGED->DATA_RESTORED (within)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-jDsa8w"
+      ]
+    },
+    {
+      "row": 15,
+      "requirement": "C16 crash boundary SOURCES_PUBLISHED_BEFORE",
+      "arrow": "DATA_STAGED->DATA_RESTORED (within)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-jDsa8w"
+      ]
+    },
+    {
+      "row": 16,
+      "requirement": "C16 crash boundary SOURCES_PUBLISHED_AFTER",
+      "arrow": "DATA_STAGED->DATA_RESTORED (after)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-jDsa8w",
+        "native-jMjVtS"
+      ],
+      "note": "first attempt native-jDsa8w FAIL in recovery launch (cause not established); single rerun native-jMjVtS PASS"
+    },
+    {
+      "row": 17,
+      "requirement": "C16 crash boundary HEALTH_BEFORE",
+      "arrow": "SAFETY_MERGED->HEALTH_VERIFIED (before)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-jMjVtS"
+      ]
+    },
+    {
+      "row": 18,
+      "requirement": "C16 crash boundary HEALTH_AFTER",
+      "arrow": "SAFETY_MERGED->HEALTH_VERIFIED (after)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-jMjVtS"
+      ]
+    },
+    {
+      "row": 19,
+      "requirement": "C16 crash boundary COMPLETE_BEFORE",
+      "arrow": "HEALTH_VERIFIED->NORMAL (before)",
+      "prompt": true,
+      "restore": "B2→B1: PREVIOUS",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-XLeNLT"
+      ]
+    },
+    {
+      "row": 20,
+      "requirement": "C16 crash boundary COMPLETE_AFTER",
+      "arrow": "HEALTH_VERIFIED->NORMAL (within)",
+      "prompt": true,
+      "restore": "B2→B1: RESTORED",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-XLeNLT"
+      ]
+    },
+    {
+      "row": 21,
+      "requirement": "C16 crash boundary CLEANUP_BEFORE",
+      "arrow": "HEALTH_VERIFIED->NORMAL (within)",
+      "prompt": true,
+      "restore": "B1→B2: RESTORED",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-XLeNLT"
+      ]
+    },
+    {
+      "row": 22,
+      "requirement": "C16 crash boundary RETENTION_AFTER",
+      "arrow": "HEALTH_VERIFIED->NORMAL (within)",
+      "prompt": true,
+      "restore": "B2→B1: RESTORED",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-XLeNLT"
+      ]
+    },
+    {
+      "row": 23,
+      "requirement": "C16 crash boundary COMPLETED_BEFORE",
+      "arrow": "HEALTH_VERIFIED->NORMAL (within)",
+      "prompt": true,
+      "restore": "B1→B2: RESTORED",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-XLeNLT"
+      ]
+    },
+    {
+      "row": 24,
+      "requirement": "C16 crash boundary COMPLETED_AFTER",
+      "arrow": "HEALTH_VERIFIED->NORMAL (within)",
+      "prompt": true,
+      "restore": "B2→B1: RESTORED",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-XLeNLT"
+      ]
+    },
+    {
+      "row": 25,
+      "requirement": "C16 crash boundary ACTIVE_CLEAR_BEFORE",
+      "arrow": "HEALTH_VERIFIED->NORMAL (within)",
+      "prompt": true,
+      "restore": "B1→B2: RESTORED",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-XLeNLT"
+      ]
+    },
+    {
+      "row": 26,
+      "requirement": "C16 crash boundary ACTIVE_CLEAR_AFTER",
+      "arrow": "HEALTH_VERIFIED->NORMAL (after)",
+      "prompt": false,
+      "restore": "B2→B1: RESTORED",
+      "ledgerHeldSettledAttempts": "22472/210/2 ; 22472/210",
+      "highWaterMonotonic": true,
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-XLeNLT"
+      ]
+    },
+    {
+      "row": 27,
+      "requirement": "Nonzero ledger through real AI path (R1 settled 210 uUSD via loopback stand-in)",
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw",
+        "native-jDsa8w",
+        "native-jMjVtS",
+        "native-XLeNLT"
+      ]
+    },
+    {
+      "row": 28,
+      "requirement": "Latest-DISPATCHED owner crash keeps full hold; latched AI refuses dispatch",
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-Lvlebw",
+        "native-jDsa8w",
+        "native-jMjVtS",
+        "native-XLeNLT"
+      ]
+    },
+    {
+      "row": 29,
+      "requirement": "Journal torn tail refused without repair; original restored -> normal start",
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-vMnYut"
+      ],
+      "note": "GATEWAY/FAILED/SAFETY_RECOVERY_REQUIRED"
+    },
+    {
+      "row": 30,
+      "requirement": "Corrupted journal MAC refused without repair",
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-vMnYut"
+      ],
+      "note": "GATEWAY/FAILED/SAFETY_RECOVERY_REQUIRED"
+    },
+    {
+      "row": 31,
+      "requirement": "Newer-major journal frame refused (crafted)",
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-vMnYut"
+      ],
+      "note": "GATEWAY/FAILED/SAFETY_RECOVERY_REQUIRED"
+    },
+    {
+      "row": 32,
+      "requirement": "Newer-major AI-off latch refused and not replaced",
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-vMnYut"
+      ],
+      "note": "GATEWAY/FAILED/SAFETY_RECOVERY_REQUIRED"
+    },
+    {
+      "row": 33,
+      "requirement": "Missing journal refused, latch kept, journal not recreated",
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "native-vMnYut"
+      ],
+      "note": "GATEWAY/FAILED/SAFETY_RECOVERY_REQUIRED"
+    },
+    {
+      "row": 34,
+      "requirement": "Format 2 archive refused before maintenance via real picker/IPC",
+      "level": "E+U",
+      "status": "PASS",
+      "evidence": [
+        "native-vMnYut",
+        "desktop/test/backup-runtime.test.cjs"
+      ],
+      "note": "BACKUP_RUNTIME_INPUT"
+    },
+    {
+      "row": 35,
+      "requirement": "Container CIBAK002 refused before maintenance",
+      "level": "E+U",
+      "status": "PASS",
+      "evidence": [
+        "native-vMnYut",
+        "desktop/test/backup-runtime.test.cjs"
+      ],
+      "note": "BACKUP_RUNTIME_INPUT"
+    },
+    {
+      "row": 36,
+      "requirement": "V25-and-older/unknown schema refused; V26 converted; V27 drift INCOMPATIBLE",
+      "level": "U",
+      "status": "PASS",
+      "evidence": [
+        "desktop/test/backup-runtime.test.cjs",
+        "backup-compatibility-VjdhHc (earlier unit, PG)"
+      ],
+      "note": "module level only"
+    },
+    {
+      "row": 37,
+      "requirement": "Foreign installation/payload/newer build/foreign owner never reach maintenance",
+      "level": "U",
+      "status": "PASS",
+      "evidence": [
+        "desktop/test/backup-runtime.test.cjs"
+      ],
+      "note": "module level only"
+    },
+    {
+      "row": 38,
+      "requirement": "Backup key rotation restore and unknown-key refusal",
+      "level": "U",
+      "status": "PASS",
+      "evidence": [
+        "desktop/test/backup-runtime.test.cjs"
+      ],
+      "note": "module level only; no product rotation entrypoint"
+    },
+    {
+      "row": 39,
+      "requirement": "Boundary hooks pause exactly once, refuse foreign profiles/claims, report mismatches",
+      "level": "U",
+      "status": "PASS",
+      "evidence": [
+        "desktop/test/backup-recovery-matrix.test.cjs"
+      ]
+    },
+    {
+      "row": 40,
+      "requirement": "Uninterrupted format-3 backup/restore in packaged app",
+      "level": "E",
+      "status": "PASS",
+      "evidence": [
+        "pre-release-final/product-9epbSW (earlier unit, same 1lvULq candidate)"
+      ]
+    },
+    {
+      "row": 41,
+      "requirement": "Format 2 archive normal restore in packaged app",
+      "level": "-",
+      "status": "BLOCKED",
+      "evidence": [],
+      "note": "product implements refusal, not conversion; needs product decision or conversion feature"
+    },
+    {
+      "row": 42,
+      "requirement": "Power loss",
+      "level": "-",
+      "status": "NOT RUN",
+      "evidence": [],
+      "note": "needs dedicated hardware or VM dropping un-synced writes"
+    },
+    {
+      "row": 43,
+      "requirement": "Real user profile/DB/locale application with rollback",
+      "level": "-",
+      "status": "BLOCKED",
+      "evidence": [],
+      "note": "needs user explicit approval and profile"
+    },
+    {
+      "row": 44,
+      "requirement": "Actual older binary reading newer B area/journal",
+      "level": "-",
+      "status": "BLOCKED",
+      "evidence": [],
+      "note": "isolated-run claim binds one runtime; tZgvV7 same journal major; needs signed recovery manifest/older reader"
+    },
+    {
+      "row": 45,
+      "requirement": "Independent review of evidence",
+      "level": "-",
+      "status": "NOT RUN",
+      "evidence": [],
+      "note": "needs independent reviewer"
+    }
+  ],
+  "counts": {
+    "PASS": 40,
+    "BLOCKED": 3,
+    "NOT RUN": 2
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Low",
+      "status": "open",
+      "summary": "Crash before PREPARED leaves unreferenced decrypted payload plaintext under userData/recovery/<tx>/",
+      "rows": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "F2",
+      "severity": "Low",
+      "status": "open",
+      "summary": "V25-and-older/unknown-schema format-3 archives refused as INPUT (described as damaged) instead of INCOMPATIBLE",
+      "rows": [
+        36
+      ]
+    },
+    {
+      "id": "F3",
+      "severity": "Low",
+      "status": "open",
+      "summary": "Interrupted restores leave extra PostgreSQL databases (stage DB before STAGED by design); live DB dirs 4 baseline vs 8/6/7 after chains B/rerun/C",
+      "rows": [
+        10
+      ]
+    }
+  ],
+  "retainedOutsideRepository": {
+    "path": "/private/tmp/cirm-pJzEaC",
+    "reason": "synthetic profile of the native-jDsa8w failure, kept for attribution; other run profiles removed after recording"
+  },
+  "limitations": [
+    "SIGKILL of Electron main is not power loss",
+    "loopback provider stand-in; no real provider/billing",
+    "mock Keychain; controlled dialogs; no real account",
+    "runner holds no DB credentials; DB equality relies on product per-table SHA-256 verification plus API/UI/ciphertext checks",
+    "no actual older binary",
+    "key rotation module-level only",
+    "each boundary exercised once (row 16 twice)",
+    "timings not acceptance results (shared machine)"
+  ]
+}
