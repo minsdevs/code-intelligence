@@ -37,6 +37,7 @@ const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
 const { RuntimeIntegrityError, integrityError, startupFailureCode,
   integrityDiagnostic, formatIntegrityDiagnostic } = require('./startup-diagnostics.cjs');
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
+const { adapterIsolationMode, openAdapterIsolation } = require('./adapter-isolation.cjs');
 const packageMetadata = require('../package.json');
 
 // App documents and workers may run only bundled same-origin script and reach only the app origin.
@@ -543,6 +544,21 @@ async function startRedis() {
 }
 
 async function spawnAnalyzer() {
+  const mode = adapterIsolationMode(packageMetadata);
+  if (mode !== 'legacy-http') {
+    // ADR-01: production analysis runs only behind the attested XPC supervisor. Without it the
+    // adapter is ADAPTER_ISOLATION_UNAVAILABLE; no ordinary child or HTTP sidecar is started.
+    try {
+      await openAdapterIsolation({ mode, runtimeRoot: runtimeRoot(), manifest: runtimeManifest });
+      runtime.adapterIsolation = { mode, isolated: true };
+    } catch (error) {
+      runtime.adapterIsolation = { mode, isolated: false, code: 'ADAPTER_ISOLATION_UNAVAILABLE',
+        reason: error?.code === 'ADAPTER_ISOLATION_UNAVAILABLE' ? error.reason : 'UNEXPECTED' };
+      console.error('DESKTOP_ADAPTER_ISOLATION ADAPTER_ISOLATION_UNAVAILABLE ' + runtime.adapterIsolation.reason);
+    }
+    return async () => {};
+  }
+  runtime.adapterIsolation = { mode, isolated: false };
   const main = binary('ts-analyzer', 'dist', 'main.js');
   await spawnManaged('ts-analyzer', process.execPath, [main], {
     cwd: path.dirname(main),
