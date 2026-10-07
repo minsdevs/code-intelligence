@@ -275,7 +275,8 @@ public class LocalSourceApprovalService {
                 changes.paths(),
                 inspection.summary(),
                 languages.entrySet().stream()
-                        .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
+                        .sorted(Map.Entry.<String, Integer>comparingByValue()
+                                .reversed()
                                 .thenComparing(Map.Entry.comparingByKey()))
                         .map(entry -> new LocalSourcePreview.LanguageCount(
                                 entry.getKey(), entry.getValue(), capabilities.expectedDepth(entry.getKey())))

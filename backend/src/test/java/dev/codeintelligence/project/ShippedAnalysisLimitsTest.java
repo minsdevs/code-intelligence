@@ -21,10 +21,9 @@ class ShippedAnalysisLimitsTest {
         new YamlPropertySourceLoader()
                 .load("application", new ClassPathResource("application.yml"))
                 .forEach(environment.getPropertySources()::addLast);
-        AnalysisProperties shipped = Binder.get(environment)
-                .bindOrCreate("app.analysis", AnalysisProperties.class);
-        AnalysisProperties defaults = Binder.get(new StandardEnvironment())
-                .bindOrCreate("app.analysis", AnalysisProperties.class);
+        AnalysisProperties shipped = Binder.get(environment).bindOrCreate("app.analysis", AnalysisProperties.class);
+        AnalysisProperties defaults =
+                Binder.get(new StandardEnvironment()).bindOrCreate("app.analysis", AnalysisProperties.class);
 
         assertThat(shipped.maxFiles()).isEqualTo(50_000);
         assertThat(defaults.maxFiles()).isEqualTo(50_000);

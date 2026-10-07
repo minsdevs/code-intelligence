@@ -1,7 +1,7 @@
 package dev.codeintelligence.project;
 
-import dev.codeintelligence.common.security.AuthenticatedUser;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import dev.codeintelligence.common.security.AuthenticatedUser;
 import dev.codeintelligence.common.security.CredentialKind;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -49,7 +49,8 @@ public class DesktopPathAuthorizationController {
             return new AuthorizedPath(grant.path().toString(), grant.nonce(), grant.expiresAt());
         }
         if (request.purpose().equals("RESTORE")) {
-            return new AuthorizedPath(authorizations.restore(Path.of(request.path())).toString(), null, null);
+            return new AuthorizedPath(
+                    authorizations.restore(Path.of(request.path())).toString(), null, null);
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown folder authorization purpose.");
     }

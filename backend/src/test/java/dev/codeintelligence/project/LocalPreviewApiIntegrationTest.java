@@ -225,11 +225,13 @@ class LocalPreviewApiIntegrationTest {
                         Map.of("directories", java.util.List.of("src", "src"), "languages", java.util.List.of("java"))),
                 200);
 
-        assertThat(preview.path("scope").toString())
-                .isEqualTo("{\"directories\":[\"src\"],\"languages\":[\"java\"]}");
+        assertThat(preview.path("scope").toString()).isEqualTo("{\"directories\":[\"src\"],\"languages\":[\"java\"]}");
         assertThat(preview.path("localImport").path("acceptedFiles").asInt()).isEqualTo(2);
         // docs/ pruned once, build.gradle at the root, src/app.ts outside the language scope.
-        assertThat(preview.path("localImport").path("excludedEntriesByReason").path("OUT_OF_SCOPE").asInt())
+        assertThat(preview.path("localImport")
+                        .path("excludedEntriesByReason")
+                        .path("OUT_OF_SCOPE")
+                        .asInt())
                 .isEqualTo(3);
         assertThat(preview.path("changedPaths").toString())
                 .isEqualTo("[\"A src/Main.java\",\"A src/nested/Util.java\"]");
@@ -238,7 +240,11 @@ class LocalPreviewApiIntegrationTest {
 
         JsonNode created = post(
                 "/api/projects/local",
-                Map.of("path", source.toString(), "previewToken", preview.path("previewToken").asString()),
+                Map.of(
+                        "path",
+                        source.toString(),
+                        "previewToken",
+                        preview.path("previewToken").asString()),
                 201);
         long project = created.path("project").path("id").asLong();
         long job = created.path("jobId").asLong();
@@ -258,7 +264,8 @@ class LocalPreviewApiIntegrationTest {
         // A refresh of the project keeps the approved scope instead of widening to the whole root.
         jdbc.update("update analysis_jobs set status = 'DONE' where id = ?", job);
         JsonNode refresh = post("/api/projects/" + project + "/local-preview", Map.of(), 200);
-        assertThat(refresh.path("scope").toString()).isEqualTo(preview.path("scope").toString());
+        assertThat(refresh.path("scope").toString())
+                .isEqualTo(preview.path("scope").toString());
         assertThat(refresh.path("localImport").path("acceptedFiles").asInt()).isEqualTo(2);
     }
 

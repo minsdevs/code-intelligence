@@ -100,7 +100,8 @@ public record LocalImportScope(List<String> directories, List<String> languages)
     }
 
     private static boolean validLanguage(String language) {
-        return language.equals(OTHER_LANGUAGE) || LanguageDetector.knownLanguages().contains(language);
+        return language.equals(OTHER_LANGUAGE)
+                || LanguageDetector.knownLanguages().contains(language);
     }
 
     private static List<String> strings(JsonNode node) {

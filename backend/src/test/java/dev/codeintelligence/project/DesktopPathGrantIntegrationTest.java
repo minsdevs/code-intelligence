@@ -90,8 +90,11 @@ class DesktopPathGrantIntegrationTest {
         assertThat(jdbc.queryForObject("select count(*) from projects where user_id = ?", Integer.class, user))
                 .isEqualTo(1);
         // The confirmed project's own refresh needs no new dialog.
-        jdbc.update("update analysis_jobs set status = 'DONE' where project_id = ?", created.project().id());
-        assertThat(approvals.previewRefresh(created.project().id(), user).operation()).isEqualTo("REFRESH");
+        jdbc.update(
+                "update analysis_jobs set status = 'DONE' where project_id = ?",
+                created.project().id());
+        assertThat(approvals.previewRefresh(created.project().id(), user).operation())
+                .isEqualTo("REFRESH");
     }
 
     @Test

@@ -515,7 +515,9 @@ class ImportSecretsCorpusIntegrationTest {
                 t -> {
                     base.build(t);
                     t.text("vendored/other/.git/HEAD", "ref: refs/heads/main\n");
-                    t.secret("vendored/other/.git/config", "[remote \"origin\"]\n\turl = https://x:%s@example.invalid/o.git\n");
+                    t.secret(
+                            "vendored/other/.git/config",
+                            "[remote \"origin\"]\n\turl = https://x:%s@example.invalid/o.git\n");
                     t.text("vendored/other/src/other.ts", "export const other = 1;\n");
                 },
                 List.of(main),

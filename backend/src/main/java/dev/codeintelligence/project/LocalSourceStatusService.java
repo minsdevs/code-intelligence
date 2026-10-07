@@ -126,8 +126,7 @@ public class LocalSourceStatusService {
         Map<String, String> current;
         try {
             // Compare under the scope the project was approved with, so out-of-scope files are not "added".
-            current = localImportService.fingerprint(
-                    source, LocalImportScope.ofProject(jdbc, project.getId()));
+            current = localImportService.fingerprint(source, LocalImportScope.ofProject(jdbc, project.getId()));
         } catch (LocalImportException e) {
             return status(
                     State.INSPECTION_FAILED,
