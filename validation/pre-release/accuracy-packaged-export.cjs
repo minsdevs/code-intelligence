@@ -19,7 +19,7 @@ const { ensureOutputParent, assertOutputPath } = require('./owned-output.cjs');
 const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.cjs');
 const { validateLocalEnvironment, requireExecutionContext, productPaths, claimExecution } = require('../../desktop/scripts/native-acceptance-context.cjs');
 const { closeValidatedApplication, createDeadline, observeStartup } = require('../../desktop/scripts/native-acceptance-electron.cjs');
-const { treeDigest, readFixture, convertFixture, writeBundle, compareDumps, apiProjection, sha256, gitBlobSha1 } = require('./accuracy-observations.cjs');
+const { treeDigest, readFixture, convertFixture, writeBundle, compareDumps, apiProjection, sha256 } = require('./accuracy-observations.cjs');
 const { evaluate } = require('./accuracy-export.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const PRODUCT_PATHS = ['backend/src/main', 'backend/build.gradle.kts', 'analyzers/ts-analyzer/src', 'analyzers/ts-analyzer/package.json',
@@ -153,7 +153,10 @@ async function main(argv = process.argv.slice(2)) {
         results.push({ status: response.status, body: response.ok && text ? JSON.parse(text) : null });
       }
       return results;
-    }, routes), 120000, 'NATIVE_API_TIMEOUT').then(results => results.map(result => {
+    }, routes), 120000, 'NATIVE_API_TIMEOUT').then(results => results.map((result, index) => {
+      if (result.status < 200 || result.status >= 300) {
+        report.apiFailure = { status: result.status, route: routes[index].replace(/[0-9]+/g, 'N').replace(/\?.*$/, '') }; save();
+      }
       assert(result.status >= 200 && result.status < 300, 'PRODUCT_API_REQUEST_FAILED'); return result.body;
     }));
     assert.deepEqual((await get(['/api/projects']))[0], []);
@@ -214,8 +217,10 @@ async function main(argv = process.argv.slice(2)) {
     const details = await get(summaries.map(node => `${base}/graph/nodes/${node.id}?${at}`));
     const relations = await get(summaries.map(node => `${base}/graph/nodes/${node.id}/relations?direction=out&depth=1&${at}`));
     assert(relations.every(item => item.truncated === false && item.resolvedSnapshotId === snapshotId), 'RELATIONS_TRUNCATED');
-    const contents = await get([...fixture.sources.keys()].map(file => `${base}/file-content?path=${encodeURIComponent(file)}&${at}`));
-    const served = new Map([...fixture.sources.keys()].map((file, index) => [file, Buffer.from(contents[index]?.content ?? '', 'utf8')]));
+    // Only inventoried files have retained content; a roster file the import policy refused stays absent.
+    const inventoried = [...fixture.sources.keys()].filter(file => files.some(row => row.path === file));
+    const contents = await get(inventoried.map(file => `${base}/file-content?path=${encodeURIComponent(file)}&${at}`));
+    const served = new Map(inventoried.map((file, index) => [file, { bytes: Buffer.from(contents[index].content ?? '', 'utf8'), oid: contents[index].contentOid }]));
     const nodes = summaries.map((node, index) => ({ type: node.nodeType, key: node.naturalKey, name: node.name, path: node.filePath,
       lineStart: node.lineStart, lineEnd: node.lineEnd, area: node.areaType, metadata: details[index].metadata ?? {} }));
     const edges = relations.flatMap(item => item.relations.filter(relation => relation.depth === 1).map(relation => ({
@@ -223,9 +228,9 @@ async function main(argv = process.argv.slice(2)) {
       confidence: relation.confidence, metadata: {} })));
     const dump = { format: 'code-intelligence-accuracy-product-dump/1', path: 'PACKAGED_APP_API', fixtureId,
       executionState: 'COMPLETED', failureCode: null, steps: report.job.steps, consumedSources,
-      // Files carry no content hash in the API; the git blob id is recomputed from the bytes the product serves back.
       files: files.map(file => ({ path: file.path, language: file.language, size: file.size,
-        contentHash: served.has(file.path) ? gitBlobSha1(served.get(file.path)) : null, analysisStatus: file.analysisStatus,
+        // The API publishes the retained content object id (files.content_hash) through file-content.
+        contentHash: served.get(file.path)?.oid ?? null, analysisStatus: file.analysisStatus,
         analysisReason: file.analysisReason, analysisTargeted: file.analysisTargeted })),
       nodes, edges,
       endpoints: endpoints.map(item => ({ nodeKey: byId.get(item.nodeId)?.naturalKey ?? null, method: item.httpMethod, path: item.path, handlerKey: item.handlerKey })),
@@ -233,8 +238,10 @@ async function main(argv = process.argv.slice(2)) {
       entities: entities.map(item => ({ nodeKey: byId.get(item.nodeId)?.naturalKey ?? null, entityName: item.entityName, tableName: item.tableName,
         source: /\.java$/.test(byId.get(item.nodeId)?.filePath ?? '') ? 'JPA' : 'API_SOURCE_UNAVAILABLE' })),
       routes: nodes.filter(node => node.type === 'FE_ROUTE').map(node => ({ nodeKey: node.key, path: node.key.replace(/^route:/, ''), componentKey: null })),
-      apiLimits: ['NO_EDGE_METADATA', 'NO_AMBIGUOUS_NODES', 'ENTITY_SOURCE_FROM_JAVA_PATH', 'FILE_HASH_FROM_SERVED_CONTENT', 'ROUTE_COMPONENT_KEY_UNAVAILABLE'] };
-    report.servedContentMatchesRoster = [...fixture.sources].every(([file, source]) => served.get(file).equals(source.bytes));
+      apiLimits: ['NO_EDGE_METADATA', 'NO_AMBIGUOUS_NODES', 'ENTITY_SOURCE_FROM_JAVA_PATH', 'ROUTE_COMPONENT_KEY_UNAVAILABLE'] };
+    report.rosterFiles = fixture.sources.size; report.inventoriedRosterFiles = inventoried.length;
+    report.notInventoried = [...fixture.sources.keys()].filter(file => !served.has(file));
+    report.servedContentMismatches = inventoried.filter(file => !served.get(file).bytes.equals(fixture.sources.get(file).bytes));
     fs.mkdirSync(path.join(evidence, 'dumps'), { mode: 0o700 });
     fs.writeFileSync(path.join(evidence, 'dumps', fixtureId + '.dump.json'), JSON.stringify(dump, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
     report.dumpSha256 = hash(path.join(evidence, 'dumps', fixtureId + '.dump.json'));
@@ -242,7 +249,8 @@ async function main(argv = process.argv.slice(2)) {
     report.checks.push('packaged-api-readback-complete');
 
     phase('native-clean-shutdown');
-    const current = { process: () => child, close: () => child.exitCode !== null || child.signalCode !== null ? Promise.resolve() : application.close() };
+    const launched = application;
+    const current = { process: () => child, close: () => child.exitCode !== null || child.signalCode !== null ? Promise.resolve() : launched.close() };
     application = null;
     await closeValidatedApplication(current, report);
     report.checks.push('native-clean-shutdown');
@@ -271,7 +279,7 @@ async function main(argv = process.argv.slice(2)) {
       path: 'PACKAGED_APP_API', nonce: report.nonce, startedAt: report.startedAt, finishedAt: new Date().toISOString(),
       driverSha256: report.driverSha256, converterSha256: report.converterSha256, productRunnerSha256: report.productRunnerSha256,
       revision: options.candidateRevision, electronVersion: report.electronVersion, packagedLaunch: true,
-      validationIdentity: report.validationIdentity } });
+      validationIdentity: report.validationIdentity?.appId } });
     report.status = 'EXPORTED'; save();
     report.t00 = await evaluate({ repo, root: evidence, corpus, capabilities, bundle: report.bundle,
       command: async (label, executable, args, cwd, childEnv, timeout) => {
@@ -287,7 +295,8 @@ async function main(argv = process.argv.slice(2)) {
       : /^[A-Z_]{3,80}$/.test(error?.message ?? '') ? error.message : 'PACKAGED_EXPORT_FAILED' };
   } finally {
     if (application) {
-      const current = { process: () => child, close: () => child.exitCode !== null || child.signalCode !== null ? Promise.resolve() : application.close() };
+      const launched = application;
+      const current = { process: () => child, close: () => child.exitCode !== null || child.signalCode !== null ? Promise.resolve() : launched.close() };
       try { await closeValidatedApplication(current, report); } catch { report.status = 'FAIL'; report.cleanupFailure = true; }
     }
     stopObserving?.();
