@@ -6,6 +6,7 @@ import { getFileContent } from '../../api/files'
 import type { FileContent } from '../../api/types'
 import { useT } from '../../lib/i18n'
 import { configureMonaco } from '../../lib/monacoSetup'
+import { MONACO_THEME } from '../../lib/monacoTheme'
 import { queryError } from './codeLocation'
 import { monacoLanguage } from './language'
 import OpenInIdeButton from './OpenInIdeButton'
@@ -205,7 +206,7 @@ function VerifiedSourceEditor({
       path={`snapshot://${projectId}/${file.resolvedSnapshotId}/${file.contentOid}/${file.path}`}
       value={file.content}
       language={monacoLanguage(file.path, file.language)}
-      theme="vs-dark"
+      theme={MONACO_THEME}
       height="100%"
       onMount={handleMount}
       options={{

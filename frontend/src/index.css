@@ -9,12 +9,12 @@
   --color-line: #26262c;
   --color-line-strong: #34343d;
   --color-ink: #dcdce2;
-  --color-ink-muted: #94949e;
-  --color-ink-faint: #64646e;
+  --color-ink-muted: #a8a8b2;
+  --color-ink-faint: #93939d;
   --color-accent: #6ea8fe;
   --color-ok: #89b884;
   --color-warn: #d4b46a;
-  --color-danger: #e06c75;
+  --color-danger: #e57d86;
 
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
