@@ -100,15 +100,25 @@ schema must keep restoring, and run `desktop/test/backup-*.test.cjs`.
 - `desktop/src/backup-payload.cjs` — V26 file-shape detection no longer equates "current" with 27.
 - `desktop/src/update-startup.cjs` unchanged; `TARGET_FLYWAY` follows the policy.
 
+## Follow-up (after integration 3b05af4)
+
+| Item | Red | Green |
+|---|---|---|
+| `validation/backup-compatibility/run.cjs`: current scenarios are V29 (`stock-v29-to-v29-0.8.7`, old/updated SQL V29); V26 restores into V29; new `pinned-historical-v27-to-v29-same-0.8.7` (producer `42d3260`); preflight accepts V29, V27 and V26 and refuses old-SQL V29 | not rerun at the old code (disk budget); the old V26 check asserted 27 Flyway rows (old line 329) where staging now applies 29 | **PASS 11/11**, `validation/local/backup-compatibility-h4v8Yw/report.json` (PostgreSQL 16.15, child exit 0, `portClosed`, `originalPrefixUnchanged`, `vectorBinaryUnchanged`) |
+| `GithubCredentialStorePostgresTest` (opt-in) expects 29 migrations; run through `validation/pre-release/run-auth-store.cjs --app` with LA8ZS9's bundled PostgreSQL, offline, synthetic | `auth-store-SJSCRl`: `expected: 27L but was: 29L` (line 64) | `auth-store-jQwD9N`: PASS, 6/6 |
+
+The runner needs `bin/pg_config` and refuses a path inside `.app/`, so its prefix was a private
+copy of LA8ZS9's `runtime/postgres` (file-for-file identical; checked) plus `pg_config` from the
+preserved source prefix, used only for `--sharedir`. As documented, the runner fetched the three
+public pgvector v0.8.1 files (tag ref, SQL, control) without credentials and checked their
+pinned SHA-256. Unit tests in that directory (`backup-recovery-matrix`, `backup-interruption-hooks`,
+`owned-crash`): 52/52. After the run, the stopped cluster, runtime copy and legacy source copies
+were removed (`cleanup.json` in the report directory); the report, logs and payloads are kept.
+
 ## Limits and what remains
 
-- Not done here (outside this unit's file area):
-  `validation/backup-compatibility/run.cjs` still hard-codes V27 as current (line 273 `schema: 27`,
-  line 329 Flyway count `'27'`, line 333 `targetSchema: 27`); the line-329 assertion will fail at
-  V29. `backend/.../GithubCredentialStorePostgresTest.java` (opt-in `CI_GITHUB_STORE_REAL=1`)
-  asserts 27 applied migrations.
-- No packaged run: restore of a real V27 backup made by `LA8ZS9` in the next candidate's app, the
-  native recovery matrix and the updater checkpoint across V27→V29 remain for the next candidate.
+- Packaged acceptance (a real LA8ZS9 V27 backup restored by the next candidate, the native
+  recovery matrix, the updater checkpoint across V27→V29) remains for the next candidate.
 - The V27 catalog fingerprint assumes the archive's live catalog equals pinned V1–V27 SQL in an
   empty database (same assumption as the existing V26 and current paths); drifted extension
   versions are still refused, not converted.

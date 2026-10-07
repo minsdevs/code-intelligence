@@ -44,12 +44,12 @@ are ignored by `validation/.gitignore`; do not commit generated credentials or D
 
 The checks cover:
 
-- Stock pgvector 0.8.7, current V27 producer and V27 staging, with a non-null
+- Stock pgvector 0.8.7, current V29 producer and V29 staging, with a non-null
   1536-dimensional vector and the real HNSW-backed summaries schema.
 - Genuine 0.8.1 SQL/control definitions on the unchanged new 0.8.7 binary. The
   fixture changes the copied control default while initializing the source,
   restores the 0.8.7 default before creating targets, and never bypasses the
-  adapter's empty-staging guard. A current V27 export must be refused with
+  adapter's empty-staging guard. A current V29 export must be refused with
   `BACKUP_PG_SCHEMA` before the DB-load iterator or accounting writer is used;
   source rows, empty target rows and original payload bytes must be unchanged.
 - Explicit `ALTER EXTENSION vector UPDATE TO '0.8.7'` in that synthetic source.
@@ -57,16 +57,20 @@ The checks cover:
   old export must still be rejected. This does not convert old archives.
 - The pinned historical V26 producer at
   `4d8946c7b18b1cdee4f6f86b1e30fc9d469d923f`, using the same 0.8.7 runtime,
-  restored through the current V27 reader with `LEGACY_UNMEASURED` file outcomes,
+  restored through the current V29 reader with `LEGACY_UNMEASURED` file outcomes,
   no invented measurements, preserved note/vector data and unchanged payload.
+- The pinned V27 producer at `42d326022da8c5d223aff178adb44c940240420e` (source of
+  candidate LA8ZS9), restored into V29 with every row digest unchanged, the nine V28
+  indexes and the two nullable V29 `scope` columns present (see
+  `docs/audit/backup-policy-v28-v29-2026-10-07.md`).
 - The production `withCompatibilityStage` controller, with an internally generated
   UUID and an acknowledged CREATE OID. A separate synthetic live database is
   initialized as a stage, its adapter is closed, then it is renamed to a generated
-  `ci_backup_live_*` name. Stock V27 and pinned V26 pass the real pinned-migration
-  comparison; old-SQL V27 fails and preserves the original typed callback exception.
+  `ci_backup_live_*` name. Stock V29, pinned V27 and pinned V26 pass the real pinned-migration
+  comparison; old-SQL V29 fails and preserves the original typed callback exception.
   Each probe adapter closes before cleanup; all probe names/OIDs disappear and the
   complete database name/OID/owner/connection projection and live rows stay equal.
-- The production restore coordinator with a real encrypted, users-only old-SQL V27
+- The production restore coordinator with a real encrypted, users-only old-SQL V29
   export. Real PostgreSQL ports, payload verification, encryption/decryption and
   authenticated recovery records are exercised. Rejection must be
   `BACKUP_RUNTIME_INCOMPATIBLE` with `recoveryRequired=false`; maintenance admission,
@@ -81,6 +85,16 @@ The checks cover:
   is installed. Source and target database encoding/provider/collate/ctype/version
   are recorded. The observed restore/refusal applies to this small synthetic
   dataset only; an unavailable locale is explicitly reported as skipped.
+
+## V29 run (2026-10-07)
+
+After V28/V29, `validation/local/backup-compatibility-h4v8Yw/report.json` passed all
+eleven checks on PostgreSQL 16.15, including `pinned-historical-v27-to-v29-same-0.8.7`.
+The prefix was a private copy of candidate LA8ZS9's bundled `runtime/postgres`
+(file-for-file identical) plus `bin/pg_config` from the preserved source prefix
+above, used only to resolve the copied share directory. The owned child exited with
+code 0 and `portClosed`; the stopped cluster and runtime copy were then removed
+(`cleanup.json` in that directory). Checks before this run used V27 as current.
 
 ## Disposable preflight observed runs
 
@@ -166,7 +180,7 @@ encrypted container. The runner does not claim packaged application, successful
 maintenance recovery, durable B cost-ledger replay or Keychain acceptance. The
 baseline is explicitly C/libc/UTF8; ICU and original user locales are unverified.
 Only the fixture's copied extension files change during execution; production
-source files, migration SQL, migration hashes and the V27 schema are not edited by
+source files, migration SQL, migration hashes and the reviewed schema are not edited by
 the runner. The single owned cluster has sequential administrative operations;
 this does not remove PostgreSQL's uncooperative-superuser check-to-DROP race.
 
