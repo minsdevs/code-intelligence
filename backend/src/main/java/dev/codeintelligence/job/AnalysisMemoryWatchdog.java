@@ -17,8 +17,9 @@ import org.springframework.stereotype.Component;
  * 05 §4 analysis memory watchdog (R10). While the owner process tree's resident memory exceeds the
  * limit, {@link #admits()} refuses new analysis work, and every watched run is stopped once so its
  * step fails with {@link AnalysisMemoryLimitException} before the OS runs out of memory. The tree
- * is sampled only while a run is watched. When it cannot be measured (no {@code ps}, e.g. on
- * Windows) analysis is not blocked; the per-analyzer limits remain the only bound there.
+ * is sampled only while a run is watched. The desktop main process measures the tree and reports
+ * it ({@link ReportedOwnerTreeMemory}); without a recent report (Windows, runs outside the desktop)
+ * analysis is not blocked and the per-analyzer limits remain the only bound.
  */
 @Component
 public class AnalysisMemoryWatchdog implements AutoCloseable {
@@ -41,12 +42,8 @@ public class AnalysisMemoryWatchdog implements AutoCloseable {
     private final ScheduledExecutorService sampler;
 
     @Autowired
-    public AnalysisMemoryWatchdog(AnalysisMemoryProperties properties) {
-        this(
-                properties.limitBytes(),
-                new ProcessTreeMemory(
-                        properties.ownerPid() == 0 ? ProcessHandle.current().pid() : properties.ownerPid()),
-                INTERVAL);
+    public AnalysisMemoryWatchdog(AnalysisMemoryProperties properties, ReportedOwnerTreeMemory memory) {
+        this(properties.limitBytes(), memory, INTERVAL);
     }
 
     public AnalysisMemoryWatchdog(long limitBytes, ResidentMemory memory, Duration interval) {
@@ -81,6 +78,11 @@ public class AnalysisMemoryWatchdog implements AutoCloseable {
         Watch watch = new Watch(onExceeded);
         watches.add(watch);
         return () -> watches.remove(watch);
+    }
+
+    /** True while at least one run is watched; the memory reporter samples faster then. */
+    public boolean watching() {
+        return !watches.isEmpty();
     }
 
     private void sample() {

@@ -32,7 +32,7 @@ class JobMemoryWatchdogIntegrationTest {
     private static final long GIB = 1024L * 1024 * 1024;
     private static final Duration TIMEOUT = Duration.ofSeconds(20);
     private static final AtomicLong UNIQUE = new AtomicLong(19_000);
-    // Injected owner-tree RSS; the production source reads the process table.
+    // Injected owner-tree RSS; in production desktop main reports it (ReportedOwnerTreeMemory).
     private static final AtomicLong RSS = new AtomicLong(GIB);
 
     @TempDir

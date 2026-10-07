@@ -60,8 +60,6 @@ app:
     memory:
       # 05 §4 watchdog: owner-tree RSS above this stops new analysis work and fails running jobs.
       limit-bytes: ${ANALYSIS_MEMORY_LIMIT_BYTES:6442450944}
-      # Root of the owner process tree; the desktop passes its main process. 0 = this backend's tree.
-      owner-pid: ${ANALYSIS_MEMORY_OWNER_PID:0}
   auth:
     pat-login-max-attempts: ${PAT_LOGIN_MAX_ATTEMPTS:20}
     pat-login-window-seconds: ${PAT_LOGIN_WINDOW_SECONDS:60}
