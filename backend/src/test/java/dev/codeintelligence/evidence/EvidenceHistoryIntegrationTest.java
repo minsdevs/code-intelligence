@@ -466,7 +466,7 @@ class EvidenceHistoryIntegrationTest {
     @Test
     @Order(13)
     @DisplayName(
-            "C06-13 GC: no retained snapshot source is evicted; legacy-contract pruning ignores note pins (recorded)")
+            "C06-13 GC: no retained snapshot source is evicted; legacy-contract pruning keeps note-pinned snapshots")
     void retentionNeverEvictsRetainedSource() {
         assertThat(snapshots).hasSizeGreaterThan(app.snapshotRetention() + 2);
         for (long snapshot : snapshots) {
@@ -488,7 +488,7 @@ class EvidenceHistoryIntegrationTest {
         REPORT.put("C06-13 legacyPrune", legacyPruneOfANotePinnedSnapshot());
     }
 
-    /** Legacy (source_contract_version 0, e.g. GitHub) snapshots are pruned by FinalizeStep without pin checks. */
+    /** Legacy (source_contract_version 0, e.g. GitHub) snapshots pinned by a note survive FinalizeStep pruning. */
     private Map<String, Object> legacyPruneOfANotePinnedSnapshot() {
         String unique = UUID.randomUUID().toString();
         long legacyUser = jdbc.queryForObject(
@@ -543,12 +543,11 @@ class EvidenceHistoryIntegrationTest {
         observed.put("pinnedFileRowKept", fileKept);
         observed.put("noteKept", noteKept);
         observed.put("status", snapshotKept && fileKept ? "PASS" : "FAIL_SPEC_DEVIATION");
-        // Observed behaviour is asserted so regressions in either direction are visible; the gate row is FAIL.
         assertThat(noteKept).isTrue();
         assertThat(snapshotKept)
-                .as("legacy prune removes the note-pinned snapshot")
-                .isFalse();
-        assertThat(fileKept).isFalse();
+                .as("legacy prune keeps the note-pinned snapshot")
+                .isTrue();
+        assertThat(fileKept).isTrue();
         // A surviving legacy snapshot reports unmeasured results, never recorded success.
         var legacyCoverage = coverage.buildReport(legacy, ids.getLast());
         assertThat(legacyCoverage.measurementStatus()).isEqualTo("LEGACY_UNMEASURED");
