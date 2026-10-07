@@ -15,6 +15,8 @@ public final class JobCancellation {
     private static final ThreadLocal<JobCancellation> CURRENT = new ThreadLocal<>();
 
     private volatile boolean requested;
+    // Set before requested: a stop by the memory watchdog fails the step instead of cancelling it.
+    private volatile boolean memoryLimitExceeded;
     // Guarded by this: the thread inside an interruptible call, and whether a cancel interrupted it.
     private Thread interruptible;
     private boolean interruptedByCancel;
@@ -22,7 +24,7 @@ public final class JobCancellation {
     /** Throws {@link JobCancelledException} once the job running on this thread was cancelled. */
     public static void checkpoint() {
         JobCancellation current = CURRENT.get();
-        if (current != null && current.requested) throw new JobCancelledException();
+        if (current != null && current.requested) throw current.stopped();
     }
 
     /**
@@ -37,6 +39,16 @@ public final class JobCancellation {
 
     boolean requested() {
         return requested;
+    }
+
+    /** The analysis memory watchdog's stop (05 §4): same interruption, but the step fails. */
+    synchronized void exceedMemoryLimit() {
+        memoryLimitExceeded = true;
+        request();
+    }
+
+    private RuntimeException stopped() {
+        return memoryLimitExceeded ? new AnalysisMemoryLimitException() : new JobCancelledException();
     }
 
     synchronized void request() {
@@ -64,13 +76,13 @@ public final class JobCancellation {
 
     private <T> T callInterruptibly(Supplier<T> call) {
         synchronized (this) {
-            if (requested) throw new JobCancelledException();
+            if (requested) throw stopped();
             interruptible = Thread.currentThread();
         }
         try {
             return call.get();
         } catch (RuntimeException failure) {
-            if (requested) throw new JobCancelledException();
+            if (requested) throw stopped();
             throw failure;
         } finally {
             synchronized (this) {

@@ -531,6 +531,8 @@ test('actual main startup passes fresh enrollment before paths file and private 
   const backend = h.children.find(value => path.basename(value.command) === 'java');
   assert.equal(backend.options.stdio[0], 'pipe'); assert.equal(backend.options.env.APP_DESKTOP_AI_BOOTSTRAP_STDIN, 'true');
   assert.equal(backend.options.env.GITHUB_NATIVE_CLIENT_ID, 'public-native-client');
+  // The backend's 6 GiB analysis watchdog measures the whole owner tree rooted at this main process.
+  assert.equal(backend.options.env.ANALYSIS_MEMORY_OWNER_PID, '4242');
   for (const child of h.children) {
     assert.doesNotMatch(JSON.stringify({ args: child.args, env: child.options.env }), new RegExp(`${h.cap}|${h.channelEpoch}|${data.source.capability}|private/ai.sock|host-provider-sentinel|host-node-sentinel|host-java-sentinel|host-github-sentinel`));
     assert.equal(JSON.stringify({ args: child.args, env: child.options.env }).includes(data.source.socketPath), false);

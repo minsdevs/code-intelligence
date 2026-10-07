@@ -57,6 +57,11 @@ app:
     github-rate-limit-retries: ${ANALYSIS_GITHUB_RATE_LIMIT_RETRIES:5}
     github-backoff-base-ms: ${ANALYSIS_GITHUB_BACKOFF_BASE_MS:1000}
     feature-merge-threshold: ${ANALYSIS_FEATURE_MERGE_THRESHOLD:0.5}
+    memory:
+      # 05 §4 watchdog: owner-tree RSS above this stops new analysis work and fails running jobs.
+      limit-bytes: ${ANALYSIS_MEMORY_LIMIT_BYTES:6442450944}
+      # Root of the owner process tree; the desktop passes its main process. 0 = this backend's tree.
+      owner-pid: ${ANALYSIS_MEMORY_OWNER_PID:0}
   auth:
     pat-login-max-attempts: ${PAT_LOGIN_MAX_ATTEMPTS:20}
     pat-login-window-seconds: ${PAT_LOGIN_WINDOW_SECONDS:60}

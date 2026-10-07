@@ -665,6 +665,8 @@ async function spawnBackend({ maintenanceId = '', traceStartup = false } = {}) {
       APP_DESKTOP_AI_BOOTSTRAP_STDIN: 'true',
       APP_DESKTOP_MAINTENANCE_STARTUP_ID: maintenanceId,
       GITHUB_NATIVE_CLIENT_ID: nativeGithubClientId(),
+      // Root of the owner tree that the backend's 6 GiB analysis memory watchdog measures.
+      ANALYSIS_MEMORY_OWNER_PID: String(process.pid),
       CORS_ALLOWED_ORIGINS: runtime.apiBaseUrl
     }
   });

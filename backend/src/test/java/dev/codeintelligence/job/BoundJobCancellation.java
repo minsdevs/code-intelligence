@@ -18,6 +18,11 @@ public final class BoundJobCancellation implements AutoCloseable {
         token.request();
     }
 
+    /** What the analysis memory watchdog does to a watched run above the limit. */
+    public void exceedMemoryLimit() {
+        token.exceedMemoryLimit();
+    }
+
     @Override
     public void close() {
         scope.close();
