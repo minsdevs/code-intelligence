@@ -227,7 +227,7 @@ Generated from candidate bundle digest f00875023a63c5c4e0da4941e5b655078ea70cd3a
 - state-local 1.0.7 [npm-bundled] - MIT: [text 3154651e339acde2858130fb40566eb80ced1b03508c57fcb52bb709ab0a0cea]
 - tailwindcss 4.3.3 [npm-bundled] - MIT: [text 60e0b68c0f35c078eef3a5d29419d0b03ff84ec1df9c3f9d6e39a519a5ae7985]
 - use-sync-external-store 1.6.0 [npm-bundled] - MIT: [text da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93]
-- zustand 4.5.7 [npm-bundled] - MIT: licence text not yet available
+- zustand 4.5.7 [npm-bundled] - MIT: [text c1e6e266563517467b1bf874817d23e426f3149252bd7d42758cd697514b8417]
 - zustand 5.0.15 [npm-bundled] - MIT: [text c1e6e266563517467b1bf874817d23e426f3149252bd7d42758cd697514b8417]
 - @borewit/text-codec 0.2.2 [npm] - MIT: [text 5b3af80f317313a8b8c227b0c8bffae67728cfec1786137b0553e625f2affec9]
 - @lukeed/csprng 1.1.0 [npm] - MIT: [text 9a9edad7baae52622bddf3c15b2ef8a33d2c89f2d25408ad13e8a7481c6b0c97]

@@ -6,6 +6,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const licence = require('../licence-obligations.cjs');
 const notices = require('../licence-notices.cjs');
 
@@ -120,7 +123,7 @@ function noticesInput() {
     { ref: 'npm:app.asar:node_modules/pkg-a', texts: [{ sha256: sha256(mitText), shipped: true }] },
     { ref: 'maven:g:shipped:1', texts: [{ sha256: sha256(apache), shipped: true }] },
   ] };
-  return { obligations, textIndex, readText: digest => texts.get(digest), frontendModules: null, candidate: 'c'.repeat(64), apache, mitText };
+  return { obligations, textIndex, readText: digest => texts.get(digest), frontendRoot: null, candidate: 'c'.repeat(64), apache, mitText };
 }
 
 test('notices generation includes shipped texts, keeps missing texts visible and never invents a text', () => {
@@ -151,4 +154,23 @@ test('notices generation rejects a text whose bytes do not match its digest', ()
   assert.throws(() => notices.build(input), { code: 'TEXT_DIGEST' });
   assert.throws(() => notices.argumentsFor(['--sbom-run', '../run-abcdef']), { code: 'ARGUMENTS' });
   assert.deepEqual(notices.argumentsFor(['--sbom-run', 'run-ozgVww']), { run: 'run-ozgVww' });
+});
+
+test('frontend notice texts come from the exact lock path, including nested copies, and only at the locked version', t => {
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'licence-notices-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const write = (rel, content) => { fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true }); fs.writeFileSync(path.join(root, rel), content); };
+  write('node_modules/zustand/package.json', JSON.stringify({ name: 'zustand', version: '5.0.0' }));
+  write('node_modules/zustand/LICENSE', 'top-level zustand 5 licence\n');
+  write('node_modules/@xyflow/react/node_modules/zustand/package.json', JSON.stringify({ name: 'zustand', version: '4.5.7' }));
+  write('node_modules/@xyflow/react/node_modules/zustand/LICENSE', 'nested zustand 4 licence\n');
+  const nested = notices.frontendTexts(root, 'node_modules/@xyflow/react/node_modules/zustand', 'zustand', '4.5.7');
+  assert.equal(nested.status, 'CHECKOUT_MODULE_TEXT');
+  assert.deepEqual(nested.texts.map(item => [item.text, item.location]),
+    [['nested zustand 4 licence\n', 'frontend/node_modules/@xyflow/react/node_modules/zustand/LICENSE']]);
+  assert.equal(notices.frontendTexts(root, 'node_modules/zustand', 'zustand', '4.5.7').status, 'VERSION_MISMATCH');
+  assert.equal(notices.frontendTexts(root, 'node_modules/missing', 'missing', '1.0.0').status, 'MODULE_MISSING');
+  for (const bad of ['node_modules/../../etc', '../node_modules/x', 'node_modules/a/../b', '/abs/node_modules/x']) {
+    assert.equal(notices.frontendTexts(root, bad, 'x', '1').status, 'LOCK_PATH_INVALID', bad);
+  }
 });

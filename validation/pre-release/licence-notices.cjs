@@ -35,9 +35,12 @@ function argumentsFor(argv) {
 }
 
 // Frontend assets are minified bundles; their notices come from the checkout's
-// node_modules only when the installed version equals the locked version.
-function frontendTexts(modulesRoot, name, version) {
-  const directory = path.join(modulesRoot, ...name.split('/'));
+// installed module at the lock path (nested copies included) only when its
+// version equals the locked version.
+const LOCK_PATH = /^node_modules\/(?:(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+\/node_modules\/)*(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/;
+function frontendTexts(frontendRoot, lockPath, name, version) {
+  if (!LOCK_PATH.test(lockPath) || lockPath.split('/').some(part => part === '.' || part === '..')) return { status: 'LOCK_PATH_INVALID', texts: [] };
+  const directory = path.join(frontendRoot, ...lockPath.split('/'));
   let manifest;
   try { manifest = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8')); } catch { return { status: 'MODULE_MISSING', texts: [] }; }
   if (manifest.name !== name || manifest.version !== version) return { status: 'VERSION_MISMATCH', texts: [] };
@@ -46,7 +49,7 @@ function frontendTexts(modulesRoot, name, version) {
     const stat = fs.lstatSync(path.join(directory, file));
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 2 * 1024 * 1024) continue;
     const text = fs.readFileSync(path.join(directory, file), 'utf8');
-    texts.push({ sha256: sha256(text), text, location: `frontend/node_modules/${name}/${file}` });
+    texts.push({ sha256: sha256(text), text, location: `frontend/${lockPath}/${file}` });
   }
   return { status: texts.length ? 'CHECKOUT_MODULE_TEXT' : 'NO_TEXT_IN_MODULE', texts };
 }
@@ -59,7 +62,7 @@ function canonicalText(textsBySha, usage, spdx) {
   return candidates.length ? candidates[0][0] : null;
 }
 
-function build({ obligations, textIndex, readText, frontendModules, candidate }) {
+function build({ obligations, textIndex, readText, frontendRoot, candidate }) {
   const textsBySha = new Map(), usage = new Map();
   const remember = (digest, text) => { if (!textsBySha.has(digest)) textsBySha.set(digest, text); };
   const indexByRef = new Map(textIndex.components.map(item => [item.ref, item]));
@@ -79,8 +82,11 @@ function build({ obligations, textIndex, readText, frontendModules, candidate })
     let digests = [], source = null;
     const indexed = indexByRef.get(comp.ref);
     if (indexed?.texts.length) { digests = [...new Set(indexed.texts.map(text => text.sha256))]; source = indexed.texts.every(text => text.shipped) ? 'SHIPPED_IN_ARTEFACT' : 'REFERENCE_COPY'; }
-    else if (comp.kind === 'npm-bundled' && frontendModules && comp.version) {
-      const found = frontendTexts(frontendModules, comp.name, comp.version);
+    else if (comp.kind === 'npm-bundled' && frontendRoot && comp.version) {
+      // Lock-declared rows carry their lock path; banner-only rows (build-time packages whose
+      // licence banner is in the bundle) are looked up at the top-level install.
+      const lockPath = comp.ref.startsWith('npm:frontend:') ? comp.ref.slice('npm:frontend:'.length) : `node_modules/${comp.name}`;
+      const found = frontendTexts(frontendRoot, lockPath, comp.name, comp.version);
       for (const text of found.texts) remember(text.sha256, text.text);
       digests = found.texts.map(text => text.sha256); source = found.status;
     }
@@ -133,7 +139,7 @@ function main(argv) {
     need(sha256(text) === digest, 'TEXT_DIGEST', digest); return text;
   };
   const { text, index } = build({ obligations: json('licence-obligations.json'), textIndex: json('licence-texts.json'), readText,
-    frontendModules: path.join(repo, 'frontend/node_modules'), candidate: summary.candidate.bundleTreeDigest });
+    frontendRoot: path.join(repo, 'frontend'), candidate: summary.candidate.bundleTreeDigest });
   const output = path.join(repo, OUTPUT);
   fs.mkdirSync(output, { recursive: true });
   fs.writeFileSync(path.join(output, 'THIRD-PARTY-NOTICES.txt'), text);

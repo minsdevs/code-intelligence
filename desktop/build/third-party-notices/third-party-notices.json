@@ -6,8 +6,8 @@
   "policy": "ENGINEERING_REVIEW_NOT_LEGAL_ADVICE",
   "counts": {
     "BUNDLED_ELSEWHERE": 13,
-    "TEXT_MISSING": 16,
-    "INCLUDED": 310,
+    "TEXT_MISSING": 15,
+    "INCLUDED": 311,
     "NO_NOTICE_REQUIRED": 5
   },
   "texts": 179,
@@ -3037,9 +3037,11 @@
       "elected": [
         "MIT"
       ],
-      "status": "TEXT_MISSING",
-      "licenceTextSha256": [],
-      "textSource": "VERSION_MISMATCH"
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c1e6e266563517467b1bf874817d23e426f3149252bd7d42758cd697514b8417"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
     },
     {
       "name": "zustand",
