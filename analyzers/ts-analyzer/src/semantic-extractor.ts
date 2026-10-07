@@ -21,6 +21,7 @@ import type {
   UnresolvedCallHit,
 } from './types'
 import { resolveRelativeImport } from './paths'
+import { endLine, startLine } from './lines'
 
 type ImportBinding = {
   source: string
@@ -651,8 +652,8 @@ function collectNestModules(
               type: 'CLASS',
               name: token,
               filePath,
-              lineStart: expression.getStartLineNumber(),
-              lineEnd: expression.getEndLineNumber(),
+              lineStart: startLine(expression),
+              lineEnd: endLine(expression),
               layer: 'BACKEND',
               metadata: { nestRole: 'INJECTION_TOKEN' },
             })
@@ -826,7 +827,7 @@ function collectControllerEndpoints(
         sourceKey: methodKey,
         expression: decorator.getText(),
         filePath,
-        lineStart: decorator.getStartLineNumber(),
+        lineStart: startLine(decorator),
         reason: globalPrefix === null ? 'UNRESOLVED_GLOBAL_PREFIX' : 'UNRESOLVED_ROUTE_PATH',
       })
       continue
@@ -847,8 +848,8 @@ function collectControllerEndpoints(
       handler: method.getName(),
       ownerKey: controllerKey,
       filePath,
-      lineStart: decorator.getStartLineNumber(),
-      lineEnd: method.getEndLineNumber(),
+      lineStart: startLine(decorator),
+      lineEnd: endLine(method),
       metadata,
     })
     addEdge(edge(controllerKey, endpointKey(httpMethod, path), 'EXPOSES', 'CONFIRMED', filePath, decorator, {}))
@@ -944,8 +945,8 @@ function collectCallableCalls(
         type: 'DB_ENTITY',
         name: prisma[2],
         filePath,
-        lineStart: call.getStartLineNumber(),
-        lineEnd: call.getEndLineNumber(),
+        lineStart: startLine(call),
+        lineEnd: endLine(call),
         layer: 'DATABASE',
         metadata: { orm: 'PRISMA', operation: prisma[3], confidence: 'LIKELY' },
       })
@@ -962,8 +963,8 @@ function collectCallableCalls(
           type: 'DB_ENTITY',
           name: injected.key.slice('data:typeorm:'.length),
           filePath,
-          lineStart: injected.node.getStartLineNumber(),
-          lineEnd: injected.node.getEndLineNumber(),
+          lineStart: startLine(injected.node),
+          lineEnd: endLine(injected.node),
           layer: 'DATABASE',
           metadata: { orm: 'TYPEORM', confidence: 'LIKELY' },
         })
@@ -991,7 +992,7 @@ function collectCallableCalls(
         sourceKey,
         expression: text,
         filePath,
-        lineStart: call.getStartLineNumber(),
+        lineStart: startLine(call),
         reason: Node.isElementAccessExpression(expression) ? 'DYNAMIC_MEMBER' : 'UNRESOLVED_TARGET',
       })
     }
@@ -1054,7 +1055,7 @@ function collectValidationMetadata(
         property: property.getName(),
         decorator: imported.name,
         arguments: decorator.getArguments().map((argument) => argument.getText()),
-        lineStart: decorator.getStartLineNumber(),
+        lineStart: startLine(decorator),
       })
     }
   }
@@ -1340,8 +1341,8 @@ function hit(
     type,
     name,
     filePath,
-    lineStart: node.getStartLineNumber(),
-    lineEnd: node.getEndLineNumber(),
+    lineStart: startLine(node),
+    lineEnd: endLine(node),
     layer,
     metadata,
   }
@@ -1362,8 +1363,8 @@ function edge(
     type,
     confidence,
     filePath,
-    lineStart: node.getStartLineNumber(),
-    lineEnd: node.getEndLineNumber(),
+    lineStart: startLine(node),
+    lineEnd: endLine(node),
     metadata,
   }
 }

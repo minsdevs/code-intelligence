@@ -7,6 +7,7 @@ import { assertParseable } from './syntax-diagnostics'
 import { createReactComponentResolver } from './react-component-binding'
 import { forEachDescendantOfKinds } from './walk'
 import { extractSliced } from './ts-slices'
+import { endLine, startLine } from './lines'
 
 const HTTP_METHODS: Record<string, true> = {
   GET: true,
@@ -188,8 +189,8 @@ function collectRoutes(source: SourceFile, filePath: string, routes: RouteHit[],
       path: routePath.startsWith('/') ? routePath : `/${routePath}`,
       component,
       filePath,
-      lineStart: node.getStartLineNumber(),
-      lineEnd: node.getEndLineNumber(),
+      lineStart: startLine(node),
+      lineEnd: endLine(node),
       // A later spread or duplicate element may replace the observed JSX value.
       componentResolution: node.getAttributes().some(Node.isJsxSpreadAttribute)
         || node.getAttributes().filter(attribute => Node.isJsxAttribute(attribute) && attribute.getNameNode().getText() === 'element').length !== 1
@@ -257,8 +258,8 @@ function collectVueRouter(source: SourceFile, filePath: string, routes: RouteHit
         path: path.startsWith('/') ? path : `/${path}`,
         component,
         filePath,
-        lineStart: element.getStartLineNumber(),
-        lineEnd: element.getEndLineNumber(),
+        lineStart: startLine(element),
+        lineEnd: endLine(element),
       })
     }
   })
@@ -401,7 +402,7 @@ function exportedHttpHandlers(source: SourceFile): { name: string; start: number
     }
     const name = fn.getName()
     if (name && HTTP_METHODS[name.toUpperCase()]) {
-      handlers.push({ name: name.toUpperCase(), start: fn.getStartLineNumber(), end: fn.getEndLineNumber() })
+      handlers.push({ name: name.toUpperCase(), start: startLine(fn), end: endLine(fn) })
     }
   }
   for (const declaration of source.getVariableDeclarations()) {
@@ -412,8 +413,8 @@ function exportedHttpHandlers(source: SourceFile): { name: string; start: number
     if (HTTP_METHODS[name.toUpperCase()]) {
       handlers.push({
         name: name.toUpperCase(),
-        start: declaration.getStartLineNumber(),
-        end: declaration.getEndLineNumber(),
+        start: startLine(declaration),
+        end: endLine(declaration),
       })
     }
   }
@@ -447,8 +448,8 @@ function collectDeclarations(
       if (!name) {
         return
       }
-      const start = node.getStartLineNumber()
-      const end = node.getEndLineNumber()
+      const start = startLine(node)
+      const end = endLine(node)
       if (isHookName(name)) {
         hooks.push({ name, kind: 'HOOK', filePath, lineStart: start, lineEnd: end })
         return
@@ -464,8 +465,8 @@ function collectDeclarations(
         name: enclosingName(node) ?? 'store',
         kind: 'STORE',
         filePath,
-        lineStart: node.getStartLineNumber(),
-        lineEnd: node.getEndLineNumber(),
+        lineStart: startLine(node),
+        lineEnd: endLine(node),
       })
     }
   })
@@ -578,7 +579,7 @@ function collectApiCalls(source: SourceFile, filePath: string, apiCalls: ApiCall
       method: parsed.method,
       url: parsed.url,
       filePath,
-      lineStart: node.getStartLineNumber(),
+      lineStart: startLine(node),
       owner: enclosingName(node),
     })
   })
