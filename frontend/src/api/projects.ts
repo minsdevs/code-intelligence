@@ -1,6 +1,7 @@
 import { apiGet, apiSend } from './client'
 import type {
   CreateProjectResponse,
+  LocalImportScope,
   LocalPreviewOutcome,
   LocalSourcePreview,
   LocalSourceStatus,
@@ -31,11 +32,11 @@ export type LocalSelectionOptions = { name?: string; grant?: string }
 
 export function previewLocalProject(
   path: string,
-  { name, grant }: LocalSelectionOptions = {},
+  { name, grant, scope }: LocalSelectionOptions & { scope?: LocalImportScope } = {},
 ): Promise<LocalSourcePreview> {
   return apiSend<LocalSourcePreview>('/api/projects/local/preview', {
     method: 'POST',
-    body: { path, name: name || undefined, grant },
+    body: { path, name: name || undefined, grant, scope },
     retryOnCsrfFailure: false,
   })
 }

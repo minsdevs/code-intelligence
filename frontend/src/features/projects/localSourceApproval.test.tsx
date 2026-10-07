@@ -401,3 +401,62 @@ describe('local source approval', () => {
     expect(screen.queryByRole('button', { name: '변경 사항 미리보기' })).not.toBeInTheDocument()
   })
 })
+
+// UX P4: languages, expected depth and areas from the backend, and a scope bound to a new preview.
+function scopedFixture(scope: LocalSourcePreview['scope'] = null): LocalSourcePreview {
+  return {
+    ...preview(),
+    previewToken: scope ? 'scoped-token-never-display' : 'opaque-token-never-display',
+    languages: [
+      { language: 'java', files: 2, expectedDepth: 'SYMBOLS_AND_CALLS' },
+      { language: 'markdown', files: 1, expectedDepth: 'INVENTORY_ONLY' },
+    ],
+    directories: [
+      { name: '.', files: 1 },
+      { name: 'src', files: 2 },
+    ],
+    scope,
+  }
+}
+
+describe('local preview languages and scope', () => {
+  it('lists each language with its file count and expected analysis depth, and the top-level areas', async () => {
+    vi.mocked(previewLocalProject).mockImplementation(async () => scopedFixture())
+    render(<LocalSourceApproval source={{ operation: 'INITIAL', path: '/fixture/source' }} onStarted={vi.fn()} />)
+    await initialReview()
+    const languages = screen.getByRole('table', { name: '선택한 파일의 언어' })
+    expect(languages).toHaveTextContent('java2구문·심볼·정적 호출')
+    expect(languages).toHaveTextContent('markdown1목록만(분석기 없음)')
+    expect(screen.getByText('예상 깊이이며 분석 결과가 아닙니다. 실제 결과는 분석 후 커버리지에 기록됩니다.')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: '루트의 파일 (1)' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'src (2)' })).not.toBeChecked()
+    expect(document.body).not.toHaveTextContent('SYMBOLS_AND_CALLS')
+  })
+
+  it('previews and approves exactly the chosen scope with a new token', async () => {
+    const applied = { directories: ['src'], languages: ['java'] }
+    vi.mocked(previewLocalProject)
+      .mockResolvedValueOnce(scopedFixture())
+      .mockResolvedValueOnce(scopedFixture(applied))
+    const onStarted = vi.fn()
+    render(
+      <LocalSourceApproval
+        source={{ operation: 'INITIAL', path: '/fixture/source', grant: 'g'.repeat(64) }}
+        onStarted={onStarted}
+      />,
+    )
+    await initialReview()
+    const narrow = screen.getByRole('group', { name: '가져올 범위 좁히기 (선택)' })
+    expect(narrow).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'src (2)' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'java (2)' }))
+    fireEvent.click(screen.getByRole('button', { name: '선택한 범위로 다시 미리보기' }))
+    await screen.findByText('적용된 범위: 폴더 src · 언어 java')
+    expect(previewLocalProject).toHaveBeenLastCalledWith('/fixture/source', { grant: 'g'.repeat(64), scope: applied })
+    fireEvent.click(screen.getByRole('button', { name: '확인한 파일 가져오기 및 분석' }))
+    await waitFor(() => expect(onStarted).toHaveBeenCalledWith(7, 42))
+    expect(createLocalProject).toHaveBeenCalledExactlyOnceWith('/fixture/source', 'scoped-token-never-display', {
+      grant: 'g'.repeat(64),
+    })
+  })
+})

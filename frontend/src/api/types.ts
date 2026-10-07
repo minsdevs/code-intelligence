@@ -428,7 +428,22 @@ export type LocalSourcePreview = {
   changes: LocalSourceStatus['changes']
   changedPaths: string[]
   localImport: LocalImportSummary
+  /** Approved files per inventory language, with the depth this installation expects to reach. */
+  languages?: LocalLanguageCount[]
+  /** Approved files per top-level directory; "." counts files directly in the root. */
+  directories?: LocalDirectoryCount[]
+  /** The narrowing this preview's token binds; null is the whole folder. */
+  scope?: LocalImportScope | null
 }
+
+export type LocalExpectedDepth = 'SYMBOLS_AND_CALLS' | 'STRUCTURE' | 'CONFIGURATION' | 'INVENTORY_ONLY'
+
+export type LocalLanguageCount = { language: string; files: number; expectedDepth: LocalExpectedDepth }
+
+export type LocalDirectoryCount = { name: string; files: number }
+
+/** An empty list does not narrow. */
+export type LocalImportScope = { directories: string[]; languages: string[] }
 
 export type LocalPreviewOutcome =
   | { state: 'CONSUMED'; projectId: number; jobId: number }
@@ -758,6 +773,7 @@ export type LocalImportExclusionReason =
   | 'HARD_LINK'
   | 'SECRET_CONTENT'
   | 'SUBMODULE'
+  | 'OUT_OF_SCOPE'
 
 /** Recorded import counts only. Excluded directories count once; descendants are unmeasured. */
 export type LocalImportSummary = {
