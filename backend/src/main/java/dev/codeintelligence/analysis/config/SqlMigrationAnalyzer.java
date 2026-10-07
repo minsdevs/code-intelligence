@@ -99,7 +99,7 @@ public class SqlMigrationAnalyzer implements CodeAnalyzer {
                         ConfigFileSupport.filename(file.file.path()),
                         file.file.path(),
                         1,
-                        lineCount(file.text))
+                        ConfigFileSupport.lineCount(file.text))
                 .withAreaType(AreaType.DATABASE.name())
                 .withMetadata(Map.of("version", file.versionLabel())));
         collector.evidence(new AnalyzerEvidence(
@@ -222,16 +222,6 @@ public class SqlMigrationAnalyzer implements CodeAnalyzer {
             stripped = stripped.substring(1, stripped.length() - 1);
         }
         return stripped;
-    }
-
-    private static int lineCount(String text) {
-        int lines = 1;
-        for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                lines++;
-            }
-        }
-        return lines;
     }
 
     static final class MigrationFile {

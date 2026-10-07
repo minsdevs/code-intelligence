@@ -13,7 +13,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * {@code projects.current_snapshot_id} in one transaction, so a failed run never replaces the
  * previous snapshot. Final publication, the FINALIZE checkpoint and terminal job success commit
  * together; a concurrent cancellation cannot publish a snapshot and then report CANCELLED.
- * Completed legacy snapshots beyond the retention window are pruned (derived data cascades);
+ * Completed legacy snapshots beyond the retention window are pruned (derived data cascades)
+ * unless a note pins one of their files or graph nodes;
  * failed/cancelled attempts keep their diagnostics and jobs. Retained
  * source awaits the separate pin/grace/GC protocol.
  * Uses plain SQL to keep the job package free of project-package dependencies.
@@ -128,6 +129,11 @@ public class FinalizeStep implements JobStep {
                               and id not in (select id from snapshots where project_id = :projectId
                                              and status = 'READY'
                                              order by id desc limit :keep)
+                              and not exists (select 1 from note_references r
+                                              join notes n on n.id = r.note_id and n.project_id = :projectId
+                                              left join files f on r.subject_type = 'FILE' and f.id = r.subject_id
+                                              left join graph_nodes g on r.subject_type = 'NODE' and g.id = r.subject_id
+                                              where coalesce(f.snapshot_id, g.snapshot_id) = snapshots.id)
                             """)
                     .param("projectId", ctx.projectId())
                     .param("keep", appProperties.snapshotRetention())

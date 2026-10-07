@@ -7,7 +7,8 @@
 // - the user-initiated update check through the application menu and native dialogs only.
 // With the shipped empty key set the updater stays disabled and no menu or request is added.
 const crypto = require('node:crypto');
-const fs = require('node:fs');
+// The physical app.asar is hashed below; Electron's asar patch would present it as a directory.
+const fs = process.versions?.electron ? require('original-fs') : require('node:fs');
 const path = require('node:path');
 const { REVIEWED_SCHEMA } = require('./backup-export-policy.cjs');
 const { openUpdateCheckpoints } = require('./update-checkpoint.cjs');
@@ -116,4 +117,4 @@ async function openUpdateStartup({ electron, safety, userData, runningBuild, run
   return Object.freeze({ beforeRuntime, afterHealthy, onStartupFailure, updateStatus: () => service?.status() ?? null });
 }
 
-module.exports = Object.freeze({ openUpdateStartup, TARGET_FLYWAY });
+module.exports = Object.freeze({ openUpdateStartup, currentBundle, TARGET_FLYWAY });
