@@ -8,28 +8,17 @@ import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
 import dev.codeintelligence.evidence.EvidenceKind;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Proxy;
+import dev.codeintelligence.testsupport.StatementCounter;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DelegatingDataSource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -40,11 +29,10 @@ import org.springframework.test.context.DynamicPropertySource;
  * trips per batch, not per row, and store exactly the same rows.
  */
 @SpringBootTest(properties = "app.token-enc-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
-@Import({TestcontainersConfiguration.class, GraphPersistenceRoundTripTest.CountingDataSource.class})
+@Import({TestcontainersConfiguration.class, StatementCounter.class})
 class GraphPersistenceRoundTripTest {
 
     private static final int NODES = 1200;
-    private static final AtomicInteger EXECUTIONS = new AtomicInteger();
 
     @TempDir
     static Path dataDir;
@@ -115,9 +103,9 @@ class GraphPersistenceRoundTripTest {
                 dev.codeintelligence.analysis.core.GraphEdgeType.CALLS,
                 dev.codeintelligence.analysis.core.EdgeConfidence.POSSIBLE));
 
-        EXECUTIONS.set(0);
+        StatementCounter.EXECUTIONS.set(0);
         persistence.persist(projectId, snapshotId, new AnalysisResult(nodes, edges, evidences));
-        int executions = EXECUTIONS.get();
+        int executions = StatementCounter.EXECUTIONS.get();
 
         assertThat(jdbcTemplate.queryForObject(
                         "select count(*) from graph_nodes where snapshot_id = ?", Integer.class, snapshotId))
@@ -157,64 +145,5 @@ class GraphPersistenceRoundTripTest {
         assertThat(jdbcTemplate.queryForObject(
                         "select count(*) from graph_edges where snapshot_id = ?", Integer.class, snapshotId))
                 .isEqualTo(2 * NODES + 1);
-    }
-
-    /** Counts statement executions (one database round trip each, a batch counts once). */
-    @TestConfiguration(proxyBeanMethods = false)
-    static class CountingDataSource {
-
-        private static final Set<String> EXECUTE = Set.of(
-                "execute", "executeQuery", "executeUpdate", "executeLargeUpdate", "executeBatch", "executeLargeBatch");
-
-        @Bean
-        static BeanPostProcessor countingDataSourcePostProcessor() {
-            return new BeanPostProcessor() {
-                @Override
-                public Object postProcessAfterInitialization(Object bean, String beanName) {
-                    if (!(bean instanceof DataSource dataSource) || bean instanceof DelegatingDataSource) {
-                        return bean;
-                    }
-                    return new DelegatingDataSource(dataSource) {
-                        @Override
-                        public Connection getConnection() throws SQLException {
-                            return counting(super.getConnection());
-                        }
-
-                        @Override
-                        public Connection getConnection(String username, String password) throws SQLException {
-                            return counting(super.getConnection(username, password));
-                        }
-                    };
-                }
-            };
-        }
-
-        private static Connection counting(Connection connection) {
-            return (Connection) Proxy.newProxyInstance(
-                    Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (proxy, method, args) -> {
-                        Object result = invoke(connection, method, args);
-                        if (result instanceof Statement statement) {
-                            Class<?> type = statement instanceof java.sql.CallableStatement
-                                    ? java.sql.CallableStatement.class
-                                    : statement instanceof java.sql.PreparedStatement
-                                            ? java.sql.PreparedStatement.class
-                                            : Statement.class;
-                            return Proxy.newProxyInstance(
-                                    Connection.class.getClassLoader(), new Class<?>[] {type}, (p, m, a) -> {
-                                        if (EXECUTE.contains(m.getName())) EXECUTIONS.incrementAndGet();
-                                        return invoke(statement, m, a);
-                                    });
-                        }
-                        return result;
-                    });
-        }
-
-        private static Object invoke(Object target, java.lang.reflect.Method method, Object[] args) throws Throwable {
-            try {
-                return method.invoke(target, args);
-            } catch (InvocationTargetException e) {
-                throw e.getCause();
-            }
-        }
     }
 }

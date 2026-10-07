@@ -16,6 +16,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.core.annotation.Order;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -31,17 +34,23 @@ public class FeatureDetectionStep implements JobStep {
     public static final String KEY = "FEATURE_DETECTION";
     public static final int ORDER = 900;
 
+    /** Feature links per JDBC batch: one round trip each instead of one per link. */
+    private static final int BATCH = 500;
+
     private final JdbcClient jdbc;
+    private final NamedParameterJdbcTemplate batches;
     private final TransactionTemplate transactionTemplate;
     private final EvidenceService evidenceService;
     private final AnalysisProperties analysisProperties;
 
     public FeatureDetectionStep(
             JdbcClient jdbc,
+            NamedParameterJdbcTemplate batches,
             TransactionTemplate transactionTemplate,
             EvidenceService evidenceService,
             AnalysisProperties analysisProperties) {
         this.jdbc = jdbc;
+        this.batches = batches;
         this.transactionTemplate = transactionTemplate;
         this.evidenceService = evidenceService;
         this.analysisProperties = analysisProperties;
@@ -105,16 +114,20 @@ public class FeatureDetectionStep implements JobStep {
                 .param("confidence", confidence)
                 .query(Long.class)
                 .single();
-        for (FeatureLinkBuilder.Link link : linker.linksFor(seed.nodeKeys())) {
-            jdbc.sql("""
+        List<SqlParameterSource> links = linker.linksFor(seed.nodeKeys()).stream()
+                .map(link -> (SqlParameterSource) new MapSqlParameterSource()
+                        .addValue("featureId", featureId)
+                        .addValue("nodeId", link.nodeId())
+                        .addValue("role", link.role()))
+                .toList();
+        for (int start = 0; start < links.size(); start += BATCH) {
+            batches.batchUpdate(
+                    """
                             insert into feature_links (feature_id, node_id, role)
                             values (:featureId, :nodeId, :role)
                             on conflict (feature_id, node_id) do update set role = excluded.role
-                            """)
-                    .param("featureId", featureId)
-                    .param("nodeId", link.nodeId())
-                    .param("role", link.role())
-                    .update();
+                            """,
+                    links.subList(start, Math.min(start + BATCH, links.size())).toArray(SqlParameterSource[]::new));
         }
         List<NewEvidence> evidences = new ArrayList<>();
         for (EndpointRow endpoint : endpoints) {
@@ -127,7 +140,7 @@ public class FeatureDetectionStep implements JobStep {
                         endpoint.httpMethod() + " " + endpoint.path()));
             }
         }
-        evidenceService.replaceLinked(projectId, EvidenceSubjects.FEATURE, featureId, evidences);
+        evidenceService.replaceLinkedAll(projectId, EvidenceSubjects.FEATURE, Map.of(featureId, evidences));
     }
 
     private List<FeatureMerger.Seed> endpointSeeds(List<EndpointRow> endpoints) {
