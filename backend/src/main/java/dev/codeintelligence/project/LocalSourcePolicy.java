@@ -2,6 +2,7 @@ package dev.codeintelligence.project;
 
 import dev.codeintelligence.common.AnalysisProperties;
 import dev.codeintelligence.common.SourceAccess;
+import dev.codeintelligence.job.JobCancellation;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -530,6 +531,7 @@ final class LocalSourcePolicy {
         }
 
         void check() throws IOException {
+            JobCancellation.checkpoint();
             if (Thread.currentThread().isInterrupted() || clock.getAsLong() - started > limits.nanos()) {
                 throw rejected("Local source inspection was cancelled or exceeded its time limit.");
             }

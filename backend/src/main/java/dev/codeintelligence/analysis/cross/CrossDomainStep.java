@@ -8,6 +8,7 @@ import dev.codeintelligence.analysis.core.GraphEdgeType;
 import dev.codeintelligence.analysis.core.NaturalKeys;
 import dev.codeintelligence.analysis.graph.GraphPersistenceService;
 import dev.codeintelligence.evidence.EvidenceKind;
+import dev.codeintelligence.job.JobCancellation;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import java.util.ArrayList;
@@ -82,6 +83,7 @@ public class CrossDomainStep implements JobStep {
                                 rs.getObject("line_start")))
                 .list();
         for (Caller caller : callers) {
+            JobCancellation.checkpoint();
             for (ApiCall call : parseCalls(caller.metadataJson())) {
                 Match best = null;
                 for (Endpoint endpoint : endpoints) {
@@ -125,6 +127,7 @@ public class CrossDomainStep implements JobStep {
         // Propagate only through the selected snapshot's unique structural edge.
         // The display/import alias in component_key is not a global component ID.
         for (Route route : routes) {
+            JobCancellation.checkpoint();
             for (GraphEdgeDraft edge : List.copyOf(edges)) {
                 if (GraphEdgeType.CONSUMES.name().equals(edge.edgeType())
                         && route.componentKey().equals(edge.sourceNaturalKey())) {

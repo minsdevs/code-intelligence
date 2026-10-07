@@ -7,6 +7,8 @@ import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.SafeRelativePath;
 import dev.codeintelligence.analysis.graph.GraphPersistenceService;
 import dev.codeintelligence.common.AnalysisProperties;
+import dev.codeintelligence.job.JobCancellation;
+import dev.codeintelligence.job.JobCancelledException;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import java.io.IOException;
@@ -75,7 +77,12 @@ public class TreeParsingStep implements JobStep {
         }
         recordAll(snapshotId, files, "TARGETED", "PARSER_STARTED");
         try {
-            client.health();
+            JobCancellation.interruptibly(() -> {
+                client.health();
+                return null;
+            });
+        } catch (JobCancelledException cancelled) {
+            throw cancelled;
         } catch (RuntimeException failure) {
             recordAll(snapshotId, files, "FAILED", "ANALYZER_UNAVAILABLE");
             throw failure;
@@ -91,7 +98,9 @@ public class TreeParsingStep implements JobStep {
             List<TreeAnalyzeDtos.FilePayload> batch = payloads.subList(start, end);
             TreeAnalyzeDtos.Response response;
             try {
-                response = client.analyze(new TreeAnalyzeDtos.Request(batch));
+                response = JobCancellation.interruptibly(() -> client.analyze(new TreeAnalyzeDtos.Request(batch)));
+            } catch (JobCancelledException cancelled) {
+                throw cancelled;
             } catch (RuntimeException failure) {
                 for (var payload : batch)
                     FileAnalysisOutcome.record(jdbc, snapshotId, payload.path(), "FAILED", "ANALYZER_REQUEST_FAILED");
@@ -141,6 +150,7 @@ public class TreeParsingStep implements JobStep {
             Path clonePath, List<InventoriedFile> files, long snapshotId) {
         List<TreeAnalyzeDtos.FilePayload> payloads = new ArrayList<>();
         for (InventoriedFile file : files) {
+            JobCancellation.checkpoint();
             if (file.size() > analysisProperties.maxFileSize()) {
                 recordOne(snapshotId, file, "UNMEASURED", "SOURCE_SIZE_LIMIT");
                 continue;

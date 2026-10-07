@@ -47,6 +47,7 @@ import dev.codeintelligence.analysis.core.GraphNodeType;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.NaturalKeys;
 import dev.codeintelligence.evidence.EvidenceKind;
+import dev.codeintelligence.job.JobCancellation;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -87,6 +88,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
         List<ParsedUnit> units = new ArrayList<>();
         for (InventoriedFile file :
                 ctx.inventory().files().stream().filter(JavaAnalyzer::isJava).toList()) {
+            JobCancellation.checkpoint();
             try {
                 units.add(parseFile(ctx, parser, file));
             } catch (Exception e) {
@@ -97,12 +99,15 @@ public class JavaAnalyzer implements CodeAnalyzer {
             }
         }
         for (ParsedUnit unit : units) {
+            JobCancellation.checkpoint();
             registerTypes(unit, collector);
         }
         for (ParsedUnit unit : units) {
+            JobCancellation.checkpoint();
             visitMembers(unit, collector);
         }
         for (ParsedUnit unit : units) {
+            JobCancellation.checkpoint();
             visitCalls(unit, collector);
             collector.outcomes.put(
                     unit.file.path(),

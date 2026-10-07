@@ -21,6 +21,7 @@ public interface JobContext {
     /** The input directory leased to this run; retained imports use disposable private scratch. */
     Path clonePath();
 
+    /** Also a {@link JobCancellation} checkpoint: throws once the job was cancelled. */
     void updateProgress(int progressPct);
 
     void attachSnapshot(long snapshotId);

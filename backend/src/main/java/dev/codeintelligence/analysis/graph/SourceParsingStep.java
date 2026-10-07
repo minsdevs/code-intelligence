@@ -14,6 +14,8 @@ import dev.codeintelligence.evidence.EvidenceKind;
 import dev.codeintelligence.evidence.EvidenceService;
 import dev.codeintelligence.evidence.EvidenceSubjects;
 import dev.codeintelligence.evidence.NewEvidence;
+import dev.codeintelligence.job.JobCancellation;
+import dev.codeintelligence.job.JobCancelledException;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import java.util.ArrayList;
@@ -80,6 +82,8 @@ public class SourceParsingStep implements JobStep {
         for (CodeAnalyzer analyzer : matching) {
             try {
                 acc.add(analyzer.analyze(new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory)));
+            } catch (JobCancelledException cancelled) {
+                throw cancelled;
             } catch (RuntimeException e) {
                 log.warn(
                         "Analyzer {} failed; isolating per file",
@@ -108,12 +112,15 @@ public class SourceParsingStep implements JobStep {
         int index = 0;
         List<InventoriedFile> files = inventory.files();
         for (InventoriedFile file : files) {
+            JobCancellation.checkpoint();
             FileInventory single = FileInventory.of(file);
             if (!analyzer.supports(single)) {
                 continue;
             }
             try {
                 acc.add(analyzer.analyze(new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), single)));
+            } catch (JobCancelledException cancelled) {
+                throw cancelled;
             } catch (RuntimeException e) {
                 log.warn(
                         "Skipping {} in {}: {}",
