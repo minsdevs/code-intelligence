@@ -2,6 +2,9 @@ package dev.codeintelligence.project;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,7 +34,7 @@ class LocalSourceStatusServiceTest {
     void setUp() {
         projects = mock(ProjectRepository.class);
         imports = mock(LocalImportService.class);
-        service = new LocalSourceStatusService(projects, imports, mock(JdbcClient.class));
+        service = new LocalSourceStatusService(projects, imports, mock(JdbcClient.class, RETURNS_DEEP_STUBS));
         project = new Project(7, "missing", tempDir.resolve("missing").toString());
         ReflectionTestUtils.setField(project, "id", 11L);
         ReflectionTestUtils.setField(project, "currentSnapshotId", 21L);
@@ -80,7 +83,7 @@ class LocalSourceStatusServiceTest {
     void inspectionFailureDoesNotPretendThatPickerAuthorizationExpired() throws Exception {
         Path source = Files.createDirectories(tempDir.resolve("missing"));
         when(imports.validateSource(source)).thenReturn(source);
-        when(imports.fingerprint(source)).thenThrow(new LocalImportException("sensitive-source-sentinel", null));
+        when(imports.fingerprint(source, null)).thenThrow(new LocalImportException("sensitive-source-sentinel", null));
 
         LocalSourceStatusService.LocalSourceStatus status = service.get(11, 7);
 
@@ -102,6 +105,6 @@ class LocalSourceStatusServiceTest {
 
         assertThat(status.state()).isEqualTo(LocalSourceStatusService.State.REAUTHORIZATION_REQUIRED);
         assertThat(status.message()).doesNotContain("private-path-sentinel");
-        verify(imports, never()).fingerprint(source);
+        verify(imports, never()).fingerprint(eq(source), any());
     }
 }

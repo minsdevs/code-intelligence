@@ -586,7 +586,10 @@ async function startAnalyzer() {
   await (await spawnAnalyzer())();
 }
 
-async function authorizePath(selected, persist = true) {
+// A native-dialog result becomes a backend grant (exact canonical root, root identity, expiry and a
+// one-time nonce) that the renderer must present to preview and confirm that folder. RESTORE only
+// re-registers a root persisted for an existing project; it never yields a grant.
+async function authorizePath(selected, { restore = false } = {}) {
   const canonical = await fsp.realpath(assertAbsolutePath(selected));
   const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/api/desktop/paths`, {
     method: 'POST',
@@ -595,15 +598,31 @@ async function authorizePath(selected, persist = true) {
       'X-Code-Intelligence-Token': runtime.apiToken,
       'X-Code-Intelligence-Path-Token': runtime.pathToken
     },
-    body: JSON.stringify({ path: canonical })
+    body: JSON.stringify(restore ? { path: canonical, purpose: 'RESTORE' } : { path: canonical })
   });
   if (!response.ok) throw new Error(`Folder authorization failed (${response.status})`);
   const result = await response.json();
-  if (persist && !runtime.authorizedRoots.includes(result.path)) {
+  if (restore) return result.path;
+  if (typeof result.grant !== 'string' || typeof result.expiresAt !== 'string') throw new Error('Folder authorization failed');
+  if (!runtime.authorizedRoots.includes(result.path)) {
     runtime.authorizedRoots.push(result.path);
     await saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
   }
-  return result.path;
+  return { path: result.path, grant: result.grant, expiresAt: result.expiresAt };
+}
+
+// SEC-M-02: a dropped folder arrives as a renderer-supplied path. It is granted only after the user
+// confirms that exact canonical folder in a native dialog whose default answer refuses.
+async function authorizeDroppedPath(selected) {
+  const canonical = await fsp.realpath(selected);
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'question', buttons: ['Analyze folder', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true,
+    title: 'Analyze this folder?', message: 'Allow Code Intelligence to read this dropped folder?', detail: canonical
+  });
+  if (response !== 0) return null;
+  const granted = await authorizePath(canonical);
+  if (granted.path !== canonical) throw new Error('The dropped folder changed before it was authorized.');
+  return granted;
 }
 
 function nativeGithubClientId() {
@@ -662,7 +681,7 @@ async function restoreAuthorizedRoots() {
   assertSafetyReady();
   for (const root of [...runtime.authorizedRoots]) {
     try {
-      await authorizePath(root, false);
+      await authorizePath(root, { restore: true });
     } catch {
       runtime.authorizedRoots = runtime.authorizedRoots.filter((entry) => entry !== root);
     }
@@ -1040,7 +1059,7 @@ async function resumeAfterBackup({ transactionId, restored, recovery = false }) 
   }
   if (!restored) {
     for (const root of [...runtime.authorizedRoots]) {
-      try { await authorizePath(root, false); }
+      try { await authorizePath(root, { restore: true }); }
       catch { runtime.authorizedRoots = runtime.authorizedRoots.filter(entry => entry !== root); }
     }
     await saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
@@ -1155,7 +1174,7 @@ function registerIpc() {
   });
   ipcMain.handle('folder:authorize', (event, selected) => {
     assertTrustedRenderer(event);
-    return withRuntimeOperation(() => { assertSafetyReady(); return authorizePath(assertAbsolutePath(selected)); });
+    return withRuntimeOperation(() => { assertSafetyReady(); return authorizeDroppedPath(assertAbsolutePath(selected)); });
   });
   ipcMain.handle('external:open', (event, url) => {
     assertTrustedRenderer(event);

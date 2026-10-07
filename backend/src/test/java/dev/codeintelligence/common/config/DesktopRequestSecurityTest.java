@@ -243,9 +243,33 @@ class DesktopRequestSecurityTest {
                         .header("X-Code-Intelligence-Path-Token", "b".repeat(64))
                         .contentType("application/json")
                         .content(body))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.path").value(folder.toRealPath().toString()))
+                .andExpect(jsonPath("$.grant").value(org.hamcrest.Matchers.matchesPattern("[0-9a-f]{64}")))
+                .andExpect(jsonPath("$.expiresAt").isString());
         assertThat(context.getBean(DesktopPathAuthorizationService.class).isAuthorized(folder.toRealPath()))
                 .isTrue();
+    }
+
+    @Test
+    void restoringAPersistedRootReturnsNoSelectionGrant(@TempDir Path folder) throws Exception {
+        String body = "{\"path\":\"" + folder.toString().replace("\\", "\\\\") + "\",\"purpose\":\"RESTORE\"}";
+        mvc.perform(post("/api/desktop/paths")
+                        .secure(true)
+                        .header(HEADER, TOKEN)
+                        .header("X-Code-Intelligence-Path-Token", "b".repeat(64))
+                        .contentType("application/json")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.path").value(folder.toRealPath().toString()))
+                .andExpect(jsonPath("$.grant").doesNotExist());
+        mvc.perform(post("/api/desktop/paths")
+                        .secure(true)
+                        .header(HEADER, TOKEN)
+                        .header("X-Code-Intelligence-Path-Token", "b".repeat(64))
+                        .contentType("application/json")
+                        .content(body.replace("RESTORE", "OTHER")))
+                .andExpect(status().isBadRequest());
     }
 
     @Configuration(proxyBeanMethods = false)

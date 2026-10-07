@@ -58,6 +58,12 @@ class LocalPreviewApiIntegrationTest {
     @Autowired
     JsonMapper json;
 
+    @Autowired
+    LocalSourceApprovalService approvals;
+
+    @Autowired
+    LocalImportService imports;
+
     @MockitoBean
     JobWorker worker;
 
@@ -186,6 +192,102 @@ class LocalPreviewApiIntegrationTest {
         assertCode(error, "LOCAL_PREVIEW_EXPIRED");
         assertThat(error.toString()).doesNotContain(token, source.toString(), "class HttpFixture");
         verifyNoInteractions(worker);
+    }
+
+    // UX P4: the preview names languages, expected depth and top-level areas, and an optional scope
+    // is bound to the approval so the confirmed import copies exactly the previewed scope.
+    @Test
+    void previewReportsLanguagesExpectedDepthAndTopLevelAreas() throws Exception {
+        Path source = mixedSource();
+        JsonNode preview = post("/api/projects/local/preview", Map.of("path", source.toString()), 200);
+
+        assertThat(preview.path("languages").toString())
+                .isEqualTo(json.readTree("""
+                        [{"language":"java","files":2,"expectedDepth":"SYMBOLS_AND_CALLS"},
+                         {"language":"gradle","files":1,"expectedDepth":"CONFIGURATION"},
+                         {"language":"markdown","files":1,"expectedDepth":"INVENTORY_ONLY"},
+                         {"language":"typescript","files":1,"expectedDepth":"INVENTORY_ONLY"}]""").toString());
+        assertThat(preview.path("directories").toString())
+                .isEqualTo(json.readTree("""
+                        [{"name":".","files":1},{"name":"docs","files":1},{"name":"src","files":3}]""").toString());
+        assertThat(preview.path("scope").isNull()).isTrue();
+    }
+
+    @Test
+    void aScopedApprovalImportsExactlyTheApprovedScope() throws Exception {
+        Path source = mixedSource();
+        JsonNode preview = post(
+                "/api/projects/local/preview",
+                Map.of(
+                        "path",
+                        source.toString(),
+                        "scope",
+                        Map.of("directories", java.util.List.of("src", "src"), "languages", java.util.List.of("java"))),
+                200);
+
+        assertThat(preview.path("scope").toString())
+                .isEqualTo("{\"directories\":[\"src\"],\"languages\":[\"java\"]}");
+        assertThat(preview.path("localImport").path("acceptedFiles").asInt()).isEqualTo(2);
+        // docs/ pruned once, build.gradle at the root, src/app.ts outside the language scope.
+        assertThat(preview.path("localImport").path("excludedEntriesByReason").path("OUT_OF_SCOPE").asInt())
+                .isEqualTo(3);
+        assertThat(preview.path("changedPaths").toString())
+                .isEqualTo("[\"A src/Main.java\",\"A src/nested/Util.java\"]");
+        assertThat(preview.path("languages").toString())
+                .isEqualTo("[{\"language\":\"java\",\"files\":2,\"expectedDepth\":\"SYMBOLS_AND_CALLS\"}]");
+
+        JsonNode created = post(
+                "/api/projects/local",
+                Map.of("path", source.toString(), "previewToken", preview.path("previewToken").asString()),
+                201);
+        long project = created.path("project").path("id").asLong();
+        long job = created.path("jobId").asLong();
+        assertThat(jdbc.queryForObject("select scope from job_local_source_inputs where job_id=?", String.class, job))
+                .isEqualTo("{\"directories\":[\"src\"],\"languages\":[\"java\"]}");
+        jdbc.update("update analysis_jobs set status = 'RUNNING' where id = ?", job);
+        Path target = root.resolve("data/repos/scoped-" + job);
+        imports.importApproved(approvals.requireJobInput(job, project), target);
+        try (var files = Files.walk(target)) {
+            assertThat(files.filter(Files::isRegularFile)
+                            .map(file -> target.relativize(file).toString())
+                            .filter(path -> !path.startsWith(".git"))
+                            .sorted()
+                            .toList())
+                    .containsExactly("src/Main.java", "src/nested/Util.java");
+        }
+        // A refresh of the project keeps the approved scope instead of widening to the whole root.
+        jdbc.update("update analysis_jobs set status = 'DONE' where id = ?", job);
+        JsonNode refresh = post("/api/projects/" + project + "/local-preview", Map.of(), 200);
+        assertThat(refresh.path("scope").toString()).isEqualTo(preview.path("scope").toString());
+        assertThat(refresh.path("localImport").path("acceptedFiles").asInt()).isEqualTo(2);
+    }
+
+    @Test
+    void anUnsafeOrUnknownScopeIsRefusedBeforeAnyApproval() throws Exception {
+        Path source = mixedSource();
+        for (Object scope : java.util.List.of(
+                Map.of("directories", java.util.List.of("..")),
+                Map.of("directories", java.util.List.of("src/nested")),
+                Map.of("languages", java.util.List.of("klingon")))) {
+            post("/api/projects/local/preview", Map.of("path", source.toString(), "scope", scope), 400);
+        }
+        assertThat(jdbc.queryForObject(
+                        "select count(*) from local_source_approvals where canonical_root=?",
+                        Long.class,
+                        source.toRealPath().toString()))
+                .isZero();
+    }
+
+    private Path mixedSource() throws Exception {
+        Path source = Files.createDirectory(root.resolve("mixed-" + UUID.randomUUID()));
+        Files.createDirectories(source.resolve("src/nested"));
+        Files.createDirectories(source.resolve("docs"));
+        Files.writeString(source.resolve("src/Main.java"), "class Main {}\n");
+        Files.writeString(source.resolve("src/nested/Util.java"), "class Util {}\n");
+        Files.writeString(source.resolve("src/app.ts"), "export const app = 1;\n");
+        Files.writeString(source.resolve("docs/guide.md"), "# Guide\n");
+        Files.writeString(source.resolve("build.gradle"), "plugins { id 'java' }\n");
+        return source;
     }
 
     private Path source() throws Exception {

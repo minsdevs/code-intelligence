@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.function.Predicate;
 import org.eclipse.jgit.dircache.DirCache;
 import org.eclipse.jgit.dircache.DirCacheBuilder;
 import org.eclipse.jgit.dircache.DirCacheEntry;
@@ -183,6 +184,23 @@ public class LocalImportService {
 
     /** Validates and resolves a local source. The returned path is the real path. */
     public Path validateSource(Path localPath) {
+        return validateSource(localPath, desktopPaths::isAuthorized);
+    }
+
+    /**
+     * Validates a new selection: a configured server root, or a live native-dialog grant for exactly
+     * this root (not spent here, so the preview can be repeated until the confirmation spends it).
+     */
+    public Path validateGranted(Path localPath, String grant) {
+        return validateSource(localPath, real -> desktopPaths.isGranted(grant, real));
+    }
+
+    /** Spends the selection grant of a confirmed initial import or relink; server roots need none. */
+    public void consumeGrant(Path realPath, String grant) {
+        if (!underAllowedRoot(realPath)) desktopPaths.consume(grant, realPath);
+    }
+
+    private Path validateSource(Path localPath, Predicate<Path> desktopAccess) {
         Path resolved = localPath.toAbsolutePath().normalize();
         Path realPath;
         if (SourceAccess.windows()) {
@@ -254,19 +272,7 @@ public class LocalImportService {
             }
         }
 
-        List<Path> allowedRoots = localImportProperties.resolvedAllowedRoots();
-        boolean underAllowedRoot = false;
-        for (Path root : allowedRoots) {
-            try {
-                if (isUnder(realPath, root.toRealPath())) {
-                    underAllowedRoot = true;
-                    break;
-                }
-            } catch (IOException ignored) {
-                // An unresolved configured root must not grant access.
-            }
-        }
-        if (!underAllowedRoot && !desktopPaths.isAuthorized(realPath)) {
+        if (!underAllowedRoot(realPath) && !desktopAccess.test(realPath)) {
             throw new LocalImportException(
                     "Path is not authorized. Choose it with the native folder picker or configure an allowed root.",
                     null);
@@ -274,16 +280,43 @@ public class LocalImportService {
         return realPath;
     }
 
+    private boolean underAllowedRoot(Path realPath) {
+        for (Path root : localImportProperties.resolvedAllowedRoots()) {
+            try {
+                if (isUnder(realPath, root.toRealPath())) return true;
+            } catch (IOException ignored) {
+                // An unresolved configured root must not grant access.
+            }
+        }
+        return false;
+    }
+
     /** Computes exactly the selected source hashes used by local copy, without retaining source bytes. */
     public Map<String, String> fingerprint(Path localPath) {
-        return inspect(localPath).gitFingerprints();
+        return fingerprint(localPath, null);
+    }
+
+    public Map<String, String> fingerprint(Path localPath, LocalImportScope scope) {
+        return inspect(localPath, scope).gitFingerprints();
     }
 
     public LocalSourceInspection inspect(Path localPath) {
-        Path source = validateSource(localPath);
+        return inspect(localPath, null);
+    }
+
+    public LocalSourceInspection inspect(Path localPath, LocalImportScope scope) {
+        return inspectValidated(validateSource(localPath), scope);
+    }
+
+    /** Inspects a new selection under its native-dialog grant (see {@link #validateGranted}). */
+    public LocalSourceInspection inspectGranted(Path localPath, String grant, LocalImportScope scope) {
+        return inspectValidated(validateGranted(localPath, grant), scope);
+    }
+
+    private LocalSourceInspection inspectValidated(Path source, LocalImportScope scope) {
         ensureDisjointSource(source);
         try (SourceAccess.Scope ignored = SourceAccess.open(source, "source")) {
-            LocalSourcePolicy.Selection selection = policy.select(source, (file, bytes) -> {});
+            LocalSourcePolicy.Selection selection = policy.select(source, scope, (file, bytes) -> {});
             Map<String, String> result = new TreeMap<>();
             selection.files().forEach((path, file) -> result.put(path, file.oid()));
             return new LocalSourceInspection(selection.binding(), result, selection.summary());
@@ -299,7 +332,8 @@ public class LocalImportService {
         Path git = staging.resolve(Constants.DOT_GIT);
         LocalSourcePolicy.Selection selection;
         try {
-            selection = policy.select(source, (file, bytes) -> {
+            LocalImportScope scope = expected == null ? null : LocalImportScope.parse(expected.scope());
+            selection = policy.select(source, scope, (file, bytes) -> {
                 Path destination = staging.resolve(file.path()).normalize();
                 if (!destination.startsWith(staging) || destination.startsWith(git)) {
                     throw LocalSourceApprovalException.sourceChanged();
@@ -430,6 +464,11 @@ public class LocalImportService {
             if (!root.isAbsolute() || !root.normalize().toString().equals(expected.canonicalRoot()))
                 throw LocalSourceApprovalException.sourceChanged();
         } catch (java.nio.file.InvalidPathException e) {
+            throw LocalSourceApprovalException.sourceChanged();
+        }
+        try {
+            LocalImportScope.parse(expected.scope());
+        } catch (LocalImportException e) {
             throw LocalSourceApprovalException.sourceChanged();
         }
     }

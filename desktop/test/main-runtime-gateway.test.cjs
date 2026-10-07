@@ -846,7 +846,7 @@ test('backup reauthorizes prior folder grants only after prepared backend and EN
   const end = h.events.lastIndexOf('maintenance.END'), grant = h.events.indexOf('fetch./api/desktop/paths');
   assert.ok(end >= 0 && grant > end); assert.equal(h.run('runtime.ready'), true);
   const selected = h.requests.find(item => new URL(item.url).pathname === '/api/desktop/paths');
-  assert.deepEqual(JSON.parse(selected.config.body), { path: approved });
+  assert.deepEqual(JSON.parse(selected.config.body), { path: approved, purpose: 'RESTORE' });
 });
 
 test('prepared backend with outstanding work cannot release maintenance or show a restored window', async t => {

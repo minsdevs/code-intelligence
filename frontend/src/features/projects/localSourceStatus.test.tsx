@@ -223,3 +223,23 @@ describe('local source inspection failures', () => {
     expect(reanalyzeLocalProject).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('local source relink', () => {
+  it('relinks only with the folder grant of the native picker', async () => {
+    const selection = { path: '/fixture/moved', grant: 'g'.repeat(64), expiresAt: '2099-01-01T00:00:00Z' }
+    vi.stubGlobal('codeIntelligenceDesktop', { pickFolder: vi.fn(async () => selection) })
+    vi.mocked(getLocalSourceStatus).mockResolvedValue({
+      ...inspectionFailed,
+      state: 'PATH_MISSING',
+      changes: { added: 0, modified: 0, deleted: 0, total: 0 },
+      changedPaths: [],
+      message: null,
+    })
+    vi.mocked(relinkLocalProject).mockResolvedValue({ id: 7 } as Awaited<ReturnType<typeof relinkLocalProject>>)
+    renderStatus()
+    fireEvent.click(await screen.findByRole('button', { name: '폴더 다시 연결' }))
+    await waitFor(() =>
+      expect(relinkLocalProject).toHaveBeenCalledExactlyOnceWith(7, '/fixture/moved', selection.grant),
+    )
+  })
+})

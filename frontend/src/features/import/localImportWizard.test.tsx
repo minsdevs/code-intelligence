@@ -29,7 +29,17 @@ vi.mock('../../api/jobs', () => ({
   subscribeJobEvents: vi.fn(),
 }))
 // These steps are outside the local approval path under test.
-vi.mock('./ConnectStep', () => ({ default: () => <div>Connect</div> }))
+const picked = { path: '/fixture/picked', grant: 'g'.repeat(64), expiresAt: '2099-01-01T00:00:00Z' }
+vi.mock('./ConnectStep', () => ({
+  default: ({ onLocalPath }: { onLocalPath: (selection: typeof picked) => void }) => (
+    <div>
+      Connect
+      <button type="button" onClick={() => onLocalPath(picked)}>
+        Pick fixture folder
+      </button>
+    </div>
+  ),
+}))
 vi.mock('./RepoStep', () => ({ default: () => <div>Repository</div> }))
 
 function preview(): LocalSourcePreview {
@@ -51,14 +61,14 @@ function preview(): LocalSourcePreview {
   }
 }
 
-function renderWizard() {
+function renderWizard(entry = '/import?path=%2Ffixture%2Ffirst') {
   const router = createMemoryRouter(
     [
       { path: '/import', element: <ImportWizardPage /> },
       { path: '/projects/:id', element: <div>Existing project</div> },
       { path: '/projects/:id/overview', element: <div>Repository overview</div> },
     ],
-    { initialEntries: ['/import?path=%2Ffixture%2Ffirst'] },
+    { initialEntries: [entry] },
   )
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
@@ -107,7 +117,21 @@ describe('local import wizard approval integration', () => {
     expect(createLocalProject).not.toHaveBeenCalled()
     fireEvent.click(confirm)
     await waitFor(() => expect(getJob).toHaveBeenCalledWith(42))
-    expect(createLocalProject).toHaveBeenCalledExactlyOnceWith('/fixture/first', 'wizard-approval')
+    expect(createLocalProject).toHaveBeenCalledExactlyOnceWith('/fixture/first', 'wizard-approval', {})
+  })
+
+  // SEC-M-02 / F-1: the native-dialog grant travels with the preview and is spent by the confirmation.
+  it('sends the folder grant of a picked folder with the preview and the confirmation', async () => {
+    renderWizard('/import')
+    fireEvent.click(await screen.findByRole('button', { name: 'Pick fixture folder' }))
+    fireEvent.click(await screen.findByRole('button', { name: '가져올 파일 미리보기' }))
+    expect(screen.getByText('/fixture/picked')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: '확인한 파일 가져오기 및 분석' }))
+    await waitFor(() => expect(getJob).toHaveBeenCalledWith(42))
+    expect(previewLocalProject).toHaveBeenCalledExactlyOnceWith('/fixture/picked', { grant: picked.grant })
+    expect(createLocalProject).toHaveBeenCalledExactlyOnceWith('/fixture/picked', 'wizard-approval', {
+      grant: picked.grant,
+    })
   })
 
   it('opens overview immediately when the approved local analysis completes', async () => {

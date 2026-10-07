@@ -66,9 +66,9 @@ function SourceStatus({ projectId, details }: { projectId: number; details: bool
   const relinkMutation = useMutation({
     mutationFn: async () => {
       setApprovalEpoch((epoch) => epoch + 1)
-      const path = await window.codeIntelligenceDesktop?.pickFolder()
-      if (!path) return null
-      return relinkLocalProject(projectId, path)
+      const selection = await window.codeIntelligenceDesktop?.pickFolder()
+      if (!selection) return null
+      return relinkLocalProject(projectId, selection.path, selection.grant)
     },
     onSuccess: async (project) => {
       if (!project) return
