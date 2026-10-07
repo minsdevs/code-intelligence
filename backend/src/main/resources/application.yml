@@ -51,7 +51,7 @@ app:
   data-dir: ${DATA_DIR:${user.home}/.code-intelligence}
   snapshot-retention: 2
   analysis:
-    max-files: ${ANALYSIS_MAX_FILES:20000}
+    max-files: ${ANALYSIS_MAX_FILES:50000}
     max-file-size: ${ANALYSIS_MAX_FILE_SIZE:1048576}
     max-commits: ${ANALYSIS_MAX_COMMITS:10000}
     github-rate-limit-retries: ${ANALYSIS_GITHUB_RATE_LIMIT_RETRIES:5}
