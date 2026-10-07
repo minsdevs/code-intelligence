@@ -1,0 +1,134 @@
+{
+  "format": 1,
+  "unit": "gate-native-update",
+  "gates": ["G-NATIVE", "G-UPDATE"],
+  "date": "2026-10-07",
+  "branch": "worktree-agent-a288b6b80aae4da1f",
+  "base": "bcd8081",
+  "verdict": "not declared; row-level facts only",
+  "candidate": {
+    "path": ".native-product-1lvULq/Code Intelligence Validation.app",
+    "builtFrom": "9211e88",
+    "signing": "ad-hoc",
+    "runtimeManifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc"
+  },
+  "forbidden": {
+    "signingOrNotarization": false, "keychainOrCredentials": false, "realProfile": false, "paidProvider": false,
+    "githubAccount": false, "updateHost": false, "publication": false, "fixtureKeys": "Ed25519 generated in memory per test process, never written"
+  },
+  "productChanges": [],
+  "packagingChanges": [],
+  "revertedUncommitted": [
+    { "path": "desktop/scripts/sign-macos-runtime.cjs", "reason": "testability refactor (exported runtimeSigningTargets) fixed no reproduced defect; restored to HEAD byte-for-byte; inspector mirrors the selection and a test pins mirror == real signRuntime" }
+  ],
+  "toolSha256": {
+    "validation/pre-release/native-signing-readiness.cjs": "d691df185fa463d3156f2ed69dd0105f66b2d6e14149627b7ce4b8f931c6c1d4",
+    "validation/pre-release/native-loader-probe.cjs": "e1ea4e84f95ce7e3a1816d74679a7d6b8d6a573cd20486a83032ecfce56b294e",
+    "validation/pre-release/update-manifest-reference.cjs": "7da616916a576afba4a30c1b2235e15e238d03492af36daa96e347e0974c66e4"
+  },
+  "commands": [
+    {
+      "id": "targeted-suites",
+      "cwd": "desktop",
+      "command": "node --test test/signing-readiness.test.cjs test/signing-loader-probe.test.cjs test/update-anti-rollback.test.cjs test/update-manifest-reference.test.cjs test/macos-signing.test.cjs test/runtime-stage.test.cjs test/runtime-stage-containment.test.cjs test/native-runtime-staging.test.cjs",
+      "result": { "tests": 119, "pass": 118, "fail": 0, "cancelled": 0, "skipped": 0, "todo": 1 },
+      "perFile": {
+        "signing-readiness": [9, 9], "signing-loader-probe": [7, 7], "update-anti-rollback": [3, 2, "1 todo NU-03"],
+        "update-manifest-reference": [12, 12], "macos-signing": [5, 5], "runtime-stage": [61, 61],
+        "runtime-stage-containment": [20, 20], "native-runtime-staging": [2, 2]
+      },
+      "log": "validation/local/native-update-readiness/targeted-suites-20261007-final.log",
+      "logSha256": "b7a3ff0a861576405f1f055ff9adf5f67b977f38f5b1b2173761dfb8af20d378",
+      "earlierRun": { "log": "validation/local/native-update-readiness/targeted-suites-20261007.log", "sha256": "69da4556a1242a91184579a0944a69639d32d3f2a787091c5c5bb3a957614e66", "result": "118 tests, 117 pass, 1 todo (before the P-2 test was added)" }
+    },
+    {
+      "id": "signing-readiness",
+      "cwd": "worktree root",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/native-signing-readiness.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\"",
+      "evidence": "validation/local/native-update-readiness/signing-nPG4nt",
+      "reportSha256": "9894b55f896c6c053e99be56d2385e0084c03dc0b9e843700008f0e1abb10085",
+      "status": "READY_FOR_DEVELOPER_ID_SIGNING_PASS",
+      "summary": { "NOTARY_BLOCKER": 0, "DEPLOYMENT_BLOCKER": 0, "RELEASE_BLOCKER": 0, "SIGNING_PENDING": 200, "REVIEW": 35, "INFO": 1 },
+      "counts": { "files": 5397, "directories": 726, "symlinks": 14, "machO": 100, "runtimePlan": 87, "outerPlan": 719, "coverage": 100, "insideOut": true, "archives": 156, "archiveEntries": 55921, "archiveMachO": 0 },
+      "deployment": { "declared": "13.0", "byMinos": { "13.0": 66, "11.0": 34 }, "sdk": { "26.5": 66, "14.2": 34 } }
+    },
+    {
+      "id": "signing-readiness-strict-control",
+      "cwd": "worktree root",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/native-signing-readiness.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\" --expect-team-id ABCDE12345",
+      "note": "fictitious Team ID; negative control on the ad-hoc candidate",
+      "evidence": "validation/local/native-update-readiness/signing-U3TqZf",
+      "reportSha256": "ef83c6e70ce37665d7348084e900dbbb53b20c0ca66d9bb43cd89456b1696166",
+      "status": "BLOCKED",
+      "summary": { "NOTARY_BLOCKER": 0, "DEPLOYMENT_BLOCKER": 0, "RELEASE_BLOCKER": 300, "SIGNING_PENDING": 0, "REVIEW": 35, "INFO": 1 }
+    },
+    {
+      "id": "loader-probe",
+      "cwd": "worktree root",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-native-update env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/native-loader-probe.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\" --packaged-app",
+      "attempts": [
+        { "evidence": "validation/local/native-update-readiness/loader-dFf5Gm", "resultSha256": "f2b1772f9043c4520d84f7ee4f4024ae00a20a793c249e59ef2fd7fb7a5ac6ce", "log": "loader-packaged-20261007.log", "status": "FAIL", "cause": "P-1 ISOLATED_RUN_INVALID (profile socket path budget from deep worktree)", "services": "10/10 PASS" },
+        { "evidence": "validation/local/native-update-readiness/loader-IZZgkK", "resultSha256": "772b9192f5fbae5368f20c038fa0f0b02656db9f6ff831b231b137315baba553", "log": "loader-packaged-20261007-retry.log", "status": "FAIL", "cause": "P-2 retitled PostgreSQL children judged by ps comm", "mappingFindings": 0 },
+        { "evidence": "validation/local/native-update-readiness/loader-MU54XX", "resultSha256": "23374d9f2159ae6237104d71117c2213eb103eb99447d464d6c776db17a04302", "log": "loader-packaged-20261007-retry2.log", "status": "PASS",
+          "services": "10/10 identical with and without developer-root deny sandbox; control denied",
+          "packaged": { "ready": ["backend", "postgres", "redis", "ts-analyzer"], "processes": 24, "mappedEntries": 292, "classes": { "bundle": 165, "os": 86, "profile": 24, "other": 17 },
+            "codeOutsideBundleAndOs": 0, "developerRootMappings": 0, "executablesOutsideBundle": 0, "exitedBeforeInspection": 0, "shutdown": "COMPLETE", "profileRemoved": true, "bundleUnchanged": true,
+            "launchEnvironmentKeys": ["HOME", "LANG", "LC_ALL", "PATH"], "launchPath": "/usr/bin:/bin:/usr/sbin:/sbin", "dyldVariables": 0 },
+          "hostDeveloperRootsPresent": ["/opt/homebrew", "/usr/local", "/Library/Developer", "/Library/Java", "/Applications/Docker.app"] }
+      ]
+    }
+  ],
+  "retainedEarlierRecords": {
+    "note": "interrupted session of the same unit, 2026-10-06T16:18–16:31Z; superseded (older tool hashes), kept",
+    "dirs": ["signing-me2v26", "signing-7mD7Kl", "signing-FerzMd", "signing-nMyq3Z (empty, aborted)", "loader-Oc8ejx (services only, PASS)"],
+    "logs": { "focused-suites.log": "full desktop run: 781 tests, 779 pass, 1 cancelled (backup-recovery-records.test.cjs, gate-recovery area), 1 todo; not rerun", "loader-packaged.log": "lock wait only, never acquired" }
+  },
+  "matrix": [
+    { "id": "N-01", "gate": "G-NATIVE", "requirement": "Developer ID signing", "status": "BLOCKED", "input": "Developer ID Application identity in owner's login keychain (CSC_NAME display name)" },
+    { "id": "N-02", "gate": "G-NATIVE", "requirement": "Notarization", "status": "BLOCKED", "input": "notarytool keychain profile name (APPLE_KEYCHAIN_PROFILE) created interactively by owner" },
+    { "id": "N-03", "gate": "G-NATIVE", "requirement": "Staple + Gatekeeper", "status": "BLOCKED", "input": "N-02" },
+    { "id": "N-04", "gate": "G-NATIVE", "requirement": "Clean macOS matrix (13.x + current)", "status": "BLOCKED", "input": "second Apple-silicon Mac/VM on 13.x and current macOS without CLT/Homebrew/Java/Node/Docker/PostgreSQL/Redis" },
+    { "id": "N-05", "gate": "G-NATIVE", "requirement": "install -> local + GitHub -> flow -> source on clean Mac", "status": "BLOCKED", "input": "N-04 + N-01..03 + production GitHub OAuth app/account" },
+    { "id": "N-06", "gate": "G-NATIVE", "requirement": "Exact-digest staging", "status": "PASS", "evidence": "runtime-stage*.test.cjs 81/81 (unit); candidate manifest validated (packaged, read-only)" },
+    { "id": "N-07", "gate": "G-NATIVE", "requirement": "otool -L free of external paths, @rpath/@loader_path", "status": "PASS", "evidence": "native-runtime-staging.test.cjs 2/2; signing-nPG4nt 0 external refs/rpaths; loader-MU54XX 0 non-bundle code mappings" },
+    { "id": "N-08", "gate": "G-NATIVE", "requirement": "Inside-out signing covers every Mach-O", "status": "PASS", "evidence": "signing-nPG4nt coverage 100/100 insideOut; mirror == real signRuntime (unit, ad-hoc)", "note": "plan only; real pass under N-01" },
+    { "id": "N-09", "gate": "G-NATIVE", "requirement": "Hardened runtime on all code", "status": "PASS", "evidence": "100/100 runtime flag" },
+    { "id": "N-10", "gate": "G-NATIVE", "requirement": "Entitlements justified per role", "status": "FAIL", "finding": "NS-01" },
+    { "id": "N-11", "gate": "G-NATIVE", "requirement": "No predicted notary rejection", "status": "PASS", "evidence": "0 NOTARY_BLOCKER (read-only predictor)", "note": "actual notarization under N-02" },
+    { "id": "N-12", "gate": "G-NATIVE", "requirement": "Secure timestamp configured", "status": "NOT RUN", "reason": "configured by code reading (hook --timestamp; osx-sign 1.3.3 default); observable only after N-01" },
+    { "id": "N-13", "gate": "G-NATIVE", "requirement": "Every binary minos <= declared 13.0", "status": "PASS", "evidence": "66 x 13.0, 34 x 11.0" },
+    { "id": "N-14", "gate": "G-NATIVE", "requirement": "D02 minimum OS by measurement", "status": "BLOCKED", "input": "Mac on macOS 13.x" },
+    { "id": "N-15", "gate": "G-NATIVE", "requirement": "No developer tools needed (single-Mac approximation)", "status": "PASS", "evidence": "loader-MU54XX", "note": "approximation only" },
+    { "id": "N-16", "gate": "G-NATIVE", "requirement": "No developer tools needed (real new Mac, B9)", "status": "BLOCKED", "input": "N-04" },
+    { "id": "N-17", "gate": "G-NATIVE", "requirement": "Stage swap without deletion window (B10), build host", "status": "PASS", "evidence": "runtime-stage*.test.cjs (unit, synthetic crash points)" },
+    { "id": "U-01", "gate": "G-UPDATE", "requirement": "First update = user-confirmed full signed DMG/ZIP", "status": "FAIL", "finding": "NU-01" },
+    { "id": "U-02", "gate": "G-UPDATE", "requirement": "Manifest verified with pinned key carrying version/platform/arch/sha256/schema/minimum version", "status": "FAIL", "finding": "NU-01", "rehearsal": "PASS 12/12 (reference, fixture keys)" },
+    { "id": "U-03", "gate": "G-UPDATE", "requirement": "Forged signature refused", "status": "FAIL", "finding": "NU-01", "rehearsal": "PASS" },
+    { "id": "U-04", "gate": "G-UPDATE", "requirement": "Tampered artifact refused", "status": "FAIL", "finding": "NU-01", "rehearsal": "PASS" },
+    { "id": "U-05", "gate": "G-UPDATE", "requirement": "Wrong platform/arch refused", "status": "FAIL", "finding": "NU-01", "rehearsal": "PASS" },
+    { "id": "U-06", "gate": "G-UPDATE", "requirement": "Downgrade via update refused", "status": "FAIL", "finding": "NU-01", "rehearsal": "PASS" },
+    { "id": "U-07", "gate": "G-UPDATE", "requirement": "Replayed older manifest refused", "status": "FAIL", "finding": "NU-01", "rehearsal": "PASS" },
+    { "id": "U-08", "gate": "G-UPDATE", "requirement": "Minimum-version violation refused", "status": "FAIL", "finding": "NU-01 (manifest part)", "note": "area-B start gate PASS (update-anti-rollback.test.cjs)" },
+    { "id": "U-09", "gate": "G-UPDATE", "requirement": "TeamID/bundle/notarization check of downloaded app", "status": "FAIL", "finding": "NU-01", "rehearsal": "PASS on observed inputs" },
+    { "id": "U-10", "gate": "G-UPDATE", "requirement": "Older build refused once a newer build has run", "status": "FAIL", "finding": "NU-03", "evidence": "todo test in update-anti-rollback.test.cjs" },
+    { "id": "U-11", "gate": "G-UPDATE", "requirement": "High-water never lowered by backup restore", "status": "PASS", "evidence": "update-anti-rollback.test.cjs + safety-journal.test.cjs (real modules, synthetic profile)" },
+    { "id": "U-12", "gate": "G-UPDATE", "requirement": "Corrupted state fails closed to recovery-only", "status": "PASS", "evidence": "update-anti-rollback.test.cjs" },
+    { "id": "U-13", "gate": "G-UPDATE", "requirement": "Downgrade only via signed recovery manifest + compatible checkpoint", "status": "FAIL", "finding": "NU-01", "rehearsal": "PASS" },
+    { "id": "U-14", "gate": "G-UPDATE", "requirement": "Migration failure/crash restores bundle + DB + source keeping newest vault/journal", "status": "FAIL", "finding": "NU-02" },
+    { "id": "U-15", "gate": "G-UPDATE", "requirement": "Recovery-only mode", "status": "PASS", "evidence": "safety-lifecycle.test.cjs, update-anti-rollback.test.cjs" },
+    { "id": "U-16", "gate": "G-UPDATE", "requirement": "Real update channel end-to-end (C14 U1-U10)", "status": "BLOCKED", "input": "NU-01..03 implemented + update host/TLS + offline Ed25519 release key + N-01..04" }
+  ],
+  "counts": { "PASS": 11, "FAIL": 13, "NOT RUN": 1, "BLOCKED": 8, "rows": 33 },
+  "findings": [
+    { "id": "NU-01", "severity": "High", "status": "open", "summary": "no updater (check, signed manifest, pinned key, artifact hash, downloaded-app identity, recovery manifest)" },
+    { "id": "NU-02", "severity": "High", "status": "open", "summary": "no pre-update/pre-migration checkpoint coupling bundle + DB + source" },
+    { "id": "NU-03", "severity": "High", "status": "open", "summary": "area-B floor not raised on first start of a newer build; reproduced by todo test; must land with NU-01 recovery path" },
+    { "id": "NS-01", "severity": "Medium", "status": "open", "summary": "entitlements broader than role; network.* inert without sandbox" },
+    { "id": "NS-02", "severity": "Medium", "status": "open", "summary": "Electron fuses RunAsNode/NODE_OPTIONS/inspect enabled, asar integrity off" },
+    { "id": "NS-03", "severity": "Low", "status": "open", "summary": "default_app.asar, Squirrel/Mantle/ReactiveObjC, pgxs test executables, scripts, static archives shipped" },
+    { "id": "NS-04", "severity": "Low", "status": "open", "summary": "JVM hsperfdata in shared per-user temp outside the isolated profile" },
+    { "id": "P-1", "severity": "Low (validation tool)", "status": "fixed", "commit": "3a719e4" },
+    { "id": "P-2", "severity": "Low (validation tool)", "status": "fixed", "commit": "156d68c", "regressionTest": "signing-loader-probe.test.cjs: process executables come from the first program-text mapping, not a retitled process name" }
+  ]
+}
