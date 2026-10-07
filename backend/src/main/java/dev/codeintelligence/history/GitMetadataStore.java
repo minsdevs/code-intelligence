@@ -6,6 +6,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -13,11 +16,17 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Component
 public class GitMetadataStore {
 
+    /** Commit files per JDBC batch: the desktop's single snapshot commit adds every file. */
+    private static final int BATCH = 500;
+
     private final JdbcClient jdbc;
+    private final NamedParameterJdbcTemplate batches;
     private final TransactionTemplate transactionTemplate;
 
-    public GitMetadataStore(JdbcClient jdbc, TransactionTemplate transactionTemplate) {
+    public GitMetadataStore(
+            JdbcClient jdbc, NamedParameterJdbcTemplate batches, TransactionTemplate transactionTemplate) {
         this.jdbc = jdbc;
+        this.batches = batches;
         this.transactionTemplate = transactionTemplate;
     }
 
@@ -49,15 +58,19 @@ public class GitMetadataStore {
                 jdbc.sql("delete from commit_files where commit_id = :commitId")
                         .param("commitId", commitId)
                         .update();
-                for (ScannedCommitFile file : commit.files()) {
-                    jdbc.sql("""
+                List<ScannedCommitFile> files = commit.files();
+                for (int start = 0; start < files.size(); start += BATCH) {
+                    batches.batchUpdate(
+                            """
                                     insert into commit_files (commit_id, path, change_type)
                                     values (:commitId, :path, :changeType)
-                                    """)
-                            .param("commitId", commitId)
-                            .param("path", file.path())
-                            .param("changeType", file.changeType())
-                            .update();
+                                    """,
+                            files.subList(start, Math.min(start + BATCH, files.size())).stream()
+                                    .map(file -> new MapSqlParameterSource()
+                                            .addValue("commitId", commitId)
+                                            .addValue("path", file.path())
+                                            .addValue("changeType", file.changeType()))
+                                    .toArray(SqlParameterSource[]::new));
                 }
             }
             jdbc.sql("delete from branches where project_id = :projectId")
