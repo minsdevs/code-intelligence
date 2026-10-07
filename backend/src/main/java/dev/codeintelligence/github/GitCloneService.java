@@ -2,6 +2,7 @@ package dev.codeintelligence.github;
 
 import dev.codeintelligence.common.AppProperties;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.eclipse.jgit.api.CloneCommand;
@@ -45,11 +46,17 @@ public class GitCloneService {
             CloneCommand command = Git.cloneRepository()
                     .setURI(remoteUri)
                     .setDirectory(target.toFile())
-                    .setCredentialsProvider(credentials);
+                    .setCredentialsProvider(credentials)
+                    .setNoCheckout(true);
             if (branch != null) {
                 command.setBranch(Constants.R_HEADS + branch);
             }
             try (Git git = command.call()) {
+                disableFilterDrivers(git.getRepository());
+                git.reset()
+                        .setMode(ResetCommand.ResetType.HARD)
+                        .setRef(Constants.HEAD)
+                        .call();
                 return headOf(git);
             }
         } catch (GitAPIException | IOException e) {
@@ -74,6 +81,7 @@ public class GitCloneService {
     private CloneResult fetchExisting(Path target, CredentialsProvider credentials, String preferredBranch)
             throws GitAPIException, IOException {
         try (Git git = Git.open(target.toFile())) {
+            disableFilterDrivers(git.getRepository());
             git.fetch()
                     .setCredentialsProvider(credentials)
                     .setRemoveDeletedRefs(true)
@@ -94,6 +102,20 @@ public class GitCloneService {
             return new CloneResult(head.name(), branch);
         }
     }
+
+    /**
+     * Hostile {@code .gitattributes} can select filter drivers that the user's own Git configuration
+     * defines (for example {@code git lfs install}), and JGit runs their smudge command on checkout.
+     * {@code $GIT_DIR/info/attributes} has the highest attribute precedence, so unsetting
+     * {@code filter} there keeps checkout and reset free of external commands; LFS pointers stay text.
+     */
+    static void disableFilterDrivers(Repository repository) throws IOException {
+        Path attributes = repository.getDirectory().toPath().resolve(Constants.INFO_ATTRIBUTES);
+        Files.createDirectories(attributes.getParent());
+        Files.writeString(attributes, NO_FILTER_ATTRIBUTES, StandardCharsets.UTF_8);
+    }
+
+    static final String NO_FILTER_ATTRIBUTES = "* -filter\n";
 
     private CloneResult headOf(Git git) throws IOException {
         ObjectId head = git.getRepository().resolve(Constants.HEAD);
