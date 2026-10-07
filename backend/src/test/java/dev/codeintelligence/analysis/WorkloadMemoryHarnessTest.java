@@ -63,6 +63,7 @@ class WorkloadMemoryHarnessTest {
     void analyzesTheWorkloadFixtureWithinTheBackendHeap() throws Exception {
         Path fixture = Path.of(System.getProperty("workload.fixture")).toRealPath();
         assertThat(Files.isDirectory(fixture)).isTrue();
+        System.out.println("[workload-memory] pid=" + ProcessHandle.current().pid());
         commit(fixture);
         TestJobContext ctx = seed(fixture);
         List<Map<String, Object>> rows = new ArrayList<>();
@@ -79,6 +80,7 @@ class WorkloadMemoryHarnessTest {
                 row.put("ms", ms);
                 row.put("peakHeapMiB", mib(sampler.peak()));
                 row.put("peakLiveAfterGcMiB", mib(sampler.peakLive()));
+                row.put("committedHeapMiB", mib(sampler.committed()));
                 row.put("fullGcs", sampler.fullGcs());
                 rows.add(row);
                 System.out.println("[workload-memory] done " + row);
@@ -185,6 +187,10 @@ class WorkloadMemoryHarnessTest {
 
         long peakLive() {
             return peakLive.get();
+        }
+
+        long committed() {
+            return heapPools.stream().mapToLong(pool -> pool.getUsage().getCommitted()).sum();
         }
 
         long fullGcs() {

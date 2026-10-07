@@ -54,15 +54,25 @@ async function main() {
     const args = ['--offline', '-p', path.join(ROOT, 'backend'), 'workloadMemoryTest', '--console=plain',
       `-PworkloadFixture=${fixture}`, `-PworkloadTsUrl=${url}`, `-PworkloadHeap=${heap}`];
     if (dumpDir) args.push(`-PworkloadHeapDumpDir=${path.resolve(dumpDir)}`);
-    const analyzerPeak = { kib: 0 };
+    // The test JVM prints its pid; both processes' RSS is sampled every 500 ms.
+    const peaks = { analyzer: 0, testJvm: 0 };
+    let testJvm = null;
+    const rssKib = pid => Number(spawnSync('/bin/ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' })
+      .stdout.trim()) || 0;
     const sampler = setInterval(() => {
-      const ps = spawnSync('/bin/ps', ['-o', 'rss=', '-p', String(analyzer.pid)], { encoding: 'utf8' });
-      analyzerPeak.kib = Math.max(analyzerPeak.kib, Number(ps.stdout.trim()) || 0);
+      peaks.analyzer = Math.max(peaks.analyzer, rssKib(analyzer.pid));
+      if (testJvm) peaks.testJvm = Math.max(peaks.testJvm, rssKib(testJvm));
     }, 500);
-    const gradle = spawn(path.join(ROOT, 'backend/gradlew'), args, { stdio: 'inherit' });
+    const gradle = spawn(path.join(ROOT, 'backend/gradlew'), args, { stdio: ['ignore', 'pipe', 'inherit'] });
+    gradle.stdout.on('data', chunk => {
+      process.stdout.write(chunk);
+      const match = /\[workload-memory\] pid=([0-9]+)/.exec(String(chunk));
+      if (match) testJvm = Number(match[1]);
+    });
     const status = await new Promise(resolve => gradle.once('exit', code => resolve(code)));
     clearInterval(sampler);
-    console.log(JSON.stringify({ gradleExit: status, tsAnalyzerPeakRssMiB: Math.round(analyzerPeak.kib / 1024) }));
+    console.log(JSON.stringify({ gradleExit: status, tsAnalyzerPeakRssMiB: Math.round(peaks.analyzer / 1024),
+      testJvmPeakRssMiB: Math.round(peaks.testJvm / 1024) }));
     process.exitCode = status === 0 ? 0 : 1;
   } finally {
     if (analyzer && analyzer.exitCode === null) analyzer.kill('SIGTERM');
