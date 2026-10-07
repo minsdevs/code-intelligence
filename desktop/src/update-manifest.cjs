@@ -1,10 +1,9 @@
 'use strict';
 
-// REFERENCE ONLY. This is not product code, not an updater and not shipped in the app.
-// It is the executable form of the G-UPDATE manifest contract (05 §6, D12, ADR-02) so the
-// rejection cases can be rehearsed with throw-away keys before the real updater exists.
-// The product has no update check, manifest verifier, artifact verifier or installer today;
-// see docs/release/update-acceptance-plan.md. Promote, do not copy-paste, when implementing.
+// Main process only. The G-UPDATE manifest contract (05 §6, D12, ADR-02), promoted unchanged in
+// behaviour from the former validation reference. Public keys come only from the pinned key file
+// (desktop/build/update-keys.json); nothing in a manifest body is trusted before its signature.
+// See docs/release/update-acceptance-plan.md §2 for the verification order.
 const crypto = require('node:crypto');
 
 const DOMAIN = 'CI-UPDATE-MANIFEST-1\0';
