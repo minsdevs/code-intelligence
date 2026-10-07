@@ -55,7 +55,10 @@ byte reads.
 
 Mandatory directory exclusions are `.git`, `node_modules`, `.gradle`, `build`,
 `dist`, `target`, `.idea`, `.vscode`, `__pycache__`, `.venv`, `venv`, `vendor`, and
-`generated`. `.DS_Store` is also excluded. Credential directories include `.ssh`,
+`generated`. `.DS_Store` is also excluded. A non-root directory that contains a `.git`
+entry (a submodule gitlink file or a nested clone) is a nested repository: it is pruned
+whole without reading its contents and counted once as `SUBMODULE`; it is never fetched.
+Credential directories include `.ssh`,
 `.aws`, `.gnupg`, `.config`, `.azure`, and `.kube`, at any encountered depth and in
 the selected root's canonical and submitted ancestry. Credential filename rules
 include `.env*`, private-key and keystore extensions, recognized credential files,

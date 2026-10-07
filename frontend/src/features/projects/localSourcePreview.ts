@@ -11,6 +11,7 @@ export const importExclusionLabels: Record<LocalImportExclusionReason, string> =
   SYMLINK: 'preview.exclusion.SYMLINK',
   HARD_LINK: 'preview.exclusion.HARD_LINK',
   SECRET_CONTENT: 'preview.exclusion.SECRET_CONTENT',
+  SUBMODULE: 'preview.exclusion.SUBMODULE',
 }
 
 function boundedInteger(value: unknown, maximum: number): value is number {

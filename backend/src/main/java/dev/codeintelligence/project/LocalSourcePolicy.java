@@ -100,7 +100,8 @@ final class LocalSourcePolicy {
         FILE_LIMIT,
         SYMLINK,
         HARD_LINK,
-        SECRET_CONTENT
+        SECRET_CONTENT,
+        SUBMODULE
     }
 
     record Limits(int files, long fileBytes, long totalBytes, int discoveredFiles, int entries, int depth, long nanos) {
@@ -219,6 +220,8 @@ final class LocalSourcePolicy {
                 if (!dir.equals(root)) {
                     Reason excluded = pathReason(dir.getFileName().toString(), true);
                     if (excluded != null) return state.skip(excluded);
+                    // A nested repository (submodule gitlink file or nested clone) is pruned whole, unread.
+                    if (nestedRepository(dir)) return state.skip(Reason.SUBMODULE);
                     if (state.ignored(dir, true)) return state.skip(Reason.IGNORED);
                 }
                 state.directories.put(dir, stamp(attrs));
@@ -329,6 +332,11 @@ final class LocalSourcePolicy {
                         manifest.finish(),
                         manifest.count(),
                         manifest.bytes()));
+    }
+
+    private static boolean nestedRepository(Path dir) throws IOException {
+        Path git = dir.resolve(Constants.DOT_GIT);
+        return SourceAccess.exists(git, true) || SourceAccess.exists(git, false);
     }
 
     private String readBranch(State state) throws IOException {

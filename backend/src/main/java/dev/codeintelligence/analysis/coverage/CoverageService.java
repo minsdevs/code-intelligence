@@ -47,7 +47,8 @@ public class CoverageService {
             "FILE_LIMIT",
             "SYMLINK",
             "HARD_LINK",
-            "SECRET_CONTENT");
+            "SECRET_CONTENT",
+            "SUBMODULE");
     private static final JsonMapper LOCAL_IMPORT_JSON = JsonMapper.builder(JsonFactory.builder()
                     .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
                     .streamReadConstraints(StreamReadConstraints.builder()

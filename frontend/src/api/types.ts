@@ -757,6 +757,7 @@ export type LocalImportExclusionReason =
   | 'SYMLINK'
   | 'HARD_LINK'
   | 'SECRET_CONTENT'
+  | 'SUBMODULE'
 
 /** Recorded import counts only. Excluded directories count once; descendants are unmeasured. */
 export type LocalImportSummary = {

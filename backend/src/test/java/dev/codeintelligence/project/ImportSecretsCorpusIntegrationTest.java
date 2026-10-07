@@ -492,25 +492,34 @@ class ImportSecretsCorpusIntegrationTest {
                 },
                 List.of(".gitignore", main),
                 ex("IGNORED", 2)));
-        // F11/05: submodule content is a default exclusion. Recorded deviation: only the gitlink file is excluded.
-        cases.add(
-                accept(
-                                "C05-18",
-                                "submodule",
-                                "submodule working tree below a gitlink file",
-                                t -> {
-                                    base.build(t);
-                                    t.text(
-                                            ".gitmodules",
-                                            "[submodule \"libs/sub\"]\n\tpath = libs/sub\n\turl = https://example.invalid/sub.git\n");
-                                    t.text("libs/sub/.git", "gitdir: ../../.git/modules/sub\n");
-                                    t.text("libs/sub/lib.ts", "export const fromSubmodule = 1;\n");
-                                },
-                                List.of(".gitmodules", "libs/sub/lib.ts", main),
-                                ex("GENERATED_DIRECTORY", 1))
-                        .deviation(
-                                "05 section 1 lists submodules as a default exclusion; local import excludes only the gitlink"
-                                        + " file and copies the submodule working tree (observed behaviour asserted, gate row FAIL)"));
+        // F11/05: submodule content is a default exclusion; the nested repository is pruned whole.
+        cases.add(accept(
+                "C05-18",
+                "submodule",
+                "submodule working tree below a gitlink file",
+                t -> {
+                    base.build(t);
+                    t.text(
+                            ".gitmodules",
+                            "[submodule \"libs/sub\"]\n\tpath = libs/sub\n\turl = https://example.invalid/sub.git\n");
+                    t.text("libs/sub/.git", "gitdir: ../../.git/modules/sub\n");
+                    t.text("libs/sub/lib.ts", "export const fromSubmodule = 1;\n");
+                    t.secret("libs/sub/config.ts", "export const token = '%s';\n");
+                },
+                List.of(".gitmodules", main),
+                ex("SUBMODULE", 1)));
+        cases.add(accept(
+                "C05-72",
+                "submodule",
+                "nested clone with its own .git directory",
+                t -> {
+                    base.build(t);
+                    t.text("vendored/other/.git/HEAD", "ref: refs/heads/main\n");
+                    t.secret("vendored/other/.git/config", "[remote \"origin\"]\n\turl = https://x:%s@example.invalid/o.git\n");
+                    t.text("vendored/other/src/other.ts", "export const other = 1;\n");
+                },
+                List.of(main),
+                ex("SUBMODULE", 1)));
         // Links and special files.
         cases.add(accept(
                 "C05-19",

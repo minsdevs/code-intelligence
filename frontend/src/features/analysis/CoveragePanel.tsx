@@ -18,6 +18,7 @@ const importExclusionReasons = [
   'SYMLINK',
   'HARD_LINK',
   'SECRET_CONTENT',
+  'SUBMODULE',
 ]
 const importSummaryFields = new Set(['schemaVersion', 'policyVersion', 'acceptedFiles', 'bytesRead', 'excludedEntriesByReason'])
 
