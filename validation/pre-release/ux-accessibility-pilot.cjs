@@ -20,6 +20,7 @@ const { readProcessTable } = require('./process-memory.cjs');
 const { descendants } = require('../backup-compatibility/owned-crash.cjs');
 const { writeFixture } = require('./ux-fixtures.cjs');
 const audit = require('./ux-page-audit.cjs');
+const { withDropConfirmation } = require('./drop-confirmation.cjs');
 
 const runFile = promisify(execFile);
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -395,11 +396,16 @@ async function main(argv = process.argv.slice(2)) {
     const target = page.getByRole('button', { name: 'Choose folder', exact: true });
     await expect(target).toBeVisible();
     const bounds = await target.boundingBox();
-    const session = await page.context().newCDPSession(page);
-    try {
-      const data = { items: [], files: [folder], dragOperationsMask: 1 };
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await session.send('Input.dispatchDragEvent', { type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
-    } finally { await session.detach(); }
+    // The preview button appears only after main granted the drop (SEC-M-02 confirmation answered once).
+    const { confirmation } = await withDropConfirmation(app, folder, async () => {
+      const session = await page.context().newCDPSession(page);
+      try {
+        const data = { items: [], files: [folder], dragOperationsMask: 1 };
+        for (const type of ['dragEnter', 'dragOver', 'drop']) await session.send('Input.dispatchDragEvent', { type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
+      } finally { await session.detach(); }
+      await expect(page.getByRole('button', { name: '가져올 파일 미리보기', exact: true })).toBeVisible();
+    });
+    (report.dropConfirmations ??= []).push(confirmation); save();
   }
   async function awaitJob(id, timeoutMs = 240000) {
     const deadline = Date.now() + timeoutMs;
@@ -871,7 +877,7 @@ async function main(argv = process.argv.slice(2)) {
         await navigate(`/projects/${ctx.projectId}/tasks`);
         const taskVisible = await page.getByText('U5 synthetic task').first().isVisible().catch(() => false);
         await navigate(overviewRoute);
-        const overviewVisible = await page.getByRole('table', { name: '분석 결과 표', exact: true }).isVisible().catch(() => false);
+        const overviewVisible = await page.getByRole('table', { name: /^(Analysis results table|분석 결과 표)$/ }).isVisible().catch(() => false);
         const overviewText = (await textOf(page.getByRole('main')).catch(() => '')).slice(0, 400);
         return { label, currentSnapshotId: project.currentSnapshot?.id ?? null, lastCompleteSnapshotKept: project.currentSnapshot?.id === ctx.snapshotId,
           notes: notes.length, tasks: Array.isArray(tasks) ? tasks.length : null, noteVisible, taskVisible, overviewVisible, overviewText };
@@ -890,13 +896,13 @@ async function main(argv = process.argv.slice(2)) {
       const startReanalysis = async () => {
         mutateSource();
         await navigate(overviewRoute);
-        await page.getByRole('button', { name: '상태 새로고침', exact: true }).click();
+        await page.getByRole('button', { name: /^(Refresh status|상태 새로고침)$/ }).click();
         await settle(800);
-        await page.getByRole('button', { name: '변경 사항 미리보기', exact: true }).click();
-        await expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible({ timeout: 60000 });
+        await page.getByRole('button', { name: /^(Preview changes|변경 사항 미리보기)$/ }).click();
+        await expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible({ timeout: 60000 });
         const [response] = await Promise.all([
           page.waitForResponse(item => new URL(item.url()).pathname === `/api/projects/${ctx.projectId}/reanalyze` && item.request().method() === 'POST', { timeout: 60000 }),
-          page.getByRole('button', { name: '변경 확인 후 전체 재분석', exact: true }).click(),
+          page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click(),
         ]);
         assert.ok(response.ok());
         const jobId = (await response.json()).jobId;
@@ -909,12 +915,12 @@ async function main(argv = process.argv.slice(2)) {
         await withFolderPicker(ctx.libraryLoans, async () => {
           await page.getByRole('button', { name: 'Choose folder', exact: true }).focus();
           await page.keyboard.press('Enter');
-          await expect(page.getByRole('button', { name: '가져올 파일 미리보기', exact: true })).toBeVisible();
+          await expect(page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ })).toBeVisible();
         });
-        await page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click();
+        await page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).click();
         const [created] = await Promise.all([
           page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local' && response.request().method() === 'POST', { timeout: 60000 }),
-          page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click(),
+          page.getByRole('button', { name: /^(Import and analyze the reviewed files|확인한 파일 가져오기 및 분석)$/ }).click(),
         ]);
         const body = await created.json();
         ctx.secondProjectId = body.project.id;

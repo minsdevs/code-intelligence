@@ -205,7 +205,7 @@ async function analyze(app, evidenceDirectory, { expectUnavailable }) {
     }, project);
     try { await page.getByRole('button', { name: 'Choose folder', exact: true }).click(); }
     finally { assert.equal(await picker.evaluate(value => value.restore()), 1); await picker.dispose(); }
-    await page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click();
+    await page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).click();
     const seen = new Map();
     const sampler = setInterval(() => {
       for (const row of processTable()) {
@@ -214,7 +214,7 @@ async function analyze(app, evidenceDirectory, { expectUnavailable }) {
     }, 100);
     const [created] = await Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local' && r.request().method() === 'POST', { timeout: 60000 }),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click()]);
+      page.getByRole('button', { name: /^(Import and analyze the reviewed files|확인한 파일 가져오기 및 분석)$/ }).click()]);
     assert.ok(created.ok());
     const { project: createdProject, jobId } = await created.json();
     let job;

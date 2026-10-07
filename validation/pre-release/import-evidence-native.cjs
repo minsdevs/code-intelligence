@@ -267,7 +267,7 @@ async function main(argv = process.argv.slice(2)) {
     await withFolderPicker(project, () => page.getByRole('button', { name: 'Choose folder', exact: true }).click());
     const [previewResponse] = await Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local/preview' && r.request().method() === 'POST', { timeout: 60000 }),
-      page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click()]);
+      page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).click()]);
     const previewText = await previewResponse.text(); assert.ok(previewResponse.ok()); assert.ok(!previewText.includes(SENTINEL));
     const preview = JSON.parse(previewText);
     report.preview = { acceptedFiles: preview.localImport.acceptedFiles, bytesRead: preview.localImport.bytesRead,
@@ -280,7 +280,7 @@ async function main(argv = process.argv.slice(2)) {
     report.checks.push('controlled-native-dialog-grant-preview-exact-exclusions', 'sibling-of-granted-root-refused-400');
     const [created] = await Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local' && r.request().method() === 'POST', { timeout: 60000 }),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click()]);
+      page.getByRole('button', { name: /^(Import and analyze the reviewed files|확인한 파일 가져오기 및 분석)$/ }).click()]);
     assert.ok(created.ok()); const createdBody = await created.json(); const projectId = createdBody.project.id;
     await awaitJob(createdBody.jobId);
     const first = (await api('/api/projects/' + projectId)).currentSnapshot.id;
@@ -314,14 +314,14 @@ async function main(argv = process.argv.slice(2)) {
     changed['src/util.ts'] = fs.readFileSync(path.join(project, 'src/util.ts'));
     const after = treeState(project);
     await page.evaluate(id => { history.pushState(null, '', '/projects/' + id + '/overview'); window.dispatchEvent(new PopStateEvent('popstate')); }, projectId);
-    const refresh = page.getByRole('button', { name: '상태 새로고침', exact: true });
+    const refresh = page.getByRole('button', { name: /^(Refresh status|상태 새로고침)$/ });
     if (await refresh.isVisible({ timeout: 10000 }).catch(() => false)) {
       await refresh.click();
-      await page.getByRole('button', { name: '변경 사항 미리보기', exact: true }).click();
-      await expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: /^(Preview changes|변경 사항 미리보기)$/ }).click();
+      await expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible();
       const [refreshed] = await Promise.all([
         page.waitForResponse(r => new URL(r.url()).pathname === `/api/projects/${projectId}/reanalyze` && r.request().method() === 'POST', { timeout: 60000 }),
-        page.getByRole('button', { name: '변경 확인 후 전체 재분석', exact: true }).click()]);
+        page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click()]);
       assert.ok(refreshed.ok()); await awaitJob((await refreshed.json()).jobId);
       report.reanalysisPath = 'ui-preview-approval';
     } else {
