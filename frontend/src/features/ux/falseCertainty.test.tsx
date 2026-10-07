@@ -191,7 +191,7 @@ describe('code explorer callers keep candidate relations distinguishable', () =>
 })
 
 describe('flows and coverage say what was not established', () => {
-  it('tells the reader that per-step confirmation is not shown and steps can be inferred', async () => {
+  it('tells the reader that steps can be inferred and marks a path without per-step verdicts as inferred', async () => {
     stubApi({
       '/api/projects/7': () => ({ id: 7, name: 'order-desk', currentSnapshot: { id: 2, status: 'DONE' } }),
       '/flows': () => [{ id: 4, name: '/orders/:orderId', kind: 'FE_BE', entryNodeId: 12 }],
@@ -202,8 +202,8 @@ describe('flows and coverage say what was not established', () => {
     renderRoute(<FlowsPage />, '/projects/:projectId/flows', '/projects/7/flows')
     const article = await screen.findByRole('article', { name: 'Flow detail' })
     expect(article).toHaveTextContent('기록된 정적 경로입니다')
-    expect(article).toHaveTextContent('단계별 확인 수준')
-    expect(article).toHaveTextContent('추정')
+    expect(article).toHaveTextContent('단계를 만든 기록된 관계의 판정')
+    expect(article).toHaveTextContent('추정 단계 포함')
   })
 
   it('never turns legacy or unmeasured coverage into a completeness percentage', async () => {
