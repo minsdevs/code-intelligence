@@ -1,5 +1,6 @@
 package dev.codeintelligence.analysis.core;
 
+import dev.codeintelligence.common.LanguageDetector;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
