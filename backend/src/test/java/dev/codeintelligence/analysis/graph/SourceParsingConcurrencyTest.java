@@ -16,6 +16,7 @@ import dev.codeintelligence.analysis.core.FileInventory;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeType;
 import dev.codeintelligence.analysis.core.InventoriedFile;
+import dev.codeintelligence.analysis.java.JavaAnalyzer;
 import dev.codeintelligence.evidence.EvidenceService;
 import dev.codeintelligence.testsupport.TestJobContext;
 import java.nio.file.Path;
@@ -70,6 +71,36 @@ class SourceParsingConcurrencyTest {
                 .extracting(GraphNodeDraft::naturalKey)
                 .containsExactly("first", "second", "third:a.txt", "third:b.txt");
         assertThat(overlapped).isTrue();
+    }
+
+    /** The Java analyzer checks for a cancel per file, so it runs on the job's thread wherever it is ordered. */
+    @Test
+    void theJavaAnalyzerRunsOnTheJobThread() {
+        Thread job = Thread.currentThread();
+        AtomicBoolean javaOnJobThread = new AtomicBoolean();
+        CodeAnalyzer before = analyzer(ctx -> result("before"));
+        CodeAnalyzer java = new JavaAnalyzer() {
+            @Override
+            public boolean supports(FileInventory inventory) {
+                return true;
+            }
+
+            @Override
+            public AnalysisResult analyze(AnalysisContext ctx) {
+                javaOnJobThread.set(Thread.currentThread() == job);
+                return result("java");
+            }
+        };
+        GraphPersistenceService persistence = mock(GraphPersistenceService.class);
+        new SourceParsingStep(List.of(before, java), jdbc(), persistence, mock(EvidenceService.class))
+                .run(new TestJobContext(1, 2, 3L, Path.of("/nonexistent")));
+
+        ArgumentCaptor<AnalysisResult> persisted = ArgumentCaptor.forClass(AnalysisResult.class);
+        verify(persistence).persist(anyLong(), anyLong(), persisted.capture());
+        assertThat(persisted.getValue().nodes())
+                .extracting(GraphNodeDraft::naturalKey)
+                .containsExactly("before", "java");
+        assertThat(javaOnJobThread).isTrue();
     }
 
     private static CodeAnalyzer analyzer(Function<AnalysisContext, AnalysisResult> body) {

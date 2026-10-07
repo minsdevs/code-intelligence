@@ -85,24 +85,31 @@ public class SourceParsingStep implements JobStep {
             if ("java".equalsIgnoreCase(file.language()) || file.path().endsWith(".java"))
                 FileAnalysisOutcome.record(jdbc, snapshotId, file.path(), "TARGETED", "JAVA_PARSER_STARTED");
         }
-        // No analyzer reads another's result. The first (the Java analyzer, by order) runs here and
-        // the others run meanwhile, in order, on one helper thread; results merge in analyzer order.
+        // No analyzer reads another's result. The Java analyzer, the longest and the one that checks
+        // for a cancel per file, runs here; the others run meanwhile, in order, on one helper thread.
+        // Results merge in analyzer order.
+        CodeAnalyzer inline = matching.stream()
+                .filter(analyzer -> analyzer instanceof dev.codeintelligence.analysis.java.JavaAnalyzer)
+                .findFirst()
+                .orElse(matching.getFirst());
         ExecutorService helper = Executors.newSingleThreadExecutor(runnable ->
                 Thread.ofPlatform().daemon().name("source-parsing-analyzers").unstarted(runnable));
         try {
-            List<Future<AnalysisResult>> later = new ArrayList<>();
-            for (CodeAnalyzer analyzer : matching.subList(1, matching.size())) {
-                later.add(helper.submit(() -> analyzer.analyze(
-                        new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory))));
+            Map<CodeAnalyzer, Future<AnalysisResult>> later = new LinkedHashMap<>();
+            for (CodeAnalyzer analyzer : matching) {
+                if (analyzer != inline)
+                    later.put(
+                            analyzer,
+                            helper.submit(() -> analyzer.analyze(
+                                    new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory))));
             }
-            for (int index = 0; index < matching.size(); index++) {
-                CodeAnalyzer analyzer = matching.get(index);
+            for (CodeAnalyzer analyzer : matching) {
                 try {
                     acc.add(
-                            index == 0
+                            analyzer == inline
                                     ? analyzer.analyze(new AnalysisContext(
                                             ctx.projectId(), snapshotId, ctx.clonePath(), inventory))
-                                    : await(later.get(index - 1)));
+                                    : await(later.get(analyzer)));
                 } catch (JobCancelledException cancelled) {
                     throw cancelled;
                 } catch (RuntimeException e) {
