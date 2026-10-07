@@ -31,6 +31,7 @@ const NETWORK_MODULE = /require\(\s*['"](?:node:)?(https?|http2|net|tls|dgram|dn
 
 // Reviewed inventory: module -> network builtins it may load, and why.
 const NETWORK_INVENTORY = Object.freeze({
+  'adapter-control.cjs': { modules: ['net'], reason: 'private backend<->main analyzer control Unix-domain socket, capability-authenticated (ADR-01)' },
   'ai-https-transport.cjs': { modules: ['dns', 'https', 'net'], reason: 'sole provider transport: fixed api.openai.com HTTPS, DNS pinned to public answers' },
   'ai-egress-bridge.cjs': { modules: ['net'], reason: 'private backend<->main Unix-domain socket, capability-authenticated' },
   'main.cjs': { modules: ['net'], reason: 'loopback port reservation for bundled services' },
