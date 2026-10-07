@@ -55,8 +55,8 @@ Other targeted runs (`cleanTest`, offline): `job.*` 161 tests, 0 failures, 4 ski
 
 Full backend Docker suite on this branch (base `d7aea75`, `docker-integration/backend-tdWzKu`,
 `sourcesUnchanged: true`): `PASS_EXECUTED_WITH_EXPLICIT_SKIPS`, 1,979 tests, 1,947 pass, 0 fail,
-32 skipped (2 more tests than `backend-AsxfT4`: the new watchdog and endpoint cases net of the moved
-ps cases).
+32 skipped (2 more than `backend-AsxfT4`: the endpoint case and `TsLanguageCapabilitiesTest`; the
+watchdog class keeps 7, its two ps cases moved to desktop).
 
 ## Changed product paths
 
