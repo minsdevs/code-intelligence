@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const os = require('node:os');
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
-const { installOwnerCapture } = require('../job-race-product.cjs');
+const { installBridgeCapture, installOwnerCapture } = require('../job-race-product.cjs');
 const { argumentsFor } = require('../job-race-backend.cjs');
 
 const electron = userData => ({ app: { getPath: () => userData, getName: () => 'Code Intelligence Acceptance' } });
@@ -55,4 +55,38 @@ test('backend runner accepts only the job race classes and a local Docker socket
     { endpoint: socket, tests: ['dev.codeintelligence.job.JobPipelineRaceIntegrationTest'], analyzer: true });
   assert.throws(() => argumentsFor(['--socket', socket, '--tests', 'dev.codeintelligence.AuthIntegrationTest']), /JOB_RACE_TEST_REFUSED/);
   assert.throws(() => argumentsFor(['--socket', 'tcp://127.0.0.1:2375', '--tests', 'dev.codeintelligence.job.JobPipelineRaceIntegrationTest']), /LOCAL_DOCKER_REQUIRED/);
+});
+
+test('an xpc-required app captures only the backend owner', () => {
+  const original = Map.prototype.set;
+  const capture = installOwnerCapture(electron('/profile'), { userData: '/profile', names: ['backend'] });
+  try {
+    const registry = new Map();
+    registry.set('backend', owner());
+    assert.equal(Map.prototype.set, original, 'restored once the only expected owner is captured');
+    assert.deepEqual(capture.captured(), ['backend']);
+  } finally { capture.restore(); Map.prototype.set = original; }
+});
+
+test('bridge capture records only the bundled adapter-bridge children and kills the single live one', async () => {
+  class ChildProcess extends EventEmitter {
+    spawn(options) { this.file = options.file; this.exitCode = null; this.signalCode = null; this.signals = []; return undefined; }
+    kill(signal) { this.signals.push(signal); setImmediate(() => { this.signalCode = signal; this.emit('exit', null, signal); }); return true; }
+  }
+  const originalSpawn = ChildProcess.prototype.spawn;
+  const capture = installBridgeCapture({ ...electron('/profile'), childProcess: { ChildProcess } }, { userData: '/profile' });
+  const start = file => { const child = new ChildProcess(); child.spawn({ file }); return child; };
+  try {
+    const java = start('/App.app/Contents/Resources/runtime/jre/bin/java');
+    const verify = start('/App.app/Contents/MacOS/adapter-bridge');
+    verify.exitCode = 0;
+    await assert.rejects(capture.kill(20), /BRIDGE_NOT_RUNNING/);
+    const analysis = start('/App.app/Contents/MacOS/adapter-bridge');
+    assert.deepEqual(await capture.kill(), { exitCode: null, signal: 'SIGKILL', sessions: 2 });
+    assert.deepEqual([java.signals, verify.signals, analysis.signals], [[], [], ['SIGKILL']]);
+    start('/App.app/Contents/MacOS/adapter-bridge'); start('/App.app/Contents/MacOS/adapter-bridge');
+    await assert.rejects(capture.kill(), /BRIDGE_NOT_UNIQUE/);
+  } finally { assert.equal(capture.restore(), 4); }
+  assert.equal(ChildProcess.prototype.spawn, originalSpawn);
+  assert.throws(() => installBridgeCapture(electron('/other'), { userData: '/profile' }), /OWNER_CAPTURE_PROFILE_MISMATCH/);
 });
