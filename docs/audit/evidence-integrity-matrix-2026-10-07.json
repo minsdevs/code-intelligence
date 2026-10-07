@@ -1,0 +1,104 @@
+{
+  "format": 1,
+  "gate": "G-EVIDENCE",
+  "date": "2026-10-07",
+  "report": "docs/audit/evidence-integrity-matrix-2026-10-07.md",
+  "branch": "worktree-agent-ac4a347c91fe92645",
+  "worktree": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-ac4a347c91fe92645",
+  "base": "bcd8081",
+  "commits": [
+    "ecd2908 [skip ci] Verify C06 evidence history against retained snapshot bytes",
+    "6b89d38 [skip ci] Walk every Flyway step with preserved legacy sentinels",
+    "8a0b9b9 [skip ci] Add import/evidence backend and packaged-app runners",
+    "b6fbbd2 [skip ci] Judge packaged published-fact failures after the independent checks"
+  ],
+  "productCodeChanged": false,
+  "candidate": {
+    "name": "1lvULq",
+    "builtFrom": "9211e88",
+    "bundle": ".native-product-1lvULq/Code Intelligence Validation.app",
+    "buildSequence": "1791292686000",
+    "runtimeManifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+    "unchangedAfterRuns": true
+  },
+  "commands": [
+    {
+      "id": "targeted-classes",
+      "cwd": "<worktree>/backend",
+      "setup": "ROOT=<worktree>/validation/local/import-evidence/targeted-XXXXXX with 0700 subdirectories home,tmp,docker,data and docker/config.json '{}'; TMPROOT=<worktree>/.citd-XXXXXX (removed afterwards)",
+      "command": "env -i HOME=\"$HOME\" PATH=/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C DOCKER_HOST=unix://$HOME/.docker/run/docker.sock DOCKER_CONFIG=$ROOT/docker CI_DOCKER_TEST_ROOT=$ROOT CI_DOCKER_TEST_TMP=$TMPROOT CI_DOCKER_TEST_SUITE=backend TESTCONTAINERS_REUSE_ENABLE=false TESTCONTAINERS_RYUK_DISABLED=false TESTCONTAINERS_CHECKS_DISABLE=false ./gradlew --offline --no-daemon --console=plain --max-workers=2 -I ../validation/pre-release/docker-integration.init.gradle test --tests '*ImportSecretsCorpusIntegrationTest' --tests '*EvidenceHistoryIntegrationTest' --tests '*LegacyMigrationWalkTest'",
+      "evidence": "validation/local/import-evidence/targeted-sJi3wp",
+      "result": "PASS with explicit skip: gradle exit 0; 88 tests, 87 pass, 0 fail, 1 skipped (C06-15 R2); C06 15 tests (14 pass, 1 skip), migration walk 1/1"
+    },
+    {
+      "id": "backend-runner",
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/import-evidence-backend.cjs --socket unix://$HOME/.docker/run/docker.sock",
+      "evidence": "validation/local/import-evidence/backend-bsZZx6",
+      "result": "FAIL: 519 tests, 517 pass, 1 fail (LocalIngestPolicyTest special files, environment: Unix domain path too long; 67/67 PASS alone), 1 skipped (C06-15 R2)"
+    },
+    {
+      "id": "packaged",
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C /Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-import-evidence node validation/pre-release/import-evidence-native.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\"",
+      "runs": [
+        {"evidence": "validation/local/import-evidence/native-n9Svxt", "driver": "8a0b9b9", "result": "FAIL at published-facts-first: 'span bounds config:package.json'"},
+        {"evidence": "validation/local/import-evidence/native-bJn2bY", "driver": "b6fbbd2", "result": "FAIL at published-facts-verdict: 'span bounds config:package.json 1-2 of 1' in each fact round; other checks PASS"}
+      ]
+    }
+  ],
+  "reportSha256": {
+    "validation/local/import-evidence/backend-bsZZx6/c06-evidence-history.json": "afe655201b713adb5d6497313fa990af6d14251174f0cd1e8e286427a9f524f1",
+    "validation/local/import-evidence/backend-bsZZx6/legacy-migration-walk.json": "d82a80547b2d174e6c5108f048f3491d35bac0e6853a455886ec9d39f687b775",
+    "validation/local/import-evidence/backend-bsZZx6/report.json": "a30c5b42c8932ffebdd745cd76e65b4a5f4865e3fba290e10f629fa982d4b449",
+    "validation/local/import-evidence/targeted-sJi3wp/c06-evidence-history.json": "afe655201b713adb5d6497313fa990af6d14251174f0cd1e8e286427a9f524f1",
+    "validation/local/import-evidence/targeted-sJi3wp/legacy-migration-walk.json": "b8f7e9a1619fbeed3a3252256a95d742d9372a18aa1c22a7e8a5447fc26ad655",
+    "validation/local/import-evidence/targeted-sJi3wp/test-totals.json": "e5555d7db65ec7ba3a0190a414022bfab4706868aa3509f54a5043fddfdb6646",
+    "validation/local/import-evidence/native-n9Svxt/result.json": "0d7e0ec4df36152e3b3bdfd16d49251c6eef4bdfbdd776089c0152188f108983",
+    "validation/local/import-evidence/native-bJn2bY/result.json": "d4f820c4a4363c19d278dcb7a4c276253f563768a8446bec53083938a02d8f02"
+  },
+  "c06": {
+    "sequences": 15,
+    "pass": 14,
+    "explicitSkip": ["C06-15 (R2 SFC offset)"],
+    "auditRounds": 13,
+    "factChecks": 4313,
+    "failures": 0,
+    "nodeTypesCovered": ["AMBIGUOUS", "ANNOTATION", "API_ENDPOINT", "CLASS", "COMPONENT", "DIRECTORY", "FIELD", "FILE", "METHOD", "PACKAGE"],
+    "nodeTypesNotCovered": ["CONFIG", "MIGRATION"]
+  },
+  "migrationWalk": {"latestVersion": 27, "steps": 27, "sentinels": 14, "legacyFileStatus": "LEGACY_UNMEASURED"},
+  "packagedFacts": {
+    "evidence": "native-bJn2bY",
+    "snapshot1": {"nodes": 27, "nodeSpanVerified": 18, "noSourceLocation": 8, "evidenceVerified": 9, "filesVerified": 8, "failures": ["span bounds config:package.json 1-2 of 1"]},
+    "snapshot1AfterReanalysis": {"nodes": 27, "nodeSpanVerified": 18, "noSourceLocation": 8, "evidenceVerified": 9, "filesVerified": 8, "failures": ["span bounds config:package.json 1-2 of 1"]},
+    "snapshot2": {"nodes": 28, "nodeSpanVerified": 19, "noSourceLocation": 8, "evidenceVerified": 10, "filesVerified": 8, "failures": ["span bounds config:package.json 1-2 of 1"]}
+  },
+  "matrix": [
+    {"id": "E-01", "status": "PASS", "requirement": "Old snapshot bytes immutable vs working tree"},
+    {"id": "E-02", "status": "FAIL", "requirement": "Hash/span/namespace of every published fact 100%", "reason": "F-3: CONFIG/MIGRATION lineEnd one past the last line; C06 corpus lacks these node types"},
+    {"id": "E-03", "status": "PASS", "requirement": "Edge span"},
+    {"id": "E-04", "status": "PASS", "requirement": "Same-line calls"},
+    {"id": "E-05", "status": "PASS", "requirement": "CRLF / Unicode / BOM"},
+    {"id": "E-06", "status": "PASS", "requirement": "Rename / delete"},
+    {"id": "E-07", "status": "PASS", "requirement": "Re-analysis reproducibility"},
+    {"id": "E-08", "status": "PASS", "requirement": "Duplicate namespace"},
+    {"id": "E-09", "status": "PASS", "requirement": "Note-pinned source survives later analyses (retained snapshots)"},
+    {"id": "E-10", "status": "FAIL", "requirement": "GC never removes pinned or note-referenced source", "reason": "F-1: FinalizeStep prunes note-pinned legacy-contract (v0) snapshots"},
+    {"id": "E-11", "status": "PASS", "requirement": "Coverage file counts equal the manifest partition"},
+    {"id": "E-12", "status": "FAIL", "requirement": "Coverage capability counts equal the manifest partition", "reason": "F-2: no per-capability outcome persisted"},
+    {"id": "E-13", "status": "PASS", "requirement": "V27 per-file outcome; older results LEGACY_UNMEASURED"},
+    {"id": "E-14", "status": "PASS", "requirement": "Every Flyway step with sentinels kept"},
+    {"id": "E-15", "status": "FAIL", "requirement": "Packaged app published facts 100% against retained source", "reason": "F-3: config:package.json 1-2 of 1 in every snapshot"},
+    {"id": "E-16", "status": "NOT RUN", "requirement": "SFC offset", "reason": "R2, outside this release"},
+    {"id": "E-17", "status": "NOT RUN", "requirement": "AI nonexistent evidence 0", "reason": "belongs to the AI/cost unit"}
+  ],
+  "counts": {"PASS": 11, "FAIL": 4, "NOT RUN": 2, "BLOCKED": 0},
+  "findings": [
+    {"id": "F-1", "severity": "Medium", "status": "open", "summary": "FinalizeStep prunes note-pinned v0 snapshots beyond retention"},
+    {"id": "F-2", "severity": "Medium", "status": "open (product gap)", "summary": "no per-capability coverage outcomes"},
+    {"id": "F-3", "severity": "Medium", "status": "open", "summary": "BuildFileAnalyzer/YamlConfigAnalyzer/SqlMigrationAnalyzer lineCount = 1 + count('\\n'): span ends past EOF for LF-terminated files", "paths": ["backend/src/main/java/dev/codeintelligence/analysis/config/BuildFileAnalyzer.java", "backend/src/main/java/dev/codeintelligence/analysis/config/YamlConfigAnalyzer.java", "backend/src/main/java/dev/codeintelligence/analysis/config/SqlMigrationAnalyzer.java"]}
+  ],
+  "gateVerdict": "not declared; recommendation: keep G-EVIDENCE open until F-1 and F-3 are fixed on a rebuilt candidate (C06 extended with CONFIG/MIGRATION nodes, packaged run passing) and F-2 is decided"
+}
