@@ -37,6 +37,7 @@
     "beforePack": "./scripts/desktop-build-gate.cjs",
     "files": [
       "src/**/*",
+      "build/update-keys.json",
       "package.json"
     ],
     "extraResources": [
