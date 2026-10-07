@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 @ConfigurationProperties("app.analysis")
 public record AnalysisProperties(
-        @DefaultValue("20000") int maxFiles,
+        @DefaultValue("50000") int maxFiles,
         @DefaultValue("1048576") long maxFileSize,
         @DefaultValue("10000") int maxCommits,
         @DefaultValue("5") int githubRateLimitRetries,
