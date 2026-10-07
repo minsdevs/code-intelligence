@@ -146,7 +146,8 @@ function evaluate(loaded) {
   const strata = new Map();
   for (const cell of loaded.capabilities.cells) for (const stratum of cell.strata) strata.set(stratum.stratumId, counters());
   const coverage = [], caseFailures = [], annotationReviewQueue = [];
-  const scoringSplits = loaded.corpus.purpose === 'SYNTHETIC_SELF_TEST' ? ['DEVELOPMENT'] : ['VALIDATION', 'HOLDOUT'];
+  // Development material is scored only in explicitly labelled self-test or development-baseline scopes.
+  const scoringSplits = ['SYNTHETIC_SELF_TEST', 'DEVELOPMENT_BASELINE'].includes(loaded.corpus.purpose) ? ['DEVELOPMENT'] : ['VALIDATION', 'HOLDOUT'];
   let checkedFacts = 0, scoredRuns = 0, unscoredDevelopmentRuns = 0;
   for (const run of loaded.observations?.runs ?? []) {
     const fixture = loaded.fixtures.find(item => item.manifest.fixtureId === run.fixtureId);
@@ -189,7 +190,8 @@ function evaluate(loaded) {
     const current = stats.get(cell.cellId), measured = current.cases.length > 0 || current.unmatched > 0 || current.reasons.size > 0;
     const samples = sampleCounts(loaded.fixtures, cell.cellId);
     const failures = measured ? thresholds(current, cell) : [];
-    const blockers = ['PRODUCT_EXECUTION_UNVERIFIED', 'PATTERN_ALLOCATION_UNREVIEWED'];
+    const blockers = [loaded.executionAttested ? 'EXECUTION_ATTESTATION_LOCAL_UNSIGNED' : 'PRODUCT_EXECUTION_UNVERIFIED', 'PATTERN_ALLOCATION_UNREVIEWED'];
+    if (loaded.corpus.purpose === 'DEVELOPMENT_BASELINE') blockers.push('DEVELOPMENT_MATERIAL_ONLY');
     if (!['P', 'S'].includes(cell.capability) && current.tp + current.fp < 200) blockers.push('WILSON_SAMPLE_MISSING');
     const required = cell.sampleRequirements;
     if (samples.evaluationPositive < required.positive || samples.evaluationNegative < required.negative
