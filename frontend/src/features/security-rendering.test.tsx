@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { routes } from '../app/router'
 import { AI_PANEL_DEFAULT_WIDTH, useUiStore } from '../stores/uiStore'
+
+// Every product source file under src/ as raw text (Vite resolves this at transform time, so the
+// app tsconfig needs no Node types). Test files and test/ helpers are not product sinks.
+const productSources = import.meta.glob<string>(
+  ['../**/*.{ts,tsx}', '!../**/*.test.{ts,tsx}', '!../**/test/**'],
+  { query: '?raw', import: 'default', eager: true },
+)
 
 // G-SEC stored-XSS boundary (05 §2: source/Markdown escaped and sanitised). Repository names,
 // file paths, commit/PR metadata and AI responses are attacker-controlled strings. They must be
@@ -123,18 +128,10 @@ describe('security: attacker-controlled strings render as inert text', () => {
   })
 
   it('product source has no raw-HTML, eval or document-write sink for untrusted strings', () => {
-    const root = join(__dirname, '..')
     const sinks = /dangerouslySetInnerHTML|\.innerHTML\s*=|\.outerHTML\s*=|insertAdjacentHTML|document\.write|new Function\(|\beval\(|srcDoc=|createContextualFragment/
-    const offenders: string[] = []
-    const visit = (directory: string) => {
-      for (const name of readdirSync(directory)) {
-        const file = join(directory, name)
-        if (statSync(file).isDirectory()) { if (name !== 'test') visit(file); continue }
-        if (!/\.(ts|tsx)$/.test(name) || /\.test\.tsx?$/.test(name)) continue
-        if (sinks.test(readFileSync(file, 'utf8'))) offenders.push(relative(root, file))
-      }
-    }
-    visit(root)
+    const files = Object.entries(productSources)
+    expect(files.length).toBeGreaterThan(50)
+    const offenders = files.filter(([, text]) => sinks.test(text)).map(([file]) => file.replace(/^\.\.\//, ''))
     expect(offenders).toEqual([])
   })
 })
