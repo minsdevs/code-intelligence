@@ -1,0 +1,615 @@
+{
+  "format": "t00-annotation-record/1",
+  "fixtureId": "dev-todo-fullstack-mini",
+  "toolSha256": "7d66269fb8f6c6a8b83d6a1a242ac8aabfff115cef0105c3cb28500c34490833",
+  "specSha256": "3764e72802f37082483c76c15dd483c6902f0cc23d84e496db0e7f8f4440ce0d",
+  "annotator": {
+    "id": "gate-accuracy-transcriber",
+    "kind": "AGENT",
+    "method": "SOURCE_AUTHORED"
+  },
+  "provenanceNote": "Transcription of the hand-authored exact-set FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) for fullstack-mini into T00 cases. Spans selected from source text with ANNOTATING.md conventions; no product output was read. React 18 / Router 6 facts (T-UI, X-HTTP) are not transcribed because the fixture is outside the R1 cell versions. Development material only.",
+  "annotatedSources": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "e45d04b5d5e680dddee0f9d9910b4fe8ad6fd6b82182871ccbbf893d6a2cead5"
+    },
+    {
+      "path": "backend/build.gradle",
+      "sha256": "e774f2faa3b7ecdea5a68b66e986a394f56063929607636c60bf5715e60905ba"
+    },
+    {
+      "path": "backend/settings.gradle",
+      "sha256": "57b69fa739285157a635853d65206cfb46c8816faab650cb19f1e6f4466ead83"
+    },
+    {
+      "path": "backend/src/main/java/com/example/todo/TodoApplication.java",
+      "sha256": "1e6e5bf5825073b2704a02cb0bdbd39d7c0800c865655baed716d1f2204d420e"
+    },
+    {
+      "path": "backend/src/main/java/com/example/todo/api/AuthController.java",
+      "sha256": "1ce0de648b72861d578fe49a1d6babe9c9bdfd6c16846f3bbb2654c1efe8991d"
+    },
+    {
+      "path": "backend/src/main/java/com/example/todo/api/TodoController.java",
+      "sha256": "0051aae8acc708659f82940f66e636cc3e32a5895fbd4bdfa8bf108b69f5a5e3"
+    },
+    {
+      "path": "backend/src/main/java/com/example/todo/domain/Todo.java",
+      "sha256": "faa7548f4bfebf63eadadc7021790e85a923c9b68d5e7ff2d33e9f99697fcb63"
+    },
+    {
+      "path": "backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "sha256": "e6e42a4bd208c7ca66b95642f9b48f15fc529540f867a0f271d0f4a64f00bb72"
+    },
+    {
+      "path": "backend/src/main/java/com/example/todo/service/AuthService.java",
+      "sha256": "cf739f90108c3c4512bb358bff898245388a1b7c5e6df9dae12d0a16e64775ea"
+    },
+    {
+      "path": "backend/src/main/java/com/example/todo/service/TodoService.java",
+      "sha256": "ce4208cbc82a2fa2a5a1f607962d7338290dea27bb3ac7110d5f52c442dc3929"
+    },
+    {
+      "path": "backend/src/main/resources/application.yml",
+      "sha256": "b8c91c1b0d473b39018b39b00fd5c38773f1ebfd40777c9a1b9dea2a7c418131"
+    },
+    {
+      "path": "backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "sha256": "07e09c6bb03e0b347c330c5d49e51decf3bcd8c2fbbadd6557f30a0ebbcf66bd"
+    },
+    {
+      "path": "backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "sha256": "be1852622194209344ffe1d9fa1b00f82d94e392173d7c7fd71aefb273852dd0"
+    },
+    {
+      "path": "backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "sha256": "5e4781e4855293f1788c139de64522d664718a3a4e4b57c0030f65d842fa9c11"
+    },
+    {
+      "path": "docker-compose.yml",
+      "sha256": "ad57bc0e627192d5ea711e30c552de292fc5522eba986920d3dd2fe3143dbb08"
+    },
+    {
+      "path": "frontend/index.html",
+      "sha256": "3d7ba196c803b671c9a83222c9ac3f8cdd3e9fa9c9060b738a66fee9f5515b57"
+    },
+    {
+      "path": "frontend/package.json",
+      "sha256": "8e0d22260d4dd289b90fe37b97aaf51f88adf9f459785de7f035f87bd20367e3"
+    },
+    {
+      "path": "frontend/src/App.tsx",
+      "sha256": "b78e6e49a4378f86883d72ab821654b4ea971ae4930f88db2158dc15cb0ff70c"
+    },
+    {
+      "path": "frontend/src/components/TodoItem.test.tsx",
+      "sha256": "9d723cf2c5397b07adda29153da26be2757dc55e0d731b6376de79a85997da0f"
+    },
+    {
+      "path": "frontend/src/components/TodoItem.tsx",
+      "sha256": "6228e247a45fefaf9cb9d145f437d536cbbc10f8c6048c7395cf55a1959fc9db"
+    },
+    {
+      "path": "frontend/src/main.tsx",
+      "sha256": "b1de0de2281a4057c8e8144857d694713821680d95c91faaa36625c63e78cee3"
+    },
+    {
+      "path": "frontend/src/pages/HomePage.tsx",
+      "sha256": "fac36f1ced86e0707cc3875b50b924869bb551cce642d7a4e6ebd8cf3dd40047"
+    },
+    {
+      "path": "frontend/src/pages/TodosPage.tsx",
+      "sha256": "000e6cc93c28b3a82c4e5ccd148b0522a4b1171f9cf89494e49872f68939b9b0"
+    },
+    {
+      "path": "frontend/tsconfig.json",
+      "sha256": "0055b6981484fd27a3d74378195fa664531692332e89ee13f4919080cf12db45"
+    },
+    {
+      "path": "frontend/vite.config.ts",
+      "sha256": "7db6d23b3af97d73ef5c8772218c1b065c25f763d6a327d11d28480a99bee4bd"
+    }
+  ],
+  "goldSha256": "3e2cbb0df43dc527dc3d96738f1dfe47a23d849a19cfbec285eae93f95d1b4b9",
+  "negativesSha256": "8af07e86ff9d467638b4a89c78aff315d0b3ed5abe6da8feb624fc2e6198153d",
+  "cases": [
+    {
+      "caseId": "dev-todo.jp.TodoApplication",
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "start": 0,
+      "end": 316,
+      "spanSha256": "1e6e5bf5825073b2704a02cb0bdbd39d7c0800c865655baed716d1f2204d420e"
+    },
+    {
+      "caseId": "dev-todo.jp.AuthController",
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "start": 0,
+      "end": 661,
+      "spanSha256": "1ce0de648b72861d578fe49a1d6babe9c9bdfd6c16846f3bbb2654c1efe8991d"
+    },
+    {
+      "caseId": "dev-todo.jp.TodoController",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 0,
+      "end": 1045,
+      "spanSha256": "0051aae8acc708659f82940f66e636cc3e32a5895fbd4bdfa8bf108b69f5a5e3"
+    },
+    {
+      "caseId": "dev-todo.jp.Todo",
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "start": 0,
+      "end": 795,
+      "spanSha256": "faa7548f4bfebf63eadadc7021790e85a923c9b68d5e7ff2d33e9f99697fcb63"
+    },
+    {
+      "caseId": "dev-todo.jp.TodoRepository",
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "start": 0,
+      "end": 207,
+      "spanSha256": "e6e42a4bd208c7ca66b95642f9b48f15fc529540f867a0f271d0f4a64f00bb72"
+    },
+    {
+      "caseId": "dev-todo.jp.AuthService",
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "start": 0,
+      "end": 178,
+      "spanSha256": "cf739f90108c3c4512bb358bff898245388a1b7c5e6df9dae12d0a16e64775ea"
+    },
+    {
+      "caseId": "dev-todo.jp.TodoService",
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "start": 0,
+      "end": 659,
+      "spanSha256": "ce4208cbc82a2fa2a5a1f607962d7338290dea27bb3ac7110d5f52c442dc3929"
+    },
+    {
+      "caseId": "dev-todo.jp.TodoServiceTest",
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "start": 0,
+      "end": 126,
+      "spanSha256": "5e4781e4855293f1788c139de64522d664718a3a4e4b57c0030f65d842fa9c11"
+    },
+    {
+      "caseId": "dev-todo.js.type.TodoApplication",
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "start": 148,
+      "end": 315,
+      "spanSha256": "df5431f1267fc1fcf71cdfdff6b1818d1ceb5b585cfd04fb821d43a4656eb15a"
+    },
+    {
+      "caseId": "dev-todo.js.type.AuthController",
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "start": 263,
+      "end": 660,
+      "spanSha256": "f96591d5bab371aec9da9bc0cc98324610c64a14bc2b98badfed0aa145121def"
+    },
+    {
+      "caseId": "dev-todo.js.type.TodoController",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 503,
+      "end": 1044,
+      "spanSha256": "ac182eba279206f7796346c34b58ae76130b6c3e86033c46befd9f9b80da06ac"
+    },
+    {
+      "caseId": "dev-todo.js.type.Todo",
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "start": 221,
+      "end": 794,
+      "spanSha256": "6a23299b73aec088d79f862a3670624c3fa5922a3f16dda8070d1febbf379d0d"
+    },
+    {
+      "caseId": "dev-todo.js.type.TodoRepository",
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "start": 138,
+      "end": 206,
+      "spanSha256": "537541e4ea34b0b01b4df4f47e22813e5d4245405ed3cd1ed81b07dfd488e135"
+    },
+    {
+      "caseId": "dev-todo.js.type.AuthService",
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "start": 83,
+      "end": 177,
+      "spanSha256": "868d392e7fb0d4dd65dbd8d90815eddfeb05627fe42623ee978ac249b421e2bb"
+    },
+    {
+      "caseId": "dev-todo.js.type.TodoService",
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "start": 194,
+      "end": 658,
+      "spanSha256": "af761de8ab58a7736108188ba804b7571a6c86943cbf99d23e49caeffe51f85d"
+    },
+    {
+      "caseId": "dev-todo.js.type.TodoServiceTest",
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "start": 63,
+      "end": 125,
+      "spanSha256": "7a385eba111635dc8b2cfa8fa65990c399beb85eba4f2114c50d2e72e09539ec"
+    },
+    {
+      "caseId": "dev-todo.js.method.main",
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "start": 207,
+      "end": 313,
+      "spanSha256": "ca11e687416f5f21c124fd8cb0b9615d5f6531a998d43925391b9204b699da8c"
+    },
+    {
+      "caseId": "dev-todo.js.method.AuthController.ctor",
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "start": 383,
+      "end": 477,
+      "spanSha256": "31e174c9f4da57b9121c32a8384d668d7ac7829152fe8214fa655fd823243b9c"
+    },
+    {
+      "caseId": "dev-todo.js.method.AuthController.login",
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "start": 483,
+      "end": 566,
+      "spanSha256": "e3167cb7e490d3d114102e959f8f2fe7b62e39816d81a1e0e9713cb3058a4e3b"
+    },
+    {
+      "caseId": "dev-todo.js.method.AuthController.logout",
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "start": 572,
+      "end": 658,
+      "spanSha256": "3fbf760aaf3f2edb7751e33418be28fa32e25fa2bb3dc704786b22c5cd67e3b5"
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoController.ctor",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 624,
+      "end": 718,
+      "spanSha256": "09c2b9b058c8f908c5d6dd38373e2a14af19c373a16f6e8bbedad8d1c86f94ee"
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoController.list",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 724,
+      "end": 810,
+      "spanSha256": "4a4ed09fbbb7b616a5df052fd3f824d028430ed10419488ad5bf05d760203543"
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoController.get",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 816,
+      "end": 928,
+      "spanSha256": "84694716a26d1e08448e2421c2e40becdb8d9abf6b697c090f1190c7a86b36bf"
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoController.create",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 934,
+      "end": 1042,
+      "spanSha256": "592f326b477c367356fac11d7dcecf13997d6d583a347a94024c3078268f6b4d"
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.getId",
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "start": 417,
+      "end": 463,
+      "spanSha256": "c4a72c85c4240369eca4293afc9d660e7ded64af708c2234f5a79f755708fbf0"
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.setId",
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "start": 469,
+      "end": 525,
+      "spanSha256": "79f22935344271a005644e23903f82d3a1c931021846eb7acbd331034dc6bcff"
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.getTitle",
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "start": 531,
+      "end": 585,
+      "spanSha256": "427d9e9960a11a6c7642e401147d666add0208338cc260d3a831e42f3640d58f"
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.setTitle",
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "start": 591,
+      "end": 661,
+      "spanSha256": "84c101d5aedcf63b0bb8ddf193b801c92010eda0a35fd3f96d40efab6d8e13bd"
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.isDone",
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "start": 667,
+      "end": 719,
+      "spanSha256": "9ce551dc3f52a7ddaa62e184cf13220071df534c4f9bafe867bef9bba016c750"
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.setDone",
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "start": 725,
+      "end": 792,
+      "spanSha256": "2f819091812dbfe780c2f7d792d4310e827ca78f60270fdfe46d2f33f94ce339"
+    },
+    {
+      "caseId": "dev-todo.js.method.AuthService.login",
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "start": 124,
+      "end": 146,
+      "spanSha256": "abfc7d1105467e036c53514a243dd0d871fd05f133b6da9349b663d006b55303"
+    },
+    {
+      "caseId": "dev-todo.js.method.AuthService.logout",
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "start": 152,
+      "end": 175,
+      "spanSha256": "607ab45156403a7098d573315724b237aae17de65d3d4ba38efa5191db5c4a18"
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoService.ctor",
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "start": 285,
+      "end": 388,
+      "spanSha256": "2897a0a4d0ea9849da7a31a16a2a131fa1777424fc2d5547601dc09b447f1b70"
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoService.findAll",
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "start": 394,
+      "end": 470,
+      "spanSha256": "16867631a5d511e9075ff06e3d4297518280371303317056caf6093350ae4a53"
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoService.findById",
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "start": 476,
+      "end": 571,
+      "spanSha256": "9715dcfe00f6ae16bcb038817ffaee52ae012bfe0a047142bbb8141ffe592f1a"
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoService.create",
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "start": 577,
+      "end": 656,
+      "spanSha256": "b79a65ee4d6912271748e9fda4806238cf1aeac1648a57e35afb88677977fd8b"
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoServiceTest.placeholder",
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "start": 92,
+      "end": 123,
+      "spanSha256": "8b964342cf41badad9987c0685d55a14f7376b08ff3c5f7b1183c84d0c32d81f"
+    },
+    {
+      "caseId": "dev-todo.js.extends.TodoRepository",
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "start": 170,
+      "end": 203,
+      "spanSha256": "5a41562cceef0977d6ae4731b508ece9f4572c739b9aa9d2b77ff9d275e35b34"
+    },
+    {
+      "caseId": "dev-todo.jc.AuthController.login",
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "start": 540,
+      "end": 559,
+      "spanSha256": "dad42d6934fd85479caa130f100e3f9b94abfb1538c198477ff487e3e77c8498"
+    },
+    {
+      "caseId": "dev-todo.jc.AuthController.logout",
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "start": 631,
+      "end": 651,
+      "spanSha256": "a9a932c61a0c63c6f2b8b746cb690eb6ffd86c13407443cd462aaef5935639be"
+    },
+    {
+      "caseId": "dev-todo.jc.TodoController.list",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 782,
+      "end": 803,
+      "spanSha256": "5a8bdafb145ffae48a7e2f0fbc185fec0e133c445dff8aee854d69b9031ffa32"
+    },
+    {
+      "caseId": "dev-todo.jc.TodoController.get",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 897,
+      "end": 921,
+      "spanSha256": "d3e9d31c9c60f2cfd301262f8499e8508a2781ec13a5f3ab7a449ecd0a998f80"
+    },
+    {
+      "caseId": "dev-todo.jc.TodoController.create",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 1011,
+      "end": 1035,
+      "spanSha256": "73005a989cb9a1dc02b388f0af85b5cbd521a2c503f52dc2c5976a157a825133"
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.findAll",
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "start": 439,
+      "end": 463,
+      "spanSha256": "89829d230db285f5c8f090e38619f51f97a6c66ec0fa980bb64c20c5b706dc40"
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.findById",
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "start": 523,
+      "end": 550,
+      "spanSha256": "f2351551d5a794ff7728ecd2ea3e71b68de87ac30edd9b5513d90880a7c9bd11"
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.create",
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "start": 624,
+      "end": 649,
+      "spanSha256": "920d2c12099e6df2671ae4f6bfbf36b71fb48bff6d57c9f882c5c8010d03c0c5"
+    },
+    {
+      "caseId": "dev-todo.jc.TodoApplication.main.run",
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "start": 256,
+      "end": 306,
+      "spanSha256": "eaa0c8865d854444ed419e4474ebda807f15dcb5be355e646c5414e9a3896582"
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.findById.orElseThrow",
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "start": 523,
+      "end": 564,
+      "spanSha256": "32408f8e8cb73060501de4a729beb1820a1ee659223fbb91679cf9a3740ec66d"
+    },
+    {
+      "caseId": "dev-todo.jf.login",
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "start": 483,
+      "end": 566,
+      "spanSha256": "e3167cb7e490d3d114102e959f8f2fe7b62e39816d81a1e0e9713cb3058a4e3b"
+    },
+    {
+      "caseId": "dev-todo.jf.logout",
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "start": 572,
+      "end": 658,
+      "spanSha256": "3fbf760aaf3f2edb7751e33418be28fa32e25fa2bb3dc704786b22c5cd67e3b5"
+    },
+    {
+      "caseId": "dev-todo.jf.list",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 724,
+      "end": 810,
+      "spanSha256": "4a4ed09fbbb7b616a5df052fd3f824d028430ed10419488ad5bf05d760203543"
+    },
+    {
+      "caseId": "dev-todo.jf.get",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 816,
+      "end": 928,
+      "spanSha256": "84694716a26d1e08448e2421c2e40becdb8d9abf6b697c090f1190c7a86b36bf"
+    },
+    {
+      "caseId": "dev-todo.jf.create",
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "start": 934,
+      "end": 1042,
+      "spanSha256": "592f326b477c367356fac11d7dcecf13997d6d583a347a94024c3078268f6b4d"
+    },
+    {
+      "caseId": "dev-todo.jd.Todo",
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "start": 221,
+      "end": 794,
+      "spanSha256": "6a23299b73aec088d79f862a3670624c3fa5922a3f16dda8070d1febbf379d0d"
+    },
+    {
+      "caseId": "dev-todo.sqlp.V1",
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "start": 0,
+      "end": 119,
+      "spanSha256": "07e09c6bb03e0b347c330c5d49e51decf3bcd8c2fbbadd6557f30a0ebbcf66bd"
+    },
+    {
+      "caseId": "dev-todo.sqls.table",
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "start": 0,
+      "end": 118,
+      "spanSha256": "5f5131eda837413d22c4c0f051fa96bac3933d64d264c7f64ea006d199a3dbaf"
+    },
+    {
+      "caseId": "dev-todo.sqls.column.id",
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "start": 25,
+      "end": 49,
+      "spanSha256": "2e265a518e78985311f38ea51225eea1f5fcff0b16b4bcdca85b81de9001e45a"
+    },
+    {
+      "caseId": "dev-todo.sqls.column.title",
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "start": 55,
+      "end": 74,
+      "spanSha256": "a10e33f1ed4390fc76445bcba9199f86e1a9289e2f86388add5e3dc110c65bf3"
+    },
+    {
+      "caseId": "dev-todo.sqls.column.done",
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "start": 80,
+      "end": 115,
+      "spanSha256": "099eeb8567a45c9a79d9fd1803e8064d7f78d70856a3d042d24c8f8832174218"
+    },
+    {
+      "caseId": "dev-todo.xdata.Todo",
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "start": 221,
+      "end": 794,
+      "spanSha256": "6a23299b73aec088d79f862a3670624c3fa5922a3f16dda8070d1febbf379d0d"
+    },
+    {
+      "caseId": "dev-todo.xdata.TodoRepository",
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "start": 138,
+      "end": 206,
+      "spanSha256": "537541e4ea34b0b01b4df4f47e22813e5d4245405ed3cd1ed81b07dfd488e135"
+    },
+    {
+      "caseId": "dev-todo.tp.App-tsx",
+      "path": "source/frontend/src/App.tsx",
+      "start": 0,
+      "end": 378,
+      "spanSha256": "b78e6e49a4378f86883d72ab821654b4ea971ae4930f88db2158dc15cb0ff70c"
+    },
+    {
+      "caseId": "dev-todo.tp.main-tsx",
+      "path": "source/frontend/src/main.tsx",
+      "start": 0,
+      "end": 212,
+      "spanSha256": "b1de0de2281a4057c8e8144857d694713821680d95c91faaa36625c63e78cee3"
+    },
+    {
+      "caseId": "dev-todo.tp.pages-HomePage-tsx",
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "start": 0,
+      "end": 55,
+      "spanSha256": "fac36f1ced86e0707cc3875b50b924869bb551cce642d7a4e6ebd8cf3dd40047"
+    },
+    {
+      "caseId": "dev-todo.tp.pages-TodosPage-tsx",
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "start": 0,
+      "end": 199,
+      "spanSha256": "000e6cc93c28b3a82c4e5ccd148b0522a4b1171f9cf89494e49872f68939b9b0"
+    },
+    {
+      "caseId": "dev-todo.tp.components-TodoItem-tsx",
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "start": 0,
+      "end": 88,
+      "spanSha256": "6228e247a45fefaf9cb9d145f437d536cbbc10f8c6048c7395cf55a1959fc9db"
+    },
+    {
+      "caseId": "dev-todo.tp.components-TodoItem-test-tsx",
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "start": 0,
+      "end": 186,
+      "spanSha256": "9d723cf2c5397b07adda29153da26be2757dc55e0d731b6376de79a85997da0f"
+    },
+    {
+      "caseId": "dev-todo.ts.App",
+      "path": "source/frontend/src/App.tsx",
+      "start": 158,
+      "end": 377,
+      "spanSha256": "efbcdc60872317b8b5d310b869bba674eab9bb415e5caf03fde4a40b02ba3d4f"
+    },
+    {
+      "caseId": "dev-todo.ts.HomePage",
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "start": 0,
+      "end": 54,
+      "spanSha256": "c74aa72931219874100f565d07ffdd50f7b7bc7cb217a5052578ec13e5f20b3c"
+    },
+    {
+      "caseId": "dev-todo.ts.TodosPage",
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "start": 52,
+      "end": 198,
+      "spanSha256": "5a2a24ec8fc049c17a2a279bd1277198509b2cc9e9f82f2cf76e20da2266a8b5"
+    },
+    {
+      "caseId": "dev-todo.ts.TodoItem",
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "start": 0,
+      "end": 87,
+      "spanSha256": "94ee3279beacc2cd16ba53d05944c7dc8c1a49a03b2f1c9ff2307341cc0996ba"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "contractVersion": "1.0.0",
+  "corpusId": "accuracy-development-baseline",
+  "purpose": "DEVELOPMENT_BASELINE",
+  "fixtures": [
+    {
+      "path": "fixtures/dev-todo-fullstack-mini/fixture.json",
+      "sha256": "c4f3c13a9980ef3e393ffa680b3fa1e09342bf39e76433ef54788629838daebe"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "format": "t00-annotation-spec/1",
+  "annotator": { "id": "gate-accuracy-transcriber", "kind": "AGENT", "method": "SOURCE_AUTHORED" },
+  "provenanceNote": "Transcription of validation/t00/fixtures/typescript-calls gold/negatives (AGENT, AUTHOR_PROVISIONAL) into the ANNOTATING.md semantic-key vocabulary. Spans re-selected from source text; no product output was read. Development material only.",
+  "fixture": {
+    "fixtureId": "dev-t00-typescript-calls",
+    "fixtureVersion": "1.0.0",
+    "corpusId": "accuracy-development-baseline",
+    "license": { "spdx": "MIT", "status": "AUTHOR_DECLARED" },
+    "origin": { "kind": "SYNTHETIC", "projectId": "t00-synthetic-project", "uri": "urn:code-intelligence:t00:synthetic-contract-selftest", "commit": null },
+    "scenarioFamilyId": "t00-call-abstention-family",
+    "generatorFamilyId": "t00-hand-authored-family",
+    "split": "DEVELOPMENT",
+    "versions": [{ "name": "typescript", "version": "5.9.3" }],
+    "capabilities": ["T-P", "T-C"],
+    "sourceRoot": "../../fixtures/typescript-calls/source",
+    "sourceMode": "ANCHOR",
+    "sourcePrefix": "source",
+    "namespaces": [{ "prefix": "", "namespace": "synthetic-typescript-calls" }],
+    "eligibility": { "overrides": [
+      { "path": "invalid.ts", "cellId": "T-C", "eligible": false, "exclusionReason": "INVALID_SYNTAX" }
+    ] }
+  },
+  "cases": [
+    { "caseId": "dev-typescript-calls.valid", "cellId": "T-P", "patternId": "valid-syntax", "stratum": null, "kind": "PARSER", "relationKind": "PARSE",
+      "polarity": "POSITIVE", "select": { "file": "calls.ts", "wholeFile": true },
+      "expected": { "resolution": "NOT_APPLICABLE", "targets": [], "valid": true, "diagnostics": [], "reasonCode": null },
+      "mustNotEmitResolved": false, "rationale": "Transcribed typescript-calls.valid: hand-authored valid TypeScript 5.9 syntax with CRLF and non-ASCII bytes." },
+    { "caseId": "dev-typescript-calls.invalid", "cellId": "T-P", "patternId": "invalid-syntax", "stratum": null, "kind": "PARSER", "relationKind": "PARSE",
+      "polarity": "NEGATIVE", "select": { "file": "invalid.ts", "wholeFile": true },
+      "expected": { "resolution": "NOT_APPLICABLE", "targets": [], "valid": false, "diagnostics": ["SYNTAX_ERROR"], "reasonCode": null },
+      "mustNotEmitResolved": true, "rationale": "Transcribed typescript-calls.invalid: the parameter list and body are incomplete." },
+    { "caseId": "dev-typescript-calls.direct", "cellId": "T-C", "patternId": "direct-source-call", "stratum": null, "kind": "FACT", "relationKind": "CALLS",
+      "polarity": "POSITIVE", "select": { "file": "calls.ts", "text": "twice(2)" }, "expectText": "twice(2)",
+      "expected": { "resolution": "STATIC_RESOLVED", "targets": ["ts:source/calls.ts#twice"], "valid": null, "diagnostics": [], "reasonCode": null },
+      "mustNotEmitResolved": false, "rationale": "Transcribed typescript-calls.direct: the identifier resolves to the module-level function twice." },
+    { "caseId": "dev-typescript-calls.candidates", "cellId": "T-C", "patternId": "dynamic-unresolved", "stratum": null, "kind": "CANDIDATES", "relationKind": "CALLS",
+      "polarity": "POSITIVE", "select": { "file": "calls.ts", "text": "action.run()" }, "expectText": "action.run()",
+      "expected": { "resolution": "INFERRED", "targets": ["ts:source/calls.ts#first.run", "ts:source/calls.ts#second.run"], "valid": null, "diagnostics": [], "reasonCode": null },
+      "mustNotEmitResolved": true, "rationale": "Transcribed typescript-calls.candidates: two object-literal implementations of Action.run are candidates only. OPEN ADJUDICATION: the target grammar for object-literal members is provisional." },
+    { "caseId": "dev-typescript-calls.dynamic", "cellId": "T-C", "patternId": "dynamic-unresolved", "stratum": null, "kind": "FACT", "relationKind": "CALLS",
+      "polarity": "NEGATIVE", "select": { "file": "calls.ts", "text": "receiver[name]()" }, "expectText": "receiver[name]()",
+      "expected": { "resolution": "UNRESOLVED", "targets": [], "valid": null, "diagnostics": [], "reasonCode": "DYNAMIC_TARGET" },
+      "mustNotEmitResolved": true, "rationale": "Transcribed typescript-calls.dynamic: computed member on an any-typed receiver." }
+  ]
+}

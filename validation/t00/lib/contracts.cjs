@@ -146,6 +146,8 @@ function loadContracts(io, options) {
     const root = path.dirname(io.resolve(path.dirname(corpusPath), reference.path)); io.protect(root);
     if (corpus.purpose === 'SYNTHETIC_SELF_TEST') requireThat(fixture.origin.kind === 'SYNTHETIC'
       && fixture.split === 'DEVELOPMENT', 'SELF_TEST_SCOPE_MISMATCH');
+    // A development baseline measures implementation-side material only; it can never hold evaluation splits.
+    if (corpus.purpose === 'DEVELOPMENT_BASELINE') requireThat(fixture.split === 'DEVELOPMENT', 'BASELINE_SCOPE_MISMATCH');
     if (fixture.origin.kind === 'PUBLIC_REPOSITORY') requireThat(/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(fixture.origin.commit ?? ''), 'ORIGIN_NOT_PINNED');
     unique(fixture.source, item => item.path); unique(fixture.capabilities, item => item);
     unique(fixture.patterns, patternKey); unique(fixture.eligibility, outcomeKey);
@@ -232,6 +234,11 @@ function loadContracts(io, options) {
   const observations = validate('observations', observationInput);
   requireThat((corpus.purpose === 'SYNTHETIC_SELF_TEST') === (observations.provenance.kind === 'SYNTHETIC_SELF_TEST'),
     'OBSERVATION_SCOPE_MISMATCH');
+  // Only a product capture may claim an external attestation, and that claim needs the attestation input.
+  requireThat(observations.provenance.captureAttestation === 'UNVERIFIED'
+    || observations.provenance.kind === 'PRODUCT_CAPTURE', 'OBSERVATION_SCOPE_MISMATCH');
+  requireThat((observations.provenance.captureAttestation === 'EXTERNAL_ATTESTATION') === Boolean(options.executionAttestation),
+    options.executionAttestation ? 'ATTESTATION_UNEXPECTED' : 'ATTESTATION_MISSING');
   requireThat(observations.corpusSha256 === loaded.corpusSha256
     && observations.capabilityManifestSha256 === loaded.capabilityManifestSha256, 'OBSERVATION_BINDING_MISMATCH');
   if (options.productBuildSha256) requireThat(options.productBuildSha256 === observations.provenance.productBuildSha256, 'BUILD_DIGEST_MISMATCH');

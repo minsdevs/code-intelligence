@@ -1,0 +1,61 @@
+{
+  "format": "t00-annotation-record/1",
+  "fixtureId": "dev-t00-java-calls",
+  "toolSha256": "7d66269fb8f6c6a8b83d6a1a242ac8aabfff115cef0105c3cb28500c34490833",
+  "specSha256": "3159022abb73d094d1a82efba9b1c6cd4b8dd60ae20eed1ca608e3810f977c43",
+  "annotator": {
+    "id": "gate-accuracy-transcriber",
+    "kind": "AGENT",
+    "method": "SOURCE_AUTHORED"
+  },
+  "provenanceNote": "Transcription of validation/t00/fixtures/java-calls gold/negatives (AGENT, AUTHOR_PROVISIONAL) into the ANNOTATING.md semantic-key and reason vocabulary. Spans re-selected from source text; no product output was read. Development material only.",
+  "annotatedSources": [
+    {
+      "path": "Calls.java",
+      "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3"
+    },
+    {
+      "path": "Invalid.java",
+      "sha256": "64c7b144c720916de595df0e2837ca78049f2f33e52965fe1daa4e51deabdf04"
+    }
+  ],
+  "goldSha256": "579d70dfde071cc948e2606c104309279cef43e90d6bcc8bc49d38dda36a6f16",
+  "negativesSha256": "3f20ab53760c2cee82d0f32662e37e01756aa4b22a2489b4d1b1e9be95763828",
+  "cases": [
+    {
+      "caseId": "dev-java-calls.valid",
+      "path": "source/Calls.java",
+      "start": 0,
+      "end": 414,
+      "spanSha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3"
+    },
+    {
+      "caseId": "dev-java-calls.invalid",
+      "path": "source/Invalid.java",
+      "start": 0,
+      "end": 28,
+      "spanSha256": "64c7b144c720916de595df0e2837ca78049f2f33e52965fe1daa4e51deabdf04"
+    },
+    {
+      "caseId": "dev-java-calls.direct",
+      "path": "source/Calls.java",
+      "start": 267,
+      "end": 275,
+      "spanSha256": "9886cfa3c9f84df787dc76a2925c1dffdd1bdc3c9d588329b75eda6b150f34d2"
+    },
+    {
+      "caseId": "dev-java-calls.candidates",
+      "path": "source/Calls.java",
+      "start": 319,
+      "end": 331,
+      "spanSha256": "377b451948b7cf45e44e7354558987d3480bc5ce16b22d02f34b52f7cfc292da"
+    },
+    {
+      "caseId": "dev-java-calls.dynamic",
+      "path": "source/Calls.java",
+      "start": 389,
+      "end": 408,
+      "spanSha256": "0940087b475beea074299f12825be07300baf080c99d1981d2923656e852e198"
+    }
+  ]
+}

@@ -1,0 +1,164 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-todo-fullstack-mini",
+  "cases": [
+    {
+      "caseId": "dev-todo.jc.TodoService.findAll",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "CALLS",
+      "polarity": "AMBIGUOUS",
+      "source": {
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "sha256": "ce4208cbc82a2fa2a5a1f607962d7338290dea27bb3ac7110d5f52c442dc3929",
+        "namespace": "todo-backend",
+        "start": 439,
+        "end": 463
+      },
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "java:com.example.todo.repository.TodoRepository#findAll()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) POSSIBLE CALLS edge to an inherited JpaRepository method stub; must never be STATIC_RESOLVED. OPEN ADJUDICATION: ANNOTATING.md section 4 would annotate this as UNRESOLVED EXTERNAL_TARGET."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.findById",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "CALLS",
+      "polarity": "AMBIGUOUS",
+      "source": {
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "sha256": "ce4208cbc82a2fa2a5a1f607962d7338290dea27bb3ac7110d5f52c442dc3929",
+        "namespace": "todo-backend",
+        "start": 523,
+        "end": 550
+      },
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "java:com.example.todo.repository.TodoRepository#findById(java.lang.Long)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) POSSIBLE CALLS edge to an inherited JpaRepository method stub; must never be STATIC_RESOLVED. OPEN ADJUDICATION: ANNOTATING.md section 4 would annotate this as UNRESOLVED EXTERNAL_TARGET."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.create",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "CALLS",
+      "polarity": "AMBIGUOUS",
+      "source": {
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "sha256": "ce4208cbc82a2fa2a5a1f607962d7338290dea27bb3ac7110d5f52c442dc3929",
+        "namespace": "todo-backend",
+        "start": 624,
+        "end": 649
+      },
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "java:com.example.todo.repository.TodoRepository#save(com.example.todo.domain.Todo)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) POSSIBLE CALLS edge to an inherited JpaRepository method stub; must never be STATIC_RESOLVED. OPEN ADJUDICATION: ANNOTATING.md section 4 would annotate this as UNRESOLVED EXTERNAL_TARGET."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoApplication.main.run",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "NEGATIVE",
+      "source": {
+        "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+        "sha256": "1e6e5bf5825073b2704a02cb0bdbd39d7c0800c865655baed716d1f2204d420e",
+        "namespace": "todo-backend",
+        "start": 256,
+        "end": 306
+      },
+      "expected": {
+        "resolution": "UNRESOLVED",
+        "targets": [],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": "EXTERNAL_TARGET"
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Implicit negative of the exact-set FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): no CALLS edge is listed for this library call, so no resolved edge may be published."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.findById.orElseThrow",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "NEGATIVE",
+      "source": {
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "sha256": "ce4208cbc82a2fa2a5a1f607962d7338290dea27bb3ac7110d5f52c442dc3929",
+        "namespace": "todo-backend",
+        "start": 523,
+        "end": 564
+      },
+      "expected": {
+        "resolution": "UNRESOLVED",
+        "targets": [],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": "EXTERNAL_TARGET"
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Implicit negative of the exact-set FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): no CALLS edge is listed for this library call, so no resolved edge may be published."
+    },
+    {
+      "caseId": "dev-todo.xdata.TodoRepository",
+      "cellId": "X-DATA",
+      "patternId": "name-only",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "DATA_CONTRACT",
+      "polarity": "AMBIGUOUS",
+      "source": {
+        "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+        "sha256": "e6e42a4bd208c7ca66b95642f9b48f15fc529540f867a0f271d0f4a64f00bb72",
+        "namespace": "todo-backend",
+        "start": 138,
+        "end": 206
+      },
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "todo-backend:sql:todos"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) LIKELY READS_WRITES repository -> table todos: derived from the entity type argument, never a resolved data contract."
+    }
+  ]
+}
