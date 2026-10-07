@@ -84,7 +84,8 @@ class T00ObservationExportTest {
         JsonNode corpus = json.readTree(Files.readAllBytes(corpusFile));
         List<String> fixtures = new ArrayList<>();
         for (JsonNode reference : corpus.path("fixtures")) {
-            Path manifestFile = regular(corpusFile.getParent(), reference.path("path").asString());
+            Path manifestFile =
+                    regular(corpusFile.getParent(), reference.path("path").asString());
             assertThat(sha256(Files.readAllBytes(manifestFile)))
                     .isEqualTo(reference.path("sha256").asString());
             JsonNode manifest = json.readTree(Files.readAllBytes(manifestFile));
@@ -226,10 +227,8 @@ class T00ObservationExportTest {
     }
 
     private static void commit(Path clone, String fixtureId) throws Exception {
-        try (Git git = Git.init()
-                .setInitialBranch("main")
-                .setDirectory(clone.toFile())
-                .call()) {
+        try (Git git =
+                Git.init().setInitialBranch("main").setDirectory(clone.toFile()).call()) {
             git.add().addFilepattern(".").call();
             git.commit()
                     .setMessage("t00 fixture " + fixtureId)
@@ -265,7 +264,10 @@ class T00ObservationExportTest {
         StringBuilder lines = new StringBuilder();
         int count = 0;
         if (Files.isRegularFile(root)) {
-            lines.append(root.getFileName()).append('\t').append(sha256(Files.readAllBytes(root))).append('\n');
+            lines.append(root.getFileName())
+                    .append('\t')
+                    .append(sha256(Files.readAllBytes(root)))
+                    .append('\n');
             count = 1;
         } else {
             List<Path> files;
