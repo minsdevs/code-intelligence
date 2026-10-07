@@ -16,7 +16,11 @@ const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.
 const { requireCapacity } = require('../../desktop/scripts/macos-runtime-supply.cjs');
 const { ensureOutputParent, assertOutputPath } = require('./owned-output.cjs');
 const { candidateSpaceBudget } = require('./candidate-capacity.cjs');
+const { validationProviderTarget } = require('../../desktop/src/ai-https-transport.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+// Validation-build-only fake-provider variant (G-COST PK-08): the candidate's AI transport targets this fixed
+// loopback origin instead of the provider host. Release builds never carry it (build gate and main refuse it).
+const VALIDATION_AI_PROVIDER_ORIGIN = 'http://127.0.0.1:47613';
 const SOURCE_COPY_INPUTS = [
   ['frontend', ['src', 'public', 'index.html', 'package.json', 'package-lock.json']],
   ['desktop', ['src', 'scripts', 'build', 'package.json', 'package-lock.json']],
@@ -356,16 +360,17 @@ async function main(argv = process.argv.slice(2)) {
     await validateRuntimeManifest(stage, manifest);
     const retained = fs.mkdtempSync(path.join(repo, '.native-product-')); report.retained = retained; save();
     const pkg = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'))), baseBuild = pkg.build;
-    const config = { ...baseBuild, productName: 'Code Intelligence Validation', appId: 'dev.codeintelligence.desktop.validation',
-      extraMetadata: { name: 'code-intelligence-validation', productName: 'Code Intelligence Validation' },
-      directories: { output: retained }, mac: { ...baseBuild.mac, identity: '-', notarize: false },
-      npmRebuild: false, nodeGypRebuild: false, buildDependenciesFromSource: false, electronDist: path.join(desktop, 'node_modules/electron/dist') };
+    const config = candidatePackagerConfig(baseBuild, retained, desktop);
+    report.validationAiProviderOrigin = config.extraMetadata.validationAiProviderOrigin;
     const configFile = path.join(desktop, 'candidate-config.json'); fs.writeFileSync(configFile, JSON.stringify(config, null, 2), { flag: 'wx' });
     run(process.execPath, [path.join(desktop, 'node_modules/electron-builder/out/cli/cli.js'), '--mac', 'dir', '--arm64', '--publish', 'never', '--config', configFile],
       desktop, 'packager', { ...fixedEnv, HOME: path.join(work, 'home'), TMPDIR: path.join(work, 'tmp'),
         CSC_IDENTITY_AUTO_DISCOVERY: 'false', NPM_CONFIG_UPDATE_NOTIFIER: 'false', NPM_CONFIG_OFFLINE: 'true', ELECTRON_BUILDER_CACHE: path.join(work, 'cache') });
     const app = path.join(retained, 'Code Intelligence Validation.app'); fs.renameSync(path.join(retained, 'mac-arm64/Code Intelligence Validation.app'), app);
     const asarFile = path.join(app, 'Contents/Resources/app.asar'), asar = createRequire(path.join(desktop, 'package.json'))('@electron/asar');
+    const packagedMetadata = JSON.parse(asar.extractFile(asarFile, 'package.json'));
+    assert.equal(packagedMetadata.validationAiProviderOrigin, VALIDATION_AI_PROVIDER_ORIGIN);
+    assert.deepEqual(validationProviderTarget(packagedMetadata), { hostname: '127.0.0.1', family: 4, port: 47613 });
     report.verifiedProductSource = {};
     for (const name of fs.readdirSync(path.join(repo, 'desktop/src')).filter(n => n.endsWith('.cjs'))) {
       assert(asar.extractFile(asarFile, 'src/' + name).equals(fs.readFileSync(path.join(repo, 'desktop/src', name))));
@@ -404,5 +409,13 @@ async function main(argv = process.argv.slice(2)) {
     save(); throw error;
   }
 }
-module.exports = { argumentsForCandidate, replaceAnalyzerBuild, replaceAnalyzerRuntime, main };
+function candidatePackagerConfig(baseBuild, output, desktop) {
+  return { ...baseBuild, productName: 'Code Intelligence Validation', appId: 'dev.codeintelligence.desktop.validation',
+    extraMetadata: { name: 'code-intelligence-validation', productName: 'Code Intelligence Validation',
+      validationAiProviderOrigin: VALIDATION_AI_PROVIDER_ORIGIN },
+    directories: { output }, mac: { ...baseBuild.mac, identity: '-', notarize: false },
+    npmRebuild: false, nodeGypRebuild: false, buildDependenciesFromSource: false, electronDist: path.join(desktop, 'node_modules/electron/dist') };
+}
+module.exports = { VALIDATION_AI_PROVIDER_ORIGIN, argumentsForCandidate, candidatePackagerConfig, replaceAnalyzerBuild,
+  replaceAnalyzerRuntime, main };
 if (require.main === module) main().catch(error => { console.error(error.code || error.name); process.exitCode = 1; });

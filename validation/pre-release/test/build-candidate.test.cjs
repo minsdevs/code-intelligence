@@ -3,7 +3,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const crypto = require('node:crypto');
-const { argumentsForCandidate, replaceAnalyzerBuild, replaceAnalyzerRuntime } = require('../build-candidate.cjs');
+const { VALIDATION_AI_PROVIDER_ORIGIN, argumentsForCandidate, candidatePackagerConfig, replaceAnalyzerBuild,
+  replaceAnalyzerRuntime } = require('../build-candidate.cjs');
+const { validationProviderTarget } = require('../../../desktop/src/ai-https-transport.cjs');
+const { requireValidationOnlyProviderVariant } = require('../../../desktop/scripts/desktop-build-gate.cjs');
 const sha = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 test('candidate argument parsing requires an explicit absolute bundle and ordered build identity', () => {
@@ -16,6 +19,19 @@ test('candidate argument parsing requires an explicit absolute bundle and ordere
     ['--app', '/app', '--build-sequence', '1', '--overwrite'], ['--app', '/app', '--guess', '1']]) {
     assert.throws(() => argumentsForCandidate(args));
   }
+});
+
+test('candidate packaging is the validation identity carrying the loopback fake-provider variant (PK-08)', () => {
+  const desktopPackage = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../desktop/package.json')));
+  const config = candidatePackagerConfig(desktopPackage.build, '/synthetic/out', '/synthetic/desktop');
+  assert.equal(config.appId, 'dev.codeintelligence.desktop.validation');
+  assert.deepEqual(config.extraMetadata, { name: 'code-intelligence-validation', productName: 'Code Intelligence Validation',
+    validationAiProviderOrigin: VALIDATION_AI_PROVIDER_ORIGIN });
+  assert.deepEqual(validationProviderTarget({ ...desktopPackage, ...config.extraMetadata }), { hostname: '127.0.0.1', family: 4, port: 47613 });
+  assert.deepEqual(requireValidationOnlyProviderVariant({ targets: [{ name: 'dir' }],
+    packager: { appInfo: { id: config.appId }, info: { metadata: desktopPackage }, config } }), { hostname: '127.0.0.1', family: 4, port: 47613 });
+  // The release configuration of the same package has no variant.
+  assert.equal(validationProviderTarget(desktopPackage), null);
 });
 
 function fixture(t) {

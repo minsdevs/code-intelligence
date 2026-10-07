@@ -31,7 +31,8 @@ const NETWORK_MODULE = /require\(\s*['"](?:node:)?(https?|http2|net|tls|dgram|dn
 
 // Reviewed inventory: module -> network builtins it may load, and why.
 const NETWORK_INVENTORY = Object.freeze({
-  'ai-https-transport.cjs': { modules: ['dns', 'https', 'net'], reason: 'sole provider transport: fixed api.openai.com HTTPS, DNS pinned to public answers' },
+  'ai-https-transport.cjs': { modules: ['dns', 'http', 'https', 'net'],
+    reason: 'sole provider transport: fixed api.openai.com HTTPS, DNS pinned to public answers; plain HTTP only to the validation-build loopback fake provider' },
   'ai-egress-bridge.cjs': { modules: ['net'], reason: 'private backend<->main Unix-domain socket, capability-authenticated' },
   'main.cjs': { modules: ['net'], reason: 'loopback port reservation for bundled services' },
   'service-transport.cjs': { modules: ['https', 'tls'], reason: 'loopback TLS to bundled backend/analyzer with pinned per-run CA' },
@@ -87,11 +88,34 @@ test('provider hosts appear only in the fixed endpoint table and the sole transp
 
 test('the HTTPS transport is composed only by the private desktop gateway', () => {
   const users = desktopFiles.filter(name => read(path.join(desktopSource, name)).includes('createHttpsTransport'));
-  assert.deepEqual(users, ['ai-desktop-gateway.cjs', 'ai-https-transport.cjs']);
+  assert.deepEqual(users, ['ai-https-transport.cjs']);
+  const providerUsers = desktopFiles.filter(name => read(path.join(desktopSource, name)).includes('createProviderTransport'));
+  assert.deepEqual(providerUsers, ['ai-desktop-gateway.cjs', 'ai-https-transport.cjs']);
   const gatewayUsers = desktopFiles.filter(name => read(path.join(desktopSource, name)).includes('openDesktopAiGateway'));
   assert.deepEqual(gatewayUsers, ['ai-desktop-gateway.cjs', 'main.cjs']);
   const coreUsers = desktopFiles.filter(name => /require\(['"]\.\/ai-egress\.cjs['"]\)/.test(read(path.join(desktopSource, name))));
   assert.deepEqual(coreUsers, ['ai-desktop-gateway.cjs']);
+});
+
+// PK-08: the loopback fake-provider origin is a build-time value of the packaged package.json only.
+test('the validation fake-provider variant comes only from build metadata, never from runtime input', () => {
+  const transport = read(path.join(desktopSource, 'ai-https-transport.cjs'));
+  assert.doesNotMatch(transport, /process\.(?:env|argv)|require\(['"](?:node:)?fs|readFile|electron/);
+  assert.equal([...transport.matchAll(/\bhttp\.request\s*\(/g)].length, 1);
+  assert.match(transport, /http\.request\(\{ protocol: 'http:', hostname: target\.hostname,/);
+  assert.match(transport, /\^http:\\\/\\\/\(127\\\.0\\\.0\\\.1\|\\\[::1\\\]\):/);
+  const gateway = read(path.join(desktopSource, 'ai-desktop-gateway.cjs'));
+  assert.match(gateway, /buildMetadata = null, transport = createProviderTransport\(buildMetadata\)/);
+  const main = read(path.join(desktopSource, 'main.cjs'));
+  assert.match(main, /^const packageMetadata = require\('\.\.\/package\.json'\);$/m);
+  assert.deepEqual([...main.matchAll(/buildMetadata: ([A-Za-z.]+)/g)].map(match => match[1]), ['packageMetadata']);
+  for (const name of desktopFiles) {
+    const text = read(path.join(desktopSource, name));
+    if (name !== 'ai-https-transport.cjs') assert.equal(text.includes('validationAiProviderOrigin'), false, name);
+  }
+  // The release configuration never carries the variant; only the candidate builder adds it.
+  const pkg = JSON.parse(read(path.join(repo, 'desktop/package.json')));
+  assert.equal(JSON.stringify(pkg).includes('validationAiProviderOrigin'), false);
 });
 
 test('the egress core has exactly one transport call site, after the journal permit and final barrier', () => {
