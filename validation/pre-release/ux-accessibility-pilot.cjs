@@ -622,7 +622,10 @@ async function main(argv = process.argv.slice(2)) {
         const detailFlow = flows.find(flow => flow.kind === 'FE_BE' && /orders\/:orderId/.test(flow.name)) || flows.find(flow => flow.kind === 'FE_BE');
         if (detailFlow) {
           const detail = await api(`/api/projects/${ctx.projectId}/flows/${detailFlow.id}?snapshotId=${ctx.snapshotId}`);
-          result.flowDetail = { id: detail.id, name: detail.name, kind: detail.kind, steps: detail.steps.map(step => ({ type: step.nodeType, name: step.nodeName, file: step.filePath, line: step.line, description: step.description })) };
+          result.flowDetail = { id: detail.id, name: detail.name, kind: detail.kind, inferredStepIncluded: detail.inferredStepIncluded ?? null,
+            stepsCarryVerdict: detail.steps.every(step => Object.hasOwn(step, 'confidence')),
+            steps: detail.steps.map(step => ({ type: step.nodeType, name: step.nodeName, file: step.filePath, line: step.line, description: step.description,
+              entry: step.entry ?? null, relationType: step.relationType ?? null, confidence: step.confidence ?? null })) };
           // UI: open the flow by keyboard and read what the user sees for each step.
           await navigate(`/projects/${ctx.projectId}/flows?snapshotId=${ctx.snapshotId}`);
           await resetFocus();
@@ -632,7 +635,8 @@ async function main(argv = process.argv.slice(2)) {
           await expect(article.getByRole('heading', { name: detailFlow.name, exact: true })).toBeVisible();
           const articleText = await textOf(article);
           result.ui.flow = { tabPressesToFlow: flowButton.presses, showsConfirmationLevelPerStep: /(CONFIRMED|LIKELY|POSSIBLE|추정|확인됨|정적 대상 확인)/.test(articleText),
-            showsInferredBadge: /추정 포함|inferred/i.test(articleText), textSample: articleText.slice(0, 700) };
+            showsInferredBadge: /추정 단계 포함|Inferred step included/.test(articleText), textSample: articleText.slice(0, 700) };
+          result.ui.flow.badgeMatchesApi = result.ui.flow.showsInferredBadge === (detail.inferredStepIncluded === true);
           const stepButton = article.getByRole('button').first();
           if (await stepButton.count()) {
             await stepButton.focus(); await page.keyboard.press('Enter');
@@ -668,7 +672,10 @@ async function main(argv = process.argv.slice(2)) {
           const keys = impact.dependents.map(dependent => dependent.nodeId);
           result.impactApi = { riskLevel: impact.riskLevel, riskScore: impact.riskScore, dependents: impact.dependents.length,
             uniqueDependentNodes: new Set(keys).size, duplicateRows: keys.length - new Set(keys).size,
-            carriesConfidence: impact.dependents.some(dependent => Object.hasOwn(dependent, 'confidence')) };
+            carriesConfidence: impact.dependents.length > 0 && impact.dependents.every(dependent => Object.hasOwn(dependent, 'confidence')),
+            scoreVersion: impact.scoreVersion ?? null,
+            groups: impact.dependents.reduce((counts, dependent) => ({ ...counts, [dependent.group ?? 'MISSING']: (counts[dependent.group ?? 'MISSING'] || 0) + 1 }), {}),
+            outsideAnalysis: impact.outsideAnalysis ? { ...impact.outsideAnalysis, areas: (impact.outsideAnalysis.areas || []).length } : null };
         }
         await navigate(`${overviewRoute}?snapshotId=${ctx.snapshotId}&nodeId=${target}`);
         const region = page.getByRole('region', { name: '선택한 코드 주변 관계', exact: true });
@@ -689,12 +696,21 @@ async function main(argv = process.argv.slice(2)) {
         await expect(impactPanel.getByText(/(Loading impact|영향|Impact)/).first()).toBeVisible();
         await settle(1500);
         const panelText = await textOf(impactPanel);
-        const list = impactPanel.getByRole('list', { name: 'Impact dependents', exact: true });
-        const rows = await list.count() ? await list.getByRole('listitem').allInnerTexts() : [];
+        // Dependents are grouped (F6): confirmed reverse dependencies, candidate impact, and an outside-analysis region.
+        const groupRows = async name => {
+          const list = impactPanel.getByRole('list', { name });
+          return await list.count() ? list.getByRole('listitem').allInnerTexts() : [];
+        };
+        const confirmedRows = await groupRows(/^(확인된 역방향 의존|Confirmed reverse dependencies)$/);
+        const candidateRows = await groupRows(/^(후보 영향|Candidate impact)/);
+        const rows = [...confirmedRows, ...candidateRows];
+        const outsideRegion = impactPanel.getByRole('region', { name: /^(분석 밖 영역|Outside analysis)$/ });
         result.ui.impactPanel = { text: panelText.slice(0, 900), rows: rows.length,
+          confirmedRows: confirmedRows.length, candidateRows: candidateRows.length,
           duplicateVisibleRows: rows.length - new Set(rows.map(row => row.split('\n')[0])).size,
           showsConfirmedVsCandidate: /(CONFIRMED|LIKELY|POSSIBLE|추정|확인된 정적)/.test(panelText.replace('정적 관계의 검토 후보입니다', '')),
-          showsOutOfAnalysisArea: /(분석 밖|미지원|미측정|unsupported|unmeasured)/i.test(panelText) };
+          showsOutOfAnalysisArea: await outsideRegion.count() > 0,
+          outsideText: await outsideRegion.count() ? (await textOf(outsideRegion)).slice(0, 400) : null };
         await auditState('analysis-impact-cancel', { full: true, shot: true });
         return result;
       }, 240000);
