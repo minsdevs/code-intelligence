@@ -42,7 +42,10 @@ class SecurityLocalApiBoundaryTest {
         var gate = context.getBean(DesktopSecurityConfiguration.class)
                 .desktopCapabilityFilter(context.getBean(DesktopAuthProperties.class))
                 .getFilter();
-        mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(gate).apply(springSecurity()).build();
+        mvc = MockMvcBuilders.webAppContextSetup(context)
+                .addFilters(gate)
+                .apply(springSecurity())
+                .build();
     }
 
     @AfterEach
@@ -58,18 +61,27 @@ class SecurityLocalApiBoundaryTest {
     void dnsRebindingAndOtherLocalProcessesCannotUseTheApiWithoutTheInstallationToken() throws Exception {
         for (String host : List.of("attacker.example:4311", "127.0.0.1.nip.io:4311", "localhost:4311", "[::1]:4311")) {
             for (var request : List.of(
-                    get("/api/projects"), get("/"), get("/actuator/health"), post("/api/projects"), post("/api/desktop/paths"))) {
+                    get("/api/projects"),
+                    get("/"),
+                    get("/actuator/health"),
+                    post("/api/projects"),
+                    post("/api/desktop/paths"))) {
                 assertThat(status(request.secure(true).header("Host", host).header("Origin", "https://" + host)))
                         .as(host)
                         .isEqualTo(401);
             }
         }
         // A different local process on the same loopback address still lacks the per-install token.
-        assertThat(status(get("/api/projects").secure(true).header(HEADER, "b".repeat(64)))).isEqualTo(401);
-        assertThat(status(get("/api/projects").secure(true).header(HEADER, TOKEN.toUpperCase()))).isEqualTo(401);
-        assertThat(status(get("/api/projects").secure(true).header(HEADER, " " + TOKEN))).isEqualTo(401);
-        assertThat(status(get("/api/projects").secure(true).header(HEADER, TOKEN, TOKEN))).isEqualTo(401);
-        assertThat(status(get("/api/projects").secure(false).header(HEADER, TOKEN).header("Origin", ORIGIN)))
+        assertThat(status(get("/api/projects").secure(true).header(HEADER, "b".repeat(64))))
+                .isEqualTo(401);
+        assertThat(status(get("/api/projects").secure(true).header(HEADER, TOKEN.toUpperCase())))
+                .isEqualTo(401);
+        assertThat(status(get("/api/projects").secure(true).header(HEADER, " " + TOKEN)))
+                .isEqualTo(401);
+        assertThat(status(get("/api/projects").secure(true).header(HEADER, TOKEN, TOKEN)))
+                .isEqualTo(401);
+        assertThat(status(
+                        get("/api/projects").secure(false).header(HEADER, TOKEN).header("Origin", ORIGIN)))
                 .as("plain HTTP is never accepted even with the token")
                 .isEqualTo(401);
     }
@@ -91,17 +103,27 @@ class SecurityLocalApiBoundaryTest {
                 "null",
                 "file://",
                 "chrome-extension://abcdefghijklmnop")) {
-            assertThat(status(get("/api/projects").secure(true).header(HEADER, TOKEN).header("Origin", origin)))
+            assertThat(status(get("/api/projects")
+                            .secure(true)
+                            .header(HEADER, TOKEN)
+                            .header("Origin", origin)))
                     .as(origin)
                     .isEqualTo(403);
         }
-        for (String referer : List.of("https://attacker.example/", "https://127.0.0.1:4312/", "http://127.0.0.1:4311/")) {
-            assertThat(status(get("/api/projects").secure(true).header(HEADER, TOKEN).header("Referer", referer)))
+        for (String referer :
+                List.of("https://attacker.example/", "https://127.0.0.1:4312/", "http://127.0.0.1:4311/")) {
+            assertThat(status(get("/api/projects")
+                            .secure(true)
+                            .header(HEADER, TOKEN)
+                            .header("Referer", referer)))
                     .as(referer)
                     .isEqualTo(403);
         }
         for (String site : List.of("cross-site", "same-site")) {
-            assertThat(status(get("/api/projects").secure(true).header(HEADER, TOKEN).header("Sec-Fetch-Site", site)))
+            assertThat(status(get("/api/projects")
+                            .secure(true)
+                            .header(HEADER, TOKEN)
+                            .header("Sec-Fetch-Site", site)))
                     .as(site)
                     .isEqualTo(403);
         }
@@ -113,7 +135,8 @@ class SecurityLocalApiBoundaryTest {
                         .header("Sec-Fetch-Dest", "empty")))
                 .as("user-initiated metadata is only accepted for a top-level document GET")
                 .isEqualTo(403);
-        assertThat(status(get("/api/projects").secure(true).header(HEADER, TOKEN).header("Origin", ORIGIN)))
+        assertThat(status(
+                        get("/api/projects").secure(true).header(HEADER, TOKEN).header("Origin", ORIGIN)))
                 .isEqualTo(200);
     }
 
@@ -126,12 +149,11 @@ class SecurityLocalApiBoundaryTest {
                         .header("Access-Control-Request-Headers", HEADER))
                 .andReturn();
         assertThat(preflight.getResponse().getStatus()).isEqualTo(401);
-        assertThat(preflight.getResponse().getHeader("Access-Control-Allow-Origin")).isNull();
+        assertThat(preflight.getResponse().getHeader("Access-Control-Allow-Origin"))
+                .isNull();
 
-        MvcResult mutation = mvc.perform(post("/api/projects")
-                        .secure(true)
-                        .header(HEADER, TOKEN)
-                        .header("Origin", ORIGIN))
+        MvcResult mutation = mvc.perform(
+                        post("/api/projects").secure(true).header(HEADER, TOKEN).header("Origin", ORIGIN))
                 .andReturn();
         assertThat(mutation.getResponse().getStatus())
                 .as("same-origin mutation without the CSRF double-submit cookie")

@@ -50,14 +50,17 @@ class SecurityGitTransportRedirectTest {
         foreign.start();
         origin.start();
         try {
-            GitCloneService service = new GitCloneService(new AppProperties(temp.resolve("data").toString(), 2));
+            GitCloneService service =
+                    new GitCloneService(new AppProperties(temp.resolve("data").toString(), 2));
             Throwable failure = catchThrowable(() -> service.cloneOrFetch(
                     temp.resolve("data/repos/1"),
                     "http://127.0.0.1:" + origin.getAddress().getPort() + "/o/r.git",
                     "SYNTHETIC-TOKEN-SENTINEL",
                     null));
             assertThat(failure).isInstanceOf(GitCloneException.class);
-            assertThat(foreignAuthorization).as("Authorization sent to the redirected foreign origin").isEmpty();
+            assertThat(foreignAuthorization)
+                    .as("Authorization sent to the redirected foreign origin")
+                    .isEmpty();
         } finally {
             origin.stop(0);
             foreign.stop(0);

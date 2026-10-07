@@ -56,8 +56,14 @@ class SecuritySourceExecutionTest {
         ArchRuleDefinition.noClasses()
                 .should()
                 .dependOnClassesThat()
-                .resideInAnyPackage("javax.script..", "groovy..", "org.codehaus.groovy..", "org.gradle..",
-                        "org.apache.maven..", "jdk.jshell..", "org.graalvm.polyglot..")
+                .resideInAnyPackage(
+                        "javax.script..",
+                        "groovy..",
+                        "org.codehaus.groovy..",
+                        "org.gradle..",
+                        "org.apache.maven..",
+                        "jdk.jshell..",
+                        "org.graalvm.polyglot..")
                 .because("repository configuration and plugins are parsed as text, never evaluated")
                 .check(PRODUCT);
         ArchRuleDefinition.noClasses()
@@ -119,7 +125,8 @@ class SecuritySourceExecutionTest {
                 dependencies { implementation 'org.example:lib:1.0' }
                 """.formatted(sentinel, sentinel));
         Files.writeString(repo.resolve("settings.gradle"), "new File('%s').createNewFile()\n".formatted(sentinel));
-        Files.writeString(repo.resolve("gradle/wrapper/gradle-wrapper.properties"),
+        Files.writeString(
+                repo.resolve("gradle/wrapper/gradle-wrapper.properties"),
                 "distributionUrl=http\\://127.0.0.1\\:9/gradle-bin.zip\n");
         Files.writeString(repo.resolve("package.json"), """
                 {"name":"hostile","scripts":{"preinstall":"touch %s","postinstall":"touch %s","prepare":"touch %s"},
