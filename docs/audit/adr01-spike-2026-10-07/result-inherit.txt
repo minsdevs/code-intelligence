@@ -1,0 +1,18 @@
+== control (unsandboxed probe, same args)
+./run.sh: line 12:  2370 Trace/BPT trap: 5       "$APP/Contents/XPCServices/Supervisor.xpc/Contents/Resources/spike/probe" "$HERE/sentinel.txt" "$HERE/write-target-$V" "$PORT" control
+listener after control:    1     1     1 Accept: */*    1 Connection: close    1 Host: localhost:59031    1 tcp:<no-payload>    1 tcp:GET / HTTP/1.1    1 User-Agent: dev-cockpit 
+== spike host
+== supervisor
+{"pid":2508,"sandboxed":1}
+== java
+{"worker":"java 21.0.12","lines":3,"identifiers":15,"userHome":"DENIED(FileSystemException)","userDirHome":"/Users/minseokchae","tcp":"DENIED(Operation not permitted)"}
+ [exit=0 signal=0]
+== node
+{"worker":"node 24.21.0 (electron 44.4.5)","analysis":{"symbols":[],"nodes":2,"edges":2,"fileOutcomes":[{"path":"src/input.ts","status":"SUCCESS","reason":"TS_PARSED"}]},"tcpListen":"DENIED(EPERM)","userHome":"DENIED(EPERM)"}
+{"label":"node-grandchild","pid":2537,"sandboxed":1,"readOutsideFile":"DENIED(Operation not permitted)","createOutsideFile":"DENIED(Operation not permitted)","tcpConnectLoopback":"DENIED(Operation not permitted)","tcpListenLoopback":"DENIED(Operation not permitted)","udpSendLoopback":"DENIED(Operation not permitted)","dnsResolve":"nodename nor servname provided, or not known"}
+ [exit=0 signal=0]
+== probe
+{"label":"supervisor-child","pid":2540,"sandboxed":1,"readOutsideFile":"DENIED(Operation not permitted)","createOutsideFile":"DENIED(Operation not permitted)","tcpConnectLoopback":"DENIED(Operation not permitted)","tcpListenLoopback":"DENIED(Operation not permitted)","udpSendLoopback":"DENIED(Operation not permitted)","dnsResolve":"nodename nor servname provided, or not known"}
+ [exit=0 signal=0]
+host exit 0
+listener after sandboxed run: 

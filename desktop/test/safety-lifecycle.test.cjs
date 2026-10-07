@@ -250,7 +250,7 @@ for (const kind of ['symlink', 'hardlink', 'permissions', 'oversize', 'schema'])
 
 test('first enrollment and reopen bind the existing identity, keep keys, and expose only an OFF facade', async t => {
   const f = await fixture(t); const first = await f.open();
-  assert.deepEqual(Object.keys(first).sort(), ['close', 'denyAdmission', 'diagnostics', 'latch']);
+  assert.deepEqual(Object.keys(first).sort(), ['close', 'denyAdmission', 'diagnostics', 'latch', 'recordAcceptedManifest', 'recordStartedBuild', 'sanctionRecoveryRollback', 'updateState']);
   assertPrivateStatus(first.diagnostics()); assert.equal(Object.isFrozen(first), true);
   assertPrivateStatus(await first.latch());
   assert.throws(() => first.denyAdmission(), { code: 'DESKTOP_AI_SAFETY_UNAVAILABLE', aiOff: true, recoveryOnly: false });
@@ -467,7 +467,7 @@ test('trusted backup factory receives only backup key copies and narrow journal 
   const handle = await f.open(lifecycle, { createBackupRuntime: async value => {
     context = value; return { async close() { backupClosed = true; } };
   } });
-  assert.deepEqual(Object.keys(handle).sort(), ['close', 'denyAdmission', 'diagnostics', 'latch']);
+  assert.deepEqual(Object.keys(handle).sort(), ['close', 'denyAdmission', 'diagnostics', 'latch', 'recordAcceptedManifest', 'recordStartedBuild', 'sanctionRecoveryRollback', 'updateState']);
   assert.deepEqual(Object.keys(context).sort(), ['journal', 'keyProvider', 'readSafetyState']);
   assert.deepEqual(Object.keys(context.journal).sort(), ['completeMaintenance', 'sealMaintenance', 'snapshot']);
   assert.deepEqual(Object.keys(context.keyProvider).sort(), ['currentKeyId', 'getBackupKey']);
@@ -549,7 +549,7 @@ test('the optional native owner capability reaches both B writers and stays outs
   assert.equal(keyOptions.ownerLocks, ownerLocks); assert.equal(journalOptions.ownerLocks, ownerLocks);
   assert.equal(journalOptions.recoveryMode, false);
   assert.equal(handle.ownerLocks, undefined); assert.equal(backupContext.ownerLocks, undefined);
-  assert.deepEqual(Object.keys(handle).sort(), ['close', 'denyAdmission', 'diagnostics', 'latch']);
+  assert.deepEqual(Object.keys(handle).sort(), ['close', 'denyAdmission', 'diagnostics', 'latch', 'recordAcceptedManifest', 'recordStartedBuild', 'sanctionRecoveryRollback', 'updateState']);
   assert.deepEqual(Object.keys(backupContext.keyProvider).sort(), ['currentKeyId', 'getBackupKey']);
   await handle.close(); assert.deepEqual(calls.slice(-3), ['backup.close', 'journal.close', 'keyring.close']);
 });

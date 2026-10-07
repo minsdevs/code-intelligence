@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { getMe } from '../../api/auth'
@@ -8,6 +8,7 @@ import ConnectStep from './ConnectStep'
 import ProgressStep from './ProgressStep'
 import RepoStep from './RepoStep'
 import { WIZARD_STEPS, type WizardStepId } from './wizard'
+import type { FolderGrant } from '../../desktop'
 import LocalSourceApproval from '../projects/LocalSourceApproval'
 
 export default function ImportWizardPage() {
@@ -26,7 +27,11 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
   const [projectId, setProjectId] = useState<number | null>(null)
   const [jobId, setJobId] = useState<number | null>(null)
 
-  const [localPath, setLocalPath] = useState<string | null>(initialPath)
+  // A URL path carries no grant; only a configured server root can preview it.
+  const [localSource, setLocalSource] = useState<{ path: string; grant?: string } | null>(
+    initialPath ? { path: initialPath } : null,
+  )
+  const localPath = localSource?.path ?? null
 
   const goConnect = useCallback(() => {
     setStep('connect')
@@ -75,8 +80,8 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
       setStep('repo')
     }
   }
-  const handleLocalPath = (path: string) => {
-    setLocalPath(path)
+  const handleLocalPath = (selection: FolderGrant) => {
+    setLocalSource({ path: selection.path, grant: selection.grant })
   }
 
   const handleImported = (nextProjectId: number, nextJobId: number) => {
@@ -88,7 +93,8 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
   const handleProgressDone = useCallback(() => {
     if (projectId != null) {
       void queryClient.invalidateQueries({ queryKey: ['projects'] })
-      navigate(`/projects/${projectId}/overview`)
+      // The workspace moves focus to its heading and announces the finished analysis.
+      navigate(`/projects/${projectId}/overview`, { state: { analysisFinished: true } })
     }
   }, [navigate, projectId, queryClient])
 
@@ -136,10 +142,11 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
         <>
           {showLocalConfirm && (
             <LocalImportConfirm
-              key={localPath}
+              key={`${localPath}:${localSource?.grant ?? ''}`}
               path={localPath}
+              grant={localSource?.grant}
               onStarted={handleImported}
-              onCancel={() => setLocalPath(null)}
+              onCancel={() => setLocalSource(null)}
             />
           )}
           {!showLocalConfirm && step === 'connect' && (
@@ -166,21 +173,30 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
 /** A supplied path starts no operation until the user requests and approves a preview. */
 function LocalImportConfirm({
   path,
+  grant,
   onStarted,
   onCancel,
 }: {
   path: string
+  grant?: string
   onStarted: (projectId: number, jobId: number) => void
   onCancel: () => void
 }) {
+  const t = useT()
   const [busy, setBusy] = useState(false)
+  const heading = useRef<HTMLHeadingElement>(null)
+  // A chosen folder replaces the source picker; focus would otherwise fall to <body>.
+  useEffect(() => {
+    heading.current?.focus()
+  }, [])
   return (
     <div className="flex max-w-lg flex-col gap-4">
       <div>
-        <h2 className="text-[15px] font-semibold text-ink">로컬 가져오기 확인</h2>
+        <h2 ref={heading} tabIndex={-1} className="text-[15px] font-semibold text-ink">
+          {t('import.localConfirmTitle')}
+        </h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
-          폴더를 확인하고 미리보기를 요청하세요. 가져올 파일을 검토한 뒤 별도로 승인하면 분석을
-          시작합니다.
+          {t('import.localConfirmDesc')}
         </p>
       </div>
 
@@ -190,7 +206,7 @@ function LocalImportConfirm({
       </div>
 
       <LocalSourceApproval
-        source={{ operation: 'INITIAL', path }}
+        source={{ operation: 'INITIAL', path, grant }}
         onStarted={onStarted}
         onBusyChange={setBusy}
       />

@@ -16,7 +16,7 @@ const os = require('node:os');
 const path = require('node:path');
 const tls = require('node:tls');
 const { createRequire } = require('node:module');
-const { execFile, execFileSync, spawnSync } = require('node:child_process');
+const { execFile, execFileSync, spawn, spawnSync } = require('node:child_process');
 const { promisify } = require('node:util');
 const { ensureOutputParent } = require('./owned-output.cjs');
 const { prepareIsolatedRun } = require('../../desktop/src/isolated-run.cjs');
@@ -92,15 +92,69 @@ async function readFuses(repo, app) {
   return { wireVersion: wire.version, state };
 }
 
-function effectiveNodeModes(executable, scratch) {
-  // Demonstrates what the fuse wire permits; each child is the packaged binary in Node mode only.
+const NODE_MODE_TIMEOUT_MS = 20000;
+
+// Starts the packaged binary in its own process group. With RunAsNode off the binary starts as the
+// app instead of Node, so every probe is bounded: after `timeoutMs` only the group this call created
+// (the started child and what it spawned) is killed, and a pipe held open by a survivor cannot keep
+// the probe waiting. The trailing `--isolated-run-claim` names a claim that does not exist, so an app
+// started by a refused Node mode exits at the product's own isolated-run refusal before it opens a
+// profile, the Keychain or its runtime; in Node mode it is only an argument after `--`.
+function boundedNodeProbe(executable, args, { env, cwd, timeoutMs = NODE_MODE_TIMEOUT_MS, spawnChild = spawn } = {}) {
+  return new Promise(resolve => {
+    const started = performance.now();
+    const child = spawnChild(executable, args, { env, cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '', timedOut = false, exit = null, done = false, timer, drain;
+    const finish = error => {
+      if (done) return; done = true; clearTimeout(timer); clearTimeout(drain);
+      child.stdout?.destroy(); child.stderr?.destroy();
+      resolve({ status: exit?.code ?? -1, signal: exit?.signal ?? null, timedOut, error: error ?? null,
+        elapsedMs: Math.round(performance.now() - started), stdout, stderr });
+    };
+    child.stdout?.on('data', bytes => { if (stdout.length < 65536) stdout += bytes; });
+    child.stderr?.on('data', bytes => { if (stderr.length < 65536) stderr += bytes; });
+    child.once('error', error => finish(String(error?.code ?? 'SPAWN_FAILED')));
+    child.once('exit', (code, signal) => { exit = { code, signal }; drain = setTimeout(() => finish(), 2000); });
+    child.once('close', () => finish());
+    timer = setTimeout(() => {
+      timedOut = true;
+      // The group leader is still running here, so its group id cannot name anyone else's processes.
+      try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch { /* already gone */ } }
+    }, timeoutMs);
+  });
+}
+
+async function effectiveNodeModes(executable, scratch, probe = boundedNodeProbe) {
+  // Demonstrates what the fuse wire permits; each child is the packaged binary asked for Node mode.
   const env = { HOME: scratch, PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C', ELECTRON_RUN_AS_NODE: '1' };
-  const runAsNode = run(executable, ['-e', 'process.stdout.write("RUN_AS_NODE:" + process.versions.electron)'], { env, cwd: scratch });
+  const refuseAppMode = ['--', '--isolated-run-claim=' + path.join(scratch, 'absent-claim.json')];
+  const runAsNode = await probe(executable, ['-e', 'process.stdout.write("RUN_AS_NODE:" + process.versions.electron)', ...refuseAppMode],
+    { env, cwd: scratch });
   const marker = path.join(scratch, 'node-options-marker.cjs');
   fs.writeFileSync(marker, 'process.stdout.write("NODE_OPTIONS_REQUIRE_EXECUTED;")\n', { mode: 0o600 });
-  const nodeOptions = run(executable, ['-e', '0'], { env: { ...env, NODE_OPTIONS: `--require ${marker}` }, cwd: scratch });
+  const nodeOptions = await probe(executable, ['-e', '0', ...refuseAppMode], { env: { ...env, NODE_OPTIONS: `--require ${marker}` }, cwd: scratch });
+  const outcome = result => ({ status: result.status, signal: result.signal, timedOut: result.timedOut, error: result.error,
+    elapsedMs: result.elapsedMs, appModeRefused: result.stderr.includes('isolated validation refused') });
   return { runAsNodeHonored: /^RUN_AS_NODE:\d/.test(runAsNode.stdout), runAsNodeElectron: /RUN_AS_NODE:(\S+)/.exec(runAsNode.stdout)?.[1] ?? null,
-    nodeOptionsRequireHonored: nodeOptions.stdout.includes('NODE_OPTIONS_REQUIRE_EXECUTED') };
+    nodeOptionsRequireHonored: nodeOptions.stdout.includes('NODE_OPTIONS_REQUIRE_EXECUTED'),
+    probes: { runAsNode: outcome(runAsNode), nodeOptions: outcome(nodeOptions) } };
+}
+
+// With RunAsNode off (ADR-01 modes) the -e script must not run; NODE_OPTIONS must never be honored.
+// A probe that could not start, or ran out its bound without the binary refusing, is not evidence either way.
+function nodeModeFailures(modes, metadata) {
+  if (!modes) return ['NODE_MODES_NOT_PROBED'];
+  const { fusesFor, VALIDATION_APP_ID } = require('../../desktop/scripts/electron-fuses.cjs');
+  const expected = fusesFor(VALIDATION_APP_ID, metadata), failures = [];
+  for (const [name, probe] of Object.entries(modes.probes ?? {})) {
+    if (probe.error) failures.push(`NODE_MODE_${name}_PROBE_ERROR`);
+  }
+  if (modes.runAsNodeHonored !== expected.runAsNode) failures.push(expected.runAsNode ? 'RUN_AS_NODE_NOT_HONORED' : 'RUN_AS_NODE_HONORED');
+  if (!expected.runAsNode && !modes.runAsNodeHonored && !modes.probes?.runAsNode?.appModeRefused) failures.push('RUN_AS_NODE_REFUSAL_UNOBSERVED');
+  if (modes.nodeOptionsRequireHonored !== expected.enableNodeOptionsEnvironmentVariable) {
+    failures.push(expected.enableNodeOptionsEnvironmentVariable ? 'NODE_OPTIONS_REQUIRE_NOT_HONORED' : 'NODE_OPTIONS_REQUIRE_HONORED');
+  }
+  return failures;
 }
 
 async function processTree(rootPid) {
@@ -223,6 +277,37 @@ function plaintextSecretScan(root, secrets, extraTexts) {
   return { scannedFiles, scannedBytes, skippedLarge, hits };
 }
 
+// SEC-M-01 expectations for the renderer record: a strict CSP is delivered and every renderer
+// attack (inline script, eval, cross-origin fetch/img to the probe listener) was blocked.
+function rendererCspFailures(renderer) {
+  if (!renderer) return ['RENDERER_NOT_PROBED'];
+  const failures = [];
+  const directives = new Map(String(renderer.documentCsp ?? '').split(';').map(entry => entry.trim().split(/\s+/))
+    .filter(([name]) => name).map(([name, ...values]) => [name.toLowerCase(), values]));
+  const only = (name, value) => { const values = directives.get(name) ?? directives.get('default-src'); return values?.length === 1 && values[0] === value; };
+  if (!renderer.documentCsp) failures.push('DOCUMENT_CSP_MISSING');
+  else {
+    if (!only('script-src', "'self'")) failures.push('SCRIPT_SRC_NOT_SELF_ONLY');
+    if (!only('connect-src', "'self'")) failures.push('CONNECT_SRC_NOT_SELF_ONLY');
+    if (!only('object-src', "'none'")) failures.push('OBJECT_SRC_NOT_NONE');
+  }
+  if (renderer.injectedInlineScriptRan !== false) failures.push('INLINE_SCRIPT_RAN');
+  if (renderer.evalAllowed !== false) failures.push('EVAL_ALLOWED');
+  if (renderer.crossOriginFetch !== 'blocked') failures.push('CROSS_ORIGIN_FETCH_SENT');
+  if ((renderer.listenerReceived ?? []).some(item => /^\/renderer-(fetch|image)/.test(item.path))) failures.push('RENDERER_REQUEST_REACHED_LISTENER');
+  return failures;
+}
+
+// SEC-M-04 expectations: the wire must equal what desktop/scripts/electron-fuses.cjs flips for a
+// validation build of this package metadata (validation keeps --inspect for Playwright only).
+function fuseFailures(state, metadata) {
+  if (!state) return ['FUSES_NOT_READ'];
+  const { fusesFor, VALIDATION_APP_ID } = require('../../desktop/scripts/electron-fuses.cjs');
+  return Object.entries(fusesFor(VALIDATION_APP_ID, metadata))
+    .map(([name, enabled]) => [name[0].toUpperCase() + name.slice(1), enabled ? 'ENABLE' : 'DISABLE'])
+    .filter(([name, expected]) => state[name] !== expected).map(([name]) => `FUSE_${name}_${state[name] ?? 'MISSING'}`);
+}
+
 async function main(argv = process.argv.slice(2)) {
   const options = argumentsFor(argv);
   assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64'); process.umask(0o077);
@@ -242,7 +327,14 @@ async function main(argv = process.argv.slice(2)) {
   try {
     report.checks.static = staticInspection(repo, app, runtime);
     report.checks.fuses = await readFuses(repo, app);
-    report.checks.effectiveNodeModes = effectiveNodeModes(report.checks.static.executable, scratch);
+    const appMetadata = JSON.parse(createRequire(path.join(repo, 'desktop/package.json'))('@electron/asar')
+      .extractFile(path.join(app, 'Contents/Resources/app.asar'), 'package.json'));
+    const failedFuses = fuseFailures(report.checks.fuses.state, appMetadata);
+    report.expectations = { fuses: { status: failedFuses.length ? 'FAIL' : 'PASS', failures: failedFuses,
+      adapterIsolation: appMetadata.adapterIsolation ?? 'legacy-http' } };
+    report.checks.effectiveNodeModes = await effectiveNodeModes(report.checks.static.executable, scratch);
+    const nodeFailures = nodeModeFailures(report.checks.effectiveNodeModes, appMetadata);
+    report.expectations.nodeModes = { status: nodeFailures.length ? 'FAIL' : 'PASS', failures: nodeFailures };
     delete report.checks.static.executable; save();
   } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
 
@@ -329,6 +421,8 @@ async function main(argv = process.argv.slice(2)) {
     await new Promise(resolve => setTimeout(resolve, 500));
     report.checks.renderer.listenerReceived = exfil.map(item => ({ method: item.method, path: item.path,
       tokenHeaderPresent: item.tokenHeaderPresent, originHeader: item.originHeader }));
+    const cspFailures = rendererCspFailures(report.checks.renderer);
+    report.expectations = { ...report.expectations, rendererCsp: { status: cspFailures.length ? 'FAIL' : 'PASS', failures: cspFailures } };
     save();
 
     const ownerPid = owner.process().pid;
@@ -403,10 +497,11 @@ async function main(argv = process.argv.slice(2)) {
     report.status = report.failure || report.cleanupFailure || report.scanFailure ? 'INCOMPLETE' : 'COMPLETE';
     report.finishedAt = new Date().toISOString(); save();
   }
-  console.log(JSON.stringify({ status: report.status, evidence }));
+  console.log(JSON.stringify({ status: report.status, expectations: report.expectations ?? null, evidence }));
   if (report.status !== 'COMPLETE') process.exitCode = 1;
   return report;
 }
 
-module.exports = { argumentsFor, plistKeys, walkModes, plaintextSecretScan };
+module.exports = { argumentsFor, plistKeys, walkModes, plaintextSecretScan, rendererCspFailures, fuseFailures, boundedNodeProbe,
+  effectiveNodeModes, nodeModeFailures };
 if (require.main === module) main().catch(error => { console.error('SECURITY_PROBE_PREFLIGHT_FAILED', String(error?.message ?? '').slice(0, 160)); process.exitCode = 1; });

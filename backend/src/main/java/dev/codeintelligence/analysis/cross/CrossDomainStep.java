@@ -8,6 +8,7 @@ import dev.codeintelligence.analysis.core.GraphEdgeType;
 import dev.codeintelligence.analysis.core.NaturalKeys;
 import dev.codeintelligence.analysis.graph.GraphPersistenceService;
 import dev.codeintelligence.evidence.EvidenceKind;
+import dev.codeintelligence.job.JobCancellation;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import java.util.ArrayList;
@@ -46,6 +47,7 @@ public class CrossDomainStep implements JobStep {
     public void run(JobContext ctx) {
         long snapshotId =
                 ctx.snapshotId().orElseThrow(() -> new IllegalStateException("no snapshot attached to the job"));
+        refreshPlannerStatistics();
         ctx.updateProgress(15);
         List<GraphEdgeDraft> edges = new ArrayList<>();
         List<AnalyzerEvidence> evidences = new ArrayList<>();
@@ -56,6 +58,17 @@ public class CrossDomainStep implements JobStep {
         linkReadsWrites(snapshotId, edges);
         persistence.persist(ctx.projectId(), snapshotId, new AnalysisResult(List.of(), edges, evidences));
         ctx.updateProgress(100);
+    }
+
+    /**
+     * The parsing steps bulk-insert this snapshot's graph. Once autovacuum has analyzed an earlier
+     * snapshot, the planner estimates the new snapshot at one row and nests full-snapshot scans in
+     * the joins below (a refresh spent 644–663 s here instead of 36 ms, G-PERF finding 5). ANALYZE
+     * samples a bounded number of rows, so its cost does not grow with the project.
+     */
+    private void refreshPlannerStatistics() {
+        jdbc.sql("analyze graph_nodes, graph_edges, frontend_routes, api_endpoints, db_entities, files")
+                .update();
     }
 
     private void linkConsumes(long snapshotId, List<GraphEdgeDraft> edges, List<AnalyzerEvidence> evidences) {
@@ -82,6 +95,7 @@ public class CrossDomainStep implements JobStep {
                                 rs.getObject("line_start")))
                 .list();
         for (Caller caller : callers) {
+            JobCancellation.checkpoint();
             for (ApiCall call : parseCalls(caller.metadataJson())) {
                 Match best = null;
                 for (Endpoint endpoint : endpoints) {
@@ -125,6 +139,7 @@ public class CrossDomainStep implements JobStep {
         // Propagate only through the selected snapshot's unique structural edge.
         // The display/import alias in component_key is not a global component ID.
         for (Route route : routes) {
+            JobCancellation.checkpoint();
             for (GraphEdgeDraft edge : List.copyOf(edges)) {
                 if (GraphEdgeType.CONSUMES.name().equals(edge.edgeType())
                         && route.componentKey().equals(edge.sourceNaturalKey())) {

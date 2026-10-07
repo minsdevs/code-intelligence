@@ -1,6 +1,7 @@
 package dev.codeintelligence.project;
 
 import dev.codeintelligence.common.SourceAccess;
+import dev.codeintelligence.job.JobCancellation;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -168,6 +169,7 @@ final class LocalStagingVerifier {
     }
 
     private void check() {
+        JobCancellation.checkpoint();
         if (Thread.currentThread().isInterrupted() || clock.getAsLong() - started - consumerNanos > limits.nanos())
             throw changed();
     }

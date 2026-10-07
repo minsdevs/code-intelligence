@@ -183,7 +183,8 @@ public class PlaygroundService {
         ContextRetrievalService.Retrieved retrieved =
                 retrieval.retrieve(userId, projectId, snapshotId, project.getClonePath(), ctx, question);
         String extra = extraContext(paths, snippet);
-        String userPrompt = SecretMask.redact(PromptBuilder.user(question, retrieved.text() + "\n" + extra));
+        String userPrompt =
+                PersonalDataMask.mask(SecretMask.redact(PromptBuilder.user(question, retrieved.text() + "\n" + extra)));
         AIProvider.ChatResponse raw = usage.chat(
                 userId, projectId, provider, "playground", new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
         AIProvider.ChatResponse validated = validator.validate(projectId, snapshotId, raw);

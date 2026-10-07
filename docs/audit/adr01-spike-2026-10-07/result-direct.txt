@@ -1,0 +1,6 @@
+plain electron-node direct: exit=0 node ran unsandboxed, home entries=158
+plain java direct: exit=0 openjdk version "21.0.12" 2026-07-21 LTS
+./direct.sh: line 4:  5603 Trace/BPT trap: 5       env -i HOME="$HOME" PATH=/usr/bin:/bin ELECTRON_RUN_AS_NODE=1 "$X/MacOS/Code Intelligence Validation" -e 'console.log("node ran unsandboxed, home entries=" + require("fs").readdirSync(require("os").homedir()).length)' > "$HERE/direct-$V.out" 2>&1
+inherit electron-node direct: exit=133 
+./direct.sh: line 4:  5607 Trace/BPT trap: 5       "$X/Resources/runtime/jre/bin/java" -version > "$HERE/direct-java-$V.out" 2>&1
+inherit java direct: exit=133 

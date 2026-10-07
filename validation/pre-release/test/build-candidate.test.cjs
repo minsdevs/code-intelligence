@@ -3,7 +3,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const crypto = require('node:crypto');
-const { argumentsForCandidate, replaceAnalyzerBuild, replaceAnalyzerRuntime } = require('../build-candidate.cjs');
+const { VALIDATION_AI_PROVIDER_ORIGIN, argumentsForCandidate, candidatePackagerConfig, replaceAnalyzerBuild,
+  replaceAnalyzerRuntime, replaceBackupMigrations, stageAdapterSupervisor, SOURCE_COPY_INPUTS } = require('../build-candidate.cjs');
+const { validationProviderTarget } = require('../../../desktop/src/ai-https-transport.cjs');
+const { requireValidationOnlyProviderVariant } = require('../../../desktop/scripts/desktop-build-gate.cjs');
 const sha = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 test('candidate argument parsing requires an explicit absolute bundle and ordered build identity', () => {
@@ -16,6 +19,19 @@ test('candidate argument parsing requires an explicit absolute bundle and ordere
     ['--app', '/app', '--build-sequence', '1', '--overwrite'], ['--app', '/app', '--guess', '1']]) {
     assert.throws(() => argumentsForCandidate(args));
   }
+});
+
+test('candidate packaging is the validation identity carrying the loopback fake-provider variant (PK-08)', () => {
+  const desktopPackage = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../desktop/package.json')));
+  const config = candidatePackagerConfig(desktopPackage.build, '/synthetic/out', '/synthetic/desktop');
+  assert.equal(config.appId, 'dev.codeintelligence.desktop.validation');
+  assert.deepEqual(config.extraMetadata, { name: 'code-intelligence-validation', productName: 'Code Intelligence Validation',
+    validationAiProviderOrigin: VALIDATION_AI_PROVIDER_ORIGIN });
+  assert.deepEqual(validationProviderTarget({ ...desktopPackage, ...config.extraMetadata }), { hostname: '127.0.0.1', family: 4, port: 47613 });
+  assert.deepEqual(requireValidationOnlyProviderVariant({ targets: [{ name: 'dir' }],
+    packager: { appInfo: { id: config.appId }, info: { metadata: desktopPackage }, config } }), { hostname: '127.0.0.1', family: 4, port: 47613 });
+  // The release configuration of the same package has no variant.
+  assert.equal(validationProviderTarget(desktopPackage), null);
 });
 
 function fixture(t) {
@@ -177,4 +193,127 @@ test('rollback never overwrites a target that appears after the second analyzer 
   assert.deepEqual(fs.readdirSync(f.target), []);
   assert.equal(fs.readFileSync(path.join(f.root, 'previous-analyzer-runtime/dist/stale.js'), 'utf8'), 'old');
   assert.equal(fs.existsSync(path.join(f.root, 'prepared-analyzer-runtime')), true);
+});
+
+test('xpc-required is an explicit, exact build option; the default stays legacy-http', () => {
+  assert.deepEqual(argumentsForCandidate(['--app', '/synthetic/app', '--build-sequence', '7', '--adapter-isolation', 'xpc-required']),
+    { app: '/synthetic/app', buildSequence: '7', adapterIsolation: 'xpc-required' });
+  assert.equal(argumentsForCandidate(['--app', '/synthetic/app', '--build-sequence', '7']).adapterIsolation, undefined);
+  for (const extra of [['--adapter-isolation', 'legacy-http'], ['--adapter-isolation', 'XPC-REQUIRED'], ['--adapter', 'xpc-required'],
+    ['--adapter-isolation'], ['--adapter-isolation', 'xpc-required', '--again']]) {
+    assert.throws(() => argumentsForCandidate(['--app', '/synthetic/app', '--build-sequence', '7', ...extra]), undefined, extra.join(' '));
+  }
+});
+
+function supervisorFixture(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-adapter-candidate-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.chmodSync(root, 0o700);
+  const desktop = path.join(root, 'desktop'), runtime = path.join(desktop, 'stage/runtime');
+  for (const file of ['ts-analyzer/dist/stdio.js', 'ts-analyzer/package.json', 'ts-analyzer/node_modules/x/index.js', 'jre/bin/java']) {
+    fs.mkdirSync(path.dirname(path.join(runtime, file)), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(runtime, file), file);
+  }
+  const files = Object.fromEntries(['ts-analyzer/dist/stdio.js', 'ts-analyzer/package.json', 'ts-analyzer/node_modules/x/index.js', 'jre/bin/java']
+    .map(file => [file, sha(path.join(runtime, file))]));
+  const calls = [];
+  const supervisor = {
+    compile(output) { calls.push(['compile', output]); fs.mkdirSync(output); return output; },
+    async assembleService(options) {
+      calls.push(['assemble', options]);
+      const bundle = path.join(options.destination, 'AdapterSupervisor.xpc');
+      fs.mkdirSync(path.join(bundle, 'Contents/Resources'), { recursive: true });
+      fs.cpSync(options.analyzer, path.join(bundle, 'Contents/Resources/ts-analyzer'), { recursive: true });
+      return bundle;
+    },
+  };
+  const plan = { workRoot: root, assertIdentity() { assert.equal(fs.realpathSync(root), root); } };
+  return { root, desktop, runtime, manifest: { format: 1, files }, calls, supervisor, plan };
+}
+
+test('the xpc-required stage moves the analyzer into the supervisor service and out of the runtime manifest', async t => {
+  const f = supervisorFixture(t);
+  const result = await stageAdapterSupervisor({ plan: f.plan, runtime: f.runtime, desktop: f.desktop, manifest: f.manifest,
+    appId: 'dev.codeintelligence.desktop.validation', version: '0.1.0', supervisor: f.supervisor });
+  const destination = path.join(f.desktop, 'stage/adapter-supervisor');
+  assert.deepEqual(f.calls.map(([name]) => name), ['compile', 'assemble']);
+  assert.deepEqual(f.calls[1][1], { destination, binaries: path.join(destination, 'bin'), analyzer: path.join(f.runtime, 'ts-analyzer'),
+    appId: 'dev.codeintelligence.desktop.validation', version: '0.1.0', electronApp: path.join(f.desktop, 'node_modules/electron/dist/Electron.app') });
+  assert.deepEqual(Object.keys(result.manifest.files), ['jre/bin/java']);
+  assert.equal(result.manifest.format, 1);
+  assert.equal(fs.existsSync(path.join(f.runtime, 'ts-analyzer')), false);
+  assert.equal(fs.readFileSync(path.join(destination, 'AdapterSupervisor.xpc/Contents/Resources/ts-analyzer/dist/stdio.js'), 'utf8'), 'ts-analyzer/dist/stdio.js');
+  assert.deepEqual([result.evidence.adapterIsolation, result.evidence.runtimeFilesRemoved], ['xpc-required', 3]);
+  assert.equal(f.manifest.files['ts-analyzer/dist/stdio.js'] !== undefined, true, 'the input manifest is not mutated');
+});
+
+test('the xpc-required stage refuses a reused stage, a changed analyzer copy or a manifest that disagrees with the analyzer', async t => {
+  const reused = supervisorFixture(t);
+  fs.mkdirSync(path.join(reused.desktop, 'stage/adapter-supervisor'));
+  await assert.rejects(stageAdapterSupervisor({ ...reused, appId: 'a', version: '1' }), /ADAPTER_SUPERVISOR_STAGE_EXISTS/);
+  const changed = supervisorFixture(t);
+  const assemble = changed.supervisor.assembleService;
+  changed.supervisor.assembleService = async options => {
+    const bundle = await assemble(options); fs.writeFileSync(path.join(bundle, 'Contents/Resources/ts-analyzer/dist/stdio.js'), 'changed'); return bundle;
+  };
+  await assert.rejects(stageAdapterSupervisor({ ...changed, appId: 'a', version: '1' }), /ADAPTER_SUPERVISOR_ANALYZER_COPY_CHANGED/);
+  assert.ok(fs.existsSync(path.join(changed.runtime, 'ts-analyzer')), 'the runtime analyzer stays until the copy is proven');
+  const drift = supervisorFixture(t);
+  delete drift.manifest.files['ts-analyzer/package.json'];
+  await assert.rejects(stageAdapterSupervisor({ ...drift, appId: 'a', version: '1' }), /ADAPTER_SUPERVISOR_ANALYZER_INVENTORY/);
+  assert.ok(fs.existsSync(path.join(drift.runtime, 'ts-analyzer')));
+});
+
+
+function migrationFixture(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-migration-stage-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.chmodSync(root, 0o700);
+  const runtime = path.join(root, 'runtime'), staged = path.join(runtime, 'backend/backup-migrations'), source = path.join(root, 'source');
+  fs.mkdirSync(staged, { recursive: true, mode: 0o700 }); fs.mkdirSync(source, { mode: 0o700 });
+  const files = {};
+  for (const [name, body] of [['V1__init.sql', 'create table a(id int);'], ['V2__more.sql', 'create table b(id int);']]) {
+    for (const directory of [staged, source]) fs.writeFileSync(path.join(directory, name), body, { mode: 0o644 });
+    files['backend/backup-migrations/' + name] = sha(path.join(staged, name));
+  }
+  const manifest = { files: { ...files, 'jre/bin/java': 'retained-native-hash' } };
+  return { root, runtime, staged, source, manifest, plan: { workRoot: root, assertIdentity() { assert.equal(fs.realpathSync(root), root); } } };
+}
+
+test('a reused runtime gains newly added Flyway migrations with exact hashes; reviewed ones never change', t => {
+  const f = migrationFixture(t);
+  fs.writeFileSync(path.join(f.source, 'V3__indexes.sql'), 'create index i on a(id);');
+  fs.writeFileSync(path.join(f.source, 'V4__scope.sql'), 'alter table b add column s text;');
+  const result = replaceBackupMigrations(f.plan, f.runtime, f.source, f.manifest);
+  assert.deepEqual(result.evidence.added, ['V3__indexes.sql', 'V4__scope.sql']);
+  for (const name of ['V1__init.sql', 'V2__more.sql', 'V3__indexes.sql', 'V4__scope.sql']) {
+    assert.equal(sha(path.join(f.staged, name)), sha(path.join(f.source, name)));
+    assert.equal(result.manifest.files['backend/backup-migrations/' + name], sha(path.join(f.source, name)));
+  }
+  assert.equal(result.manifest.files['jre/bin/java'], 'retained-native-hash');
+  // Nothing new: unchanged manifest, nothing added.
+  const again = migrationFixture(t);
+  assert.deepEqual(replaceBackupMigrations(again.plan, again.runtime, again.source, again.manifest),
+    { manifest: again.manifest, evidence: { added: [] } });
+});
+
+test('a reused runtime refuses changed, removed or out-of-order migrations', t => {
+  const changed = migrationFixture(t); fs.writeFileSync(path.join(changed.source, 'V2__more.sql'), 'edited');
+  assert.throws(() => replaceBackupMigrations(changed.plan, changed.runtime, changed.source, changed.manifest), /BACKUP_MIGRATION_CHANGED/);
+  const removed = migrationFixture(t); fs.rmSync(path.join(removed.source, 'V1__init.sql'));
+  assert.throws(() => replaceBackupMigrations(removed.plan, removed.runtime, removed.source, removed.manifest), /BACKUP_MIGRATION_CHANGED/);
+  const early = migrationFixture(t); fs.writeFileSync(path.join(early.source, 'V2__other.sql'), 'x');
+  assert.throws(() => replaceBackupMigrations(early.plan, early.runtime, early.source, early.manifest), /BACKUP_MIGRATION_ORDER/);
+  const odd = migrationFixture(t); fs.writeFileSync(path.join(odd.source, 'notes.txt'), 'x');
+  assert.throws(() => replaceBackupMigrations(odd.plan, odd.runtime, odd.source, odd.manifest), /BACKUP_MIGRATION_NAME/);
+});
+
+test('the copied desktop carries every source the packaging hooks read, including the adapter supervisor', () => {
+  const desktop = Object.fromEntries(SOURCE_COPY_INPUTS)['desktop'];
+  const repoDesktop = path.join(__dirname, '../../../desktop');
+  // afterPack/sign hooks run from the copied desktop and resolve desktop/native/adapter-supervisor beside scripts/.
+  const hook = fs.readFileSync(path.join(repoDesktop, 'scripts/adapter-supervisor.cjs'), 'utf8');
+  assert.match(hook, /path\.join\(__dirname, '\.\.', 'native', 'adapter-supervisor'\)/);
+  assert.ok(fs.existsSync(path.join(repoDesktop, 'native/adapter-supervisor/entitlements/worker-adhoc.plist')));
+  assert.ok(desktop.includes('native'), 'desktop/native must be copied into the candidate work tree');
 });

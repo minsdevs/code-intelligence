@@ -314,6 +314,7 @@ function JobProgress({
   const needsSourceFix = retryNeedsSourceFix || job?.failureCode === 'TS_SYNTAX_ERROR'
   const needsNewAnalysis = retryNeedsNewAnalysis || job?.failureCode === 'RETRY_SOURCE_UNVERIFIED'
   const needsGithubLogin = job?.failureCode === 'GITHUB_REAUTHENTICATION_REQUIRED'
+  const isolationUnavailable = job?.failureCode === 'ADAPTER_ISOLATION_UNAVAILABLE'
 
   return (
     <div className="flex max-w-xl flex-col gap-4">
@@ -367,7 +368,7 @@ function JobProgress({
         <div role="alert" className="rounded-md border border-danger/40 bg-surface-1 px-3 py-2.5">
           <p className="text-[13px] text-danger">
             {needsPreview
-              ? '승인한 원본을 사용할 수 없어 분석을 중단했습니다. 기존 프로젝트에서 새 미리보기를 확인한 뒤 다시 승인하세요.'
+              ? t('progress.previewRequired')
               : (error ?? job?.error ?? t('progress.failed'))}
           </p>
           {job?.status === 'FAILED' &&
@@ -378,14 +379,14 @@ function JobProgress({
                 className="mt-2 rounded-md border border-line-strong px-3 py-1.5 text-[13px]"
                 onClick={() => onSourcePreviewRequired(job.projectId)}
               >
-                기존 프로젝트에서 새 미리보기
+                {t('progress.newPreview')}
               </button>
             ) : (
               <Link
                 className="mt-2 inline-block text-[13px] underline"
                 to={`/projects/${job.projectId}`}
               >
-                기존 프로젝트에서 새 미리보기
+                {t('progress.newPreview')}
               </Link>
             ))}
           {job?.status === 'FAILED' && needsSourceFix && (
@@ -398,6 +399,9 @@ function JobProgress({
                 {t('progress.backToProject')}
               </Link>
             </>
+          )}
+          {job?.status === 'FAILED' && isolationUnavailable && (
+            <p className="mt-2 text-[13px] text-ink-muted">{t('progress.isolationUnavailable')}</p>
           )}
           {job?.status === 'FAILED' && needsNewAnalysis && (
             <p className="mt-2 text-[13px] text-ink-muted">{t('analysis.checkpointChanged')}</p>

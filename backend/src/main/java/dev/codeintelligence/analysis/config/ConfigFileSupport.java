@@ -47,6 +47,22 @@ final class ConfigFileSupport {
         return stripped;
     }
 
+    /**
+     * Number of the line holding the last character: LF, CRLF and a lone CR end a line, and a final terminator does not
+     * open another one. An empty file still spans line 1.
+     */
+    static int lineCount(String text) {
+        int lines = 1;
+        int last = text.length() - 1;
+        for (int i = 0; i < last; i++) {
+            char c = text.charAt(i);
+            if (c == '\n' || (c == '\r' && text.charAt(i + 1) != '\n')) {
+                lines++;
+            }
+        }
+        return lines;
+    }
+
     static int lineOf(String text, String token) {
         if (text == null || token == null || token.isBlank()) {
             return 1;

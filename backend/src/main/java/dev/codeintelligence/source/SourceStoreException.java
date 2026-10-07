@@ -21,11 +21,11 @@ public final class SourceStoreException extends RuntimeException {
         return new SourceStoreException("SOURCE_STORE_INVALID_REQUEST");
     }
 
-    static SourceStoreException unavailable() {
+    public static SourceStoreException unavailable() {
         return new SourceStoreException("SOURCE_STORE_UNAVAILABLE");
     }
 
-    static SourceStoreException integrity() {
+    public static SourceStoreException integrity() {
         return new SourceStoreException("SOURCE_STORE_INTEGRITY");
     }
 }

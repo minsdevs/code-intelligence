@@ -1,0 +1,37 @@
+== spike host
+== supervisor
+{"pid":99970,"sandboxed":1}
+== java
+{"worker":"java 21.0.12","lines":3,"identifiers":15,"userHome":"DENIED(FileSystemException)","userDirHome":"/Users/minseokchae","tcp":"DENIED(Operation not permitted)"}
+ [exit=0 signal=0]
+== node
+node:internal/modules/cjs/loader:1575
+  throw err;
+  ^
+
+Error: Cannot find module '/Users/minseokchae/Dev/ciw/isolation/validation/local/adr01-spike/out-plain/Spike.app/Contents/XPCServices/Supervisor.xpc/Contents/Resources/runtime/ts-analyzer/node_modules/typescript'
+Require stack:
+- /Users/minseokchae/Dev/ciw/isolation/validation/local/adr01-spike/out-plain/Spike.app/Contents/XPCServices/Supervisor.xpc/Contents/Resources/spike/node-analyze.cjs
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1571:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1125:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1149:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1176:12)
+    at Module._load (node:internal/modules/cjs/loader:1348:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)
+    at Module.require (node:internal/modules/cjs/loader:1681:12)
+    at require (node:internal/modules/helpers:157:16)
+    at Object.<anonymous> (/Users/minseokchae/Dev/ciw/isolation/validation/local/adr01-spike/out-plain/Spike.app/Contents/XPCServices/Supervisor.xpc/Contents/Resources/spike/node-analyze.cjs:7:12)
+    at Module._compile (node:internal/modules/cjs/loader:1937:14) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/Users/minseokchae/Dev/ciw/isolation/validation/local/adr01-spike/out-plain/Spike.app/Contents/XPCServices/Supervisor.xpc/Contents/Resources/spike/node-analyze.cjs'
+  ]
+}
+
+Node.js v24.21.0
+ [exit=1 signal=0]
+== probe
+{"label":"supervisor-child","pid":99985,"sandboxed":1,"readOutsideFile":"DENIED(Operation not permitted)","createOutsideFile":"DENIED(Operation not permitted)","tcpConnectLoopback":"DENIED(Operation not permitted)","tcpListenLoopback":"DENIED(Operation not permitted)","udpSendLoopback":"DENIED(Operation not permitted)","dnsResolve":"nodename nor servname provided, or not known"}
+ [exit=0 signal=0]
+host exit 0
+listener after sandboxed run:    1     1     1 Accept: */*    1 Connection: close    1 Host: localhost:58812    1 tcp:<no-payload>    1 tcp:GET / HTTP/1.1    1 User-Agent: dev-cockpit 

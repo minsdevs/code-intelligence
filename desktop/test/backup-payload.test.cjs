@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { createBackupPayload, readBackupPayload, inspectBackupPayload, BackupPayloadError, LIMITS } = require('../src/backup-payload.cjs');
-const { createBackupExportPolicy, createBackupRestorePolicy, REVIEWED_SCHEMA, REVIEWED_V26_SCHEMA } = require('../src/backup-export-policy.cjs');
+const { createBackupExportPolicy, createBackupRestorePolicy, REVIEWED_SCHEMA, REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA } = require('../src/backup-export-policy.cjs');
 
 // Independent framing/digest oracles. No SQL, JGit process, provider or OS key storage is used.
 const POLICY = createBackupExportPolicy(REVIEWED_SCHEMA);
@@ -557,4 +557,29 @@ test('legacy reader rejects forged migration, partial outcome columns, hybrid ta
     await f.raw(footer(records)); await rejects(f.read()); }
   const f = await fixture(t); const records = footer(legacyRecords([user(), row])); records.at(-1).recordsSha256 = 'b'.repeat(64);
   await f.raw(records); await rejects(f.read(), 'INTEGRITY');
+});
+
+function v27Records(rows) {
+  const database = summary(rows); database.schema = clone(REVIEWED_V27_SCHEMA);
+  return [header(), ...rows.map(row => ({ kind: 'ROW', row })), { kind: 'DATABASE', summary: database }];
+}
+test('reader accepts an exact V27 archive with unchanged rows while the writer stays V29-only', async t => {
+  const file = POLICY.projectRow('files', { id: '5', snapshot_id: '3', path: 'main.ts', language: 'typescript', size: '5',
+    line_count: 1, content_hash: 'a'.repeat(64), analysis_status: 'SUCCESS', analysis_reason: null, analysis_targeted: true });
+  const f = await fixture(t); const records = footer(v27Records([user(), file])); await f.raw(records);
+  assert.deepEqual(await f.read(), records);
+  const writeFixture = await fixture(t); const writer = await writeFixture.create(); await writer.writeRow(user());
+  await rejects(writer.writeDatabase(v27Records([user()]).at(-1).summary), 'SUMMARY');
+  const v26File = createBackupRestorePolicy(REVIEWED_V26_SCHEMA).projectRow('files', {
+    id: '5', snapshot_id: '3', path: 'main.ts', language: null, size: '5', line_count: null, content_hash: 'a'.repeat(64),
+  });
+  const cases = [records => { records.at(-1).summary.schema.migrations.push(clone(REVIEWED_SCHEMA.migrations[27])); },
+    records => { records.at(-1).summary.schema.migrations[26].sha256 = 'b'.repeat(64); },
+    records => { records.at(-1).summary.schema.tables = clone(REVIEWED_SCHEMA.tables); },
+    records => { records.at(-1).summary.schema.migrations.push({ version: 28, filename: 'V28__synthetic_future.sql', sha256: 'f'.repeat(64) }); }];
+  for (const mutate of cases) {
+    const g = await fixture(t); const mutated = clone(v27Records([user(), file])); mutate(mutated);
+    await g.raw(footer(mutated)); await rejects(g.read(), 'SUMMARY');
+  }
+  const hybrid = await fixture(t); await hybrid.raw(footer(v27Records([user(), v26File]))); await rejects(hybrid.read(), 'SUMMARY');
 });

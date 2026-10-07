@@ -21,6 +21,8 @@ const { validateLocalEnvironment, requireExecutionContext, productPaths, claimEx
 const { closeValidatedApplication, createDeadline, observeStartup } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { treeDigest, readFixture, convertFixture, writeBundle, compareDumps, apiProjection, sha256 } = require('./accuracy-observations.cjs');
 const { evaluate } = require('./accuracy-export.cjs');
+const { expectedServices } = require('./adapter-mode.cjs');
+const { withDropConfirmation } = require('./drop-confirmation.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const PRODUCT_PATHS = ['backend/src/main', 'backend/build.gradle.kts', 'analyzers/ts-analyzer/src', 'analyzers/ts-analyzer/package.json',
   'analyzers/ts-analyzer/package-lock.json', 'analyzers/tree-analyzer/src', 'desktop/src', 'desktop/package.json', 'frontend/src'];
@@ -142,7 +144,7 @@ async function main(argv = process.argv.slice(2)) {
     const status = await perform(() => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()));
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null);
     assert.equal(status.aiOff, true, 'Provider egress must remain disabled');
-    assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
+    assert.deepEqual([...status.services].sort(), expectedServices(app));
     report.checks.push('packaged-services-ready-ai-off');
     // Batched GETs through the renderer's own API authority (token header; no CSRF needed for GET).
     const get = routes => perform(() => page.evaluate(async routes => {
@@ -166,21 +168,26 @@ async function main(argv = process.argv.slice(2)) {
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
     await perform(() => expect(picker).toBeVisible());
     const bounds = await perform(() => picker.boundingBox()); assert(bounds);
-    const cdp = await perform(() => page.context().newCDPSession(page));
-    try {
-      const data = { items: [], files: [folder], dragOperationsMask: 1 };
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await perform(() => cdp.send('Input.dispatchDragEvent', {
-        type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data }));
-    } finally { await perform(() => cdp.detach()).catch(() => {}); }
-    const [previewResponse] = await perform(() => Promise.all([
-      page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local/preview' && response.request().method() === 'POST', { timeout: deadline.limit() }),
-      page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click()]));
+    // SEC-M-02: main grants the drop only after its native confirmation; answered once and verified.
+    const { result: previewResponse, confirmation } = await withDropConfirmation(application, folder, async () => {
+      const cdp = await perform(() => page.context().newCDPSession(page));
+      try {
+        const data = { items: [], files: [folder], dragOperationsMask: 1 };
+        for (const type of ['dragEnter', 'dragOver', 'drop']) await perform(() => cdp.send('Input.dispatchDragEvent', {
+          type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data }));
+      } finally { await perform(() => cdp.detach()).catch(() => {}); }
+      const [response] = await perform(() => Promise.all([
+        page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local/preview' && response.request().method() === 'POST', { timeout: deadline.limit() }),
+        page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).click()]));
+      return response;
+    });
+    report.dropConfirmation = confirmation; save();
     assert(previewResponse.ok(), 'IMPORT_PREVIEW_FAILED');
     report.localImport = (await perform(() => previewResponse.json())).localImport ?? null;
-    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
+    await perform(() => expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible());
     const [created] = await perform(() => Promise.all([
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local' && response.request().method() === 'POST', { timeout: deadline.limit() }),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click()]));
+      page.getByRole('button', { name: /^(Import and analyze the reviewed files|확인한 파일 가져오기 및 분석)$/ }).click()]));
     assert(created.ok(), 'IMPORT_CREATE_FAILED');
     const createdBody = await perform(() => created.json());
     const projectId = createdBody.project.id, jobId = createdBody.jobId;

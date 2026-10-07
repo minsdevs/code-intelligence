@@ -139,6 +139,16 @@ const MIGRATIONS = [
     "version": 27,
     "filename": "V27__file_analysis_outcomes.sql",
     "sha256": "451d6875544abfcb2d2b8b613741e3faed2fb5b762ed25d95421fd3f014fae5c"
+  },
+  {
+    "version": 28,
+    "filename": "V28__foreign_key_lookup_indexes.sql",
+    "sha256": "88dd245aa6cb0f1cd9cee18e3620d127b0afdbe44dc62c50a4390c2f971cb2db"
+  },
+  {
+    "version": 29,
+    "filename": "V29__local_source_scope.sql",
+    "sha256": "e98df3f29116fc5a27647a67bd52199c95c48a23290b9b84ca0cdff8c966b8ac"
   }
 ];
 
@@ -575,6 +585,7 @@ const TABLE_DEFINITIONS = [
     ["root_platform", "varchar(16)", false, "none", "omit"],
     ["root_identity", "text", false, "none", "omit"],
     ["root_owner", "text", true, "none", "omit"],
+    ["scope", "text", true, "none", "omit"],
   ]],
   ["job_local_source_inputs", "excluded", [
     ["job_id", "bigint", false, "none", "omit"],
@@ -593,6 +604,7 @@ const TABLE_DEFINITIONS = [
     ["root_platform", "varchar(16)", false, "none", "omit"],
     ["root_identity", "text", false, "none", "omit"],
     ["root_owner", "text", true, "none", "omit"],
+    ["scope", "text", true, "none", "omit"],
   ]],
   ["source_blobs", "data", [
     ["project_id", "bigint", false, "none", "keep"],
@@ -757,17 +769,27 @@ const TABLES = new Map(TABLE_DEFINITIONS.map(([name, kind, columns]) => [name, {
   names: Object.freeze(columns.filter(column => column[4] === 'keep').map(column => column[0])),
 }]));
 
-// The only legacy reader is the reviewed V26 -> V27 additive migration. Export stays V27.
+// The only legacy readers are the reviewed V27 and V26 inventories. Export stays V29.
+// V28 adds only indexes and V29 only nullable columns of excluded tables, so V27 rows project unchanged.
+const SCOPE_TABLES = ['local_source_approvals', 'job_local_source_inputs'];
+const V27_TABLES = new Map([...TABLES].map(([name, table]) => [name, SCOPE_TABLES.includes(name)
+  ? { ...table, columns: table.columns.filter(c => c[0] !== 'scope') } : table]));
+const REVIEWED_V27_SCHEMA = deepFreeze({ migrations: MIGRATIONS.slice(0, 27),
+  tables: REVIEWED_SCHEMA.tables.map(t => SCOPE_TABLES.includes(t.name)
+    ? { ...t, columns: t.columns.filter(c => c.name !== 'scope') } : t),
+});
+// V26 -> V27 is the reviewed additive file-outcome migration; V26 rows are upgraded on restore.
 const OUTCOME_COLUMNS = ['analysis_status', 'analysis_reason', 'analysis_targeted'];
-const V26_TABLES = new Map([...TABLES].filter(([name]) => name !== 'snapshot_inventory_measurements')
+const V26_TABLES = new Map([...V27_TABLES].filter(([name]) => name !== 'snapshot_inventory_measurements')
   .map(([name, table]) => [name, name === 'files' ? {
     ...table, columns: table.columns.filter(c => !OUTCOME_COLUMNS.includes(c[0])),
     names: table.names.filter(c => !OUTCOME_COLUMNS.includes(c)),
   } : table]));
 const REVIEWED_V26_SCHEMA = deepFreeze({ migrations: MIGRATIONS.slice(0, 26),
-  tables: REVIEWED_SCHEMA.tables.filter(t => t.name !== 'snapshot_inventory_measurements').map(t =>
+  tables: REVIEWED_V27_SCHEMA.tables.filter(t => t.name !== 'snapshot_inventory_measurements').map(t =>
     t.name === 'files' ? { ...t, columns: t.columns.filter(c => !OUTCOME_COLUMNS.includes(c.name)) } : t),
 });
+const LEGACY_SCHEMAS = new Map([[26, [REVIEWED_V26_SCHEMA, V26_TABLES]], [27, [REVIEWED_V27_SCHEMA, V27_TABLES]]]);
 function upgradeV26FileRow(row) {
   const values = exactRecord(row, V26_TABLES.get('files').names, 'INVALID_ROW');
   return projectRow('files', { ...Object.fromEntries(values), analysis_status: 'LEGACY_UNMEASURED',
@@ -776,9 +798,13 @@ function upgradeV26FileRow(row) {
 function createBackupRestorePolicy(schema) {
   // Never infer a legacy version from a prefix, a caller version string, or missing columns.
   const root = exactRecord(schema, ['migrations', 'tables'], 'SCHEMA_MISMATCH');
-  const legacy = arrayValues(root.get('migrations'), 'SCHEMA_MISMATCH', MIGRATIONS.length).length === 26;
-  validateSchema(schema, legacy ? REVIEWED_V26_SCHEMA.migrations : MIGRATIONS, legacy ? V26_TABLES : TABLES);
+  const legacy = LEGACY_SCHEMAS.get(arrayValues(root.get('migrations'), 'SCHEMA_MISMATCH', MIGRATIONS.length).length);
+  validateSchema(schema, legacy ? legacy[0].migrations : MIGRATIONS, legacy ? legacy[1] : TABLES);
   if (!legacy) return Object.freeze({ ...createBackupExportPolicy(schema), schema: REVIEWED_SCHEMA });
+  // V27 and V29 select the same columns of the same tables; only the excluded-table inventory differs.
+  if (legacy[0] === REVIEWED_V27_SCHEMA) {
+    return Object.freeze({ schema: REVIEWED_V27_SCHEMA, columnsFor(name) { return tableDefinition(name).names; }, projectRow });
+  }
   return Object.freeze({ schema: REVIEWED_V26_SCHEMA,
     columnsFor(name) { const t = V26_TABLES.get(name); if (!t) fail('TABLE_UNKNOWN'); return t.names; },
     projectRow(name, values) {
@@ -1151,4 +1177,4 @@ function createBackupExportPolicy(schemaInventory) {
   });
 }
 
-module.exports = Object.freeze({ createBackupExportPolicy, createBackupRestorePolicy, upgradeV26FileRow, REVIEWED_SCHEMA, REVIEWED_V26_SCHEMA, POLICY_LIMITS, BackupExportPolicyError });
+module.exports = Object.freeze({ createBackupExportPolicy, createBackupRestorePolicy, upgradeV26FileRow, REVIEWED_SCHEMA, REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA, POLICY_LIMITS, BackupExportPolicyError });

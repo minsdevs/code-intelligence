@@ -20,6 +20,7 @@ const { readProcessTable } = require('./process-memory.cjs');
 const { descendants } = require('../backup-compatibility/owned-crash.cjs');
 const { writeFixture } = require('./ux-fixtures.cjs');
 const audit = require('./ux-page-audit.cjs');
+const { withDropConfirmation } = require('./drop-confirmation.cjs');
 
 const runFile = promisify(execFile);
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -395,11 +396,16 @@ async function main(argv = process.argv.slice(2)) {
     const target = page.getByRole('button', { name: 'Choose folder', exact: true });
     await expect(target).toBeVisible();
     const bounds = await target.boundingBox();
-    const session = await page.context().newCDPSession(page);
-    try {
-      const data = { items: [], files: [folder], dragOperationsMask: 1 };
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await session.send('Input.dispatchDragEvent', { type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
-    } finally { await session.detach(); }
+    // The preview button appears only after main granted the drop (SEC-M-02 confirmation answered once).
+    const { confirmation } = await withDropConfirmation(app, folder, async () => {
+      const session = await page.context().newCDPSession(page);
+      try {
+        const data = { items: [], files: [folder], dragOperationsMask: 1 };
+        for (const type of ['dragEnter', 'dragOver', 'drop']) await session.send('Input.dispatchDragEvent', { type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
+      } finally { await session.detach(); }
+      await expect(page.getByRole('button', { name: '가져올 파일 미리보기', exact: true })).toBeVisible();
+    });
+    (report.dropConfirmations ??= []).push(confirmation); save();
   }
   async function awaitJob(id, timeoutMs = 240000) {
     const deadline = Date.now() + timeoutMs;
@@ -622,7 +628,10 @@ async function main(argv = process.argv.slice(2)) {
         const detailFlow = flows.find(flow => flow.kind === 'FE_BE' && /orders\/:orderId/.test(flow.name)) || flows.find(flow => flow.kind === 'FE_BE');
         if (detailFlow) {
           const detail = await api(`/api/projects/${ctx.projectId}/flows/${detailFlow.id}?snapshotId=${ctx.snapshotId}`);
-          result.flowDetail = { id: detail.id, name: detail.name, kind: detail.kind, steps: detail.steps.map(step => ({ type: step.nodeType, name: step.nodeName, file: step.filePath, line: step.line, description: step.description })) };
+          result.flowDetail = { id: detail.id, name: detail.name, kind: detail.kind, inferredStepIncluded: detail.inferredStepIncluded ?? null,
+            stepsCarryVerdict: detail.steps.every(step => Object.hasOwn(step, 'confidence')),
+            steps: detail.steps.map(step => ({ type: step.nodeType, name: step.nodeName, file: step.filePath, line: step.line, description: step.description,
+              entry: step.entry ?? null, relationType: step.relationType ?? null, confidence: step.confidence ?? null })) };
           // UI: open the flow by keyboard and read what the user sees for each step.
           await navigate(`/projects/${ctx.projectId}/flows?snapshotId=${ctx.snapshotId}`);
           await resetFocus();
@@ -632,7 +641,8 @@ async function main(argv = process.argv.slice(2)) {
           await expect(article.getByRole('heading', { name: detailFlow.name, exact: true })).toBeVisible();
           const articleText = await textOf(article);
           result.ui.flow = { tabPressesToFlow: flowButton.presses, showsConfirmationLevelPerStep: /(CONFIRMED|LIKELY|POSSIBLE|추정|확인됨|정적 대상 확인)/.test(articleText),
-            showsInferredBadge: /추정 포함|inferred/i.test(articleText), textSample: articleText.slice(0, 700) };
+            showsInferredBadge: /추정 단계 포함|Inferred step included/.test(articleText), textSample: articleText.slice(0, 700) };
+          result.ui.flow.badgeMatchesApi = result.ui.flow.showsInferredBadge === (detail.inferredStepIncluded === true);
           const stepButton = article.getByRole('button').first();
           if (await stepButton.count()) {
             await stepButton.focus(); await page.keyboard.press('Enter');
@@ -668,7 +678,10 @@ async function main(argv = process.argv.slice(2)) {
           const keys = impact.dependents.map(dependent => dependent.nodeId);
           result.impactApi = { riskLevel: impact.riskLevel, riskScore: impact.riskScore, dependents: impact.dependents.length,
             uniqueDependentNodes: new Set(keys).size, duplicateRows: keys.length - new Set(keys).size,
-            carriesConfidence: impact.dependents.some(dependent => Object.hasOwn(dependent, 'confidence')) };
+            carriesConfidence: impact.dependents.length > 0 && impact.dependents.every(dependent => Object.hasOwn(dependent, 'confidence')),
+            scoreVersion: impact.scoreVersion ?? null,
+            groups: impact.dependents.reduce((counts, dependent) => ({ ...counts, [dependent.group ?? 'MISSING']: (counts[dependent.group ?? 'MISSING'] || 0) + 1 }), {}),
+            outsideAnalysis: impact.outsideAnalysis ? { ...impact.outsideAnalysis, areas: (impact.outsideAnalysis.areas || []).length } : null };
         }
         await navigate(`${overviewRoute}?snapshotId=${ctx.snapshotId}&nodeId=${target}`);
         const region = page.getByRole('region', { name: '선택한 코드 주변 관계', exact: true });
@@ -689,31 +702,44 @@ async function main(argv = process.argv.slice(2)) {
         await expect(impactPanel.getByText(/(Loading impact|영향|Impact)/).first()).toBeVisible();
         await settle(1500);
         const panelText = await textOf(impactPanel);
-        const list = impactPanel.getByRole('list', { name: 'Impact dependents', exact: true });
-        const rows = await list.count() ? await list.getByRole('listitem').allInnerTexts() : [];
+        // Dependents are grouped (F6): confirmed reverse dependencies, candidate impact, and an outside-analysis region.
+        const groupRows = async name => {
+          const list = impactPanel.getByRole('list', { name });
+          return await list.count() ? list.getByRole('listitem').allInnerTexts() : [];
+        };
+        const confirmedRows = await groupRows(/^(확인된 역방향 의존|Confirmed reverse dependencies)$/);
+        const candidateRows = await groupRows(/^(후보 영향|Candidate impact)/);
+        const rows = [...confirmedRows, ...candidateRows];
+        const outsideRegion = impactPanel.getByRole('region', { name: /^(분석 밖 영역|Outside analysis)$/ });
         result.ui.impactPanel = { text: panelText.slice(0, 900), rows: rows.length,
+          confirmedRows: confirmedRows.length, candidateRows: candidateRows.length,
           duplicateVisibleRows: rows.length - new Set(rows.map(row => row.split('\n')[0])).size,
           showsConfirmedVsCandidate: /(CONFIRMED|LIKELY|POSSIBLE|추정|확인된 정적)/.test(panelText.replace('정적 관계의 검토 후보입니다', '')),
-          showsOutOfAnalysisArea: /(분석 밖|미지원|미측정|unsupported|unmeasured)/i.test(panelText) };
+          showsOutOfAnalysisArea: await outsideRegion.count() > 0,
+          outsideText: await outsideRegion.count() ? (await textOf(outsideRegion)).slice(0, 400) : null };
         await auditState('analysis-impact-cancel', { full: true, shot: true });
         return result;
       }, 240000);
     }
 
-    // Screen inventory used for language/size/zoom/motion measurements.
+    // Screen inventory used for language/size/zoom/motion measurements. Selectors accept the
+    // Korean and English UI text, because English mode no longer renders hard-coded Korean.
+    const resultsTable = /^(분석 결과 표|Analysis results table)$/;
+    const relationsRegion = /^(선택한 코드 주변 관계|Relations around the selected code)$/;
+    const relationsLoading = /^(관계를 불러오는 중…|Loading relations…)$/;
     const screens = [
       { id: 'home', route: () => '/' },
       { id: 'projects', route: () => '/projects' },
       { id: 'import-connect', route: () => '/import' },
-      { id: 'overview-entrypoints', route: () => overviewRoute, ready: () => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible() },
-      { id: 'overview-files', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: '파일 · 분석 상태', exact: true }).click() },
-      { id: 'overview-symbols', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: '심볼 · 함수 · 클래스', exact: true }).click() },
-      { id: 'overview-dependencies', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: '선언된 외부 패키지', exact: true }).click() },
+      { id: 'overview-entrypoints', route: () => overviewRoute, ready: () => expect(page.getByRole('table', { name: resultsTable })).toBeVisible() },
+      { id: 'overview-files', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: /^(파일 · 분석 상태|Files · analysis status)$/ }).click() },
+      { id: 'overview-symbols', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: /^(심볼 · 함수 · 클래스|Symbols · functions · classes)$/ }).click() },
+      { id: 'overview-dependencies', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: /^(선언된 외부 패키지|Declared external packages)$/ }).click() },
       { id: 'overview-neighborhood', route: () => `${overviewRoute}?snapshotId=${ctx.snapshotId}&nodeId=${ctx.nodes?.orderService}`,
-        ready: () => expect(page.getByRole('region', { name: '선택한 코드 주변 관계', exact: true }).getByText('관계를 불러오는 중…', { exact: true })).toHaveCount(0) },
+        ready: () => expect(page.getByRole('region', { name: relationsRegion }).getByText(relationsLoading)).toHaveCount(0) },
       { id: 'overview-coverage', route: () => overviewRoute, prepare: async () => {
-        await page.getByText('분석 범위와 미확인 사항', { exact: true }).click();
-        await expect(page.getByRole('region', { name: '분석 범위 보고서', exact: true })).toBeVisible(); } },
+        await page.getByText(/^(분석 범위와 미확인 사항|Analysis coverage and unverified parts)$/).click();
+        await expect(page.getByRole('region', { name: /^(분석 범위 보고서|Analysis coverage report)$/ })).toBeVisible(); } },
       { id: 'features', route: () => `/projects/${ctx.projectId}/features`, prepare: async () => {
         const tree = page.getByRole('tree').or(page.getByRole('list', { name: /Feature tree|기능 트리|Feature/ }));
         const first = tree.getByRole('button').first();
@@ -733,7 +759,7 @@ async function main(argv = process.argv.slice(2)) {
         await box.fill('Order'); await page.keyboard.press('Enter'); } },
       { id: 'settings', route: () => '/settings' },
       { id: 'ai-panel', route: () => `${overviewRoute}?snapshotId=${ctx.snapshotId}&nodeId=${ctx.nodes?.orderService}`, prepare: async () => {
-        await page.getByRole('button', { name: 'AI 설명 준비 · 전송 전 확인', exact: true }).click();
+        await page.getByRole('button', { name: /^(AI 설명 준비 · 전송 전 확인|Prepare AI explanation · review before sending)$/ }).click();
         await settle(800); }, cleanup: async () => {
         const collapse = page.getByRole('button', { name: /^(Collapse AI panel|AI 패널 접기)$/ });
         if (await collapse.count()) await collapse.first().click(); } },
@@ -851,7 +877,7 @@ async function main(argv = process.argv.slice(2)) {
         await navigate(`/projects/${ctx.projectId}/tasks`);
         const taskVisible = await page.getByText('U5 synthetic task').first().isVisible().catch(() => false);
         await navigate(overviewRoute);
-        const overviewVisible = await page.getByRole('table', { name: '분석 결과 표', exact: true }).isVisible().catch(() => false);
+        const overviewVisible = await page.getByRole('table', { name: /^(Analysis results table|분석 결과 표)$/ }).isVisible().catch(() => false);
         const overviewText = (await textOf(page.getByRole('main')).catch(() => '')).slice(0, 400);
         return { label, currentSnapshotId: project.currentSnapshot?.id ?? null, lastCompleteSnapshotKept: project.currentSnapshot?.id === ctx.snapshotId,
           notes: notes.length, tasks: Array.isArray(tasks) ? tasks.length : null, noteVisible, taskVisible, overviewVisible, overviewText };
@@ -870,13 +896,13 @@ async function main(argv = process.argv.slice(2)) {
       const startReanalysis = async () => {
         mutateSource();
         await navigate(overviewRoute);
-        await page.getByRole('button', { name: '상태 새로고침', exact: true }).click();
+        await page.getByRole('button', { name: /^(Refresh status|상태 새로고침)$/ }).click();
         await settle(800);
-        await page.getByRole('button', { name: '변경 사항 미리보기', exact: true }).click();
-        await expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible({ timeout: 60000 });
+        await page.getByRole('button', { name: /^(Preview changes|변경 사항 미리보기)$/ }).click();
+        await expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible({ timeout: 60000 });
         const [response] = await Promise.all([
           page.waitForResponse(item => new URL(item.url()).pathname === `/api/projects/${ctx.projectId}/reanalyze` && item.request().method() === 'POST', { timeout: 60000 }),
-          page.getByRole('button', { name: '변경 확인 후 전체 재분석', exact: true }).click(),
+          page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click(),
         ]);
         assert.ok(response.ok());
         const jobId = (await response.json()).jobId;
@@ -889,12 +915,12 @@ async function main(argv = process.argv.slice(2)) {
         await withFolderPicker(ctx.libraryLoans, async () => {
           await page.getByRole('button', { name: 'Choose folder', exact: true }).focus();
           await page.keyboard.press('Enter');
-          await expect(page.getByRole('button', { name: '가져올 파일 미리보기', exact: true })).toBeVisible();
+          await expect(page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ })).toBeVisible();
         });
-        await page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click();
+        await page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).click();
         const [created] = await Promise.all([
           page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local' && response.request().method() === 'POST', { timeout: 60000 }),
-          page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click(),
+          page.getByRole('button', { name: /^(Import and analyze the reviewed files|확인한 파일 가져오기 및 분석)$/ }).click(),
         ]);
         const body = await created.json();
         ctx.secondProjectId = body.project.id;

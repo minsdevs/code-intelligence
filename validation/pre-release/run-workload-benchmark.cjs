@@ -21,6 +21,10 @@ const { readOwnerMemory } = require('./process-memory.cjs');
 const { observePowerSource, acObservedAtRunBoundaries, confirmObservedGone } = require('./run-startup-benchmark.cjs');
 const { SIZE_CLASSES, generateWorkload, hashTree, mutateWorkload } = require('./workload-fixture.cjs');
 const { SLO, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplete } = require('./workload-metrics.cjs');
+const { expectedServices } = require('./adapter-mode.cjs');
+const { withDropConfirmation } = require('./drop-confirmation.cjs');
+// The analysis results table in either UI language (English is the product default).
+const RESULT_ROWS = 'table[aria-label="Analysis results table"] tbody tr, table[aria-label="분석 결과 표"] tbody tr';
 
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 // `delete` is a diagnostic row (project deletion time), not an SLO row; it runs only on request.
@@ -163,7 +167,7 @@ async function main(argv = process.argv.slice(2)) {
   const requireFrontend = createRequire(path.join(repo, 'frontend/package.json'));
   const { _electron } = requireFrontend('playwright'), { expect } = requireFrontend('@playwright/test');
   const inputs = [__filename, path.join(__dirname, 'workload-metrics.cjs'), path.join(__dirname, 'workload-fixture.cjs'),
-    path.join(__dirname, 'startup-metrics.cjs'), path.join(__dirname, 'process-memory.cjs'),
+    path.join(__dirname, 'startup-metrics.cjs'), path.join(__dirname, 'process-memory.cjs'), path.join(__dirname, 'drop-confirmation.cjs'),
     path.join(__dirname, 'run-startup-benchmark.cjs'), path.join(repo, 'desktop/scripts/native-acceptance-electron.cjs'),
     path.join(repo, 'desktop/src/isolated-run.cjs')];
   const sources = Object.fromEntries(inputs.map(file => [path.relative(repo, file), hash(file)]));
@@ -209,12 +213,12 @@ async function main(argv = process.argv.slice(2)) {
     assert.deepEqual(identity, { name: plan.appIdentity.name, profile: plan.paths.userData, packaged: true });
     const status = await bounded(() => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()), remaining(), 'STARTUP_TIMEOUT');
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null); assert.equal(status.aiOff, true);
-    assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
+    assert.deepEqual([...status.services].sort(), expectedServices(app));
     page.setDefaultTimeout(30000);
     return page;
   }
 
-  function driver(page) {
+  function driver(page, sdk) {
     const api = async (route, method = 'GET', timeoutMs = 60000) => {
       const result = await bounded(() => page.evaluate(async ({ route, method }) => {
         const desktop = window.codeIntelligenceDesktop;
@@ -250,16 +254,17 @@ async function main(argv = process.argv.slice(2)) {
       window.__workload ??= { marks: {} };
       const marks = window.__workload.marks; delete marks[name];
       const holds = () => {
-        if (condition.kind === 'button') return [...document.querySelectorAll('button')].some(button => button.textContent.trim() === condition.text);
-        if (condition.kind === 'region') return Boolean(document.querySelector(`section[aria-label="${condition.label}"]`));
+        // Texts and labels are given in every UI language (English is the product default).
+        if (condition.kind === 'button') return [...document.querySelectorAll('button')].some(button => condition.text.includes(button.textContent.trim()));
+        if (condition.kind === 'region') return condition.label.some(label => document.querySelector(`section[aria-label="${label}"]`));
         if (condition.kind === 'rows') return new RegExp(condition.path).test(location.pathname)
-          && document.querySelectorAll('table[aria-label="분석 결과 표"] tbody tr').length >= condition.minimum;
+          && document.querySelectorAll(condition.RESULT_ROWS).length >= condition.minimum;
         return false;
       };
       const observer = new MutationObserver(() => { if (holds()) { marks[name] ??= performance.now(); observer.disconnect(); } });
       observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
       if (holds()) { marks[name] = performance.now(); observer.disconnect(); }
-    }, { name, condition });
+    }, { name, condition: { ...condition, RESULT_ROWS } });
     const markClick = name => page.evaluate(name => {
       window.__workload ??= { marks: {} };
       delete window.__workload.marks[name];
@@ -291,7 +296,8 @@ async function main(argv = process.argv.slice(2)) {
         await new Promise(resolve => setTimeout(resolve, intervalMs));
       }
     })();
-    return { api, timedGets, navigate, watch, markClick, marks, waitMark, pollJob };
+    const confirmDrop = (folder, action) => withDropConfirmation(sdk, folder, action);
+    return { api, timedGets, navigate, watch, markClick, marks, waitMark, pollJob, confirmDrop };
   }
 
   async function importAndPreview(page, d, folder, measurement) {
@@ -299,18 +305,23 @@ async function main(argv = process.argv.slice(2)) {
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
     await expect(picker).toBeVisible();
     const bounds = await picker.boundingBox(); assert.ok(bounds);
-    const cdp = await page.context().newCDPSession(page);
-    try {
-      // Chromium's native drag protocol supplies the real folder; the unmodified UI calls
-      // preload -> folder:authorize -> the product's folder policy.
-      const data = { items: [], files: [folder], dragOperationsMask: 1 };
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.send('Input.dispatchDragEvent', {
-        type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
-    } finally { await bounded(cdp.detach(), 5000, 'PREVIEW_FAILED').catch(() => {}); }
-    const button = page.getByRole('button', { name: '가져올 파일 미리보기', exact: true });
-    await expect(button).toBeVisible();
-    await d.watch('previewAck', { kind: 'button', text: '검사 중…' });
-    await d.watch('previewShown', { kind: 'region', label: '확인할 가져오기 미리보기' });
+    const button = page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ });
+    // The preview button appears only after main granted the drop, so the SEC-M-02 confirmation is
+    // answered and verified before any timed mark starts.
+    const { confirmation } = await d.confirmDrop(folder, async () => {
+      const cdp = await page.context().newCDPSession(page);
+      try {
+        // Chromium's native drag protocol supplies the real folder; the unmodified UI calls
+        // preload -> folder:authorize -> the product's folder policy.
+        const data = { items: [], files: [folder], dragOperationsMask: 1 };
+        for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.send('Input.dispatchDragEvent', {
+          type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data });
+      } finally { await bounded(cdp.detach(), 5000, 'PREVIEW_FAILED').catch(() => {}); }
+      await expect(button).toBeVisible();
+    });
+    (report.dropConfirmations ??= []).push(confirmation);
+    await d.watch('previewAck', { kind: 'button', text: ['Inspecting…', '검사 중…'] });
+    await d.watch('previewShown', { kind: 'region', label: ['Import preview to review', '확인할 가져오기 미리보기'] });
     await d.markClick('previewClick');
     const [response] = await Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local/preview' && r.request().method() === 'POST', { timeout: 120000 }),
@@ -333,7 +344,7 @@ async function main(argv = process.argv.slice(2)) {
     await d.markClick('approveClick');
     const [created] = await Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local' && r.request().method() === 'POST', { timeout: 60000 }),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click(),
+      page.getByRole('button', { name: /^(Import and analyze the reviewed files|확인한 파일 가져오기 및 분석)$/ }).click(),
     ]);
     if (!created.ok()) throw new Error('ANALYSIS_START_FAILED');
     const body = await created.json();
@@ -396,7 +407,7 @@ async function main(argv = process.argv.slice(2)) {
       await d.navigate(`/projects/${projectId}/overview`);
       const shown = await d.waitMark('firstPage', 30000, 'GRAPH_RENDER_FAILED');
       row.metrics.firstPageRenderMs = Math.round(shown.firstPage - begin);
-      row.firstPageRows = await page.locator('table[aria-label="분석 결과 표"] tbody tr').count();
+      row.firstPageRows = await page.locator(RESULT_ROWS).count();
     });
     row.firstPageScope = 'navigation to rendered first page of the overview result table; product page size is 40, there is no 100-node graph view';
     row.status = 'PASS';
@@ -408,16 +419,16 @@ async function main(argv = process.argv.slice(2)) {
     row.change = mutateWorkload({ root: folder, manifest: fixture });
     const { projectId } = run;
     await d.navigate(`/projects/${projectId}/overview`);
-    const refresh = page.getByRole('button', { name: '상태 새로고침', exact: true });
+    const refresh = page.getByRole('button', { name: /^(Refresh status|상태 새로고침)$/ });
     await stage('INCREMENTAL_FAILED', async () => {
       await expect(refresh).toBeVisible();
       await d.markClick('statusClick');
       await refresh.click();
-      const previewButton = page.getByRole('button', { name: '변경 사항 미리보기', exact: true });
+      const previewButton = page.getByRole('button', { name: /^(Preview changes|변경 사항 미리보기)$/ });
       await expect(previewButton).toBeVisible({ timeout: 120000 });
       const status = await d.marks();
       row.metrics.statusCheckMs = Math.round(status.now - status.statusClick);
-      await d.watch('refreshShown', { kind: 'region', label: '확인할 가져오기 미리보기' });
+      await d.watch('refreshShown', { kind: 'region', label: ['Import preview to review', '확인할 가져오기 미리보기'] });
       await d.markClick('refreshPreviewClick');
       await previewButton.click();
       const shown = await d.waitMark('refreshShown', 120000, 'INCREMENTAL_FAILED');
@@ -426,7 +437,7 @@ async function main(argv = process.argv.slice(2)) {
     await d.markClick('refreshClick');
     const [response] = await stage('INCREMENTAL_FAILED', () => Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === `/api/projects/${projectId}/reanalyze` && r.request().method() === 'POST', { timeout: 60000 }),
-      page.getByRole('button', { name: '변경 확인 후 전체 재분석', exact: true }).click(),
+      page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click(),
     ]));
     if (!response.ok()) throw new Error('INCREMENTAL_FAILED');
     const jobId = (await response.json()).jobId;
@@ -538,7 +549,7 @@ async function main(argv = process.argv.slice(2)) {
       const page = await stage('STARTUP_FAILED', () => ready(sdk, launched.remaining));
       run.readyMs = Math.round(performance.now() - started);
       if (sequence > 0) {
-        const d = driver(page);
+        const d = driver(page, sdk);
         let analysisFailure = null;
         if (options.rows[0] === 'preview') {
           const row = run.rows.preview = { status: 'RUNNING', metrics: {}, failure: null };

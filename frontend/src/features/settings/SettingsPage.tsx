@@ -271,10 +271,10 @@ export default function SettingsPage() {
               <dt className="text-ink-muted">{t('settings.githubStatus')}</dt>
               <dd className="text-ink">{githubQuery.data.connected ? t('settings.githubConnected')
                 : githubQuery.data.reauthenticationReason === 'REFRESH_IN_PROGRESS' ? t('settings.githubRefreshing')
-                  : githubQuery.data.reauthenticationReason ? 'GitHub 재인증 필요' : '로컬 모드 · GitHub 미연결'}</dd>
+                  : githubQuery.data.reauthenticationReason ? t('settings.githubReauthNeeded') : t('settings.githubLocalMode')}</dd>
               {githubQuery.data.githubId != null && <>
-                <dt className="text-ink-muted">GitHub 계정</dt>
-                <dd className="break-all text-ink">{githubQuery.data.identityType === 'GITHUB' && accountQuery.data?.login ? `@${accountQuery.data.login}` : `GitHub ID ${githubQuery.data.githubId ?? '확인 중'}`}</dd>
+                <dt className="text-ink-muted">{t('settings.githubAccount')}</dt>
+                <dd className="break-all text-ink">{githubQuery.data.identityType === 'GITHUB' && accountQuery.data?.login ? `@${accountQuery.data.login}` : `GitHub ID ${githubQuery.data.githubId ?? t('settings.githubIdChecking')}`}</dd>
               </>}
             </dl>
             {githubQuery.data.reauthenticationReason && <p role="status" className="mt-3 text-[12px] text-ink-muted">
@@ -287,7 +287,7 @@ export default function SettingsPage() {
             <p className="mt-3 text-[11px] text-ink-faint">{t('settings.githubRefreshPolicy')}</p>
             {!githubQuery.data.connected && (
               <div className="mt-4">
-                {switchAccount && <p role="status" className="mb-3 text-[12px] text-ink-muted">이전 연결을 해제했습니다. 브라우저에서 원하는 GitHub 계정인지 확인한 뒤 다시 로그인하세요.</p>}
+                {switchAccount && <p role="status" className="mb-3 text-[12px] text-ink-muted">{t('settings.switchDisconnected')}</p>}
                 <GithubConnectControl oauthAvailable={githubQuery.data.oauthAvailable} onConnected={async () => { setSwitchAccount(false); await refreshGithub() }} />
               </div>
             )}
@@ -295,7 +295,7 @@ export default function SettingsPage() {
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 {!disconnectConfirm ? (
                   <>
-                  <button type="button" onClick={() => { setSwitchAccount(true); setDisconnectConfirm(true) }} className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink hover:bg-surface-2">계정 전환</button>
+                  <button type="button" onClick={() => { setSwitchAccount(true); setDisconnectConfirm(true) }} className="rounded-md border border-line px-3 py-1.5 text-[13px] text-ink hover:bg-surface-2">{t('settings.switchAccount')}</button>
                   <button
                     type="button"
                     onClick={() => { setSwitchAccount(false); setDisconnectConfirm(true) }}
@@ -306,7 +306,7 @@ export default function SettingsPage() {
                   </>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2" role="alert">
-                    <span className="text-[12px] text-danger">{switchAccount ? '계정을 전환하려면 현재 GitHub 연결을 먼저 해제합니다. 로컬 프로젝트와 분석 기록은 유지됩니다.' : t('settings.unlinkConfirm')}</span>
+                    <span className="text-[12px] text-danger">{switchAccount ? t('settings.switchConfirm') : t('settings.unlinkConfirm')}</span>
                     <button
                       type="button"
                       onClick={() => disconnectMutation.mutate()}
@@ -340,7 +340,7 @@ export default function SettingsPage() {
                 )}
               </div>
             )}
-            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">로컬 폴더 분석에는 로그인이 필요하지 않습니다. 연결 해제는 이 앱의 GitHub 접근만 해제하며 로컬 프로젝트와 분석 기록은 유지됩니다. {t('settings.unlinkHint')}</p>
+            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">{t('settings.localNoLogin')} {t('settings.unlinkHint')}</p>
           </>
         )}
       </section>
@@ -355,6 +355,7 @@ export default function SettingsPage() {
               <button
                 key={entry.id}
                 type="button"
+                lang={entry.id}
                 onClick={() => setLang(entry.id)}
                 aria-pressed={active}
                 className={`rounded-md border px-3 py-1.5 text-[13px] transition-colors ${

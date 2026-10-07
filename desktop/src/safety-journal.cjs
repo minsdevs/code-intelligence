@@ -61,6 +61,7 @@ function day(value) {
       || new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value) fail('INVALID_INPUT');
   return value;
 }
+function serial(value) { if (!Number.isSafeInteger(value) || value < 1) fail('INVALID_INPUT'); return value; }
 function maxMoney(...values) { return values.reduce((a, b) => BigInt(a) >= BigInt(b) ? a : b, '0'); }
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -195,7 +196,8 @@ class Journal {
     }
     this.state = { sequence: 0, headHash: ZERO, clockHighWaterMs: 0, budgetDay: '1970-01-01', minimumVersion: '0',
       initialized: false, aiOff: true, requests: new Map(), pendingRestore: null, restoreReceipt: null,
-      legacyLiabilityUnresolved: false, pendingMaintenance: null, maintenanceReceipt: null, maintenanceIds: new Set() };
+      legacyLiabilityUnresolved: false, pendingMaintenance: null, maintenanceReceipt: null, maintenanceIds: new Set(),
+      lastManifestSerial: 0, rollback: null };
     this.bytes = 0;
     this.queue = Promise.resolve();
     this.permits = new Map();
@@ -432,6 +434,26 @@ class Journal {
         state.budgetDay = metadata.budgetDay; state.minimumVersion = metadata.minimumVersion;
         state.aiOff = true; break;
       }
+      case 'BUILD_STARTED':
+        // ADR-02 updater high-water: a newer build that started normally raises the floor.
+        object(event, ['type', 'build']); money(event.build);
+        if (BigInt(event.build) <= BigInt(state.minimumVersion)) fail('HIGH_WATER_REGRESSION');
+        state.minimumVersion = event.build; break;
+      case 'MANIFEST_ACCEPTED':
+        object(event, ['type', 'serial']); serial(event.serial);
+        if (event.serial <= state.lastManifestSerial) fail('MANIFEST_REPLAYED');
+        state.lastManifestSerial = event.serial; break;
+      case 'ROLLBACK_SANCTIONED':
+        // The only record that lowers the floor: bound to one signed recovery manifest serial and
+        // its retained checkpoint. The serial is consumed, so the same manifest cannot repeat it.
+        object(event, ['type', 'targetBuild', 'serial', 'checkpointId', 'manifestSha256']);
+        money(event.targetBuild); serial(event.serial); uuid(event.checkpointId); hash(event.manifestSha256);
+        if (event.serial <= state.lastManifestSerial) fail('MANIFEST_REPLAYED');
+        if (state.pendingRestore || state.pendingMaintenance || BigInt(event.targetBuild) >= BigInt(state.minimumVersion)) fail('ROLLBACK_INVALID');
+        state.minimumVersion = event.targetBuild; state.lastManifestSerial = event.serial;
+        state.rollback = { targetBuild: event.targetBuild, serial: event.serial, checkpointId: event.checkpointId,
+          manifestSha256: event.manifestSha256 };
+        state.aiOff = true; break;
       case 'RESTORE_BEGIN': {
         object(event, ['type', 'restoreId', 'inputDigest', 'obligationCount', 'inputBudgetDay', 'inputMinimumVersion', 'budgetDay', 'minimumVersion']);
         uuid(event.restoreId); hash(event.inputDigest); day(event.inputBudgetDay); money(event.inputMinimumVersion);
@@ -495,7 +517,8 @@ class Journal {
       projectionDigest: this.projectionDigest(), totalLiabilityMicroUsd: requests.reduce((sum, row) => sum + BigInt(liability(row)), 0n).toString(),
       requests, pendingRestore, restoreReceipt: this.state.restoreReceipt,
       legacyLiabilityUnresolved: this.state.legacyLiabilityUnresolved,
-      pendingMaintenance: this.state.pendingMaintenance, maintenanceReceipt: this.state.maintenanceReceipt });
+      pendingMaintenance: this.state.pendingMaintenance, maintenanceReceipt: this.state.maintenanceReceipt,
+      lastManifestSerial: this.state.lastManifestSerial, rollback: this.state.rollback });
   }
   async append(event) {
     await this.checkOwnership();
@@ -584,6 +607,7 @@ class Journal {
       this.state.legacyLiabilityUnresolved ||= this.pendingState.legacyLiabilityUnresolved;
       this.state.pendingMaintenance ||= this.pendingState.pendingMaintenance;
       this.state.minimumVersion = maxMoney(this.state.minimumVersion, this.pendingState.minimumVersion);
+      this.state.lastManifestSerial = Math.max(this.state.lastManifestSerial, this.pendingState.lastManifestSerial);
       this.state.budgetDay = [this.state.budgetDay, this.pendingState.budgetDay].sort().at(-1);
       for (const [id, row] of this.pendingState.requests) {
         const previous = this.state.requests.get(id);
@@ -604,7 +628,7 @@ class Journal {
       try { await this.checkOwnership(); const result = await action(); await this.checkOwnership(); return result; }
       catch (error) {
         const code = error instanceof SafetyJournalError ? error.code : 'IO_FAILURE';
-        if (!['INVALID_INPUT', 'AI_OFF', 'DUPLICATE_REQUEST', 'UNKNOWN_REQUEST', 'PERMIT_INVALID', 'ACTIVATION_REJECTED', 'CONCURRENCY_LIMIT', 'RESTORE_PENDING', 'RESTORE_CONFLICT', 'MAINTENANCE_REJECTED'].includes(code)) await this.poison(code);
+        if (!['INVALID_INPUT', 'AI_OFF', 'DUPLICATE_REQUEST', 'UNKNOWN_REQUEST', 'PERMIT_INVALID', 'ACTIVATION_REJECTED', 'CONCURRENCY_LIMIT', 'RESTORE_PENDING', 'RESTORE_CONFLICT', 'MAINTENANCE_REJECTED', 'UPDATE_REJECTED'].includes(code)) await this.poison(code);
         throw new SafetyJournalError(code, this.snapshot());
       }
     });
@@ -750,6 +774,36 @@ class Journal {
       return this.snapshot();
     });
   }
+  recordStartedBuild() {
+    return this.run(async () => {
+      // Written only after a successful normal start, never by a recovery-mode open.
+      if (this.options.recoveryMode === true || this.state.pendingRestore || this.state.pendingMaintenance
+          || BigInt(this.options.runningBuild) < BigInt(this.state.minimumVersion)) fail('UPDATE_REJECTED');
+      if (BigInt(this.options.runningBuild) > BigInt(this.state.minimumVersion))
+        await this.append({ type: 'BUILD_STARTED', build: this.options.runningBuild });
+      return this.snapshot();
+    });
+  }
+  recordManifest(input) {
+    return this.run(async () => {
+      object(input, ['serial']); serial(input.serial);
+      if (input.serial <= this.state.lastManifestSerial) fail('UPDATE_REJECTED');
+      await this.append({ type: 'MANIFEST_ACCEPTED', serial: input.serial });
+      return this.snapshot();
+    });
+  }
+  sanctionRollback(input) {
+    return this.run(async () => {
+      object(input, ['targetBuild', 'serial', 'checkpointId', 'manifestSha256']);
+      money(input.targetBuild); serial(input.serial); uuid(input.checkpointId); hash(input.manifestSha256);
+      if (input.serial <= this.state.lastManifestSerial || this.state.pendingRestore || this.state.pendingMaintenance
+          || BigInt(input.targetBuild) > BigInt(this.options.runningBuild)) fail('UPDATE_REJECTED');
+      // A target at or above the floor needs no exception; the recovery manifest is still consumed.
+      if (BigInt(input.targetBuild) >= BigInt(this.state.minimumVersion)) await this.append({ type: 'MANIFEST_ACCEPTED', serial: input.serial });
+      else await this.append({ type: 'ROLLBACK_SANCTIONED', ...input });
+      return this.snapshot();
+    });
+  }
   sealMaintenance(input) { return this.maintenance(input, false); }
   completeMaintenance(input) { return this.maintenance(input, true); }
   async verifyMaintenanceHead() {
@@ -885,7 +939,8 @@ async function prepare(options, initialize) {
     }
     // Expose capabilities, never mutable internal state, file descriptors, options, or key ports.
     return Object.freeze(Object.fromEntries(['snapshot', 'reserveAndPermit', 'consumePermit', 'settle', 'holdUnknown',
-      'latch', 'mergeRestore', 'sealMaintenance', 'completeMaintenance', 'activate', 'close'].map((name) => [name, journal[name].bind(journal)])));
+      'latch', 'mergeRestore', 'sealMaintenance', 'completeMaintenance', 'activate', 'recordStartedBuild', 'recordManifest',
+      'sanctionRollback', 'close'].map((name) => [name, journal[name].bind(journal)])));
   } catch (error) {
     const code = error instanceof SafetyJournalError ? error.code : 'IO_FAILURE';
     // Another live writer owns its own OFF policy; never mutate or remove that writer's files.

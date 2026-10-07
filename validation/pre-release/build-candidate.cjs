@@ -16,14 +16,20 @@ const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.
 const { requireCapacity } = require('../../desktop/scripts/macos-runtime-supply.cjs');
 const { ensureOutputParent, assertOutputPath } = require('./owned-output.cjs');
 const { candidateSpaceBudget } = require('./candidate-capacity.cjs');
+const { validationProviderTarget } = require('../../desktop/src/ai-https-transport.cjs');
+const { adapterMode } = require('./adapter-mode.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+// Validation-build-only fake-provider variant (G-COST PK-08): the candidate's AI transport targets this fixed
+// loopback origin instead of the provider host. Release builds never carry it (build gate and main refuse it).
+const VALIDATION_AI_PROVIDER_ORIGIN = 'http://127.0.0.1:47613';
+const VALIDATION_APP_ID = 'dev.codeintelligence.desktop.validation';
 const SOURCE_COPY_INPUTS = [
   ['frontend', ['src', 'public', 'index.html', 'package.json', 'package-lock.json']],
-  ['desktop', ['src', 'scripts', 'build', 'package.json', 'package-lock.json']],
+  ['desktop', ['src', 'scripts', 'build', 'native', 'package.json', 'package-lock.json']],
   ['analyzers/ts-analyzer', ['src', 'package.json', 'package-lock.json', 'tsconfig.json']],
 ];
 
-function measureCandidateCopies(repo, originalRuntime) {
+function measureCandidateCopies(repo, originalRuntime, { adapterSupervisor = false } = {}) {
   const dependencies = {}, sources = {};
   for (const [component, entries] of SOURCE_COPY_INPUTS) {
     const dependency = dependencyInventory(path.join(repo, component, 'node_modules'));
@@ -43,7 +49,7 @@ function measureCandidateCopies(repo, originalRuntime) {
     sourceBytes: Object.values(sources).reduce((sum, value) => sum + value.bytes, 0), runtimeBytes: runtime.bytes,
     electronBytes: electron.bytes, analyzerDependencyBytes: dependencies['analyzers/ts-analyzer'].bytes };
   return { dependencies, sources, runtime: { bytes: runtime.bytes, sha256: runtime.sha256 },
-    electron: { bytes: electron.bytes, sha256: electron.sha256 }, input, budget: candidateSpaceBudget(input) };
+    electron: { bytes: electron.bytes, sha256: electron.sha256 }, input, budget: candidateSpaceBudget(input, { adapterSupervisor }) };
 }
 
 function ownedDirectory(plan, directory) {
@@ -94,11 +100,71 @@ function regularFiles(directory) {
 }
 
 function argumentsForCandidate(argv) {
-  assert.equal(argv.length, 4); assert.equal(argv[0], '--app'); assert.equal(argv[2], '--build-sequence');
+  // ADR-01 `xpc-required` is an explicit option of this development build; the shipped default stays unchanged.
+  const isolated = argv.length === 6;
+  assert(argv.length === 4 || isolated); assert.equal(argv[0], '--app'); assert.equal(argv[2], '--build-sequence');
   assert.equal(typeof argv[1], 'string'); assert(path.isAbsolute(argv[1]));
   assert.equal(argv[3].match(/^[1-9][0-9]{0,18}$/)?.[0], argv[3]);
   assert(BigInt(argv[3]) <= 9223372036854775807n);
-  return { app: argv[1], buildSequence: argv[3] };
+  if (isolated) { assert.equal(argv[4], '--adapter-isolation'); assert.equal(argv[5], 'xpc-required'); }
+  return { app: argv[1], buildSequence: argv[3], ...(isolated ? { adapterIsolation: 'xpc-required' } : {}) };
+}
+
+/**
+ * ADR-01 `xpc-required`: builds the adapter supervisor and bridge, assembles the service with the
+ * staged analyzer as its worker (desktop/stage/adapter-supervisor, installed by afterPack and signed
+ * by the signing hook), then removes the analyzer from the staged runtime and its manifest.
+ */
+async function stageAdapterSupervisor({ plan, runtime, desktop, manifest, appId, version,
+  supervisor = require('../../desktop/scripts/adapter-supervisor.cjs') }) {
+  plan.assertIdentity();
+  const analyzer = path.join(runtime, 'ts-analyzer'), destination = path.join(desktop, 'stage', 'adapter-supervisor');
+  ownedDirectory(plan, runtime); ownedDirectory(plan, desktop); ownedDirectory(plan, analyzer);
+  noOverlap(analyzer, destination);
+  assert(!fs.existsSync(destination), 'ADAPTER_SUPERVISOR_STAGE_EXISTS');
+  const analyzerTree = regularFiles(analyzer);
+  fs.mkdirSync(destination, { mode: 0o700 });
+  const binaries = supervisor.compile(path.join(destination, 'bin'));
+  const bundle = await supervisor.assembleService({ destination, binaries, analyzer, appId, version,
+    electronApp: path.join(desktop, 'node_modules/electron/dist/Electron.app') });
+  assert.equal(bundle, path.join(destination, 'AdapterSupervisor.xpc'), 'ADAPTER_SUPERVISOR_STAGE_UNEXPECTED');
+  const copied = regularFiles(path.join(bundle, 'Contents/Resources/ts-analyzer'));
+  assert.equal(copied.inventory.sha256, analyzerTree.inventory.sha256, 'ADAPTER_SUPERVISOR_ANALYZER_COPY_CHANGED');
+  const removed = Object.keys(manifest.files).filter(name => name.startsWith('ts-analyzer/'));
+  assert.deepEqual(removed.sort(), Object.keys(analyzerTree.files).map(name => 'ts-analyzer/' + name).sort(), 'ADAPTER_SUPERVISOR_ANALYZER_INVENTORY');
+  plan.assertIdentity(); ownedDirectory(plan, analyzer);
+  fs.rmSync(analyzer, { recursive: true });
+  const files = Object.fromEntries(Object.entries(manifest.files).filter(([name]) => !name.startsWith('ts-analyzer/')));
+  return { manifest: { ...manifest, files }, evidence: { adapterIsolation: 'xpc-required', stage: destination,
+    analyzerTreeSha256: analyzerTree.inventory.sha256, runtimeFilesRemoved: removed.length } };
+}
+
+// The reused runtime carries the baseline's reviewed Flyway files for backup staging. A newer source
+// may only append migrations: every staged file must be unchanged and every added one must sort after
+// the last staged version; the manifest gains the exact hash of each appended file.
+const MIGRATION_NAME = /^V([0-9]+)__[A-Za-z0-9_]+\.sql$/;
+function replaceBackupMigrations(plan, runtime, source, manifest) {
+  plan.assertIdentity();
+  const target = path.join(runtime, 'backend/backup-migrations');
+  ownedDirectory(plan, runtime); ownedDirectory(plan, target);
+  const version = name => {
+    const match = MIGRATION_NAME.exec(name); if (!match) assert.fail('BACKUP_MIGRATION_NAME'); return Number(match[1]);
+  };
+  const staged = fs.readdirSync(target).sort((a, b) => version(a) - version(b));
+  const wanted = fs.readdirSync(source).sort((a, b) => version(a) - version(b));
+  for (const name of staged) {
+    if (!wanted.includes(name) || hash(path.join(source, name)) !== hash(path.join(target, name))) assert.fail('BACKUP_MIGRATION_CHANGED');
+  }
+  const last = staged.length ? version(staged[staged.length - 1]) : 0, added = wanted.filter(name => !staged.includes(name));
+  if (added.some(name => version(name) <= last)) assert.fail('BACKUP_MIGRATION_ORDER');
+  const files = { ...manifest.files };
+  for (const name of added) {
+    const file = path.join(source, name), stat = fs.lstatSync(file);
+    assert(stat.isFile() && !stat.isSymbolicLink(), 'BACKUP_MIGRATION_NAME');
+    const copied = path.join(target, name); fs.copyFileSync(file, copied, fs.constants.COPYFILE_EXCL); fs.chmodSync(copied, 0o644);
+    files['backend/backup-migrations/' + name] = hash(copied); assert.equal(files['backend/backup-migrations/' + name], hash(file));
+  }
+  return { manifest: added.length ? { ...manifest, files } : manifest, evidence: { added } };
 }
 
 function replaceAnalyzerBuild(plan, runtime, compiled, manifest) {
@@ -224,7 +290,7 @@ async function main(argv = process.argv.slice(2)) {
   execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', baseline], { stdio: 'pipe', timeout: 30000 });
   // Full native provisioning retains its 8GiB floor. This path reuses a verified
   // runtime and measures its distinct copies before applying a separate allowance.
-  const copyMeasurements = measureCandidateCopies(repo, originalRuntime);
+  const copyMeasurements = measureCandidateCopies(repo, originalRuntime, { adapterSupervisor: options.adapterIsolation === 'xpc-required' });
   const capacity = requireCapacity(repo, { minimumBytes: BigInt(copyMeasurements.budget.requiredFreeBytes) });
   console.log(JSON.stringify({ status: 'CANDIDATE_CAPACITY', availableBytes: capacity.availableBytes,
     budget: copyMeasurements.budget }));
@@ -248,6 +314,7 @@ async function main(argv = process.argv.slice(2)) {
     sourceWorkingTree: Boolean(execFileSync('git', ['status', '--porcelain', '--', ...sourceRoots, ...buildInputs], { cwd: repo, encoding: 'utf8' }).trim()),
     gradleEnvironment: 'existing checkout and user Gradle cache/configuration; not a hermetic Gradle home',
     sources: sourceDigests(), capacity, copyMeasurements, buildSequence: options.buildSequence, javaRecompiled: true, nativeRebuilt: false,
+    adapterIsolation: options.adapterIsolation ?? 'legacy-http',
     realKeychain: false, formalSigning: false, notarized: false, released: false,
     baselineHashes: { manifest: hash(originalManifestFile), asar: hash(path.join(baseline, 'Contents/Resources/app.asar')) } };
   const save = () => fs.writeFileSync(assertOutputPath(evidence, path.join(evidence, 'result.json')), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
@@ -308,6 +375,8 @@ async function main(argv = process.argv.slice(2)) {
       work, 'jar-readback', { ...fixedEnv, HOME: path.join(work, 'home'), TMPDIR: path.join(work, 'tmp') }, 120000);
     const readback = JSON.parse(fs.readFileSync(path.join(evidence, 'jar-readback.json'))); assert.equal(readback.status, 'PASS');
     assert.equal(hash(originalJar), report.compiledJarSha256); fs.renameSync(temporaryJar, targetJar); report.jar = readback;
+    const migrations = replaceBackupMigrations(plan, stage, path.join(repo, 'backend/src/main/resources/db/migration'), originalManifest);
+    report.backupMigrationsAdded = migrations.evidence.added; save();
     for (const name of fs.readdirSync(path.join(repo, 'backend/src/main/resources/db/migration')))
       assert.equal(hash(path.join(repo, 'backend/src/main/resources/db/migration', name)), hash(path.join(stage, 'backend/backup-migrations', name)));
     const analyzerInputs = { packageJsonSha256: hash(path.join(analyzer, 'package.json')),
@@ -316,7 +385,7 @@ async function main(argv = process.argv.slice(2)) {
       || analyzerInputs.packageLockSha256 !== hash(path.join(stage, 'ts-analyzer/package-lock.json'));
     let replacement;
     if (!analyzerDependenciesChanged) {
-      replacement = replaceAnalyzerBuild(plan, stage, path.join(analyzer, 'dist'), originalManifest);
+      replacement = replaceAnalyzerBuild(plan, stage, path.join(analyzer, 'dist'), migrations.manifest);
     } else {
       const production = path.join(work, 'analyzer-production');
       fs.mkdirSync(production, { mode: 0o700 });
@@ -333,7 +402,7 @@ async function main(argv = process.argv.slice(2)) {
           npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false', NPM_CONFIG_UPDATE_NOTIFIER: 'false' }, 120000);
       assert.equal(hash(path.join(production, 'package.json')), analyzerInputs.packageJsonSha256, 'ANALYZER_DEPENDENCY_INPUT_CHANGED');
       assert.equal(hash(path.join(production, 'package-lock.json')), analyzerInputs.packageLockSha256, 'ANALYZER_DEPENDENCY_INPUT_CHANGED');
-      replacement = replaceAnalyzerRuntime(plan, stage, path.join(analyzer, 'dist'), production, originalManifest, analyzerInputs);
+      replacement = replaceAnalyzerRuntime(plan, stage, path.join(analyzer, 'dist'), production, migrations.manifest, analyzerInputs);
     }
     report.analyzer = replacement.evidence;
     const previousControl = path.join(work, 'previous-control-runtime');
@@ -348,24 +417,34 @@ async function main(argv = process.argv.slice(2)) {
       fs.copyFileSync(file, target, fs.constants.COPYFILE_EXCL);
       assert.equal(hash(file), hash(target));
     }
-    const manifest = { ...replacement.manifest, buildSequence: options.buildSequence, controlProtocol: 1,
-      files: { ...replacement.manifest.files, 'backend/code-intelligence.jar': hash(targetJar),
+    let runtimeManifest = replacement.manifest;
+    if (options.adapterIsolation === 'xpc-required') {
+      // The hooks of the copied desktop read the flag from its package.json (also packed into app.asar).
+      const packageFile = path.join(desktop, 'package.json'), desktopPackage = JSON.parse(fs.readFileSync(packageFile));
+      fs.writeFileSync(packageFile, JSON.stringify({ ...desktopPackage, adapterIsolation: 'xpc-required' }, null, 2) + '\n');
+      const staged = await stageAdapterSupervisor({ plan, runtime: stage, desktop, manifest: replacement.manifest,
+        appId: VALIDATION_APP_ID, version: desktopPackage.version });
+      runtimeManifest = staged.manifest; report.adapterSupervisor = staged.evidence; save();
+    }
+    const manifest = { ...runtimeManifest, buildSequence: options.buildSequence, controlProtocol: 1,
+      files: { ...runtimeManifest.files, 'backend/code-intelligence.jar': hash(targetJar),
         'backend/code-intelligence-control.jar': report.control.jarSha256,
         'backend/code-intelligence-control-provenance.json': report.control.provenanceSha256 } };
     fs.writeFileSync(path.join(stage, 'runtime-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
     await validateRuntimeManifest(stage, manifest);
     const retained = fs.mkdtempSync(path.join(repo, '.native-product-')); report.retained = retained; save();
     const pkg = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'))), baseBuild = pkg.build;
-    const config = { ...baseBuild, productName: 'Code Intelligence Validation', appId: 'dev.codeintelligence.desktop.validation',
-      extraMetadata: { name: 'code-intelligence-validation', productName: 'Code Intelligence Validation' },
-      directories: { output: retained }, mac: { ...baseBuild.mac, identity: '-', notarize: false },
-      npmRebuild: false, nodeGypRebuild: false, buildDependenciesFromSource: false, electronDist: path.join(desktop, 'node_modules/electron/dist') };
+    const config = candidatePackagerConfig(baseBuild, retained, desktop);
+    report.validationAiProviderOrigin = config.extraMetadata.validationAiProviderOrigin;
     const configFile = path.join(desktop, 'candidate-config.json'); fs.writeFileSync(configFile, JSON.stringify(config, null, 2), { flag: 'wx' });
     run(process.execPath, [path.join(desktop, 'node_modules/electron-builder/out/cli/cli.js'), '--mac', 'dir', '--arm64', '--publish', 'never', '--config', configFile],
       desktop, 'packager', { ...fixedEnv, HOME: path.join(work, 'home'), TMPDIR: path.join(work, 'tmp'),
         CSC_IDENTITY_AUTO_DISCOVERY: 'false', NPM_CONFIG_UPDATE_NOTIFIER: 'false', NPM_CONFIG_OFFLINE: 'true', ELECTRON_BUILDER_CACHE: path.join(work, 'cache') });
     const app = path.join(retained, 'Code Intelligence Validation.app'); fs.renameSync(path.join(retained, 'mac-arm64/Code Intelligence Validation.app'), app);
     const asarFile = path.join(app, 'Contents/Resources/app.asar'), asar = createRequire(path.join(desktop, 'package.json'))('@electron/asar');
+    const packagedMetadata = JSON.parse(asar.extractFile(asarFile, 'package.json'));
+    assert.equal(packagedMetadata.validationAiProviderOrigin, VALIDATION_AI_PROVIDER_ORIGIN);
+    assert.deepEqual(validationProviderTarget(packagedMetadata), { hostname: '127.0.0.1', family: 4, port: 47613 });
     report.verifiedProductSource = {};
     for (const name of fs.readdirSync(path.join(repo, 'desktop/src')).filter(n => n.endsWith('.cjs'))) {
       assert(asar.extractFile(asarFile, 'src/' + name).equals(fs.readFileSync(path.join(repo, 'desktop/src', name))));
@@ -379,12 +458,23 @@ async function main(argv = process.argv.slice(2)) {
     assert.deepEqual(await verifyControlSourceMembers({ jarFile: path.join(appRuntime, 'backend/code-intelligence-control.jar'),
       provenanceFile: path.join(appRuntime, 'backend/code-intelligence-control-provenance.json'),
       classRoot: path.join(repo, 'backend/build/classes/java/main'), backendJarFile: originalJar }), report.control);
+    const isolated = options.adapterIsolation === 'xpc-required';
+    assert.equal(adapterMode(app), isolated ? 'xpc-required' : 'legacy-http', 'ADAPTER_ISOLATION_PACKAGING');
+    assert.equal(packagedMetadata.adapterIsolation, isolated ? 'xpc-required' : undefined, 'ADAPTER_ISOLATION_PACKAGING');
+    if (isolated) {
+      assert.equal(fs.existsSync(path.join(appRuntime, 'ts-analyzer')), false, 'ADAPTER_ISOLATION_PACKAGING');
+      const section = JSON.parse(fs.readFileSync(finalManifestFile)).adapterSupervisor;
+      assert.equal(section?.format, 1, 'ADAPTER_ISOLATION_PACKAGING');
+      report.adapterSupervisor.packaged = section; save();
+    }
+    const analyzerRoot = isolated ? path.join(app, 'Contents/XPCServices/AdapterSupervisor.xpc/Contents/Resources/ts-analyzer')
+      : path.join(appRuntime, 'ts-analyzer');
     for (const [name, expected] of Object.entries(report.analyzer.fileHashes))
-      assert.equal(hash(path.join(appRuntime, 'ts-analyzer/dist', name)), expected);
+      assert.equal(hash(path.join(analyzerRoot, 'dist', name)), expected);
     if (report.analyzer.dependenciesRestaged) {
-      assert.equal(hash(path.join(appRuntime, 'ts-analyzer/package.json')), report.analyzer.packageJsonSha256);
-      assert.equal(hash(path.join(appRuntime, 'ts-analyzer/package-lock.json')), report.analyzer.packageLockSha256);
-      const shippedProxy = JSON.parse(fs.readFileSync(path.join(appRuntime, 'ts-analyzer/node_modules/proxy-addr/package.json')));
+      assert.equal(hash(path.join(analyzerRoot, 'package.json')), report.analyzer.packageJsonSha256);
+      assert.equal(hash(path.join(analyzerRoot, 'package-lock.json')), report.analyzer.packageLockSha256);
+      const shippedProxy = JSON.parse(fs.readFileSync(path.join(analyzerRoot, 'node_modules/proxy-addr/package.json')));
       assert.equal(shippedProxy.name, 'proxy-addr'); assert.equal(shippedProxy.version, report.analyzer.proxyAddrVersion);
     }
     execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { stdio: 'pipe', timeout: 30000 });
@@ -404,5 +494,13 @@ async function main(argv = process.argv.slice(2)) {
     save(); throw error;
   }
 }
-module.exports = { argumentsForCandidate, replaceAnalyzerBuild, replaceAnalyzerRuntime, main };
+function candidatePackagerConfig(baseBuild, output, desktop) {
+  return { ...baseBuild, productName: 'Code Intelligence Validation', appId: VALIDATION_APP_ID,
+    extraMetadata: { name: 'code-intelligence-validation', productName: 'Code Intelligence Validation',
+      validationAiProviderOrigin: VALIDATION_AI_PROVIDER_ORIGIN },
+    directories: { output }, mac: { ...baseBuild.mac, identity: '-', notarize: false },
+    npmRebuild: false, nodeGypRebuild: false, buildDependenciesFromSource: false, electronDist: path.join(desktop, 'node_modules/electron/dist') };
+}
+module.exports = { VALIDATION_AI_PROVIDER_ORIGIN, argumentsForCandidate, candidatePackagerConfig, replaceAnalyzerBuild, replaceBackupMigrations,
+  replaceAnalyzerRuntime, stageAdapterSupervisor, SOURCE_COPY_INPUTS, main };
 if (require.main === module) main().catch(error => { console.error(error.code || error.name); process.exitCode = 1; });

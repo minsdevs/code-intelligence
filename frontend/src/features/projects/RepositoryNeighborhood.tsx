@@ -34,8 +34,18 @@ export default function RepositoryNeighborhood({
   const graph = useMemo(() => {
     const byId = new Map<number, GraphNodeSummary>([[selected.id, selected]])
     for (const relation of (relations ?? []).slice(0, 40)) byId.set(relation.node.id, relation.node)
+    const location = (node: GraphNodeSummary) => node.filePath ?? node.nodeType
+    const name = (id: number | undefined) =>
+      (id != null ? byId.get(id)?.name : undefined) ?? t('graph.unknownItem')
     const nodes: Node[] = [...byId.values()].map((node, index) => ({
       id: String(node.id),
+      // Screen readers read the name; never the database id React Flow would fall back to.
+      ariaLabel:
+        index === 0
+          ? t('neighborhood.selectedNode')
+              .replace('{name}', node.name)
+              .replace('{location}', location(node))
+          : `${node.name} · ${location(node)}`,
       position:
         index === 0 ? { x: 320, y: 0 } : { x: direction === 'in' ? 0 : 640, y: (index - 1) * 90 },
       data: { label: `${node.name}\n${node.filePath ?? node.nodeType}` },
@@ -57,6 +67,13 @@ export default function RepositoryNeighborhood({
         source: String(relation.sourceNodeId),
         target: String(relation.targetNodeId),
         label: `${relation.edgeType} · ${relationConfidenceLabel(t, relation.confidence)}`,
+        ariaLabel: t('graph.edgeName')
+          .replace('{source}', name(relation.sourceNodeId))
+          .replace('{target}', name(relation.targetNodeId))
+          .replace(
+            '{details}',
+            `${relation.edgeType} · ${relationConfidenceLabel(t, relation.confidence)}`,
+          ),
         markerEnd: { type: MarkerType.ArrowClosed },
         labelStyle: { fontSize: 10, fill: 'var(--color-ink)' },
         labelBgStyle: { fill: 'var(--color-surface-1)' },
@@ -66,32 +83,30 @@ export default function RepositoryNeighborhood({
   return (
     <>
       <p className="mt-3 rounded border border-line p-3 text-xs text-ink-muted">
-        기록된 정적 관계에 따른 검토 후보입니다. 판정 열에서 정적 대상 확인과 추정(LIKELY ·
-        POSSIBLE)을 구분하세요. 런타임 영향이나 전체 경로를 보장하지 않습니다. 동적
-        호출·reflection·미지원 문법·서비스 경계에서 추적이 끊길 수 있습니다.
+        {t('neighborhood.intro')}
       </p>
       <div className="my-3 flex flex-wrap gap-3 text-xs">
         <label>
-          방향{' '}
+          {t('neighborhood.direction')}{' '}
           <select
-            aria-label="관계 방향"
+            aria-label={t('neighborhood.directionLabel')}
             value={direction}
             onChange={(event) => setDirection(event.target.value as 'in' | 'out')}
             className="rounded border border-line bg-surface-2 p-2"
           >
-            <option value="in">들어오는 관계 · 함께 검토할 코드</option>
-            <option value="out">나가는 관계 · 다음 처리 위치</option>
+            <option value="in">{t('neighborhood.in')}</option>
+            <option value="out">{t('neighborhood.out')}</option>
           </select>
         </label>
         <label>
-          관계 종류{' '}
+          {t('neighborhood.type')}{' '}
           <select
-            aria-label="관계 종류"
+            aria-label={t('neighborhood.type')}
             value={edgeType}
             onChange={(event) => setEdgeType(event.target.value)}
             className="rounded border border-line bg-surface-2 p-2"
           >
-            <option value="">전체</option>
+            <option value="">{t('neighborhood.all')}</option>
             {edgeTypes.map((type) => (
               <option key={type}>{type}</option>
             ))}
@@ -102,29 +117,41 @@ export default function RepositoryNeighborhood({
             className="self-center text-accent"
             to={`/projects/${projectId}/code${codeLocationSearch(selected.filePath, selected.lineStart, { snapshotId, versioned: true })}`}
           >
-            선택한 항목의 보관된 소스
+            {t('neighborhood.selectedSource')}
           </Link>
         )}
       </div>
       {query.isError ? (
-        <p role="alert">관계를 불러오지 못했습니다. 영향 여부는 알 수 없습니다.</p>
+        <p role="alert">{t('neighborhood.error')}</p>
       ) : query.isLoading ? (
-        <p role="status">관계를 불러오는 중…</p>
+        <p role="status">{t('neighborhood.loading')}</p>
       ) : (
         <>
           {(relations?.length ?? 0) === 0 ? (
-            <p className="py-3 text-sm text-ink-muted">
-              이 분석에서 기록된 관계를 찾지 못했습니다. 추적이 여기서 끊기며, 영향 없음의 근거가
-              아닙니다.
-            </p>
+            <p className="py-3 text-sm text-ink-muted">{t('neighborhood.empty')}</p>
           ) : (
             <>
-              <div className="h-72 rounded border border-line" aria-label="선택 주변 관계 그래프">
+              <div
+                className="h-72 rounded border border-line"
+                aria-label={t('neighborhood.graph')}
+                onKeyDown={(event) => {
+                  // React Flow only selects a node on Enter; open it as a click does.
+                  const element = (event.target as Element).closest('.react-flow__node')
+                  const target = graph.byId.get(Number(element?.getAttribute('data-id')))
+                  if (event.key === 'Enter' && target) onSelect(target)
+                }}
+              >
                 <ReactFlow
                   nodes={graph.nodes}
                   edges={graph.edges}
                   nodesDraggable={false}
                   nodesConnectable={false}
+                  deleteKeyCode={null}
+                  ariaLabelConfig={{
+                    'node.a11yDescription.default': t('graph.nodeHint'),
+                    'node.a11yDescription.keyboardDisabled': t('graph.nodeHint'),
+                    'edge.a11yDescription.default': t('graph.edgeHint'),
+                  }}
                   fitView
                   minZoom={0.15}
                   maxZoom={1.5}
@@ -138,24 +165,20 @@ export default function RepositoryNeighborhood({
                   <Controls showInteractive={false} />
                 </ReactFlow>
               </div>
-              <p className="mt-2 text-xs text-ink-muted">
-                선은 기록된 관계 방향입니다. 아래 표에서 연결된 항목의 소스와 관계 종류를 확인하고
-                다음 항목을 선택할 수 있습니다. 그래프는 주변 40개 관계까지 표시합니다. 소스 링크는
-                연결된 심볼의 선언 위치이며, 정확한 호출 행을 뜻하지 않습니다.
-              </p>
+              <p className="mt-2 text-xs text-ink-muted">{t('neighborhood.graphNote')}</p>
               {query.data?.truncated && (
                 <p role="status" className="mt-2 text-xs text-warn">
-                  관계 조회 한도에 도달했습니다. 종류를 좁혀 다시 확인하세요.
+                  {t('neighborhood.truncated')}
                 </p>
               )}
               <div className="mt-2 max-h-80 overflow-auto">
-                <table className="w-full text-left text-xs" aria-label="선택 주변 관계 표">
+                <table className="w-full text-left text-xs" aria-label={t('neighborhood.table')}>
                   <thead>
                     <tr>
-                      <th className="p-2">관계와 방향</th>
-                      <th className="p-2">연결된 항목</th>
-                      <th className="p-2">판정</th>
-                      <th className="p-2">연결된 항목의 소스</th>
+                      <th className="p-2">{t('neighborhood.col.relation')}</th>
+                      <th className="p-2">{t('neighborhood.col.item')}</th>
+                      <th className="p-2">{t('neighborhood.col.verdict')}</th>
+                      <th className="p-2">{t('neighborhood.col.source')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -165,7 +188,8 @@ export default function RepositoryNeighborhood({
                         className="border-t border-line"
                       >
                         <td className="p-2">
-                          {direction === 'in' ? '→ 선택 항목' : '선택 항목 →'} · {relation.edgeType}
+                          {t(direction === 'in' ? 'neighborhood.toSelected' : 'neighborhood.fromSelected')}{' '}
+                          · {relation.edgeType}
                         </td>
                         <td className="max-w-72 p-2 [overflow-wrap:anywhere]">
                           <button className="text-accent" onClick={() => onSelect(relation.node)}>
@@ -182,10 +206,10 @@ export default function RepositoryNeighborhood({
                               className="text-accent"
                               to={`/projects/${projectId}/code${codeLocationSearch(relation.node.filePath, relation.node.lineStart, { snapshotId, versioned: true })}`}
                             >
-                              보관된 소스
+                              {t('neighborhood.storedSource')}
                             </Link>
                           ) : (
-                            '파일 위치 미확인'
+                            t('neighborhood.noLocation')
                           )}
                         </td>
                       </tr>

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import dev.codeintelligence.TestcontainersConfiguration;
+import dev.codeintelligence.common.LanguageDetector;
 import java.io.ByteArrayOutputStream;
 import java.net.CookieManager;
 import java.net.ServerSocket;

@@ -46,6 +46,7 @@ class SourceStoreClientTest {
     private static final String TOKEN = "a".repeat(64);
     private static final String KEY = "b".repeat(32);
     private static final byte[] BODY = "AAAA".getBytes(StandardCharsets.UTF_8);
+    private static final String SESSION = "c".repeat(32);
 
     @ParameterizedTest
     @ValueSource(ints = {0, 1, SourceStoreClient.MAX_BYTES})
@@ -95,6 +96,81 @@ class SourceStoreClientTest {
             assertThat(returned).isEqualTo(bytes).isNotSameAs(bytes);
             server.completed();
         }
+    }
+
+    @Test
+    void stageSendsAStagedPutAndReturnsTheVaultSessionWatermark() throws Exception {
+        String hash = hash(BODY);
+        try (var server = new FakeServer(socket -> {
+            JsonNode request = request(socket);
+            assertThat(Set.copyOf(request.propertyNames()))
+                    .isEqualTo(Set.of(
+                            "version", "requestId", "auth", "operation", "projectId", "sha256", "byteSize", "bytes"));
+            assertThat(request.get("operation").stringValue()).isEqualTo("STAGE");
+            assertThat(Base64.getDecoder().decode(request.get("bytes").stringValue()))
+                    .isEqualTo(BODY);
+            write(socket, frame(success(request, stagedResult(hash))));
+        })) {
+            var staged = server.client().stage(3, BODY);
+            assertThat(staged).isEqualTo(new SourceStoreClient.StagedBlob(hash, BODY.length, KEY, SESSION, 7));
+            assertThat(staged.blob()).isEqualTo(new SourceStoreClient.StoredBlob(hash, BODY.length, KEY));
+            server.completed();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"session", "session-type", "sequence-zero", "sequence-type", "missing", "extra", "hash"})
+    void stageRejectsAnInvalidSessionWatermark(String attack) throws Exception {
+        try (var server = new FakeServer(socket -> {
+            JsonNode request = request(socket);
+            Map<String, Object> result = stagedResult(hash(BODY));
+            switch (attack) {
+                case "session" -> result.put("session", "C".repeat(32));
+                case "session-type" -> result.put("session", 1);
+                case "sequence-zero" -> result.put("sequence", 0);
+                case "sequence-type" -> result.put("sequence", "7");
+                case "missing" -> result.remove("session");
+                case "extra" -> result.put("path", "/private-fixture");
+                case "hash" -> result.put("sha256", "0".repeat(64));
+                default -> throw new AssertionError(attack);
+            }
+            write(socket, frame(success(request, result)));
+        })) {
+            fails(() -> server.client().stage(3, BODY), "SOURCE_STORE_INTEGRITY");
+            server.completed();
+        }
+    }
+
+    @Test
+    void barrierSendsOnlyTheSessionWatermarkAndRequiresItsExactAcknowledgment() throws Exception {
+        try (var server = new FakeServer(socket -> {
+            JsonNode request = request(socket);
+            assertThat(Set.copyOf(request.propertyNames()))
+                    .isEqualTo(Set.of("version", "requestId", "auth", "operation", "session", "sequence"));
+            assertThat(request.get("operation").stringValue()).isEqualTo("BARRIER");
+            assertThat(request.get("session").stringValue()).isEqualTo(SESSION);
+            assertThat(request.get("sequence").longValue()).isEqualTo(7);
+            write(socket, frame(success(request, Map.of("session", SESSION, "sequence", 7))));
+        })) {
+            server.client().barrier(SESSION, 7);
+            server.completed();
+        }
+        try (var server = new FakeServer(socket -> {
+            JsonNode request = request(socket);
+            write(socket, frame(success(request, Map.of("session", SESSION, "sequence", 6))));
+        })) {
+            fails(() -> server.client().barrier(SESSION, 7), "SOURCE_STORE_INTEGRITY");
+            server.completed();
+        }
+    }
+
+    @Test
+    void invalidBarrierInputsAreRejectedBeforeAnyConnection() {
+        var client = configuredClient("/tmp/ci-missing-barrier.sock");
+        fails(() -> client.barrier("C".repeat(32), 1), "SOURCE_STORE_INVALID_REQUEST");
+        fails(() -> client.barrier(null, 1), "SOURCE_STORE_INVALID_REQUEST");
+        fails(() -> client.barrier(SESSION, 0), "SOURCE_STORE_INVALID_REQUEST");
+        fails(() -> client.stage(0, BODY), "SOURCE_STORE_INVALID_REQUEST");
     }
 
     @Test
@@ -477,6 +553,11 @@ class SourceStoreClientTest {
         response.put("ok", true);
         response.put("result", result);
         return response;
+    }
+
+    private static Map<String, Object> stagedResult(String hash) {
+        return new LinkedHashMap<>(
+                Map.of("sha256", hash, "byteSize", BODY.length, "keyId", KEY, "session", SESSION, "sequence", 7));
     }
 
     private static Map<String, Object> readResult(byte[] bytes) {

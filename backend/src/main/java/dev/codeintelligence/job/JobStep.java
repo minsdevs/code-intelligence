@@ -3,7 +3,8 @@ package dev.codeintelligence.job;
 /**
  * One pipeline step (§8.1). Implementations must be idempotent per snapshot so a retry after a
  * checkpoint is safe (§8.3). Any exception fails the step (and the job); the remaining steps stay
- * PENDING until a retry.
+ * PENDING until a retry. Long loops call {@link JobCancellation#checkpoint()} and blocking worker
+ * requests run in {@link JobCancellation#interruptibly}, so a cancel stops the body within the bound.
  */
 public interface JobStep {
 

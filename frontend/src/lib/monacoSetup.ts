@@ -5,6 +5,7 @@ import JsonWorker from 'monaco-editor/language/json/json.worker.js?worker'
 import CssWorker from 'monaco-editor/language/css/css.worker.js?worker'
 import HtmlWorker from 'monaco-editor/language/html/html.worker.js?worker'
 import TypeScriptWorker from 'monaco-editor/language/typescript/ts.worker.js?worker'
+import { MONACO_THEME, monacoThemeData } from './monacoTheme'
 
 let configured = false
 
@@ -23,5 +24,6 @@ export function configureMonaco(): void {
       return new EditorWorker()
     },
   }
+  monaco.editor.defineTheme(MONACO_THEME, monacoThemeData)
   loader.config({ monaco })
 }

@@ -10,7 +10,7 @@ const { EventEmitter } = require('node:events');
 const { PassThrough, Writable } = require('node:stream');
 const { spawnSync } = require('node:child_process');
 const { createBackupPostgres, validateBackupSummary, BackupPostgresError, LIMITS } = require('../src/backup-postgres.cjs');
-const { createBackupExportPolicy, createBackupRestorePolicy, REVIEWED_SCHEMA, REVIEWED_V26_SCHEMA } = require('../src/backup-export-policy.cjs');
+const { createBackupExportPolicy, createBackupRestorePolicy, REVIEWED_SCHEMA, REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA } = require('../src/backup-export-policy.cjs');
 const policy = createBackupExportPolicy(REVIEWED_SCHEMA);
 const migrationRoot = path.resolve(__dirname, '../../backend/src/main/resources/db/migration');
 const ID = '9007199254740993', OTHER_ID = '9007199254740995';
@@ -26,6 +26,19 @@ const sequences = REVIEWED_SCHEMA.tables.flatMap(t => t.columns.filter(c => c.ge
 const zeroSequences = () => Object.fromEntries(sequences.map(s => [s.key, '0']));
 const functions = ['guard_ai_cost_immutability', 'protect_sealed_source_entry', 'protect_snapshot_source_identity',
   'protect_source_blob', 'protect_source_manifest', 'reject_local_source_input_update'];
+// Mirrors the reviewed inventories: V27 lacks the V29 scope columns, V26 also the V27 outcome columns/table.
+function legacyCatalog(current, version) {
+  const catalog = copy(current);
+  for (const table of catalog.tables.filter(t => ['local_source_approvals', 'job_local_source_inputs'].includes(t.name))) {
+    table.columns = table.columns.filter(c => c.name !== 'scope');
+  }
+  if (version === 26) {
+    catalog.tables = catalog.tables.filter(t => t.name !== 'snapshot_inventory_measurements');
+    catalog.tables.find(t => t.name === 'files').columns = catalog.tables.find(t => t.name === 'files').columns
+      .filter(c => !['analysis_status', 'analysis_reason', 'analysis_targeted'].includes(c.name));
+  }
+  return catalog;
+}
 async function header(owner = true) {
   const catalog = { tables: REVIEWED_SCHEMA.tables.map(t => ({ name: t.name, kind: 'r', rls: false, forceRls: false,
     columns: t.columns.map(c => ({ ...c, default: null })) })), constraints: [], indexes: [], triggers: [],
@@ -84,11 +97,9 @@ async function fixture(t, patch = {}) {
         if (controls.hang || call.closed) return;
         if (controls.stderr) child.stderr.write(controls.stderr);
         if (sql.includes("'kind','legacyCatalog'")) {
-          const catalog = copy(controls.header.catalog);
-          catalog.tables = catalog.tables.filter(t => t.name !== 'snapshot_inventory_measurements');
-          catalog.tables.find(t => t.name === 'files').columns = catalog.tables.find(t => t.name === 'files').columns
-            .filter(c => !['analysis_status', 'analysis_reason', 'analysis_targeted'].includes(c.name));
-          emit({ kind: 'legacyCatalog', catalog });
+          const version = Number(sql.match(/'kind','legacyCatalog','version',([0-9]+),/)[1]);
+          const value = { kind: 'legacyCatalog', version, catalog: legacyCatalog(controls.header.catalog, version) };
+          if (controls.legacyPatch) controls.legacyPatch(value); emit(value);
         } else if (sql.includes("'kind','header'")) {
           const h = copy(controls.header);
           const needsOwner = sql.includes('min(id) filter'); h.owner = needsOwner ? h.owner : null;
@@ -612,11 +623,7 @@ test('real isolated PostgreSQL typed export and trigger-respecting staging round
 
 function legacySummary(h, rows) {
   const result = summaryFor(h, rows); result.schema = REVIEWED_V26_SCHEMA;
-  const catalog = copy(h.catalog);
-  catalog.tables = catalog.tables.filter(t => t.name !== 'snapshot_inventory_measurements');
-  catalog.tables.find(t => t.name === 'files').columns = catalog.tables.find(t => t.name === 'files').columns
-    .filter(c => !['analysis_status', 'analysis_reason', 'analysis_targeted'].includes(c.name));
-  result.catalogSha256 = sha(canonical(catalog));
+  result.catalogSha256 = sha(canonical(legacyCatalog(h.catalog, 26)));
   delete result.tableCounts.snapshot_inventory_measurements; delete result.tableSha256.snapshot_inventory_measurements;
   return result;
 }
@@ -642,24 +649,72 @@ test('V26 restore rejects current catalog masquerading as legacy and preserves o
   }
 });
 
+function v27Summary(h, rows) {
+  const result = summaryFor(h, rows); result.schema = REVIEWED_V27_SCHEMA;
+  result.catalogSha256 = sha(canonical(legacyCatalog(h.catalog, 27)));
+  return result;
+}
+test('V27 restore authenticates the pinned V27 catalog and loads unchanged rows into the V29 schema', async t => {
+  const f = await staging(t);
+  const file = policy.projectRow('files', { id: '5', snapshot_id: '3', path: 'src/main.ts', language: 'typescript', size: '12',
+    line_count: 1, content_hash: HASH, analysis_status: 'SUCCESS', analysis_reason: null, analysis_targeted: true });
+  const rows = [user(), file, note()]; f.controls.rows = rows;
+  const expected = v27Summary(f.originalHeader, rows);
+  assert.throws(() => validateBackupSummary(expected), /schema/);
+  assert.deepEqual(f.adapter.assertRestoreCompatibility({ expected, liveOwnerUserId: ID }), expected);
+  for (const catalog of [canonical(f.originalHeader.catalog), canonical(legacyCatalog(f.originalHeader.catalog, 26))]) {
+    assert.throws(() => f.adapter.assertRestoreCompatibility({ expected: { ...expected, catalogSha256: sha(catalog) }, liveOwnerUserId: ID }),
+      { code: 'BACKUP_PG_SCHEMA' });
+  }
+  assert.throws(() => f.adapter.assertRestoreCompatibility({ expected: { ...summaryFor(f.originalHeader, rows),
+    catalogSha256: expected.catalogSha256 }, liveOwnerUserId: ID }), { code: 'BACKUP_PG_SCHEMA' });
+  const result = await f.adapter.loadRows(loadOptions(f, rows, { expected }));
+  for (const table of ['users', 'files', 'notes']) assert.equal(result.tableSha256[table], expected.tableSha256[table]);
+  assert.equal(result.tableCounts.files, '1'); assert.equal(result.tableCounts.notes, '1');
+  assert.doesNotMatch(f.calls[1].chunks.join(''), /"scope"|insert into public\."(?:local_source_approvals|job_local_source_inputs)"/);
+});
+test('archives claiming an unknown, partial or hybrid migration inventory are refused before staging input', async t => {
+  const future = schema => ({ ...schema, migrations: [...schema.migrations,
+    { version: schema.migrations.length + 1, filename: `V${schema.migrations.length + 1}__synthetic_future.sql`, sha256: HASH }] });
+  const mutations = [s => { s.schema = future(REVIEWED_SCHEMA); }, s => { s.schema = future(REVIEWED_V27_SCHEMA); },
+    s => { s.schema = { ...REVIEWED_SCHEMA, migrations: REVIEWED_SCHEMA.migrations.slice(0, 28) }; },
+    s => { s.schema = { ...REVIEWED_V27_SCHEMA, tables: REVIEWED_SCHEMA.tables }; },
+    s => { s.schema = { ...REVIEWED_SCHEMA, migrations: REVIEWED_V27_SCHEMA.migrations }; },
+    s => { s.schema = { ...REVIEWED_SCHEMA, migrations: REVIEWED_SCHEMA.migrations.slice(0, 25) }; }];
+  for (const mutate of mutations) {
+    const f = await staging(t), expected = v27Summary(f.originalHeader, [user()]); mutate(expected);
+    assert.throws(() => f.adapter.assertRestoreCompatibility({ expected, liveOwnerUserId: ID }), { code: 'BACKUP_PG_SCHEMA' });
+    await rejects(f.adapter.loadRows(loadOptions(f, [user()], { expected })), 'SCHEMA');
+    assert.equal(f.calls.length, 1, 'A refused inventory must not start a load transaction');
+  }
+});
+test('staging requires exactly the pinned V26 then V27 legacy catalogs before the current header', async t => {
+  for (const patch of [value => { value.version = 26; }, value => { value.version = 28; }, value => { value.extra = true; }]) {
+    const f = await fixture(t, stageOptions); let seen = 0;
+    f.controls.legacyPatch = value => { if (++seen === 2) patch(value); };
+    await rejects(f.adapter.initializeStaging(), 'SCHEMA');
+    assert.throws(() => f.adapter.assertRestoreCompatibility({ expected: v27Summary(f.originalHeader, [user()]), liveOwnerUserId: ID }),
+      { code: 'BACKUP_PG_STAGING' });
+  }
+  const f = await staging(t);
+  assert.match(f.calls[0].chunks.join(''), /'kind','legacyCatalog','version',26,[\s\S]*'kind','legacyCatalog','version',27,/);
+});
+
 // Opt-in native compatibility proof: a fresh private cluster, never an existing profile/port.
-test('native V26 exporter payload restores into V27 with real constraints and no invented measurements', {
-  skip: !process.env.CI_BACKUP_V26_PG_BIN,
-}, async t => {
+// The source side runs the frozen production exporter of `baseline`, not a compatibility branch produced by this test.
+async function nativeLegacyCluster(t, { bin: binPath, baseline, schema }) {
   const { spawn } = require('node:child_process'); const net = require('node:net');
-  const { once } = require('node:events'); const { readBackupPayload } = require('../src/backup-payload.cjs');
-  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ci-v26-native-')));
-  const bin = await fs.realpath(process.env.CI_BACKUP_V26_PG_BIN);
+  const { once } = require('node:events');
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), `ci-v${schema.migrations.length}-native-`)));
+  const bin = await fs.realpath(binPath);
   const sourceRoot = path.join(root, 'legacy-src'), legacyMigrations = path.join(root, 'migrations');
   await fs.mkdir(legacyMigrations); await fs.cp(path.resolve(__dirname, '../src'), sourceRoot, { recursive: true });
-  // Frozen production V26 implementation, not a compatibility branch produced by this test.
-  const baseline = '4d8946c7b18b1cdee4f6f86b1e30fc9d469d923f';
   for (const name of ['backup-export-policy.cjs', 'backup-postgres.cjs', 'backup-payload.cjs', 'backup-source-selection.cjs']) {
     const result = spawnSync('git', ['show', `${baseline}:desktop/src/${name}`], { cwd: path.resolve(__dirname, '../..'), maxBuffer: 1024 * 1024 });
-    assert.equal(result.status, 0, 'Pinned V26 fixture source must exist in local git history.');
+    assert.equal(result.status, 0, 'Pinned legacy fixture source must exist in local git history.');
     await fs.writeFile(path.join(sourceRoot, name), result.stdout);
   }
-  for (const m of REVIEWED_V26_SCHEMA.migrations) await fs.copyFile(path.join(migrationRoot, m.filename), path.join(legacyMigrations, m.filename));
+  for (const m of schema.migrations) await fs.copyFile(path.join(migrationRoot, m.filename), path.join(legacyMigrations, m.filename));
   const legacy = require(path.join(sourceRoot, 'backup-postgres.cjs'));
   const legacyPayload = require(path.join(sourceRoot, 'backup-payload.cjs'));
   const pgRoot = path.join(root, 'pg'); const cert = path.join(root, 'server.crt'), key = path.join(root, 'server.key');
@@ -697,31 +752,86 @@ test('native V26 exporter payload restores into V27 with real constraints and no
     installationId: INSTALLATION, mode: 'staging', connection: { host: '127.0.0.1', port, user: 'backup_fixture', database }, env });
   const source = await legacy.createBackupPostgres(options(sourceDb, legacyMigrations)); adapters.push(source);
   const target = await createBackupPostgres(options(targetDb)); adapters.push(target);
-  await source.initializeStaging(); await target.initializeStaging();
+  await source.initializeStaging(); const { catalogSha256: targetCatalog } = await target.initializeStaging();
+  // Export with the legacy adapter, write with the legacy payload writer, read with the current reader.
+  async function exportArchive() {
+    const { readBackupPayload } = require('../src/backup-payload.cjs');
+    const exporter = await legacy.createBackupPostgres({ ...options(sourceDb, legacyMigrations), mode: 'export' }); adapters.push(exporter);
+    const rows = []; const expected = await exporter.exportRows({ writeRow: row => rows.push(row) });
+    const payloadRoot = path.join(root, 'payload'); await fs.mkdir(payloadRoot, { mode: 0o700 });
+    const writer = await legacyPayload.createBackupPayload({ root: payloadRoot, installationId: INSTALLATION, minimumVersion: '20261003' });
+    try { for (const row of rows) await writer.writeRow(row); await writer.writeDatabase(expected); await writer.finish(); }
+    finally { await writer.close(); }
+    const payload = await fs.readFile(path.join(payloadRoot, 'payload.bin'));
+    const readRows = []; let readSummary;
+    for await (const record of readBackupPayload({ root: payloadRoot, installationId: INSTALLATION, runningBuild: '20261005' })) {
+      if (record.kind === 'ROW') readRows.push(record.row); if (record.kind === 'DATABASE') readSummary = record.summary;
+    }
+    assert.deepEqual(readRows, rows); assert.deepEqual(readSummary, expected);
+    return { rows: readRows, expected: readSummary, payload, payloadFile: path.join(payloadRoot, 'payload.bin') };
+  }
+  return { sql, sourceDb, targetDb, target, targetCatalog, exportArchive };
+}
+test('native V26 exporter payload restores into V29 with real constraints and no invented measurements', {
+  skip: !process.env.CI_BACKUP_V26_PG_BIN,
+}, async t => {
+  const native = await nativeLegacyCluster(t, { bin: process.env.CI_BACKUP_V26_PG_BIN,
+    baseline: '4d8946c7b18b1cdee4f6f86b1e30fc9d469d923f', schema: REVIEWED_V26_SCHEMA });
+  const { sql, sourceDb, targetDb, target } = native;
   sql(sourceDb, `insert into users(id,login,local_key,identity_type) values(1,'fixture','${INSTALLATION}','LOCAL');
     insert into projects(id,user_id,name,repo_owner,repo_name) values(2,1,'fixture','fixture','fixture');
     insert into snapshots(id,project_id,commit_sha,status) values(3,2,'${'a'.repeat(40)}','READY');
     insert into files(id,snapshot_id,path,language,size,line_count,content_hash) values(4,3,'src/main.ts','typescript',12,1,'${HASH}');
     insert into notes(id,project_id,title,content_md) values(5,2,'legacy note','preserved');`);
-  const exporter = await legacy.createBackupPostgres({ ...options(sourceDb, legacyMigrations), mode: 'export' }); adapters.push(exporter);
-  const rows = []; const expected = await exporter.exportRows({ writeRow: row => rows.push(row) });
-  assert.equal(expected.schema.migrations.length, 26);
-  const payloadRoot = path.join(root, 'payload'); await fs.mkdir(payloadRoot, { mode: 0o700 });
-  const writer = await legacyPayload.createBackupPayload({ root: payloadRoot, installationId: INSTALLATION, minimumVersion: '20261003' });
-  try { for (const row of rows) await writer.writeRow(row); await writer.writeDatabase(expected); await writer.finish(); }
-  finally { await writer.close(); }
-  const originalPayload = await fs.readFile(path.join(payloadRoot, 'payload.bin'));
-  const readRows = []; let readSummary;
-  for await (const record of readBackupPayload({ root: payloadRoot, installationId: INSTALLATION, runningBuild: '20261005' })) {
-    if (record.kind === 'ROW') readRows.push(record.row); if (record.kind === 'DATABASE') readSummary = record.summary;
-  }
-  assert.deepEqual(readRows, rows); assert.deepEqual(readSummary, expected);
-  await target.loadRows({ rows: readRows, expected: readSummary, liveOwnerUserId: '1', livePreferenceRevisionHighWater: {}, writeAccounting: async () => {} });
+  const archive = await native.exportArchive();
+  assert.equal(archive.expected.schema.migrations.length, 26);
+  await target.loadRows({ rows: archive.rows, expected: archive.expected, liveOwnerUserId: '1', livePreferenceRevisionHighWater: {}, writeAccounting: async () => {} });
   assert.equal(sql(targetDb, "select analysis_status||':'||analysis_targeted::text||':'||(analysis_reason is null)::text from files;"), 'LEGACY_UNMEASURED:false:true');
   assert.equal(sql(targetDb, 'select count(*) from snapshot_inventory_measurements;'), '0');
   assert.equal(sql(targetDb, 'select content_md from notes;'), 'preserved');
-  assert.equal(sql(targetDb, "select count(*) from flyway_schema_history where success;"), '27');
-  assert.deepEqual(await fs.readFile(path.join(payloadRoot, 'payload.bin')), originalPayload);
+  assert.equal(sql(targetDb, "select count(*) from flyway_schema_history where success;"), String(REVIEWED_SCHEMA.migrations.length));
+  assert.deepEqual(await fs.readFile(archive.payloadFile), archive.payload);
   const readback = []; await target.exportRows({ writeRow: row => readback.push(row) });
   assert.equal(readback.find(row => row.table === 'files').values.analysis_status, 'LEGACY_UNMEASURED');
+});
+// 42d3260 is the source of candidate LA8ZS9: the shipped V27 exporter and payload writer.
+test('native V27 exporter payload restores unchanged into V29 with the V28 indexes and V29 scope columns', {
+  skip: !process.env.CI_BACKUP_V27_PG_BIN,
+}, async t => {
+  const native = await nativeLegacyCluster(t, { bin: process.env.CI_BACKUP_V27_PG_BIN,
+    baseline: '42d3260', schema: REVIEWED_V27_SCHEMA });
+  const { sql, sourceDb, targetDb, target } = native;
+  sql(sourceDb, `insert into users(id,login,local_key,identity_type) values(1,'fixture','${INSTALLATION}','LOCAL');
+    insert into projects(id,user_id,name,repo_owner,repo_name) values(2,1,'fixture','fixture','fixture');
+    insert into snapshots(id,project_id,commit_sha,status) values(3,2,'${'a'.repeat(40)}','READY');
+    insert into files(id,snapshot_id,path,language,size,line_count,content_hash,analysis_status,analysis_reason,analysis_targeted)
+      values(4,3,'src/main.ts','typescript',12,1,'${HASH}','PARTIAL','PARSE_ERROR',true);
+    insert into snapshot_inventory_measurements(snapshot_id,discovered_files,excluded_for_count,excluded_for_size,excluded_binary,excluded_submodules)
+      values(3,7,1,2,3,0);
+    insert into graph_nodes(id,snapshot_id,node_type,natural_key,name,file_id,metadata) values(6,3,'FILE','src/main.ts','main.ts',4,'{}');
+    insert into analysis_findings(id,snapshot_id,category,severity,title,status,node_id) values(8,3,'fixture','LOW','kept','OPEN',6);
+    insert into notes(id,project_id,title,content_md) values(5,2,'v27 note','preserved');`);
+  const archive = await native.exportArchive();
+  assert.equal(archive.expected.schema.migrations.length, 27);
+  assert.deepEqual(archive.expected.schema, REVIEWED_V27_SCHEMA);
+  // The real V27 catalog differs from V29 (indexes, scope columns); only the pinned V27 fingerprint admits it.
+  assert.notEqual(archive.expected.catalogSha256, native.targetCatalog);
+  assert.deepEqual(target.assertRestoreCompatibility({ expected: archive.expected, liveOwnerUserId: '1' }), archive.expected);
+  const restored = await target.loadRows({ rows: archive.rows, expected: archive.expected, liveOwnerUserId: '1',
+    livePreferenceRevisionHighWater: {}, writeAccounting: async () => {} });
+  for (const table of ['users', 'projects', 'snapshots', 'files', 'snapshot_inventory_measurements', 'graph_nodes', 'analysis_findings', 'notes']) {
+    assert.equal(restored.tableSha256[table], archive.expected.tableSha256[table], `${table} rows restore unchanged`);
+  }
+  assert.equal(sql(targetDb, "select analysis_status||':'||analysis_reason||':'||analysis_targeted::text from files;"), 'PARTIAL:PARSE_ERROR:true');
+  assert.equal(sql(targetDb, 'select discovered_files from snapshot_inventory_measurements;'), '7');
+  assert.equal(sql(targetDb, "select count(*) from flyway_schema_history where success;"), '29');
+  assert.equal(sql(targetDb, `select count(*) from pg_indexes where schemaname='public' and indexname in ('idx_graph_edges_source_node_id',
+    'idx_graph_edges_target_node_id','idx_graph_nodes_file_id','idx_feature_links_node_id','idx_flows_entry_node_id','idx_flow_steps_node_id',
+    'idx_flow_steps_edge_id','idx_analysis_findings_node_id','idx_ai_conversations_snapshot_id');`), '9');
+  assert.equal(sql(targetDb, `select count(*) from information_schema.columns where table_schema='public' and column_name='scope'
+    and table_name in ('local_source_approvals','job_local_source_inputs') and is_nullable='YES';`), '2');
+  assert.equal(sql(targetDb, 'select (select count(*) from local_source_approvals)+(select count(*) from job_local_source_inputs);'), '0');
+  assert.deepEqual(await fs.readFile(archive.payloadFile), archive.payload);
+  const readback = []; await target.exportRows({ writeRow: row => readback.push(row) });
+  assert.deepEqual(readback.filter(row => row.table === 'files'), archive.rows.filter(row => row.table === 'files'));
 });

@@ -10,6 +10,7 @@ import { useUiStore } from '../../stores/uiStore'
 import { parseProjectId } from '../../lib/projectId'
 import { codeLocationSearch, parseLineParam } from '../code/codeLocation'
 import { CoveragePanel } from '../analysis/CoveragePanel'
+import { useT } from '../../lib/i18n'
 
 const NeighborhoodPanel = lazy(() => import('./RepositoryNeighborhood'))
 const PAGE_SIZE = 40
@@ -30,36 +31,31 @@ const SYMBOL_TYPES = new Set([
   'ENTITY',
   'DB_ENTITY',
 ])
-const categories = [
-  ['files', '파일 · 분석 상태'],
-  ['entrypoints', '요청 · 화면 진입점'],
-  ['symbols', '심볼 · 함수 · 클래스'],
-  ['dependencies', '선언된 외부 패키지'],
-] as const
-type Category = (typeof categories)[number][0]
-const statuses: Record<string, string> = {
-  SUCCESS: '구문 분석 성공',
-  PARTIAL: '부분 성공',
-  FAILED: '분석 실패',
-  UNSUPPORTED: '미지원',
-  UNMEASURED: '미측정',
-  TARGETED: '분석 대상 · 결과 대기',
-  LEGACY_UNMEASURED: '과거 미측정',
-}
-
-const outcomeReasons: Record<string, string> = {
-  AMBIGUOUS_SYMBOL_IDENTITY: '다른 파일의 동명 선언을 구분할 수 없어 관련 연결을 생략했습니다.',
-  ANALYZER_DISABLED: '이 분석에는 해당 분석기가 연결되지 않았습니다.',
-  ANALYZER_UNAVAILABLE: '분석기에 연결하지 못했습니다.',
-  ANALYZER_OUTCOME_MISSING_OR_INVALID:
-    '분석기가 파일별 결과를 제공하지 않았거나 응답이 모호합니다.',
-  SOURCE_LANGUAGE_UNSUPPORTED: '이 언어의 소스 분석은 지원하지 않습니다.',
-  PARSER_NOT_MEASURED: '이 파일의 파서 결과는 측정되지 않았습니다.',
-  PROJECT_SYNTAX_REJECTED: '입력 프로젝트의 구문 오류로 분석 요청이 거부됐습니다.',
-  SOURCE_READ_FAILED: '보관된 분석 입력을 읽지 못했습니다.',
-}
+const categories = ['files', 'entrypoints', 'symbols', 'dependencies'] as const
+type Category = (typeof categories)[number]
+// Labels live in translations.ts under overview.status.* and overview.reason.*.
+const statuses = [
+  'SUCCESS',
+  'PARTIAL',
+  'FAILED',
+  'UNSUPPORTED',
+  'UNMEASURED',
+  'TARGETED',
+  'LEGACY_UNMEASURED',
+]
+const outcomeReasons = new Set([
+  'AMBIGUOUS_SYMBOL_IDENTITY',
+  'ANALYZER_DISABLED',
+  'ANALYZER_UNAVAILABLE',
+  'ANALYZER_OUTCOME_MISSING_OR_INVALID',
+  'SOURCE_LANGUAGE_UNSUPPORTED',
+  'PARSER_NOT_MEASURED',
+  'PROJECT_SYNTAX_REJECTED',
+  'SOURCE_READ_FAILED',
+])
 
 export default function RepositoryOverviewPage() {
+  const t = useT()
   const { projectId: rawId } = useParams()
   const projectId = parseProjectId(rawId)
   const [params, setParams] = useSearchParams()
@@ -81,27 +77,25 @@ export default function RepositoryOverviewPage() {
   const snapshot =
     snapshots.data?.find((item) => item.id === snapshotId) ??
     (project.data?.currentSnapshot?.id === snapshotId ? project.data.currentSnapshot : null)
-  if (!projectId) return <p className="p-5">프로젝트를 선택하세요.</p>
+  if (!projectId) return <p className="p-5">{t('overview.selectProject')}</p>
   if (project.isError || invalidSnapshot)
     return (
       <p role="alert" className="p-5">
-        프로젝트 또는 분석 시점을 확인할 수 없습니다.
+        {t('overview.unknownProject')}
       </p>
     )
-  if (!project.data) return <p className="p-5">프로젝트를 불러오는 중…</p>
+  if (!project.data) return <p className="p-5">{t('overview.loadingProject')}</p>
   return (
-    <div className="min-h-0 flex-1 overflow-auto p-4 @min-[800px]:p-6" aria-label="레포 개요">
+    <div className="min-h-0 flex-1 overflow-auto p-4 @min-[800px]:p-6" aria-label={t('overview.title')}>
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold">레포 개요</h2>
-          <p className="mt-1 text-sm text-ink-muted">
-            구성과 진입점을 찾고, 변경 전에 함께 확인할 코드를 살펴보세요.
-          </p>
+          <h2 className="text-xl font-semibold">{t('overview.title')}</h2>
+          <p className="mt-1 text-sm text-ink-muted">{t('overview.intro')}</p>
         </div>
         <label className="text-xs">
-          분석 시점{' '}
+          {t('overview.snapshotLabel')}{' '}
           <select
-            aria-label="개요 분석 시점"
+            aria-label={t('overview.snapshotSelect')}
             className="rounded border border-line bg-surface-1 p-2"
             value={requestedSnapshot ?? 'current'}
             onChange={(event) => {
@@ -110,7 +104,7 @@ export default function RepositoryOverviewPage() {
               setParams(next)
             }}
           >
-            <option value="current">현재 결과</option>
+            <option value="current">{t('overview.currentResult')}</option>
             {(snapshots.data ?? []).map((item) => (
               <option key={item.id} value={item.id}>
                 #{item.id} · {item.analyzedAt ?? item.status}
@@ -120,17 +114,18 @@ export default function RepositoryOverviewPage() {
         </label>
       </header>
       {snapshotId == null ? (
-        <p role="status">
-          완료된 분석 결과가 없습니다. 가져오기 또는 분석을 완료하면 이곳에서 탐색할 수 있습니다.
-        </p>
+        <p role="status">{t('overview.noResult')}</p>
       ) : (
         <>
           <p className="mb-4 rounded border border-line bg-surface-1 p-3 text-xs [overflow-wrap:anywhere]">
-            분석 #{snapshotId} · {snapshot?.analyzedAt ?? '시점 미확인'} · 소스 상태{' '}
-            {snapshot?.commitSha || '미확인'} · {snapshot?.status ?? '상태 확인 중'}
+            {t('overview.snapshotLine')
+              .replace('{id}', String(snapshotId))
+              .replace('{time}', snapshot?.analyzedAt ?? t('overview.timeUnknown'))
+              .replace('{commit}', snapshot?.commitSha || t('overview.unknown'))
+              .replace('{status}', snapshot?.status ?? t('overview.statusChecking'))}
             {snapshotId !== project.data.currentSnapshot?.id
-              ? ' · 이전 결과'
-              : ' · 현재 등록된 결과 (원본의 최신 상태와 다를 수 있음)'}
+              ? t('overview.previousResult')
+              : t('overview.currentRegistered')}
           </p>
           <SnapshotOverview
             key={`${projectId}:${snapshotId}`}
@@ -153,6 +148,7 @@ function SnapshotOverview({
   snapshotId: number
   current: boolean
 }) {
+  const t = useT()
   const [params, setParams] = useSearchParams()
   const [category, setCategory] = useState<Category>('entrypoints')
   const [search, setSearch] = useState('')
@@ -254,35 +250,32 @@ function SnapshotOverview({
     <div className="space-y-5">
       <section className="grid gap-4 @min-[800px]:grid-cols-2">
         <article className="rounded-lg border border-line bg-surface-1 p-4">
-          <h3 className="font-semibold">이 프로젝트는 무엇을 하나요?</h3>
-          <p className="mt-2 text-xs text-ink-muted">
-            README의 선언 · 실행 명령도 문서에 적힌 정보이며, 이 앱에서 실행하거나 성공을 확인한
-            것은 아닙니다.
-          </p>
+          <h3 className="font-semibold">{t('overview.whatTitle')}</h3>
+          <p className="mt-2 text-xs text-ink-muted">{t('overview.readmeNote')}</p>
           {readme.data ? (
             <>
               <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap font-sans text-sm [overflow-wrap:anywhere]">
                 {readme.data.content.slice(0, 1000)}
               </pre>
               <Link className="mt-2 inline-block text-xs text-accent" to={sourceLink(readmePath!)}>
-                해당 시점 README 전체 보기
+                {t('overview.readmeFull')}
               </Link>
             </>
           ) : (
             <p className="mt-2 text-sm text-ink-muted">
               {files.isError
-                ? '파일 목록을 불러올 수 없어 README를 확인하지 못했습니다.'
+                ? t('overview.readmeFilesError')
                 : readme.isLoading
-                  ? 'README를 불러오는 중…'
+                  ? t('overview.readmeLoading')
                   : readme.isError
-                    ? '보관된 README를 열 수 없습니다.'
-                    : '루트 README가 없습니다. 아래 진입점과 기능의 코드 근거로 확인하세요.'}
+                    ? t('overview.readmeError')
+                    : t('overview.readmeMissing')}
             </p>
           )}
         </article>
         <article className="rounded-lg border border-line bg-surface-1 p-4">
-          <h3 className="font-semibold">코드에서 확인한 구성</h3>
-          <ul aria-label="주요 폴더" className="mt-2 flex flex-wrap gap-2">
+          <h3 className="font-semibold">{t('overview.structureTitle')}</h3>
+          <ul aria-label={t('overview.folders')} className="mt-2 flex flex-wrap gap-2">
             {directories.map(([folder, count]) => (
               <li key={folder}>
                 <button
@@ -293,14 +286,16 @@ function SnapshotOverview({
                     setSearch(folder)
                   }}
                 >
-                  {folder || '루트'} · 목록 {count}개
+                  {t('overview.folderCount')
+                    .replace('{folder}', folder || t('overview.root'))
+                    .replace('{count}', String(count))}
                 </button>
               </li>
             ))}
           </ul>
 
           {overview.isError ? (
-            <p role="alert">구성 집계를 불러올 수 없습니다.</p>
+            <p role="alert">{t('overview.countsError')}</p>
           ) : (
             <ul className="mt-2 flex flex-wrap gap-2">
               {components.map(([type, count]) => (
@@ -320,77 +315,79 @@ function SnapshotOverview({
             </ul>
           )}
           <p className="mt-3 text-xs text-ink-muted">
-            파일 목록의 언어: {languages.join(', ') || '미확인'}. 언어 감지는 심볼·호출·프레임워크
-            지원 보장이 아닙니다.
+            {t('overview.languages').replace(
+              '{languages}',
+              languages.join(', ') || t('overview.unknown'),
+            )}
           </p>
           <div className="mt-3 flex flex-wrap gap-3 text-sm">
             <Link
               className="text-accent"
               to={`/projects/${projectId}/features?snapshotId=${snapshotId}`}
             >
-              주요 기능 찾기 →
+              {t('overview.findFeatures')}
             </Link>
             <Link
               className="text-accent"
               to={`/projects/${projectId}/flows?snapshotId=${snapshotId}`}
             >
-              기록된 정적 흐름 따라가기 →
+              {t('overview.followFlows')}
             </Link>
           </div>
         </article>
       </section>
       <section
         className="rounded-lg border border-line bg-surface-1 p-4"
-        aria-label="분석 결과 탐색"
+        aria-label={t('overview.explore')}
       >
-        <h3 className="font-semibold">어디에 구현되어 있나요?</h3>
-        <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="분석 결과 종류">
-          {categories.map(([key, label]) => (
+        <h3 className="font-semibold">{t('overview.whereTitle')}</h3>
+        <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={t('overview.kinds')}>
+          {categories.map((key) => (
             <button
               key={key}
               aria-pressed={category === key}
               className={`rounded px-3 py-2 text-xs ${category === key ? 'bg-surface-3 text-ink' : 'border border-line text-ink-muted'}`}
               onClick={() => setCategory(key)}
             >
-              {label}
+              {t(`overview.category.${key}`)}
             </button>
           ))}
         </div>
         <div className="my-3 flex flex-wrap items-center gap-3 text-xs">
           <label className="min-w-48 flex-1">
-            검색{' '}
+            {t('overview.search')}{' '}
             <input
-              aria-label="분석 결과 검색"
+              aria-label={t('overview.searchLabel')}
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="이름 또는 파일 경로"
+              placeholder={t('overview.searchPlaceholder')}
               className="ml-2 w-3/4 rounded border border-line bg-surface-2 p-2"
             />
           </label>
           <label>
-            정렬{' '}
+            {t('overview.sort')}{' '}
             <select
-              aria-label="분석 결과 정렬"
+              aria-label={t('overview.sortLabel')}
               value={sort}
               onChange={(event) => setSort(event.target.value as typeof sort)}
               className="rounded border border-line bg-surface-2 p-2"
             >
-              <option value="path">파일 경로</option>
-              <option value="name">이름</option>
-              <option value="type">종류</option>
+              <option value="path">{t('overview.sort.path')}</option>
+              <option value="name">{t('overview.sort.name')}</option>
+              <option value="type">{t('overview.sort.type')}</option>
             </select>
           </label>
           {category === 'symbols' && (
             <label>
-              종류{' '}
+              {t('overview.kind')}{' '}
               <select
-                aria-label="심볼 종류"
+                aria-label={t('overview.symbolKind')}
                 value={nodeType}
                 onChange={(event) => setNodeType(event.target.value)}
                 className="rounded border border-line bg-surface-2 p-2"
               >
-                <option value="">전체</option>
+                <option value="">{t('overview.all')}</option>
                 {Object.keys(overview.data?.nodeCounts ?? {})
                   .filter((type) => SYMBOL_TYPES.has(type))
                   .map((type) => (
@@ -401,17 +398,17 @@ function SnapshotOverview({
           )}
           {category === 'files' && (
             <label>
-              상태{' '}
+              {t('overview.status')}{' '}
               <select
-                aria-label="파일 분석 상태"
+                aria-label={t('overview.fileStatus')}
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
                 className="rounded border border-line bg-surface-2 p-2"
               >
-                <option value="">전체</option>
-                {Object.entries(statuses).map(([value, label]) => (
+                <option value="">{t('overview.all')}</option>
+                {statuses.map((value) => (
                   <option key={value} value={value}>
-                    {label}
+                    {t(`overview.status.${value}`)}
                   </option>
                 ))}
               </select>
@@ -419,31 +416,25 @@ function SnapshotOverview({
           )}
         </div>
         {category === 'dependencies' && (
-          <p className="mb-3 text-xs text-ink-muted">
-            manifest에 선언된 외부 패키지입니다. 실제 실행 중 사용 여부나 설치 성공은 확인하지
-            않았습니다. PACKAGE 심볼은 내부 namespace이므로 여기에 포함하지 않습니다.
-          </p>
+          <p className="mb-3 text-xs text-ink-muted">{t('overview.dependenciesNote')}</p>
         )}
         {category === 'entrypoints' && (
-          <p className="mb-3 text-xs text-ink-muted">
-            분석기가 기록한 요청·화면 진입점입니다. 실행 명령이나 런타임 도달 가능성을 확인한 목록은
-            아닙니다.
-          </p>
+          <p className="mb-3 text-xs text-ink-muted">{t('overview.entrypointsNote')}</p>
         )}
         {(category === 'files' ? files.isError : nodes.isError) ? (
-          <p role="alert">결과를 불러올 수 없습니다. 빈 결과로 해석하지 마세요.</p>
+          <p role="alert">{t('overview.resultsError')}</p>
         ) : (category === 'files' ? files.isLoading : nodes.isLoading) ? (
-          <p role="status">결과를 불러오는 중…</p>
+          <p role="status">{t('overview.resultsLoading')}</p>
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs" aria-label="분석 결과 표">
+              <table className="w-full text-left text-xs" aria-label={t('overview.table')}>
                 <thead>
                   <tr className="border-b border-line text-ink-muted">
-                    <th className="p-2">이름 / 파일</th>
-                    <th className="p-2">종류</th>
-                    <th className="p-2">근거 / 분석 상태</th>
-                    <th className="p-2">탐색</th>
+                    <th className="p-2">{t('overview.col.name')}</th>
+                    <th className="p-2">{t('overview.col.kind')}</th>
+                    <th className="p-2">{t('overview.col.evidence')}</th>
+                    <th className="p-2">{t('overview.col.explore')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -475,15 +466,16 @@ function SnapshotOverview({
                                 className="text-accent"
                                 to={sourceLink(node.filePath, node.lineStart, true)}
                               >
-                                보관된 소스{node.lineStart ? `:${node.lineStart}` : ''}
+                                {t('overview.storedSource')}
+                                {node.lineStart ? `:${node.lineStart}` : ''}
                               </Link>
                             ) : (
-                              '파일 근거 미확인'
+                              t('overview.noFileEvidence')
                             )}
                           </td>
                           <td className="p-2">
                             <button className="text-accent" onClick={() => selectNode(node)}>
-                              관계 · 함께 확인할 곳
+                              {t('overview.relations')}
                             </button>
                           </td>
                         </tr>
@@ -492,21 +484,20 @@ function SnapshotOverview({
               </table>
             </div>
             {total === 0 && (
-              <p className="py-4 text-sm text-ink-muted">
-                기록된 결과가 없습니다. 미지원·미해결 구간이 있을 수 있으며 기능이나 영향이 없다는
-                뜻은 아닙니다.
-              </p>
+              <p className="py-4 text-sm text-ink-muted">{t('overview.empty')}</p>
             )}
             <div className="mt-3 flex items-center justify-between gap-3 text-xs">
               <span>
-                {total.toLocaleString()}개 · {PAGE_SIZE}개씩 표시
+                {t('overview.pageSummary')
+                  .replace('{total}', total.toLocaleString())
+                  .replace('{size}', String(PAGE_SIZE))}
               </span>
               <div className="flex items-center gap-3">
                 <button
                   disabled={page === 0}
                   onClick={() => setPageState({ key: filterKey, page: page - 1 })}
                 >
-                  이전
+                  {t('overview.previous')}
                 </button>
                 <span>
                   {page + 1} / {Math.max(1, Math.ceil(total / PAGE_SIZE))}
@@ -515,7 +506,7 @@ function SnapshotOverview({
                   disabled={(page + 1) * PAGE_SIZE >= total}
                   onClick={() => setPageState({ key: filterKey, page: page + 1 })}
                 >
-                  다음
+                  {t('overview.next')}
                 </button>
               </div>
             </div>
@@ -525,21 +516,24 @@ function SnapshotOverview({
       {selectedId != null && (
         <section
           className="rounded-lg border border-line bg-surface-1 p-4"
-          aria-label="선택한 코드 주변 관계"
+          aria-label={t('overview.selectedRegion')}
         >
           {detail.isError ? (
-            <p role="alert">선택한 항목이 이 분석 시점에 속하는지 확인할 수 없습니다.</p>
+            <p role="alert">{t('overview.selectedUnknown')}</p>
           ) : !detail.data ? (
-            <p>항목을 불러오는 중…</p>
+            <p>{t('overview.itemLoading')}</p>
           ) : (
             <>
-              <h3 className="font-semibold">{detail.data.name} · 변경 전에 함께 확인할 곳</h3>
+              <h3 className="font-semibold">
+                {t('overview.selectedTitle').replace('{name}', detail.data.name)}
+              </h3>
               <p className="mt-1 text-xs text-ink-muted [overflow-wrap:anywhere]">
-                {detail.data.filePath ?? detail.data.naturalKey} · 분석 #{snapshotId}
+                {detail.data.filePath ?? detail.data.naturalKey} ·{' '}
+                {t('overview.analysisNumber').replace('{id}', String(snapshotId))}
               </p>
               {category === 'dependencies' && (
                 <p className="mt-2 text-xs">
-                  선언 정보:{' '}
+                  {t('overview.declaration')}
                   {['group', 'artifact', 'version', 'configuration']
                     .map((key) =>
                       typeof detail.data?.metadata[key] === 'string'
@@ -547,7 +541,7 @@ function SnapshotOverview({
                         : null,
                     )
                     .filter(Boolean)
-                    .join(' · ') || '추가 metadata 없음'}
+                    .join(' · ') || t('overview.noMetadata')}
                 </p>
               )}
               {current ? (
@@ -572,15 +566,12 @@ function SnapshotOverview({
                     })
                   }}
                 >
-                  AI 설명 준비 · 전송 전 확인
+                  {t('overview.aiExplain')}
                 </button>
               ) : (
-                <p className="mt-3 text-xs text-ink-muted">
-                  이전 분석의 AI 설명은 아직 지원하지 않습니다. 이 시점의 표·관계·소스는 AI 없이
-                  탐색할 수 있습니다.
-                </p>
+                <p className="mt-3 text-xs text-ink-muted">{t('overview.aiPastUnsupported')}</p>
               )}
-              <Suspense fallback={<p className="mt-3">관계를 불러오는 중…</p>}>
+              <Suspense fallback={<p className="mt-3">{t('overview.relationsLoading')}</p>}>
                 <NeighborhoodPanel
                   key={`${snapshotId}:${selectedId}`}
                   projectId={projectId}
@@ -595,7 +586,9 @@ function SnapshotOverview({
         </section>
       )}
       <details className="rounded-lg border border-line p-3">
-        <summary className="cursor-pointer text-sm font-medium">분석 범위와 미확인 사항</summary>
+        <summary className="cursor-pointer text-sm font-medium">
+          {t('overview.coverageSummary')}
+        </summary>
         <div className="mt-3">
           <CoveragePanel projectId={projectId} snapshotId={snapshotId} />
         </div>
@@ -613,6 +606,8 @@ function FileRow({
   href: string
   onSymbols: () => void
 }) {
+  const t = useT()
+  const status = file.analysisStatus ?? 'LEGACY_UNMEASURED'
   return (
     <tr className="border-b border-line/50">
       <td className="max-w-72 p-2 [overflow-wrap:anywhere]">
@@ -620,18 +615,20 @@ function FileRow({
           {file.path}
         </Link>
       </td>
-      <td className="p-2">{file.language ?? '미확인'}</td>
+      <td className="p-2">{file.language ?? t('overview.unknown')}</td>
       <td className="p-2">
-        {statuses[file.analysisStatus ?? 'LEGACY_UNMEASURED'] ?? '미측정'}
+        {statuses.includes(status) ? t(`overview.status.${status}`) : t('overview.status.UNMEASURED')}
         {file.analysisReason && (
           <span className="block text-ink-muted">
-            {outcomeReasons[file.analysisReason] ?? file.analysisReason}
+            {outcomeReasons.has(file.analysisReason)
+              ? t(`overview.reason.${file.analysisReason}`)
+              : file.analysisReason}
           </span>
         )}
       </td>
       <td className="p-2">
         <button className="text-accent" onClick={onSymbols}>
-          관련 심볼
+          {t('overview.relatedSymbols')}
         </button>
       </td>
     </tr>

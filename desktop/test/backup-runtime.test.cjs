@@ -15,7 +15,7 @@ const { BackupPostgresError } = require('../src/backup-postgres.cjs');
 const { createBackupPayload, readBackupPayload } = require('../src/backup-payload.cjs');
 const { encryptFile, decryptFile } = require('../src/backup-archive.cjs');
 const { createBackupRecoveryRecords } = require('../src/backup-recovery-records.cjs');
-const { createBackupExportPolicy, upgradeV26FileRow, REVIEWED_SCHEMA, REVIEWED_V26_SCHEMA } = require('../src/backup-export-policy.cjs');
+const { createBackupExportPolicy, upgradeV26FileRow, REVIEWED_SCHEMA, REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA } = require('../src/backup-export-policy.cjs');
 const { createMaintenanceVerifier } = require('../src/backup-cost-state.cjs');
 
 const POLICY = createBackupExportPolicy(REVIEWED_SCHEMA);
@@ -275,8 +275,8 @@ async function fixture(t) {
       await step('stage.open', name); assert.equal(name, preparedStage.stageDatabase);
       return { async initializeStaging() { await step('stage.initialize'); },
         async loadRows(value) { await step('stage.load'); loadedRows = []; for await (const row of value.rows) loadedRows.push(row);
-          const legacy = value.expected.schema.migrations.length === 26;
-          assert.deepEqual(value.expected, legacy ? v26Summary(loadedRows) : summary(loadedRows)); assert.equal(value.liveOwnerUserId, OWNER);
+          const version = value.expected.schema.migrations.length, legacy = version === 26;
+          assert.deepEqual(value.expected, legacy ? v26Summary(loadedRows) : version === 27 ? v27Summary(loadedRows) : summary(loadedRows)); assert.equal(value.liveOwnerUserId, OWNER);
           assert.deepEqual(value.liveSequenceHighWater, exportedSummary.sequenceHighWater);
           assert.deepEqual(value.livePreferenceRevisionHighWater, exportedSummary.preferenceRevisionHighWater);
           const restoredRows = legacy ? loadedRows.map(row => row.table === 'files' ? upgradeV26FileRow(row.values) : row) : loadedRows;
@@ -1179,6 +1179,9 @@ test('review regression accepts an already removed registered payload only under
   assert.deepEqual(await payloadFiles(root), []); assert.equal(f.state.aiOff, true); await f.intact();
 });
 
+function v27Summary(rows) {
+  const result = summary(rows); result.schema = REVIEWED_V27_SCHEMA; return result;
+}
 function v26Summary(rows) {
   const result = summary(rows); result.schema = REVIEWED_V26_SCHEMA;
   delete result.tableCounts.snapshot_inventory_measurements; delete result.tableSha256.snapshot_inventory_measurements;
@@ -1279,6 +1282,18 @@ test('old-archive policy: V25-and-older and unknown future schemas are refused a
   // so the refusals above are caused by the schema itself rather than by the crafted container.
   assert.equal((await f.runtime.restore(await craftedArchive(f, { rows, summary: v26Summary(rows) }))).restored, true);
   assert.ok(f.loadedRows.some(row => row.table === 'files' && !Object.hasOwn(row.values, 'analysis_status')));
+});
+
+test('old-archive policy: an exact V27 archive restores unchanged into V29; a V28-only or hybrid inventory is refused', async t => {
+  const f = await fixture(t), data = dataset();
+  const v28 = v27Summary(data.rows); v28.schema = { ...REVIEWED_SCHEMA, migrations: REVIEWED_SCHEMA.migrations.slice(0, 28) };
+  await refusedBeforeMaintenance(f, await craftedArchive(f, { rows: data.rows, summary: v28, records: data.records }), 'INPUT');
+  const hybrid = v27Summary(data.rows); hybrid.schema = { ...REVIEWED_V27_SCHEMA, tables: REVIEWED_SCHEMA.tables };
+  await refusedBeforeMaintenance(f, await craftedArchive(f, { rows: data.rows, summary: hybrid, records: data.records }), 'INPUT');
+  const state = await f.recordState(); assert.equal(state.active, null); assert.equal(state.completed.length, 0);
+  await f.reopen(); await f.archive(data); // registers the dataset with the synthetic staging adapter
+  assert.equal((await f.runtime.restore(await craftedArchive(f, { rows: data.rows, summary: v27Summary(data.rows), records: data.records }))).restored, true);
+  assert.deepEqual(f.loadedRows, data.rows);
 });
 
 test('old-archive policy: foreign installation, foreign payload identity, newer-build and foreign-owner archives never reach maintenance', async t => {

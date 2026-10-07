@@ -181,16 +181,27 @@ public class BuildFileAnalyzer implements CodeAnalyzer {
 
     private String putConfigNode(String path, String text, GraphCollector collector) {
         String key = NaturalKeys.config(path);
-        collector.put(
-                GraphNodeDraft.of(GraphNodeType.CONFIG, key, ConfigFileSupport.filename(path), path, 1, lineCount(text))
-                        .withAreaType(AreaType.BUILD_TOOLING.name()));
+        collector.put(GraphNodeDraft.of(
+                        GraphNodeType.CONFIG,
+                        key,
+                        ConfigFileSupport.filename(path),
+                        path,
+                        1,
+                        ConfigFileSupport.lineCount(text))
+                .withAreaType(AreaType.BUILD_TOOLING.name()));
         collector.evidence(
                 new AnalyzerEvidence(key, EvidenceKind.DEPENDENCY, path, 1, 1, ConfigFileSupport.excerpt(text)));
         return key;
     }
 
     private GraphNodeDraft collectorNode(GraphCollector collector, String key, String path, String text) {
-        return GraphNodeDraft.of(GraphNodeType.CONFIG, key, ConfigFileSupport.filename(path), path, 1, lineCount(text))
+        return GraphNodeDraft.of(
+                        GraphNodeType.CONFIG,
+                        key,
+                        ConfigFileSupport.filename(path),
+                        path,
+                        1,
+                        ConfigFileSupport.lineCount(text))
                 .withAreaType(AreaType.BUILD_TOOLING.name());
     }
 
@@ -306,16 +317,6 @@ public class BuildFileAnalyzer implements CodeAnalyzer {
         }
         String value = child.getTextContent();
         return value == null ? null : value.strip();
-    }
-
-    private static int lineCount(String text) {
-        int lines = 1;
-        for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                lines++;
-            }
-        }
-        return lines;
     }
 
     record ParsedGav(String group, String artifact, String version) {}

@@ -47,7 +47,9 @@ public class CoverageService {
             "FILE_LIMIT",
             "SYMLINK",
             "HARD_LINK",
-            "SECRET_CONTENT");
+            "SECRET_CONTENT",
+            "SUBMODULE",
+            "OUT_OF_SCOPE");
     private static final JsonMapper LOCAL_IMPORT_JSON = JsonMapper.builder(JsonFactory.builder()
                     .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
                     .streamReadConstraints(StreamReadConstraints.builder()
@@ -125,7 +127,58 @@ public class CoverageService {
                 CoverageReport.SUPPORT_UNVERIFIED,
                 readLocalImportSummary(projectId, snapshotId),
                 snapshotId,
-                outcomes);
+                outcomes,
+                computeCapabilityOutcomes(snapshotId, outcomes != null));
+    }
+
+    /**
+     * The recorded per-file outcome is the primary parser's, so it measures capability P only. Symbol, call, framework
+     * and cross-language outcomes are not persisted per file and stay unrecorded instead of borrowing P's counts.
+     */
+    private List<CoverageReport.CapabilityOutcome> computeCapabilityOutcomes(long snapshotId, boolean measured) {
+        List<CoverageReport.CapabilityOutcome> capabilities = new ArrayList<>();
+        for (String capability : CoverageReport.CAPABILITIES) {
+            if (!measured) {
+                capabilities.add(
+                        CoverageReport.CapabilityOutcome.unrecorded(capability, CoverageReport.LEGACY_UNMEASURED));
+            } else if (!"P".equals(capability)) {
+                capabilities.add(CoverageReport.CapabilityOutcome.unrecorded(capability, CoverageReport.NOT_RECORDED));
+            } else {
+                capabilities.add(jdbc.sql("""
+                                select count(*) filter (where analysis_status='SUCCESS') as successful,
+                                       count(*) filter (where analysis_status='PARTIAL') as partial,
+                                       count(*) filter (where analysis_status='FAILED') as failed,
+                                       count(*) filter (where analysis_status='UNSUPPORTED') as unsupported,
+                                       count(*) filter (where analysis_status='TARGETED') as pending,
+                                       count(*) filter (where analysis_status in ('UNMEASURED','LEGACY_UNMEASURED'))
+                                           as unmeasured
+                                from files where snapshot_id=:sid
+                                """)
+                        .param("sid", snapshotId)
+                        .query((rs, n) -> new CoverageReport.CapabilityOutcome(
+                                capability,
+                                "PER_FILE_RECORDED",
+                                rs.getInt("successful")
+                                        + rs.getInt("partial")
+                                        + rs.getInt("failed")
+                                        + rs.getInt("unsupported")
+                                        + rs.getInt("pending"),
+                                rs.getInt("successful"),
+                                rs.getInt("partial"),
+                                rs.getInt("failed"),
+                                rs.getInt("unsupported"),
+                                rs.getInt("pending"),
+                                rs.getInt("unmeasured")))
+                        .single());
+            }
+        }
+        return List.copyOf(capabilities);
+    }
+
+    /** Recorded per-file outcomes of a snapshot, or null when the snapshot predates per-file measurement. */
+    @Transactional(readOnly = true)
+    public CoverageReport.OutcomeSummary outcomes(long snapshotId) {
+        return computeOutcomes(snapshotId);
     }
 
     private CoverageReport.OutcomeSummary computeOutcomes(long snapshotId) {

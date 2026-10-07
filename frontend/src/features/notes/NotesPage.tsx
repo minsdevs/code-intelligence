@@ -220,7 +220,7 @@ function NoteEditor({
                 className="rounded-full border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-accent hover:underline"
               >
                 {ref.type.toLowerCase()}:
-                {ref.type === 'FILE' ? `${ref.label} · 현재 소스` : ref.label}
+                {ref.type === 'FILE' ? t('notes.currentSource').replace('{label}', ref.label) : ref.label}
               </button>
             </li>
           ))}

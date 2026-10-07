@@ -201,10 +201,7 @@ export default function GithubConnectControl({
       >
         {t('connect.continue')}
       </button>
-      <p className="text-[12px] text-ink-muted">
-        GitHub OAuth가 이 앱에 설정되지 않아 로그인할 수 없습니다. 로컬 폴더 분석은 로그인 없이
-        사용할 수 있습니다.
-      </p>
+      <p className="text-[12px] text-ink-muted">{t('connect.oauthUnavailable')}</p>
     </div>
   )
 

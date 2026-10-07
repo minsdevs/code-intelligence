@@ -114,10 +114,15 @@ public class YamlConfigAnalyzer implements CodeAnalyzer {
         if (!configured.isEmpty()) {
             metadata.put("configured", configured);
         }
-        collector.put(
-                GraphNodeDraft.of(GraphNodeType.CONFIG, key, ConfigFileSupport.filename(path), path, 1, lineCount(text))
-                        .withAreaType(AreaType.BACKEND.name())
-                        .withMetadata(metadata));
+        collector.put(GraphNodeDraft.of(
+                        GraphNodeType.CONFIG,
+                        key,
+                        ConfigFileSupport.filename(path),
+                        path,
+                        1,
+                        ConfigFileSupport.lineCount(text))
+                .withAreaType(AreaType.BACKEND.name())
+                .withMetadata(metadata));
         collector.evidence(new AnalyzerEvidence(key, EvidenceKind.CONFIG, path, 1, 1, ConfigFileSupport.excerpt(text)));
     }
 
@@ -144,15 +149,5 @@ public class YamlConfigAnalyzer implements CodeAnalyzer {
             }
         }
         return null;
-    }
-
-    private static int lineCount(String text) {
-        int lines = 1;
-        for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                lines++;
-            }
-        }
-        return lines;
     }
 }

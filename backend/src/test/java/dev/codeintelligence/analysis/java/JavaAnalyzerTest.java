@@ -5,10 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import dev.codeintelligence.analysis.core.AnalysisContext;
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.FileInventory;
+import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
 import dev.codeintelligence.analysis.core.InventoriedFile;
-import dev.codeintelligence.analysis.core.LanguageDetector;
 import dev.codeintelligence.analysis.core.NaturalKeys;
+import dev.codeintelligence.common.LanguageDetector;
 import dev.codeintelligence.testsupport.FixtureRepo;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -150,6 +151,110 @@ class JavaAnalyzerTest {
         assertThat(extendsEdges(result))
                 .contains("java:com.example.todo.repository.TodoRepository"
                         + "->java:org.springframework.data.jpa.repository.JpaRepository");
+    }
+
+    @Test
+    void interfaceAndAbstractReceiverCallsAreInferredImplementationCandidates() throws Exception {
+        AnalysisResult result = analyzeCalls();
+        String action = NaturalKeys.javaMethod("demo.Action", "run", List.of());
+        String first = NaturalKeys.javaMethod("demo.FirstAction", "run", List.of());
+        String second = NaturalKeys.javaMethod("demo.SecondAction", "run", List.of());
+        String third = NaturalKeys.javaMethod("demo.ThirdAction", "run", List.of());
+        String indirect = NaturalKeys.javaMethod("demo.Calls", "indirect", List.of("demo.Action"));
+        assertThat(callEdges(result, indirect))
+                .extracting(GraphEdgeDraft::targetNaturalKey)
+                .containsExactlyInAnyOrder(first, second, third);
+        assertThat(callEdges(result, indirect)).allSatisfy(edge -> {
+            assertThat(edge.confidence()).isEqualTo("POSSIBLE");
+            assertThat(edge.metadata())
+                    .containsEntry("resolution", "inferred")
+                    .containsEntry("declaredTarget", action)
+                    .containsEntry("targetCandidates", List.of(first, second, third));
+        });
+
+        String square = NaturalKeys.javaMethod("demo.Square", "area", List.of());
+        String circle = NaturalKeys.javaMethod("demo.Circle", "area", List.of());
+        String shape = NaturalKeys.javaMethod("demo.Calls", "shape", List.of("demo.Shape"));
+        assertThat(callEdges(result, shape))
+                .allMatch(edge -> edge.confidence().equals("POSSIBLE"))
+                .extracting(GraphEdgeDraft::targetNaturalKey)
+                .containsExactlyInAnyOrder(square, circle);
+        String implicitThis = NaturalKeys.javaMethod("demo.Shape", "twice", List.of());
+        assertThat(callEdges(result, implicitThis))
+                .allMatch(edge -> edge.confidence().equals("POSSIBLE"))
+                .extracting(GraphEdgeDraft::targetNaturalKey)
+                .containsExactlyInAnyOrder(square, circle);
+
+        assertThat(callEdges(result, NaturalKeys.javaMethod("demo.Calls", "concrete", List.of("demo.FirstAction"))))
+                .singleElement()
+                .matches(edge -> edge.confidence().equals("CONFIRMED")
+                        && edge.targetNaturalKey().equals(first));
+        assertThat(callEdges(result, NaturalKeys.javaMethod("demo.Calls", "exact", List.of("demo.Circle"))))
+                .singleElement()
+                .matches(edge -> edge.confidence().equals("CONFIRMED")
+                        && edge.targetNaturalKey().equals(circle));
+        assertThat(result.edges())
+                .noneMatch(edge -> edge.edgeType().equals("CALLS")
+                        && edge.confidence().equals("CONFIRMED")
+                        && (edge.targetNaturalKey().equals(action)
+                                || edge.targetNaturalKey()
+                                        .equals(NaturalKeys.javaMethod("demo.Shape", "area", List.of()))));
+    }
+
+    @Test
+    void javaCallEdgesCarryTheirCallSite() throws Exception {
+        AnalysisResult result = analyzeCalls();
+        assertThat(callEdges(result, NaturalKeys.javaMethod("demo.Calls", "direct", List.of())))
+                .singleElement()
+                .satisfies(edge -> assertThat(edge.metadata())
+                        .containsEntry("filePath", "Calls.java")
+                        .containsEntry("lineStart", 11)
+                        .containsEntry("lineEnd", 11)
+                        .containsEntry("expression", "twice"));
+        assertThat(callEdges(result, NaturalKeys.javaMethod("demo.Calls", "indirect", List.of("demo.Action"))))
+                .hasSize(3)
+                .allSatisfy(edge -> assertThat(edge.metadata())
+                        .containsEntry("lineStart", 12)
+                        .containsEntry("expression", "action.run"));
+        assertThat(callEdges(result, NaturalKeys.javaMethod("demo.Calls", "chained", List.of("demo.Square"))))
+                .singleElement()
+                .satisfies(edge -> assertThat(edge.metadata())
+                        .containsEntry("lineStart", 16)
+                        .containsEntry("lineEnd", 17)
+                        .containsEntry("expression", "square\n      .area"));
+    }
+
+    private AnalysisResult analyzeCalls() throws Exception {
+        Path repo = Files.createDirectories(temp.resolve("calls"));
+        Files.writeString(repo.resolve("Calls.java"), """
+                package demo;
+                interface Action { void run(); }
+                class FirstAction implements Action { public void run() {} }
+                class SecondAction implements Action { public void run() {} }
+                record ThirdAction() implements Action { public void run() {} }
+                abstract class Shape { abstract double area(); double twice() { return area() * 2; } }
+                class Square extends Shape { double area() { return 1; } }
+                final class Circle extends Shape { double area() { return 3; } }
+                class Calls {
+                  static int twice(int value) { return value * 2; }
+                  static int direct() { return twice(2); }
+                  static void indirect(Action action) { action.run(); }
+                  static void concrete(FirstAction first) { first.run(); }
+                  static double shape(Shape shape) { return shape.area(); }
+                  static double exact(Circle circle) { return circle.area(); }
+                  static double chained(Square square) { return square
+                      .area(); }
+                }
+                """);
+        return new JavaAnalyzer()
+                .analyze(new AnalysisContext(
+                        1, 1, repo, FileInventory.of(new InventoriedFile("Calls.java", "java", 0, 18, ""))));
+    }
+
+    private static List<GraphEdgeDraft> callEdges(AnalysisResult result, String caller) {
+        return result.edges().stream()
+                .filter(edge -> "CALLS".equals(edge.edgeType()) && caller.equals(edge.sourceNaturalKey()))
+                .toList();
     }
 
     @Test

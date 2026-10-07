@@ -2,6 +2,7 @@ package dev.codeintelligence.project;
 
 import dev.codeintelligence.common.AnalysisProperties;
 import dev.codeintelligence.common.SourceAccess;
+import dev.codeintelligence.job.JobCancellation;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -99,7 +100,9 @@ final class LocalSourcePolicy {
         FILE_LIMIT,
         SYMLINK,
         HARD_LINK,
-        SECRET_CONTENT
+        SECRET_CONTENT,
+        SUBMODULE,
+        OUT_OF_SCOPE
     }
 
     record Limits(int files, long fileBytes, long totalBytes, int discoveredFiles, int entries, int depth, long nanos) {
@@ -199,6 +202,11 @@ final class LocalSourcePolicy {
     }
 
     Selection select(Path root, AcceptedFile sink) throws IOException {
+        return select(root, null, sink);
+    }
+
+    /** Selects under an optional scope; out-of-scope directories are pruned unread, like other exclusions. */
+    Selection select(Path root, LocalImportScope scope, AcceptedFile sink) throws IOException {
         if (secretAncestor(root)
                 || root.getFileName() == null
                 || pathReason(root.getFileName().toString(), true) != null) {
@@ -218,6 +226,12 @@ final class LocalSourcePolicy {
                 if (!dir.equals(root)) {
                     Reason excluded = pathReason(dir.getFileName().toString(), true);
                     if (excluded != null) return state.skip(excluded);
+                    // A nested repository (submodule gitlink file or nested clone) is pruned whole, unread.
+                    if (nestedRepository(dir)) return state.skip(Reason.SUBMODULE);
+                    if (scope != null
+                            && dir.getParent().equals(root)
+                            && !scope.includesDirectory(dir.getFileName().toString()))
+                        return state.skip(Reason.OUT_OF_SCOPE);
                     if (state.ignored(dir, true)) return state.skip(Reason.IGNORED);
                 }
                 state.directories.put(dir, stamp(attrs));
@@ -255,6 +269,12 @@ final class LocalSourcePolicy {
                 }
                 if (BINARY_EXTENSIONS.contains(extension(file.getFileName().toString()))) {
                     state.exclude(Reason.BINARY);
+                    return FileVisitResult.CONTINUE;
+                }
+                if (scope != null
+                        && ((file.getParent().equals(root) && !scope.includesDirectory(LocalImportScope.ROOT_FILES))
+                                || !scope.includesLanguage(LocalImportScope.language(relative)))) {
+                    state.exclude(Reason.OUT_OF_SCOPE);
                     return FileVisitResult.CONTINUE;
                 }
                 state.candidates.put(relative, new Candidate(file, stamp(attrs)));
@@ -327,7 +347,13 @@ final class LocalSourcePolicy {
                         limitsHash,
                         manifest.finish(),
                         manifest.count(),
-                        manifest.bytes()));
+                        manifest.bytes(),
+                        scope == null ? null : scope.canonical()));
+    }
+
+    private static boolean nestedRepository(Path dir) throws IOException {
+        Path git = dir.resolve(Constants.DOT_GIT);
+        return SourceAccess.exists(git, true) || SourceAccess.exists(git, false);
     }
 
     private String readBranch(State state) throws IOException {
@@ -530,6 +556,7 @@ final class LocalSourcePolicy {
         }
 
         void check() throws IOException {
+            JobCancellation.checkpoint();
             if (Thread.currentThread().isInterrupted() || clock.getAsLong() - started > limits.nanos()) {
                 throw rejected("Local source inspection was cancelled or exceeded its time limit.");
             }

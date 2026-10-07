@@ -90,10 +90,10 @@ export default function CodeExplorerPage() {
           >
             {unknown && (
               <option value="unknown" disabled>
-                미확인 근거 / Unknown context
+                {t('codeExplorer.unknownContext')}
               </option>
             )}
-            <option value="current">현재 소스 / Current source</option>
+            <option value="current">{t('codeExplorer.currentSource')}</option>
             {(snapshotsQuery.data ?? []).map((snapshot) => (
               <option key={snapshot.id} value={snapshot.id}>
                 #{snapshot.id} · {snapshot.analyzedAt ?? snapshot.status}
@@ -102,7 +102,7 @@ export default function CodeExplorerPage() {
           </select>
         </label>
         {projectQuery.isError && (
-          <span role="alert">프로젝트의 snapshot을 확인할 수 없습니다.</span>
+          <span role="alert">{t('codeExplorer.snapshotUnknown')}</span>
         )}
       </header>
       <div

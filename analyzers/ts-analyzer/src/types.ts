@@ -5,6 +5,29 @@ export type AnalyzeFile = {
 
 export type AnalyzeRequest = {
   files: AnalyzeFile[]
+  /** Chunked whole-project analysis (03 §6); `files` stays empty on session commands. */
+  session?: SessionCommand
+}
+
+export type SessionCommand = {
+  op: 'open' | 'put' | 'seal' | 'analyze' | 'page' | 'close'
+  id?: string
+  seq?: number
+  page?: number
+  /** put: this chunk's files. */
+  files?: AnalyzeFile[]
+  /** open/seal: the exact manifest. */
+  fileCount?: number
+  bytes?: number
+  digest?: string
+}
+
+export type SessionReply = {
+  id: string
+  op: SessionCommand['op']
+  seq?: number
+  page?: number
+  pages?: number
 }
 
 export type RouteHit = {

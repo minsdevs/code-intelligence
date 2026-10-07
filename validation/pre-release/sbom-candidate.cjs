@@ -22,6 +22,7 @@ const macho = require('./sbom-macho.cjs');
 const maven = require('./sbom-maven.cjs');
 const zip = require('./sbom-zip.cjs');
 const licence = require('./licence-obligations.cjs');
+const jreSupply = require('./sbom-jre-supply.cjs');
 const { ensureOutputParent } = require('./owned-output.cjs');
 
 const MiB = 1024 * 1024;
@@ -33,6 +34,9 @@ class SbomError extends Error { constructor(code, detail) { super(code); this.co
 const need = (ok, code, detail) => { if (!ok) throw new SbomError(code, detail); };
 const LICENCE_FILE = /^(?:licen[cs]e|copying|copyright|unlicense|copyrightnotice|notice|thirdpartynotices?|third-party-notices|legal)(?:[._-][A-Za-z0-9._-]*)?$/i;
 const NOTICE_FILE = /^(?:notice|thirdpartynotices?|third-party-notices)(?:[._-][A-Za-z0-9._-]*)?$/i;
+// Eclipse projects (JGit) ship their licence texts as about.html at the JAR root; it
+// counts only when it reproduces licence wording rather than links.
+const ECLIPSE_ABOUT_LICENCE = /Redistribution and use in source and binary forms|Permission is hereby granted|TERMS AND CONDITIONS FOR USE, REPRODUCTION|THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS/;
 
 // ---------------------------------------------------------------- arguments
 function argumentsFor(argv) {
@@ -135,8 +139,21 @@ const purlNpm = (name, version) => `pkg:npm/${name.startsWith('@') ? '%40' + nam
 const PG_BIN = /^(?:postgres|initdb|pg_isready|psql|createdb|pg_dump|pg_restore)$/;
 // PostgreSQL 16 server modules, client libraries and encoding conversion procs.
 const PG_LIB = /^(?:lib(?:pq|ecpg|ecpg_compat|pgtypes|pgcommon(?:_shlib)?|pgport(?:_shlib)?|pgfeutils)(?:\.[0-9]+)?\.(?:dylib|a)|libpqwalreceiver\.dylib|pgoutput\.dylib|plpgsql\.dylib|pg_trgm\.dylib|dict_snowball\.dylib|(?:[a-z0-9_]+_and_[a-z0-9_]+|euc2004_sjis2004)\.dylib)$/;
+// ADR-01 xpc-required candidates: the adapter supervisor service carries a second copy of the app's
+// Electron (its Node worker) and the TypeScript analyzer, which no longer ships in the runtime.
+const ADAPTER_SERVICE = 'Contents/XPCServices/AdapterSupervisor.xpc/';
 function attributeFile(rel) {
   const R = 'Contents/Resources/', RT = R + 'runtime/';
+  if (rel === 'Contents/MacOS/adapter-bridge') return 'first-party:adapter-supervisor';
+  if (rel.startsWith(ADAPTER_SERVICE)) {
+    const inner = rel.slice(ADAPTER_SERVICE.length);
+    if (inner === 'Contents/Info.plist' || /(?:^|\/)_CodeSignature\/CodeResources$/.test(inner)) return 'first-party:packaging';
+    if (inner === 'Contents/MacOS/AdapterSupervisor') return 'first-party:adapter-supervisor';
+    if (inner === 'Contents/MacOS/adapter-node') return 'electron';
+    if (/^Contents\/Frameworks\/(?:Electron Framework|Mantle|ReactiveObjC|Squirrel)\.framework\//.test(inner)) return attributeFile(inner);
+    if (inner.startsWith('Contents/Resources/ts-analyzer/')) return attributeFile(RT + inner.slice('Contents/Resources/'.length));
+    return null;
+  }
   if (rel === 'Contents/Info.plist' || rel === 'Contents/PkgInfo') return 'first-party:packaging';
   if (/^Contents(?:\/Frameworks\/[^/]+\.app\/Contents)?\/_CodeSignature\/CodeResources$/.test(rel)) return 'first-party:packaging';
   if (/\/_CodeSignature\/CodeResources$/.test(rel) && rel.startsWith('Contents/Frameworks/')) return 'first-party:packaging';
@@ -182,6 +199,10 @@ function attributeFile(rel) {
   if (r.startsWith('ts-analyzer/node_modules/')) return 'analyzer-npm';
   if (/^ts-analyzer\/(?:dist\/.+|package\.json|package-lock\.json)$/.test(r)) return 'first-party:ts-analyzer';
   return null;
+}
+// app.asar members written by this repository (desktop build.files): sources, metadata, update keys.
+function firstPartyAsarMember(name) {
+  return name === 'package.json' || name.startsWith('src/') || name === 'build/update-keys.json';
 }
 function attributeBackendMember(name) {
   if (/^BOOT-INF\/lib\/[^/]+\.jar$/.test(name)) return 'nested-jar';
@@ -297,7 +318,7 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
     bundleId: appPlist.CFBundleIdentifier || null, minimumSystemVersion: appPlist.LSMinimumSystemVersion || null };
   for (const [ref, name] of [['first-party:packaging', 'code-intelligence packaging metadata'], ['first-party:desktop', 'code-intelligence-desktop'],
     ['first-party:backend', 'code-intelligence-backend'], ['first-party:frontend', 'code-intelligence-frontend bundle'], ['first-party:ts-analyzer', 'ts-analyzer'],
-    ['first-party:control', 'code-intelligence-control']]) {
+    ['first-party:control', 'code-intelligence-control'], ['first-party:adapter-supervisor', 'code-intelligence adapter supervisor and bridge']]) {
     component(ref, { kind: 'first-party', type: 'application', name, version: product.version, expression: 'MIT', firstParty: true });
   }
 
@@ -313,9 +334,22 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
   const lockElectron = readers.desktopLock.packages?.['node_modules/electron']?.version || null;
   const electronLicenceFiles = ['legal/electron/LICENSE', 'legal/electron/LICENSES.chromium.html'].filter(name => fileSet.has(resources + name));
   const electronNotice = electronLicenceFiles.length === 2 ? [{ kind: 'LICENCE', visibility: 'BUNDLE_LEGAL', location: resources + 'legal/electron/' }] : [];
+  const workerPlist = ADAPTER_SERVICE + 'Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/Info.plist';
+  const adapterWorkerCopy = fileSet.has(workerPlist)
+    ? { location: ADAPTER_SERVICE + 'Contents/Frameworks/Electron Framework.framework/', version: plistStrings(bytesOf(workerPlist)).CFBundleVersion || null }
+    : null;
   component('electron', { kind: 'electron', type: 'framework', name: 'electron', version: electronVersion, policy: 'electron',
     purl: electronVersion && `pkg:generic/electron@${electronVersion}?download_url=https://github.com/electron/electron/releases/download/v${electronVersion}/electron-v${electronVersion}-darwin-arm64.zip`,
-    noticeEvidence: electronNotice, properties: { checkoutLockVersion: lockElectron, userAgentWitness: witnesses.electronUserAgent.value } });
+    noticeEvidence: electronNotice, properties: { checkoutLockVersion: lockElectron, userAgentWitness: witnesses.electronUserAgent.value,
+      ...(adapterWorkerCopy ? { adapterWorkerCopy } : {}) } });
+  // The worker copy is attributed to the app's Electron components only when it is the same release.
+  if (adapterWorkerCopy && adapterWorkerCopy.version !== electronVersion) {
+    for (const row of attribution) {
+      if (row.location === ADAPTER_SERVICE + 'Contents/MacOS/adapter-node' || row.location.startsWith(ADAPTER_SERVICE + 'Contents/Frameworks/')) {
+        if (row.component !== 'first-party:packaging') row.component = null;
+      }
+    }
+  }
   for (const [ref, name, version, policy] of [['chromium', 'chromium', witnesses.chromium.value, 'chromium'], ['v8', 'v8', witnesses.v8.value, 'chromium'],
     ['nodejs', 'node.js (embedded in Electron)', witnesses.node.value, 'chromium'], ['ffmpeg', 'ffmpeg (Chromium build)', null, 'ffmpeg'],
     ['swiftshader', 'swiftshader', null, 'swiftshader'], ['crashpad', 'crashpad', null, 'crashpad'], ['squirrel-mac', 'Squirrel.Mac', null, 'squirrel-mac'],
@@ -343,8 +377,8 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
     noticeEvidence: legalFiles.some(item => item.rel.endsWith('/LICENSE')) ? [{ kind: 'LICENCE', visibility: 'BUNDLE_LEGAL', location: runtime + 'jre/legal/' }] : [],
     properties: { javaVersion, vendorWitness: vendor.value, vendorCandidates: vendor.candidates, buildWitness: build.value, modules,
       legalFiles: legalFiles.length, embeddedThirdPartyNotices: thirdPartyMd },
-    // macos-runtime-supply.json locks only the four C sources; the JDK used by jlink has no URL/digest record.
-    provenance: { recordedSourceUrl: null, recordedSha256: null, status: 'NO_REPOSITORY_SUPPLY_RECORD' } });
+    provenance: jreSupply.provenance(readers.supply.jre, { buildWitness: build.value, javaVersion, vendorWitness: vendor.value }) });
+  components.get('temurin-jre').externalReferences = jreSupply.externalReferences(components.get('temurin-jre').provenance);
 
   // ---- Native runtimes from the source lock
   const sourceLockRel = runtime + 'postgres/share/code-intelligence-notices/source-lock.json';
@@ -409,7 +443,7 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
   for (const entry of asarEntries) {
     const location = `${resources}app.asar!/${entry.name}`, bytes = asarMember(entry), digest = sha256(bytes);
     let ref = null;
-    if (entry.name === 'package.json' || entry.name.startsWith('src/')) ref = 'first-party:desktop';
+    if (firstPartyAsarMember(entry.name)) ref = 'first-party:desktop';
     else { const root = npmRoot(entry.name); if (root && asarRoots.has(root)) ref = asarRoots.get(root).ref; }
     attribution.push({ location, component: ref, sha256: digest, bytes: entry.size, container: resources + 'app.asar' });
     if (ref && ref.startsWith('npm:')) {
@@ -422,18 +456,19 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
   }
   function npmRootDir(ref) { return ref.replace(/^npm:[^:]+:/, ''); }
 
-  // ---- npm packages: analyzer runtime (filesystem)
-  const analyzerLock = JSON.parse(bytesOf(runtime + 'ts-analyzer/package-lock.json').toString('utf8'));
+  // ---- npm packages: analyzer (runtime, or the adapter supervisor service of an xpc-required candidate)
+  const analyzerParent = fileSet.has(runtime + 'ts-analyzer/package-lock.json') ? runtime : ADAPTER_SERVICE + 'Contents/Resources/';
+  const analyzerLock = JSON.parse(bytesOf(analyzerParent + 'ts-analyzer/package-lock.json').toString('utf8'));
   const analyzerRoots = new Map();
-  for (const item of files.filter(entry => entry.rel.startsWith(runtime + 'ts-analyzer/node_modules/') && entry.rel.endsWith('/package.json'))) {
-    const inner = item.rel.slice(runtime.length);
+  for (const item of files.filter(entry => entry.rel.startsWith(analyzerParent + 'ts-analyzer/node_modules/') && entry.rel.endsWith('/package.json'))) {
+    const inner = item.rel.slice(analyzerParent.length);
     if (!inventory.packageManifest(inner.slice('ts-analyzer/'.length))) continue;
     const root = inner.slice(0, -'/package.json'.length);
     analyzerRoots.set(root, npmComponent('ts-analyzer', root, bytesOf(item.rel), analyzerLock, 'SHIPPED_ANALYZER_LOCK'));
   }
   for (const row of attribution) {
     if (row.component !== 'analyzer-npm') continue;
-    const inner = row.location.slice(runtime.length), root = npmRoot(inner);
+    const inner = row.location.startsWith(analyzerParent) ? row.location.slice(analyzerParent.length) : null, root = inner && npmRoot(inner);
     const comp = root && analyzerRoots.get(root);
     row.component = comp ? comp.ref : null;
     if (comp && path.posix.dirname(inner) === root && LICENCE_FILE.test(path.posix.basename(inner))) {
@@ -517,9 +552,11 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
       properties: { members: members.length, memberListing: memberError || 'OK', licenceDeclarationSource: licenceSource, licenceChain: declared.chain,
         unmappedLicenceNames: unknown.map(item => item.name || item.url), bundleLicense: bundleLicense || null,
         packageRoots: [...new Set(members.filter(item => item.name.endsWith('.class')).map(item => item.name.split('/').slice(0, 3).join('.')))].slice(0, 40) } });
+    const about = members.find(item => item.type === 'file' && item.name === 'about.html');
+    if (about) licenceMembers.push(about);
     for (const member of licenceMembers) {
       let text = null; try { text = zip.readMember(nested, member, 2 * MiB); } catch { text = null; }
-      if (!text) continue;
+      if (!text || (member === about && !ECLIPSE_ABOUT_LICENCE.test(text.toString('utf8')))) continue;
       const kind = NOTICE_FILE.test(path.posix.basename(member.name)) ? 'NOTICE' : 'LICENCE';
       comp.noticeEvidence.push({ kind, visibility: 'ARTEFACT', location: `${location}!/${member.name}`, sha256: sha256(text) });
       comp.licenceTexts = [...(comp.licenceTexts || []), { location: `${location}!/${member.name}`, sha256: sha256(text), text: text.toString('utf8') }];
@@ -701,6 +738,8 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
     if (comp.firstParty) { comp.licence = { class: 'PERMISSIVE', chosen: ['MIT'], obligations: [], findings: [] }; continue; }
     const replaceable = comp.kind === 'maven' || comp.kind === 'npm' ? 'MANIFEST_HASH_ENFORCED' : comp.ref === 'ffmpeg' ? 'SIGNED_BUNDLE' : 'UNKNOWN';
     comp.licence = licence.evaluate({ expression: comp.expression, noticeEvidence: comp.noticeEvidence, replaceable, legalReview: policyEntry?.legalReview || null });
+    const excluded = comp.kind === 'maven' ? licence.excludedRuntime({ groupId: comp.group, artifactId: comp.name }) : null;
+    if (excluded) comp.licence.findings.push({ code: 'EXCLUDED_RUNTIME_ARTEFACT', blocking: true, reason: excluded.reason });
   }
 
   return { appRoot, entries, files, symlinks, attribution, unattributed, components, manifestCheck, product, witnesses, machoReport, machoSummary,
@@ -770,6 +809,7 @@ function cycloneDx(result, meta) {
       ...(comp.firstParty ? { supplier: { name: 'Code Intelligence (first party)' } } : {}),
       ...(hash ? { hashes: [{ alg: 'SHA-256', content: hash }] } : {}),
       ...(licences(comp) ? { licenses: licences(comp) } : {}), ...(comp.purl ? { purl: comp.purl } : {}),
+      ...(comp.externalReferences ? { externalReferences: comp.externalReferences } : {}),
       ...(rows.length ? { evidence: { occurrences: rows.slice(0, LIMITS.occurrences).map(row => ({ location: row.location })) } } : {}),
       properties };
   });
@@ -807,6 +847,7 @@ function cycloneDx(result, meta) {
 // within the fields, enums and reference rules it relies on.
 const COMPONENT_TYPES = new Set(['application', 'framework', 'library', 'container', 'platform', 'operating-system', 'device',
   'device-driver', 'firmware', 'file', 'machine-learning-model', 'data']);
+const EXTERNAL_REFERENCE_TYPES = new Set(['vcs', 'distribution', 'website', 'license', 'build-meta', 'release-notes', 'other']);
 function validateCycloneDx(bom) {
   const errors = [], refs = new Set();
   const check = (ok, message) => { if (!ok) errors.push(message); };
@@ -828,6 +869,10 @@ function validateCycloneDx(bom) {
     for (const property of item.properties || []) check(typeof property.name === 'string' && typeof property.value === 'string', `${where}: property`);
     for (const occurrence of item.evidence?.occurrences || []) check(typeof occurrence.location === 'string', `${where}: occurrence`);
     check(item.purl === undefined || /^pkg:[a-z]+\/.+/.test(item.purl), `${where}: purl`);
+    for (const reference of item.externalReferences || []) {
+      check(EXTERNAL_REFERENCE_TYPES.has(reference.type) && /^https:\/\/\S+$/.test(reference.url)
+        && (reference.hashes || []).every(hash => hash.alg === 'SHA-256' && /^[a-f0-9]{64}$/.test(hash.content)), `${where}: externalReference`);
+    }
   };
   component(bom.metadata.component, 'metadata.component');
   (bom.components || []).forEach((item, index) => component(item, `components[${index}]`));
@@ -859,7 +904,7 @@ async function main(argv) {
   const resolvedFile = path.join(repo, 'validation/local/pre-release-final', options.resolved);
   const resolvedBytes = readRegular(resolvedFile, 4 * MiB), resolvedMaven = JSON.parse(resolvedBytes.toString('utf8'));
   need(resolvedMaven?.kind === 'RESOLVED_GRADLE_RUNTIME_ARTIFACTS' && Array.isArray(resolvedMaven.components), 'RESOLVED_MAVEN_INVALID');
-  const toolFiles = ['sbom-candidate.cjs', 'sbom-macho.cjs', 'sbom-maven.cjs', 'sbom-zip.cjs', 'licence-obligations.cjs', 'licence-policy.json', 'inventory-candidate.cjs'];
+  const toolFiles = ['sbom-candidate.cjs', 'sbom-macho.cjs', 'sbom-maven.cjs', 'sbom-zip.cjs', 'sbom-jre-supply.cjs', 'licence-obligations.cjs', 'licence-policy.json', 'inventory-candidate.cjs'];
   const toolSha256 = sha256(toolFiles.map(name => sha256(fs.readFileSync(path.join(__dirname, name)))).join('\n'));
   const started = new Date().toISOString();
   const result = await analyse({ repo, appRelative, resolvedMaven, gradleCache: options.gradleCache, electronZip: options.electronZip,
@@ -941,7 +986,7 @@ async function main(argv) {
     components: summary.counts.components, completeSbom: summary.completeSbom, sha256: hashes };
 }
 
-module.exports = { LIMITS, argumentsFor, attributeFile, attributeBackendMember, npmRoot, npmExpression, plistStrings, uniqueWitness,
+module.exports = { LIMITS, argumentsFor, attributeFile, attributeBackendMember, firstPartyAsarMember, npmRoot, npmExpression, plistStrings, uniqueWitness,
   codeBytesEqualIgnoringSignature, treeDigest, cycloneDx, validateCycloneDx, otoolCompare, main };
 if (require.main === module) {
   main(process.argv.slice(2)).then(result => process.stdout.write(JSON.stringify(result) + '\n')).catch(error => {

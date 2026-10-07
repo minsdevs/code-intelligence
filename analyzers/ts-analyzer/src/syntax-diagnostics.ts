@@ -20,8 +20,15 @@ export class ParserSyntaxError extends Error {
 }
 
 export function assertParseable(project: Project, sources: SourceFile[]): void {
-  if (sources.length === 0) return
+  const { diagnostics, total } = syntaxDiagnostics(project, sources)
+  // A broken bootstrap/import may affect other files. Reject the whole result.
+  if (total > 0) throw new ParserSyntaxError(diagnostics, total)
+}
+
+/** Syntactic diagnostics of `sources` in order, at most 100 reported. */
+export function syntaxDiagnostics(project: Project, sources: SourceFile[]): { diagnostics: ParserSyntaxDiagnostic[]; total: number } {
   const diagnostics: ParserSyntaxDiagnostic[] = []
+  if (sources.length === 0) return { diagnostics, total: 0 }
   let total = 0
   const program = project.getProgram().compilerObject
   for (const source of sources) {
@@ -38,6 +45,5 @@ export function assertParseable(project: Project, sources: SourceFile[]): void {
       })
     }
   }
-  // A broken bootstrap/import may affect other files. Reject the whole result.
-  if (total > 0) throw new ParserSyntaxError(diagnostics, total)
+  return { diagnostics, total }
 }

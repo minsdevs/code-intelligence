@@ -1,15 +1,72 @@
-import type { LocalImportExclusionReason, LocalSourcePreview } from '../../api/types'
+import type {
+  LocalExpectedDepth,
+  LocalImportExclusionReason,
+  LocalSourcePreview,
+} from '../../api/types'
 
+/** Translation keys of the exclusion reasons, in display order. */
 export const importExclusionLabels: Record<LocalImportExclusionReason, string> = {
-  GENERATED_DIRECTORY: '생성·의존성 폴더',
-  SECRET_PATH: '민감 경로',
-  IGNORED: '제외 규칙',
-  BINARY: '바이너리 파일',
-  OVERSIZED: '파일 크기 제한',
-  FILE_LIMIT: '파일 수 제한',
-  SYMLINK: '심볼릭 링크',
-  HARD_LINK: '하드 링크',
-  SECRET_CONTENT: '민감 내용',
+  GENERATED_DIRECTORY: 'preview.exclusion.GENERATED_DIRECTORY',
+  SECRET_PATH: 'preview.exclusion.SECRET_PATH',
+  IGNORED: 'preview.exclusion.IGNORED',
+  BINARY: 'preview.exclusion.BINARY',
+  OVERSIZED: 'preview.exclusion.OVERSIZED',
+  FILE_LIMIT: 'preview.exclusion.FILE_LIMIT',
+  SYMLINK: 'preview.exclusion.SYMLINK',
+  HARD_LINK: 'preview.exclusion.HARD_LINK',
+  SECRET_CONTENT: 'preview.exclusion.SECRET_CONTENT',
+  SUBMODULE: 'preview.exclusion.SUBMODULE',
+  OUT_OF_SCOPE: 'preview.exclusion.OUT_OF_SCOPE',
+}
+
+/** Translation keys of the expected analysis depths. */
+export const expectedDepthLabels: Record<LocalExpectedDepth, string> = {
+  SYMBOLS_AND_CALLS: 'preview.depth.SYMBOLS_AND_CALLS',
+  STRUCTURE: 'preview.depth.STRUCTURE',
+  CONFIGURATION: 'preview.depth.CONFIGURATION',
+  INVENTORY_ONLY: 'preview.depth.INVENTORY_ONLY',
+}
+
+function boundedName(value: unknown, maximum: number): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= maximum
+}
+
+function validBreakdown(preview: Partial<LocalSourcePreview>): boolean {
+  const { languages, directories, scope } = preview
+  if (
+    languages !== undefined &&
+    (!Array.isArray(languages) ||
+      languages.length > 256 ||
+      !languages.every(
+        (entry) =>
+          entry &&
+          boundedName(entry.language, 64) &&
+          boundedInteger(entry.files, 50_000) &&
+          Object.hasOwn(expectedDepthLabels, entry.expectedDepth),
+      ))
+  )
+    return false
+  if (
+    directories !== undefined &&
+    (!Array.isArray(directories) ||
+      directories.length > 50_000 ||
+      !directories.every(
+        (entry) => entry && boundedName(entry.name, 255) && boundedInteger(entry.files, 50_000),
+      ))
+  )
+    return false
+  if (scope === undefined || scope === null) return true
+  return (
+    typeof scope === 'object' &&
+    ['directories', 'languages'].every((key) => {
+      const values = scope[key as keyof typeof scope]
+      return (
+        Array.isArray(values) &&
+        values.length <= 256 &&
+        values.every((value) => boundedName(value, 255))
+      )
+    })
+  )
 }
 
 function boundedInteger(value: unknown, maximum: number): value is number {
@@ -37,7 +94,8 @@ export function isLocalSourcePreview(
       preview.snapshotId === null ||
       (boundedInteger(preview.snapshotId, Number.MAX_SAFE_INTEGER) && preview.snapshotId > 0)
     ) ||
-    (operation === 'INITIAL' && preview.snapshotId !== null)
+    (operation === 'INITIAL' && preview.snapshotId !== null) ||
+    !validBreakdown(preview)
   )
     return false
   const changes = preview.changes

@@ -270,3 +270,51 @@ test('a lost response may be retried as an exact content-addressed put', async (
   assert.deepEqual(second.result, first.result);
   assert.equal(f.entries.size, 1);
 });
+
+test('staged puts carry the vault session and a barrier forwards only an exact session watermark', async (t) => {
+  const session = 'c'.repeat(32);
+  const f = await fixture(t, {
+    async stage(value) {
+      f.calls.push(['STAGE', value.projectId]);
+      const hash = crypto.createHash('sha256').update(value.bytes).digest('hex');
+      return { projectId: value.projectId, sha256: hash, byteSize: value.bytes.length, keyId: 'b'.repeat(32), session, sequence: 9 };
+    },
+    async barrier(value) {
+      f.calls.push(['BARRIER', value.session, value.sequence]);
+      return { format: 1, session: value.session, sequence: value.sequence };
+    },
+  });
+  const staged = await exchange(f.socketPath, request('STAGE', { bytes: bytes.toString('base64') }));
+  assert.equal(staged.ok, true);
+  assert.deepEqual(staged.result, { sha256, byteSize: bytes.length, keyId: 'b'.repeat(32), session, sequence: 9 });
+  const barrier = { version: 1, requestId: crypto.randomUUID(), auth: AUTH, operation: 'BARRIER', session, sequence: 9 };
+  const settled = await exchange(f.socketPath, barrier);
+  assert.equal(settled.ok, true);
+  assert.deepEqual(settled.result, { session, sequence: 9 });
+  for (const change of [
+    { session: 'C'.repeat(32) }, { session: `${session}\n` }, { sequence: 0 }, { sequence: 1.5 }, { sequence: '9' },
+    { projectId: '7' }, { auth: 'c'.repeat(64) },
+  ]) {
+    const response = await exchange(f.socketPath, { ...barrier, requestId: crypto.randomUUID(), ...change });
+    assert.equal(response.ok, false);
+    assert.match(response.code, /^SOURCE_BROKER_(INVALID|UNAUTHORIZED)$/);
+  }
+  const missing = { ...barrier, requestId: crypto.randomUUID() };
+  delete missing.sequence;
+  assert.equal((await exchange(f.socketPath, missing)).ok, false);
+  assert.deepEqual(f.calls, [['STAGE', '7'], ['BARRIER', session, 9]]);
+});
+
+test('a staged receipt from a different address or with a malformed session is never acknowledged', async (t) => {
+  for (const result of [{ sha256: 'd'.repeat(64) }, { session: 'not-a-session' }, { sequence: 0 }]) {
+    const f = await fixture(t, {
+      async stage(value) {
+        return { projectId: value.projectId, sha256, byteSize: value.bytes.length, keyId: 'b'.repeat(32),
+          session: 'c'.repeat(32), sequence: 1, ...result };
+      },
+    });
+    const response = await exchange(f.socketPath, request('STAGE', { bytes: bytes.toString('base64') }));
+    assert.equal(response.ok, false);
+    assert.equal(response.code, 'SOURCE_BROKER_UNAVAILABLE');
+  }
+});

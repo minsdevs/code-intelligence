@@ -83,7 +83,8 @@ async function harness(t, options = {}) {
       const webContents = new EventEmitter(); webContents.id = 7; webContents.mainFrame = { url: 'about:blank' };
       webContents.send = (channel, value) => outbound.push({ channel, value: clone(value) });
       webContents.setWindowOpenHandler = fn => { this.windowOpen = fn; };
-      webContents.session = { webRequest: { onBeforeSendHeaders: (_filter, fn) => { this.headers = fn; } },
+      webContents.session = { webRequest: { onBeforeSendHeaders: (_filter, fn) => { this.headers = fn; },
+        onHeadersReceived: (_filter, fn) => { this.responseHeaders = fn; } },
         setCertificateVerifyProc(fn) { this.verifyCertificate = fn; },
         async clearStorageData(value) { events.push('session.clearStorage'); controls.clearedStorage = value; await controls.clearStorage?.(); },
         async clearCache() { events.push('session.clearCache'); },
@@ -117,6 +118,10 @@ async function harness(t, options = {}) {
         };
       } else child.stdin = null;
       children.push({ command, args: [...args], options: config, child }); queueMicrotask(() => child.emit('spawn')); return child;
+    },
+    execFile(file, args, config, callback) {
+      (controls.execFiles ??= []).push({ file, args: [...args], shell: config.shell, env: config.env });
+      queueMicrotask(() => callback(null, controls.psTable ?? ''));
     },
     spawnSync(command, args, config) {
       synchronous.push({ command, args, options: config }); events.push(`run.${path.basename(command)}`);
@@ -504,6 +509,33 @@ test('a denied initial document can acquire runtime authority only after its mai
   assert.equal(departed.returnValue, null);
 });
 
+test('main reports its owner tree to the backend watchdog with one fixed ps and the main capability', async t => {
+  const h = await harness(t); await h.start();
+  assert.equal(h.run('runtime.ready'), true);
+  const tick = () => [...h.timers].find(timer => timer.fn.name === 'tick');
+  let watching = true;
+  h.controls.fetch = async url => new URL(url).pathname === '/api/desktop/owner-memory'
+    ? { ok: true, json: async () => ({ watching }) } : undefined;
+  // Main (4242) owns the backend (25001) and its child (25002); 9999 is outside the tree.
+  h.controls.psTable = '  4242     1  1000\n25001  4242  2000\n25002 25001   300\n 9999     1 50000\n';
+  let timer = tick(); assert.equal(timer.delay, 0); h.timers.delete(timer); await timer.fn();
+  assert.deepEqual(h.controls.execFiles, [{ file: '/bin/ps', args: ['-axo', 'pid=,ppid=,rss='], shell: false, env: {} }]);
+  const reports = () => h.requests.filter(value => new URL(value.url).pathname === '/api/desktop/owner-memory');
+  assert.equal(reports().length, 1);
+  assert.deepEqual(JSON.parse(reports()[0].config.body), { ownerTreeBytes: 3300 * 1024 });
+  assert.equal(reports()[0].config.headers['X-Code-Intelligence-Path-Token'], h.run('runtime.pathToken'));
+  // A watched run makes main sample every 2 s; otherwise every 5 s.
+  timer = tick(); assert.equal(timer.delay, 2000); watching = false; h.timers.delete(timer); await timer.fn();
+  assert.equal(tick().delay, 5000);
+  // While the runtime is not ready, main neither samples nor reports.
+  h.run('runtime.ready = false');
+  timer = tick(); h.timers.delete(timer); await timer.fn();
+  assert.equal(h.controls.execFiles.length, 2); assert.equal(reports().length, 2);
+  h.run('runtime.ready = true');
+  h.run('stopOwnerMemory()');
+  assert.equal(tick(), undefined);
+});
+
 test('existing local data permits first source enrollment without a fresh paid-AI exemption', async t => {
   const h = await harness(t), data = path.join(h.paths.userData, 'data');
   await h.realLifecycle.loadDesktopSecrets({ userData: h.paths.userData, safeStorage: h.safeStorage });
@@ -530,6 +562,8 @@ test('actual main startup passes fresh enrollment before paths file and private 
   const backend = h.children.find(value => path.basename(value.command) === 'java');
   assert.equal(backend.options.stdio[0], 'pipe'); assert.equal(backend.options.env.APP_DESKTOP_AI_BOOTSTRAP_STDIN, 'true');
   assert.equal(backend.options.env.GITHUB_NATIVE_CLIENT_ID, 'public-native-client');
+  // The backend's 6 GiB analysis watchdog gets the owner tree from main and starts no process itself.
+  assert.equal(backend.options.env.ANALYSIS_MEMORY_OWNER_PID, undefined);
   for (const child of h.children) {
     assert.doesNotMatch(JSON.stringify({ args: child.args, env: child.options.env }), new RegExp(`${h.cap}|${h.channelEpoch}|${data.source.capability}|private/ai.sock|host-provider-sentinel|host-node-sentinel|host-java-sentinel|host-github-sentinel`));
     assert.equal(JSON.stringify({ args: child.args, env: child.options.env }).includes(data.source.socketPath), false);
@@ -541,6 +575,17 @@ test('actual main startup passes fresh enrollment before paths file and private 
     new RegExp(`${h.cap}|${h.channelEpoch}|${data.source.capability}|private/ai.sock|tokenEncryptionKey`));
   assert.equal(JSON.stringify({ config: event.returnValue, outbound: h.outbound }).includes(data.source.socketPath), false);
   assert.equal([...h.handlers.keys()].some(name => /activate|gateway|settle|enrollment|permit/.test(name)), false);
+});
+
+test('the AI gateway receives only the packaged build metadata, whatever the shell environment says', async t => {
+  const packaged = { name: 'code-intelligence-validation', validationAiProviderOrigin: 'http://127.0.0.1:47613' };
+  const h = await harness(t, { modules: { '../package.json': packaged } });
+  h.context.process.env.validationAiProviderOrigin = 'http://127.0.0.1:1234';
+  h.context.process.env.CODE_INTELLIGENCE_AI_PROVIDER_ORIGIN = 'http://127.0.0.1:1234';
+  await h.start();
+  assert.equal(h.run('runtime.ready'), true);
+  assert.equal(h.controls.gatewayOptions.buildMetadata, packaged);
+  assert.equal(h.controls.gatewayOptions.transport, undefined);
 });
 
 test('packaged public GitHub client ID reaches backend without a shell environment', async t => {
@@ -834,7 +879,7 @@ test('backup reauthorizes prior folder grants only after prepared backend and EN
   const end = h.events.lastIndexOf('maintenance.END'), grant = h.events.indexOf('fetch./api/desktop/paths');
   assert.ok(end >= 0 && grant > end); assert.equal(h.run('runtime.ready'), true);
   const selected = h.requests.find(item => new URL(item.url).pathname === '/api/desktop/paths');
-  assert.deepEqual(JSON.parse(selected.config.body), { path: approved });
+  assert.deepEqual(JSON.parse(selected.config.body), { path: approved, purpose: 'RESTORE' });
 });
 
 test('prepared backend with outstanding work cannot release maintenance or show a restored window', async t => {
@@ -1366,3 +1411,67 @@ for (const mode of ['missing', 'json', 'platform', 'build', 'protocol', 'layout'
     assert.doesNotMatch(JSON.stringify(h.dialogs) + JSON.stringify(logs), /private-sentinel|private\/secrets/);
   });
 }
+
+// G-UPDATE startup wiring (update-startup.cjs) with the real checkpoint module and real area B.
+async function seedProfile(h) {
+  const secrets = await h.realLifecycle.loadDesktopSecrets({ userData: h.paths.userData, safeStorage: h.safeStorage });
+  const existing = await h.realLifecycle.openSafetyLifecycle({ userData: h.paths.userData, safeStorage: h.safeStorage,
+    installationId: secrets.localIdentity, runningBuild: '100' });
+  await existing.close();
+  await fsp.mkdir(path.join(h.paths.userData, 'postgres'), { mode: 0o700 });
+  await fsp.writeFile(path.join(h.paths.userData, 'postgres', 'PG_VERSION'), '16', { mode: 0o600 });
+  return secrets;
+}
+
+test('G-UPDATE: a healthy start commits the schema record and raises the started-build floor in area B', async t => {
+  const { TARGET_FLYWAY } = require('../src/update-startup.cjs');
+  const h = await harness(t, { backupProtocol: 3 }); await h.start();
+  assert.equal(h.run('runtime.ready'), true);
+  const schema = JSON.parse(await fsp.readFile(path.join(h.paths.userData, 'update-checkpoints', 'schema.json'), 'utf8'));
+  assert.deepEqual([schema.build, schema.flyway], ['100', TARGET_FLYWAY]);
+  await h.shutdown();
+  // The authenticated B record (canonical JSON) carries the floor; safety-lifecycle refuses older builds by it.
+  assert.equal((await fsp.readFile(path.join(h.paths.userData, 'safety', 'ai-journal', 'events.log')))
+    .includes('"event":{"build":"100","type":"BUILD_STARTED"}'), true);
+});
+
+test('G-UPDATE: a start that fails before the backend is healthy keeps the floor and leaves the checkpoint recovery-only', async t => {
+  const h = await harness(t, { backupProtocol: 3 });
+  await seedProfile(h);
+  // The backend (the Flyway migration) fails to start after PostgreSQL is already up.
+  h.controls.guardianSpawn = async (_child, value) => { if (path.basename(value.command) === 'java') throw new Error('synthetic migration failure'); };
+  await h.start(); await h.shutdown();
+  assert.equal(h.events.includes('spawn.postgres') || h.guardians.some(item => path.basename(item.command) === 'postgres'), true);
+  assert.equal(h.events.includes('window.create'), false);
+  const root = path.join(h.paths.userData, 'update-checkpoints');
+  const [id] = (await fsp.readdir(root)).filter(name => name !== 'schema.json');
+  const record = JSON.parse(await fsp.readFile(path.join(root, id, 'record.json'), 'utf8'));
+  assert.equal(record.state, 'FAILED'); assert.equal(record.targetBuild, '100');
+  assert.equal(await fsp.readFile(path.join(root, id, 'postgres', 'PG_VERSION'), 'utf8'), '16');
+  // B stays owned after this failure (by design); its log shows that the floor was never raised.
+  assert.equal((await fsp.readFile(path.join(h.paths.userData, 'safety', 'ai-journal', 'events.log'))).includes('BUILD_STARTED'), false);
+});
+
+test('G-UPDATE: an unfinished upgrade blocks startup before PostgreSQL; restore returns the checkpoint database', async t => {
+  const { openUpdateCheckpoints } = require('../src/update-checkpoint.cjs');
+  const h = await harness(t, { backupProtocol: 3 });
+  await seedProfile(h);
+  const checkpoints = await openUpdateCheckpoints({ userData: h.paths.userData, runningBuild: '100', targetFlyway: 27, bundle: null });
+  const { id } = await checkpoints.beforeMigration({ journal: { sequence: 1, headHash: 'a'.repeat(64) } });
+  await fsp.writeFile(path.join(h.paths.userData, 'postgres', 'PG_VERSION'), 'half migrated');
+  await checkpoints.markFailed();
+  h.controls.confirmation = 2;
+  await h.start();
+  assert.equal(h.events.some(event => event.startsWith('spawn.')), false, 'no service starts while the upgrade is unfinished');
+  assert.equal(h.quitCount > 0, true);
+  const prompt = h.dialogs.find(item => item.kind === 'confirm')?.values[0];
+  assert.deepEqual(prompt.buttons, ['Restore previous data', 'Try the upgrade again', 'Quit']);
+  await h.shutdown();
+  const again = await harness(t, { backupProtocol: 3 });
+  await fsp.rm(again.paths.userData, { recursive: true }); await fsp.cp(h.paths.userData, again.paths.userData, { recursive: true });
+  again.controls.confirmation = 0;
+  await again.start();
+  assert.equal(again.events.some(event => event.startsWith('spawn.')), false);
+  assert.equal(await fsp.readFile(path.join(again.paths.userData, 'postgres', 'PG_VERSION'), 'utf8'), '16');
+  assert.equal(JSON.parse(await fsp.readFile(path.join(again.paths.userData, 'update-checkpoints', id, 'record.json'), 'utf8')).state, 'RESTORED');
+});

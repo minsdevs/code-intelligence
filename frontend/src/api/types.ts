@@ -357,6 +357,11 @@ export type FlowStepView = {
   filePath: string | null
   line: number | null
   description: string | null
+  /** The flow's anchor; no relation produces it. Missing on old responses. */
+  entry?: boolean
+  /** Relation that produced the step; null when none was recorded, which is not a confirmation. */
+  relationType?: string | null
+  confidence?: string | null
 }
 
 export type FlowDetail = {
@@ -367,6 +372,7 @@ export type FlowDetail = {
   entryNodeId: number | null
   steps: FlowStepView[]
   evidences: FeatureEvidenceView[]
+  inferredStepIncluded?: boolean
 }
 
 export type FindingJudgmentStatus = 'NEEDS_REVIEW' | 'ACCEPTED' | 'FALSE_POSITIVE' | 'RESOLVED'
@@ -422,7 +428,22 @@ export type LocalSourcePreview = {
   changes: LocalSourceStatus['changes']
   changedPaths: string[]
   localImport: LocalImportSummary
+  /** Approved files per inventory language, with the depth this installation expects to reach. */
+  languages?: LocalLanguageCount[]
+  /** Approved files per top-level directory; "." counts files directly in the root. */
+  directories?: LocalDirectoryCount[]
+  /** The narrowing this preview's token binds; null is the whole folder. */
+  scope?: LocalImportScope | null
 }
+
+export type LocalExpectedDepth = 'SYMBOLS_AND_CALLS' | 'STRUCTURE' | 'CONFIGURATION' | 'INVENTORY_ONLY'
+
+export type LocalLanguageCount = { language: string; files: number; expectedDepth: LocalExpectedDepth }
+
+export type LocalDirectoryCount = { name: string; files: number }
+
+/** An empty list does not narrow. */
+export type LocalImportScope = { directories: string[]; languages: string[] }
 
 export type LocalPreviewOutcome =
   | { state: 'CONSUMED'; projectId: number; jobId: number }
@@ -460,6 +481,7 @@ export type SnapshotComparison = {
   regressionWarnings: string[]
 }
 
+/** One row per dependent: shortest depth, strongest path verdict (a path carries its weakest edge). */
 export type ImpactNodeView = {
   depth: number
   edgeType: string
@@ -468,6 +490,30 @@ export type ImpactNodeView = {
   name: string
   filePath: string | null
   line: number | null
+  /** Missing on old responses; treat as not confirmed. */
+  confidence?: string | null
+  pathCount?: number
+  group?: 'CONFIRMED_DEPENDENCY' | 'CANDIDATE_IMPACT'
+}
+
+export type ImpactOutsideArea = {
+  status: string
+  language: string | null
+  files: number
+  samplePath: string | null
+}
+
+/** Counts are null when the snapshot did not record per-file outcomes. */
+export type ImpactOutsideAnalysis = {
+  measurementStatus: 'PER_FILE_RECORDED' | 'LEGACY_UNMEASURED'
+  excludedFiles?: number | null
+  excludedSubmodules?: number | null
+  unsupportedFiles?: number | null
+  failedFiles?: number | null
+  partialFiles?: number | null
+  pendingFiles?: number | null
+  unmeasuredFiles?: number | null
+  areas: ImpactOutsideArea[]
 }
 
 export type ImpactView = {
@@ -477,6 +523,8 @@ export type ImpactView = {
   riskScore: number
   riskLevel: string
   dependents: ImpactNodeView[]
+  scoreVersion?: string
+  outsideAnalysis?: ImpactOutsideAnalysis | null
 }
 
 export type EraView = {
@@ -724,6 +772,8 @@ export type LocalImportExclusionReason =
   | 'SYMLINK'
   | 'HARD_LINK'
   | 'SECRET_CONTENT'
+  | 'SUBMODULE'
+  | 'OUT_OF_SCOPE'
 
 /** Recorded import counts only. Excluded directories count once; descendants are unmeasured. */
 export type LocalImportSummary = {

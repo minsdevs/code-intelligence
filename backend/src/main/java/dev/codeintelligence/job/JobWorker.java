@@ -17,8 +17,10 @@ import org.springframework.stereotype.Component;
 /**
  * Runs each job on its own virtual thread (dedicated executor, separate from Boot's MVC
  * executor). Step loop semantics (§8.2~8.3): DONE steps are skipped (checkpoint), a step failure
- * marks the step and job FAILED while the remaining steps stay PENDING, and a cancel takes effect
- * after the currently RUNNING step completes.
+ * marks the step and job FAILED while the remaining steps stay PENDING. A cancel is observed by the
+ * RUNNING step body at its next {@link JobCancellation} checkpoint or interrupts its in-flight
+ * worker request (T03); the step then ends FAILED with "cancelled" and the job CANCELLED. Steps
+ * without a checkpoint still end at the step boundary.
  */
 @Component
 public class JobWorker {
@@ -32,10 +34,11 @@ public class JobWorker {
     private final AppProperties appProperties;
     private final JobWorkspaceProvider workspaces;
     private final MaintenanceGate maintenance;
+    private final AnalysisMemoryWatchdog memory;
     private final SimpleAsyncTaskExecutor executor;
     // Run claims and final transitions of a job are serialized against each other (B4 fencing).
     private final ReentrantLock runOwnership = new ReentrantLock();
-    private final Map<Long, Object> currentRuns = new ConcurrentHashMap<>();
+    private final Map<Long, JobCancellation> currentRuns = new ConcurrentHashMap<>();
 
     public JobWorker(
             JobRepository repository,
@@ -43,7 +46,31 @@ public class JobWorker {
             JobProgressPublisher publisher,
             AppProperties appProperties,
             JobWorkspaceProvider workspaces) {
-        this(repository, pipeline, publisher, appProperties, workspaces, new MaintenanceGate());
+        this(
+                repository,
+                pipeline,
+                publisher,
+                appProperties,
+                workspaces,
+                new MaintenanceGate(),
+                AnalysisMemoryWatchdog.disabled());
+    }
+
+    public JobWorker(
+            JobRepository repository,
+            Pipeline pipeline,
+            JobProgressPublisher publisher,
+            AppProperties appProperties,
+            JobWorkspaceProvider workspaces,
+            MaintenanceGate maintenance) {
+        this(
+                repository,
+                pipeline,
+                publisher,
+                appProperties,
+                workspaces,
+                maintenance,
+                AnalysisMemoryWatchdog.disabled());
     }
 
     @Autowired
@@ -53,13 +80,15 @@ public class JobWorker {
             JobProgressPublisher publisher,
             AppProperties appProperties,
             JobWorkspaceProvider workspaces,
-            MaintenanceGate maintenance) {
+            MaintenanceGate maintenance,
+            AnalysisMemoryWatchdog memory) {
         this.repository = repository;
         this.pipeline = pipeline;
         this.publisher = publisher;
         this.appProperties = appProperties;
         this.workspaces = workspaces;
         this.maintenance = maintenance;
+        this.memory = memory;
         this.executor = new SimpleAsyncTaskExecutor("job-");
         this.executor.setVirtualThreads(true);
     }
@@ -83,8 +112,19 @@ public class JobWorker {
         }
     }
 
+    /** Tells the run that currently owns the job to stop its step (T03); a stale worker is not affected. */
+    void requestCancel(long jobId) {
+        runOwnership.lock();
+        try {
+            JobCancellation run = currentRuns.get(jobId);
+            if (run != null) run.request();
+        } finally {
+            runOwnership.unlock();
+        }
+    }
+
     void runJob(long jobId) {
-        Object run = new Object();
+        JobCancellation run = new JobCancellation();
         runOwnership.lock();
         try {
             if (!repository.markJobRunning(jobId)) {
@@ -95,9 +135,17 @@ public class JobWorker {
             runOwnership.unlock();
         }
         try {
+            // 05 §4: no new analysis work starts while the owner tree is above the memory limit.
+            if (!memory.admits()) {
+                repository.markJobFailed(
+                        jobId, AnalysisMemoryLimitException.MESSAGE, AnalysisMemoryLimitException.CODE);
+                publisher.publish(jobId);
+                return;
+            }
             publisher.publish(jobId);
             JobRecord job = repository.findJob(jobId).orElseThrow();
-            try (var workspace = workspaces.open(job)) {
+            try (var workspace = workspaces.open(job);
+                    var watch = memory.watch(run::exceedMemoryLimit)) {
                 Path clonePath = workspace.clonePath();
                 for (JobStepRecord step : repository.findSteps(jobId)) {
                     if (step.status() == StepStatus.DONE || step.status() == StepStatus.SKIPPED) {
@@ -107,7 +155,7 @@ public class JobWorker {
                         publisher.publish(jobId);
                         return;
                     }
-                    if (!runStep(job, step, clonePath)) {
+                    if (!runStep(job, step, clonePath, run)) {
                         return;
                     }
                 }
@@ -135,7 +183,7 @@ public class JobWorker {
      * new run of the same job. Only the worker owning the current run may complete its
      * cancellation, otherwise CANCELLING would release the project while the new writer runs.
      */
-    private boolean releaseRun(long jobId, Object run) {
+    private boolean releaseRun(long jobId, JobCancellation run) {
         runOwnership.lock();
         try {
             return currentRuns.remove(jobId, run) && repository.finishCancellation(jobId);
@@ -144,7 +192,7 @@ public class JobWorker {
         }
     }
 
-    private boolean runStep(JobRecord job, JobStepRecord step, Path clonePath) {
+    private boolean runStep(JobRecord job, JobStepRecord step, Path clonePath, JobCancellation run) {
         JobStep implementation = pipeline.find(job.type(), step.stepKey()).orElse(null);
         if (implementation == null) {
             return failStep(job, step, "no step registered for key '" + step.stepKey() + "'", null);
@@ -152,10 +200,17 @@ public class JobWorker {
         try {
             repository.markStepRunning(step.id());
             publisher.publish(job.id());
-            implementation.run(new WorkerJobContext(job, step.id(), clonePath));
+            try (JobCancellation.Scope ignored = run.bind()) {
+                implementation.run(new WorkerJobContext(job, step.id(), clonePath));
+            }
             repository.markStepDone(step.id());
             publisher.publish(job.id());
             return true;
+        } catch (JobCancelledException cancelled) {
+            // The job is CANCELLING; releaseRun completes the cancellation once this worker has left.
+            repository.markStepFailed(step.id(), cancelled.getMessage());
+            publisher.publish(job.id());
+            return false;
         } catch (Exception ex) {
             return failStep(job, step, sanitize(ex), ex);
         }
@@ -225,6 +280,7 @@ public class JobWorker {
 
         @Override
         public void updateProgress(int progressPct) {
+            JobCancellation.checkpoint();
             repository.updateStepProgress(stepId, Math.clamp(progressPct, 0, 100));
             publisher.publish(job.id());
         }

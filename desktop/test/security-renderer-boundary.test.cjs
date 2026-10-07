@@ -29,7 +29,8 @@ function loadMain() {
       webContents.send = () => {};
       webContents.setWindowOpenHandler = fn => { this.windowOpen = fn; };
       webContents.session = {
-        webRequest: { onBeforeSendHeaders: (filter, fn) => { this.headerFilter = filter; this.headers = fn; } },
+        webRequest: { onBeforeSendHeaders: (filter, fn) => { this.headerFilter = filter; this.headers = fn; },
+          onHeadersReceived: (filter, fn) => { this.responseFilter = filter; this.responseHeaders = fn; } },
         setCertificateVerifyProc: fn => { this.verifyCertificate = fn; },
         setPermissionCheckHandler: fn => { this.permissionCheck = fn; },
         setPermissionRequestHandler: fn => { this.permissionRequest = fn; },
@@ -52,7 +53,10 @@ function loadMain() {
     setTimeout, clearTimeout });
   vm.runInContext(fs.readFileSync(path.join(sourceRoot, 'main.cjs'), 'utf8'), context);
   const run = source => vm.runInContext(source, context);
-  context.syntheticRequest = async (url, init) => { requests.push({ url, init }); return { ok: true, json: async () => ({ path: '/synthetic' }) }; };
+  let response = { path: '/synthetic' };
+  context.syntheticRequest = async (url, init) => { requests.push({ url, init }); return { ok: true, json: async () => response }; };
+  context.syntheticDialogs = dialogs;
+  context.syntheticFolder = fs.realpathSync(require('node:os').tmpdir());
   context.syntheticOperation = name => operations.push(name);
   run(`mainWindow = new BrowserWindow({}); mainWindow.webContents.mainFrame.url = '${ORIGIN}/projects';
     runtime = { apiBaseUrl: '${ORIGIN}', apiToken: '${TOKEN}', pathToken: 'p'.repeat(64), authorizedRoots: [], ready: true,
@@ -60,9 +64,11 @@ function loadMain() {
         verifyBackendCertificate: (data, host) => data === 'pinned' && host === '127.0.0.1' } };
     safetyLifecycle = { diagnostics: () => ({ aiOff: true, recoveryOnly: false }) };
     stopRuntime = async () => syntheticOperation('stop'); startRuntime = async () => syntheticOperation('start');
+    saveEncryptedJson = async () => syntheticOperation('persist');
     registerIpc();`);
   const trusted = () => ({ sender: browser[0].webContents, senderFrame: browser[0].webContents.mainFrame });
-  return { handlers, browser, opened, dialogs, requests, operations, run, trusted };
+  return { handlers, browser, opened, dialogs, requests, operations, run, trusted,
+    folder: context.syntheticFolder, respond: value => { response = value; } };
 }
 
 async function invoke(h, channel, event, ...args) {
@@ -120,7 +126,7 @@ const HOSTILE_EXTERNAL = ['javascript:alert(document.domain)', 'file:///Applicat
   'https://gist.github.com/', 'https://api.github.com/', 'https://codeload.github.com/o/r', 'https://127.0.0.1:41000/',
   'https://[::ffff:8c52:7903]/', 'https://2398795651/', 'data:text/html,<script>alert(1)</script>',
   'about:blank', 'not a url'];
-// blob: URLs report the origin of their inner URL; see the SEC-L-01 TODO below.
+// blob: URLs report the origin of their inner URL (SEC-L-01).
 const INNER_ORIGIN_SCHEMES = ['blob:https://github.com/00000000-0000-0000-0000-000000000000',
   'blob:https://docs.github.com/00000000-0000-0000-0000-000000000000'];
 
@@ -201,6 +207,36 @@ test('the launch token header is injected only for app-origin requests of the pr
   ]) assert.equal(JSON.stringify(send(details)).includes(TOKEN), false, JSON.stringify(details));
 });
 
+// SEC-M-01: the renderer must not run injected inline script or eval, or reach other origins.
+// Monaco and elk workers are emitted as same-origin files (monacoSetup.ts), so no blob: worker.
+const APP_CSP = "default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; "
+  + "style-src 'self' 'unsafe-inline'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+
+test('every app-origin response in the product session carries the reviewed CSP, replacing any served policy', () => {
+  const h = loadMain();
+  h.run('createWindow();');
+  const window = h.browser[1];
+  assert.equal(typeof window.responseHeaders, 'function', 'no CSP is delivered for app documents');
+  assert.deepEqual(JSON.parse(JSON.stringify(window.responseFilter)), { urls: [`${ORIGIN}/*`] });
+  const receive = details => { let result; window.responseHeaders(details, value => { result = value; }); return result; };
+  for (const [resourceType, url, served] of [
+    ['mainFrame', `${ORIGIN}/`, { 'Content-Type': ['text/html'] }],
+    ['subFrame', `${ORIGIN}/projects`, { 'content-security-policy': ["script-src * 'unsafe-inline' 'unsafe-eval'"] }],
+    ['script', `${ORIGIN}/assets/editor.worker.js`, { 'CONTENT-SECURITY-POLICY': ['default-src *'], 'Content-Security-Policy': ['img-src *'] }],
+    ['xhr', `${ORIGIN}/api/projects`, undefined],
+  ]) {
+    const result = receive({ webContentsId: window.webContents.id, resourceType, url, responseHeaders: served });
+    assert.equal(result.cancel, undefined, url);
+    const names = Object.keys(result.responseHeaders).filter(name => name.toLowerCase() === 'content-security-policy');
+    assert.deepEqual(names, ['Content-Security-Policy'], url);
+    assert.deepEqual([...result.responseHeaders['Content-Security-Policy']], [APP_CSP], url);
+    if (served?.['Content-Type']) assert.deepEqual([...result.responseHeaders['Content-Type']], ['text/html']);
+  }
+  const directives = Object.fromEntries(APP_CSP.split('; ').map(entry => { const [name, ...values] = entry.split(' '); return [name, values]; }));
+  for (const name of ['script-src', 'connect-src', 'worker-src']) assert.deepEqual(directives[name], ["'self'"], name);
+  assert.equal(APP_CSP.includes('unsafe-eval'), false);
+});
+
 function loadPreload(config) {
   const exposed = new Map(), sent = [];
   class File {}
@@ -232,21 +268,72 @@ test('preload exposes a frozen fixed API that cannot reach arbitrary IPC channel
   assert.deepEqual(sent.slice(1), [['folder:authorize', '/Users/synthetic/project'], ['external:open', 'https://github.com/']]);
 });
 
-// Open finding SEC-M-02 (see docs/audit/security-internal-review-2026-10-07.md). The main process
-// grants any absolute path that a compromised renderer sends on folder:authorize; 05 §1 requires
-// that only a native dialog result is granted. Kept as TODO until a main-side confirmation exists.
-test('a renderer-supplied folder path is not granted without a main-process native confirmation',
-  { todo: 'SEC-M-02 open: folder:authorize trusts any absolute path from the renderer' }, async () => {
-    const h = loadMain();
-    await invoke(h, 'folder:authorize', h.trusted(), '/').catch(() => {});
-    assert.ok(h.dialogs.length > 0 || h.requests.length === 0, 'grant reached the backend without a native confirmation');
-  });
+// SEC-M-02 (docs/audit/security-internal-review-2026-10-07.md): 05 §1 grants only native dialog
+// results. A renderer-supplied (dropped) path reaches the backend grant only after the user confirms
+// that exact canonical folder in a main-process native dialog.
+test('a renderer-supplied folder path is not granted without a main-process native confirmation', async () => {
+  const h = loadMain();
+  assert.equal(await invoke(h, 'folder:authorize', h.trusted(), '/'), null, 'a declined confirmation grants nothing');
+  assert.equal(h.dialogs.length, 1, 'the dropped path is shown in a native confirmation');
+  assert.equal(h.requests.length, 0, 'grant reached the backend without a native confirmation');
+  const [window, options] = h.dialogs[0];
+  assert.equal(window, h.run('mainWindow'));
+  assert.equal(options.detail, '/');
+  assert.equal(options.cancelId, options.defaultId, 'the default answer is to refuse');
+});
 
-// Open finding SEC-L-01: assertExternalUrl compares URL.origin only, and a blob: URL inherits the
-// origin of its inner https URL, so the OS receives a non-https scheme. Fix: also require
-// url.protocol === 'https:'. Kept as TODO; the allowlisted host is unchanged and no IDE scheme passes.
-test('external open and window.open refuse non-https schemes that inherit an allowlisted origin',
-  { todo: 'SEC-L-01 open: blob:https://github.com/... passes the origin-only allowlist' }, async () => {
+test('a confirmed dropped folder and a picked folder each return the backend grant, never a bare path', async () => {
+  const h = loadMain();
+  h.run(`dialog.showMessageBox = async (...values) => { syntheticDialogs.push(values); return { response: 0 }; };
+    dialog.showOpenDialog = async (...values) => { syntheticDialogs.push(values); return { canceled: false, filePaths: [syntheticFolder] }; };`);
+  const grant = { path: h.folder, grant: 'g'.repeat(64), expiresAt: '2026-10-07T10:15:00Z' };
+  h.respond(grant);
+  assert.deepEqual(JSON.parse(JSON.stringify(await invoke(h, 'folder:authorize', h.trusted(), h.folder))), grant);
+  assert.deepEqual(JSON.parse(JSON.stringify(await invoke(h, 'folder:pick', h.trusted()))), grant);
+  assert.equal(h.requests.length, 2);
+  for (const request of h.requests) {
+    assert.deepEqual(JSON.parse(request.init.body), { path: h.folder });
+    assert.equal(request.init.headers['X-Code-Intelligence-Path-Token'], 'p'.repeat(64));
+  }
+  assert.equal(h.dialogs.length, 2, 'one confirmation for the drop and one folder dialog for the pick');
+  assert.deepEqual(h.operations, ['persist'], 'the granted root is persisted once for later project refresh');
+});
+
+test('a confirmed drop whose canonical folder changes before the grant is refused', async () => {
+  const h = loadMain();
+  h.run(`dialog.showMessageBox = async (...values) => { syntheticDialogs.push(values); return { response: 0 }; };`);
+  h.respond({ path: '/somewhere/else', grant: 'g'.repeat(64), expiresAt: '2026-10-07T10:15:00Z' });
+  await assert.rejects(invoke(h, 'folder:authorize', h.trusted(), h.folder), /changed/);
+});
+
+// Runner contract: validation drivers answer this confirmation through
+// validation/pre-release/drop-confirmation.cjs. Its serialized installer must accept exactly what
+// the real main.cjs asks for a dropped folder, and refuse (grant nothing) for any other folder.
+test('the validation drop-confirmation installer matches the real main-process confirmation', async () => {
+  const { DROP_CONFIRMATION, installDropConfirmation, verifyDropConfirmation } = require('../../validation/pre-release/drop-confirmation.cjs');
+  const install = (h, detail) => h.run(`(${installDropConfirmation.toString()})({ dialog }, ${JSON.stringify({ ...DROP_CONFIRMATION, detail })})`);
+  const accepted = loadMain();
+  const grant = { path: accepted.folder, grant: 'g'.repeat(64), expiresAt: '2026-10-07T10:15:00Z' };
+  accepted.respond(grant);
+  const handle = install(accepted, accepted.folder);
+  assert.deepEqual(JSON.parse(JSON.stringify(await invoke(accepted, 'folder:authorize', accepted.trusted(), accepted.folder))), grant);
+  const requests = JSON.parse(JSON.stringify(handle.restore()));
+  assert.deepEqual(verifyDropConfirmation(requests, { ...DROP_CONFIRMATION, detail: accepted.folder }),
+    { requests: 1, accepted: true, canonicalPath: accepted.folder, title: 'Analyze this folder?', defaultAnswerRefuses: true });
+  assert.equal(accepted.requests.length, 1);
+  assert.equal(accepted.dialogs.length, 0, 'the synthetic OS dialog was never reached');
+
+  const refused = loadMain();
+  const other = install(refused, '/somewhere/else');
+  assert.equal(await invoke(refused, 'folder:authorize', refused.trusted(), refused.folder), null, 'another folder is refused');
+  assert.equal(refused.requests.length, 0, 'a refused confirmation reaches no backend grant');
+  assert.throws(() => verifyDropConfirmation(JSON.parse(JSON.stringify(other.restore())), { ...DROP_CONFIRMATION, detail: '/somewhere/else' }),
+    /^Error: DROP_CONFIRMATION_MISMATCH$/);
+});
+
+// SEC-L-01: a blob: URL inherits the origin of its inner https URL, so an origin-only allowlist
+// handed the OS a non-https scheme. assertExternalUrl also requires the https: protocol.
+test('external open and window.open refuse non-https schemes that inherit an allowlisted origin', async () => {
     const h = loadMain();
     for (const url of INNER_ORIGIN_SCHEMES) await assert.rejects(invoke(h, 'external:open', h.trusted(), url), url);
     h.run('createWindow();');

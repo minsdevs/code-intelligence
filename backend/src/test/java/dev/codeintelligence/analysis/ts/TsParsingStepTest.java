@@ -64,20 +64,88 @@ class TsParsingStepTest {
                         files.stream().map(InventoriedFile::path).toList());
     }
 
+    /**
+     * The user's size-class decision (G-PERF R5/R6): a project over the 10 MiB single-request
+     * budget is no longer refused. It travels as one sealed session whose chunks the analyzer
+     * assembles into a single compiler project; result pages are merged in order.
+     */
     @Test
-    void refusesOverBudgetInputBeforeSendingOrPersistingPartialAnalysis() throws Exception {
+    void sendsAProjectOverTheSingleRequestBudgetAsOneSealedSession() throws Exception {
         List<InventoriedFile> files = files(11, "x".repeat(1_000_000));
-        assertThatThrownBy(() -> step(files).run(new TestJobContext(1, 2, 3L, root)))
-                .isInstanceOf(TsAnalyzerException.class)
-                .hasMessageContaining("10 MiB");
-        verify(client, never()).analyze(any());
-        verifyNoInteractions(persistence);
-        assertThat(outcomes).hasSize(22);
+        TsParsingStep step = step(files);
+        List<TsAnalyzeDtos.SessionCommand> commands = new ArrayList<>();
+        String id = "0123456789abcdef0123456789abcdef";
+        when(client.analyze(any())).thenAnswer(invocation -> {
+            TsAnalyzeDtos.Request request = invocation.getArgument(0);
+            TsAnalyzeDtos.SessionCommand command = request.session();
+            assertThat(request.files()).isEmpty();
+            commands.add(command);
+            return switch (command.op()) {
+                case "analyze" -> page(id, "analyze", 0, "ts:0000.ts#First");
+                case "page" -> page(id, "page", command.page(), "ts:0010.ts#Second");
+                default -> reply(new TsAnalyzeDtos.SessionReply(id, command.op(), command.seq(), null, null));
+            };
+        });
+        var persisted = ArgumentCaptor.forClass(dev.codeintelligence.analysis.core.AnalysisResult.class);
+
+        step.run(new TestJobContext(1, 2, 3L, root));
+
+        assertThat(commands)
+                .extracting(TsAnalyzeDtos.SessionCommand::op)
+                .containsExactly(
+                        "open", "put", "put", "put", "put", "put", "put", "put", "put", "put", "put", "put", "seal",
+                        "analyze", "page", "close");
+        assertThat(commands)
+                .filteredOn(command -> command.op().equals("put"))
+                .allSatisfy(command -> assertThat(command.files()).hasSize(1))
+                .extracting(TsAnalyzeDtos.SessionCommand::seq)
+                .containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+        TsProjectSession.ManifestBuilder expected = new TsProjectSession.ManifestBuilder();
+        for (InventoriedFile file : files) expected.add(file.path(), "x".repeat(1_000_000));
+        TsProjectSession.Manifest manifest = expected.build();
+        for (TsAnalyzeDtos.SessionCommand command : List.of(commands.getFirst(), commands.get(12))) {
+            assertThat(command.fileCount()).isEqualTo(11);
+            assertThat(command.bytes()).isEqualTo(11_000_000L);
+            assertThat(command.digest()).isEqualTo(manifest.digest());
+        }
+        verify(persistence).persist(eq(2L), eq(3L), persisted.capture());
+        assertThat(persisted.getValue().nodes())
+                .extracting(dev.codeintelligence.analysis.core.GraphNodeDraft::naturalKey)
+                .contains("ts:0000.ts#First", "ts:0010.ts#Second");
         assertThat(outcomes.subList(11, 22))
-                .allSatisfy(outcome -> assertThat(outcome)
-                        .containsEntry("sid", 3L)
-                        .containsEntry("status", "UNMEASURED")
-                        .containsEntry("reason", "PROJECT_REQUEST_LIMIT"));
+                .noneSatisfy(outcome -> assertThat(outcome).containsEntry("reason", "PROJECT_REQUEST_LIMIT"));
+    }
+
+    @Test
+    void sessionLimitIsTheLocalPreviewHardLimit() {
+        TsProjectSession.requireWithinLimit(50_000, 512L * 1024 * 1024);
+        assertThatThrownBy(() -> TsProjectSession.requireWithinLimit(50_001, 0))
+                .isInstanceOf(TsAnalyzerException.class)
+                .hasMessageContaining("50000-file / 512 MiB");
+        assertThatThrownBy(() -> TsProjectSession.requireWithinLimit(1, 512L * 1024 * 1024 + 1))
+                .isInstanceOf(TsAnalyzerException.class);
+    }
+
+    private static TsAnalyzeDtos.Response reply(TsAnalyzeDtos.SessionReply session) {
+        return new TsAnalyzeDtos.Response(
+                null, null, null, null, null, null, null, null, null, null, null, null, session);
+    }
+
+    private static TsAnalyzeDtos.Response page(String id, String op, int page, String key) {
+        return new TsAnalyzeDtos.Response(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(new TsAnalyzeDtos.SemanticNodeHit(key, "CLASS", key, null, 1, 1, null, Map.of())),
+                null,
+                null,
+                null,
+                new TsAnalyzeDtos.SessionReply(id, op, null, page, 2));
     }
 
     @SuppressWarnings("unchecked")

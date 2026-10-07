@@ -3,6 +3,7 @@ package dev.codeintelligence.analysis.core;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.codeintelligence.TestcontainersConfiguration;
+import dev.codeintelligence.common.LanguageDetector;
 import dev.codeintelligence.testsupport.FakeGithubApi;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

@@ -185,12 +185,14 @@ class JobAnalyzerWorkerRaceIntegrationTest {
     }
 
     /**
-     * Late worker result after cancel: the analyzer finished and its result is withheld while the
-     * job is CANCELLING; delivering it afterwards may only touch the cancelled run's own staging
-     * snapshot, never the current result, and the lock holds until the writer leaves.
+     * T03 (05 §4): cancel aborts the in-flight analyzer request. The analyzer has produced its
+     * result and the relay withholds it; the cancel interrupts the waiting request, the step ends
+     * and the project is released within the 10 s bound instead of at the 30 s read timeout. The
+     * withheld result delivered afterwards reaches neither the cancelled run's staging snapshot
+     * nor the current result.
      */
     @Test
-    void lateAnalyzerResultAfterCancelOnlyReachesTheCancelledRunsOwnSnapshot() throws Exception {
+    void cancelAbortsTheInFlightAnalyzerRequestAndReleasesTheProjectWithinTheBound() throws Exception {
         Analyzed p = analyzedProject();
         Map<String, Object> before = fingerprint(p.snapshotId());
         UUID generation = currentGeneration(p.projectId());
@@ -201,21 +203,35 @@ class JobAnalyzerWorkerRaceIntegrationTest {
         assertThat(hold.awaitResponse(60))
                 .as("the analyzer produced its result")
                 .isTrue();
-        api.cancel(job, HttpStatus.ACCEPTED);
-        assertThat(jobStatus(job)).isEqualTo("CANCELLING");
-        api.reanalyzeRejected(p.projectId());
-        api.delete(p.projectId(), HttpStatus.CONFLICT);
         Long staging = snapshotOf(job);
-        long stagingNodesBefore = count("select count(*) from graph_nodes where snapshot_id=?", staging);
+        Map<String, Object> stagingAtCancel = fingerprint(staging);
+
+        long requested = System.nanoTime();
+        api.cancel(job, HttpStatus.ACCEPTED);
+        long acknowledged = System.nanoTime();
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(50))
+                .until(() -> "CANCELLED".equals(jobStatus(job)) && activeJobs(p.projectId()) == 0);
+        System.out.printf(
+                "T03 cancel during the analyzer request: ack %d ms, lock released %d ms after the request%n",
+                Duration.ofNanos(acknowledged - requested).toMillis(),
+                Duration.ofNanos(System.nanoTime() - requested).toMillis());
+        assertThat(stepStatus(job, "TS_PARSING")).isEqualTo("FAILED");
+        assertThat(stepError(job, "TS_PARSING")).isEqualTo("cancelled");
+        assertThat(stepStatus(job, "TREE_PARSING")).isEqualTo("PENDING");
+        assertThat(outcomeReasons(staging)).doesNotContain("ANALYZER_REQUEST_FAILED");
 
         hold.decide(AnalyzerRelay.Decision.DELIVER);
-        assertThat(awaitTerminal(job)).isEqualTo("CANCELLED");
-        assertThat(stepStatus(job, "TS_PARSING")).isEqualTo("DONE");
-        assertThat(stepStatus(job, "TREE_PARSING")).isEqualTo("PENDING");
-        assertThat(count("select count(*) from graph_nodes where snapshot_id=?", staging))
-                .as("the late result was persisted only into the cancelled run's staging snapshot")
-                .isGreaterThan(stagingNodesBefore);
+        assertThat(hold.awaitClosed(30)).isTrue();
+        assertThat(hold.clientWriteFailed())
+                .as("the aborted request's connection was already closed by the backend")
+                .isTrue();
+        assertThat(fingerprint(staging))
+                .as("the withheld result reached nothing")
+                .isEqualTo(stagingAtCancel);
         assertThat(snapshotStatus(staging)).isNotEqualTo("READY");
+        assertThat(jobStatus(job)).isEqualTo("CANCELLED");
         assertThat(currentSnapshot(p.projectId())).isEqualTo(p.snapshotId());
         assertThat(currentGeneration(p.projectId())).isEqualTo(generation);
         assertThat(fingerprint(p.snapshotId())).isEqualTo(before);
@@ -229,14 +245,11 @@ class JobAnalyzerWorkerRaceIntegrationTest {
     }
 
     /**
-     * Characterization of the open B4/T03 gap, not an acceptance of it: cancel does not abort an
-     * in-flight analyzer request. While the result is withheld the job stays CANCELLING (and the
-     * project locked) past the 10 s cancel bound until the client read timeout (30 s default)
-     * ends the step. A result that arrives after that, and after a newer run published, writes
-     * nothing.
+     * Fencing after a bounded cancel: the request is aborted at cancel, a newer run publishes, and
+     * the old analyzer result released only then writes nothing and changes no job state.
      */
     @Test
-    void cancelWaitsForTheInFlightRequestUntilItsReadTimeoutAndAStaleResultWritesNothing() throws Exception {
+    void aStaleAnalyzerResultAfterABoundedCancelAndANewerPublishWritesNothing() throws Exception {
         Analyzed p = analyzedProject();
         RaceRepos.commit(p.bare(), Map.of(RaceRepos.APP, app("v2-" + p.name())), "second");
         AnalyzerRelay.Hold hold = relay.arm();
@@ -245,13 +258,10 @@ class JobAnalyzerWorkerRaceIntegrationTest {
         assertThat(hold.awaitResponse(60)).isTrue();
         api.cancel(job, HttpStatus.ACCEPTED);
         Awaitility.await()
-                .during(Duration.ofSeconds(11))
-                .atMost(Duration.ofSeconds(14))
-                .until(() -> "CANCELLING".equals(jobStatus(job)) && activeJobs(p.projectId()) == 1);
-
-        assertThat(awaitTerminal(job)).isEqualTo("CANCELLED");
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(50))
+                .until(() -> "CANCELLED".equals(jobStatus(job)) && activeJobs(p.projectId()) == 0);
         assertThat(stepStatus(job, "TS_PARSING")).isEqualTo("FAILED");
-        assertThat(outcomeReasons(snapshotOf(job))).containsOnly("ANALYZER_REQUEST_FAILED");
         assertThat(currentSnapshot(p.projectId())).isEqualTo(p.snapshotId());
 
         long next = api.reanalyze(p.projectId());
@@ -354,6 +364,11 @@ class JobAnalyzerWorkerRaceIntegrationTest {
     private String stepStatus(long jobId, String step) {
         return jdbc.queryForObject(
                 "select status from analysis_job_steps where job_id=? and step_key=?", String.class, jobId, step);
+    }
+
+    private String stepError(long jobId, String step) {
+        return jdbc.queryForObject(
+                "select error from analysis_job_steps where job_id=? and step_key=?", String.class, jobId, step);
     }
 
     private int stepAttempt(long jobId, String step) {

@@ -14,6 +14,7 @@ const { prepareIsolatedRun } = require('../src/isolated-run.cjs');
 const { inheritedEnvironment } = require('../src/runtime-platform.cjs');
 const { validateRuntimeManifest } = require('../src/runtime-manifest.cjs');
 const { observeStartup, createDeadline, closeOwnedApplication } = require('./native-acceptance-electron.cjs');
+const { expectedServices } = require('../../validation/pre-release/adapter-mode.cjs');
 
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -205,7 +206,7 @@ async function main(argv = process.argv.slice(2)) {
     const status = await perform(() => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()));
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null);
     assert.equal(status.aiOff, true);
-    assert.deepEqual([...status.services].sort(), ['backend', 'postgres', 'redis', 'ts-analyzer']);
+    assert.deepEqual([...status.services].sort(), expectedServices(app));
     const command = execFileSync('/bin/ps', ['-p', String(child.pid), '-o', 'command='], { encoding: 'utf8', timeout: 5000 });
     assert.ok(command.includes(executable) && command.includes('--isolated-run-claim=' + plan.claimFile));
     assert.doesNotMatch(command, /--use-mock-keychain|--password-store=basic|--require|--inspect-brk/);

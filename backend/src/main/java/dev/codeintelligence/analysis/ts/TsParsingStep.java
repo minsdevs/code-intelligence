@@ -7,6 +7,8 @@ import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.SafeRelativePath;
 import dev.codeintelligence.analysis.graph.GraphPersistenceService;
 import dev.codeintelligence.common.AnalysisProperties;
+import dev.codeintelligence.job.JobCancellation;
+import dev.codeintelligence.job.JobCancelledException;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import java.io.IOException;
@@ -69,31 +71,41 @@ public class TsParsingStep implements JobStep {
         }
         recordAll(snapshotId, files, "TARGETED", "PARSER_STARTED");
         try {
-            client.health();
+            JobCancellation.interruptibly(() -> {
+                client.health();
+                return null;
+            });
+        } catch (JobCancelledException cancelled) {
+            throw cancelled;
         } catch (RuntimeException failure) {
             recordAll(snapshotId, files, "FAILED", "ANALYZER_UNAVAILABLE");
             throw failure;
         }
         ctx.updateProgress(20);
-        List<TsAnalyzeDtos.FilePayload> payloads;
+        TsInput input;
         try {
-            payloads = readPayloads(ctx.clonePath(), files, snapshotId);
+            input = readInput(ctx.clonePath(), files, snapshotId);
         } catch (TsAnalyzerException failure) {
             recordAll(snapshotId, files, "UNMEASURED", "PROJECT_REQUEST_LIMIT");
             throw failure;
         }
-        if (payloads.isEmpty()) {
+        if (input.paths().isEmpty()) {
             ctx.updateProgress(100);
             return;
         }
         // The analyzer resolves project-wide imports, DI and route prefixes. Independent
-        // batches silently change their meaning; reject oversized projects before sending.
+        // batches silently change their meaning, so a project is one request when it fits and
+        // otherwise one session whose chunks the analyzer seals into a single project (03 §6).
         TsAnalyzeDtos.Response response;
         try {
-            response = client.analyze(new TsAnalyzeDtos.Request(payloads));
+            response = input.payloads() != null
+                    ? JobCancellation.interruptibly(() -> client.analyze(new TsAnalyzeDtos.Request(input.payloads())))
+                    : TsProjectSession.analyze(
+                            client, input.paths(), input.manifest(), path -> read(ctx.clonePath(), path));
+        } catch (JobCancelledException cancelled) {
+            throw cancelled;
         } catch (RuntimeException failure) {
-            var submitted =
-                    payloads.stream().map(TsAnalyzeDtos.FilePayload::path).collect(java.util.stream.Collectors.toSet());
+            var submitted = java.util.Set.copyOf(input.paths());
             recordAll(
                     snapshotId,
                     files.stream().filter(f -> submitted.contains(f.path())).toList(),
@@ -106,10 +118,7 @@ public class TsParsingStep implements JobStep {
         FileAnalysisOutcome.recordResponse(
                 jdbc,
                 snapshotId,
-                payloads.stream()
-                        .map(TsAnalyzeDtos.FilePayload::path)
-                        .filter(TsParsingStep::isPrimarySource)
-                        .toList(),
+                input.paths().stream().filter(TsParsingStep::isPrimarySource).toList(),
                 result.fileOutcomes());
         ctx.updateProgress(100);
     }
@@ -146,10 +155,18 @@ public class TsParsingStep implements JobStep {
                 .toList();
     }
 
-    private List<TsAnalyzeDtos.FilePayload> readPayloads(Path clonePath, List<InventoriedFile> files, long snapshotId) {
+    /** {@code payloads} is set only when the whole project fits one request. */
+    private record TsInput(
+            List<String> paths, List<TsAnalyzeDtos.FilePayload> payloads, TsProjectSession.Manifest manifest) {}
+
+    private TsInput readInput(Path clonePath, List<InventoriedFile> files, long snapshotId) {
+        TsProjectSession.requireWithinLimit(files.size(), 0);
+        List<String> paths = new ArrayList<>();
         List<TsAnalyzeDtos.FilePayload> payloads = new ArrayList<>();
         TsRequestBudget budget = new TsRequestBudget();
+        TsProjectSession.ManifestBuilder manifest = new TsProjectSession.ManifestBuilder();
         for (InventoriedFile file : files) {
+            JobCancellation.checkpoint();
             if (file.size() > analysisProperties.maxFileSize()) {
                 recordOne(snapshotId, file, "UNMEASURED", "SOURCE_SIZE_LIMIT");
                 continue;
@@ -162,14 +179,27 @@ public class TsParsingStep implements JobStep {
                 }
                 String content = Files.readString(resolved, StandardCharsets.UTF_8);
                 TsAnalyzeDtos.FilePayload payload = new TsAnalyzeDtos.FilePayload(file.path(), content);
-                budget.add(payload);
-                payloads.add(payload);
+                // Retain source text only while one request can still carry the whole project.
+                if (payloads != null && !budget.tryAdd(payload)) payloads = null;
+                if (payloads != null) payloads.add(payload);
+                manifest.add(file.path(), content);
+                paths.add(file.path());
             } catch (InvalidFilePathException | IOException e) {
                 recordOne(snapshotId, file, "FAILED", "SOURCE_READ_FAILED");
                 log.warn("Skipping TS file {}: {}", file.path(), e.toString());
             }
         }
-        return payloads;
+        TsProjectSession.Manifest built = manifest.build();
+        TsProjectSession.requireWithinLimit(built.fileCount(), built.bytes());
+        return new TsInput(paths, payloads, built);
+    }
+
+    private static String read(Path clonePath, String path) throws IOException {
+        try {
+            return Files.readString(SafeRelativePath.resolve(clonePath, path), StandardCharsets.UTF_8);
+        } catch (InvalidFilePathException e) {
+            throw new IOException(e);
+        }
     }
 
     static boolean isAnalyzerInput(InventoriedFile file) {

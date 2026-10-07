@@ -144,9 +144,9 @@ describe('impact never reads as a guarantee', () => {
   })
 
   it.each([
-    ['ko', /영향이 없다는 증거가 아닙니다/, /역방향 의존이 없습니다/],
-    ['en', /not proof of no impact/, /^No reverse dependencies\.$/],
-  ])('describes an empty reverse-dependency result as not found, not as absence (%s)', async (lang, expected, forbidden) => {
+    ['ko', /영향이 없다는 증거가 아닙니다/, /역방향 의존이 없습니다/, '관계 미발견은 영향 없음이 아닙니다'],
+    ['en', /not proof of no impact/, /^No reverse dependencies\.$/, 'finding no relation does not mean no impact'],
+  ])('describes an empty reverse-dependency result as not found, not as absence (%s)', async (lang, expected, forbidden, intro) => {
     window.localStorage.setItem('code-intelligence.lang', lang)
     stubApi(impactRoutes([]))
     renderRoute(<AnalysisPage />, '/projects/:projectId/analysis', '/projects/7/analysis')
@@ -156,7 +156,8 @@ describe('impact never reads as a guarantee', () => {
     const panel = screen.getByRole('complementary', { name: 'Impact' })
     await waitFor(() => expect(panel).toHaveTextContent(expected))
     expect(within(panel).queryByText(forbidden)).not.toBeInTheDocument()
-    expect(panel).toHaveTextContent('관계 미발견은 영향 없음이 아닙니다')
+    // The panel intro is in the UI language (G-UX A18); it was hard-coded Korean before.
+    expect(panel).toHaveTextContent(intro)
   })
 })
 
@@ -191,7 +192,7 @@ describe('code explorer callers keep candidate relations distinguishable', () =>
 })
 
 describe('flows and coverage say what was not established', () => {
-  it('tells the reader that per-step confirmation is not shown and steps can be inferred', async () => {
+  it('tells the reader that steps can be inferred and marks a path without per-step verdicts as inferred', async () => {
     stubApi({
       '/api/projects/7': () => ({ id: 7, name: 'order-desk', currentSnapshot: { id: 2, status: 'DONE' } }),
       '/flows': () => [{ id: 4, name: '/orders/:orderId', kind: 'FE_BE', entryNodeId: 12 }],
@@ -202,8 +203,8 @@ describe('flows and coverage say what was not established', () => {
     renderRoute(<FlowsPage />, '/projects/:projectId/flows', '/projects/7/flows')
     const article = await screen.findByRole('article', { name: 'Flow detail' })
     expect(article).toHaveTextContent('기록된 정적 경로입니다')
-    expect(article).toHaveTextContent('단계별 확인 수준')
-    expect(article).toHaveTextContent('추정')
+    expect(article).toHaveTextContent('단계를 만든 기록된 관계의 판정')
+    expect(article).toHaveTextContent('추정 단계 포함')
   })
 
   it('never turns legacy or unmeasured coverage into a completeness percentage', async () => {

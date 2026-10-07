@@ -206,11 +206,14 @@ public class AiRequestPlanService {
                         b.type(),
                         SecretMask.redact(b.label()),
                         b.content().length(),
-                        b.content().contains("[REDACTED]"),
+                        b.content().contains("[REDACTED]") || PersonalDataMask.detects(b.content()),
                         b.fileRefs()))
                 .toList();
+        // The digest below binds these masked bytes, so the approved preview is exactly what is sent.
         var payload = new AIProvider.ChatRequest(
-                systemPrompt(intent), SecretMask.redact(PromptBuilder.user(question, selected.text())), true);
+                systemPrompt(intent),
+                PersonalDataMask.mask(SecretMask.redact(PromptBuilder.user(question, selected.text()))),
+                true);
         long revision = preferences
                 .find(userId)
                 .map(AiPreferenceStore.Preference::revision)

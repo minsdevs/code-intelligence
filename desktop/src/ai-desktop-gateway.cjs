@@ -7,7 +7,7 @@ const path = require('node:path');
 const { createAiEgress } = require('./ai-egress.cjs');
 const { openAiEgressBridge } = require('./ai-egress-bridge.cjs');
 const { contractCatalog, SUPPORTED_MODEL } = require('./ai-model-contracts.cjs');
-const { createHttpsTransport } = require('./ai-https-transport.cjs');
+const { createProviderTransport } = require('./ai-https-transport.cjs');
 
 function fail() { throw new Error('AI gateway unavailable'); }
 function exact(value, fields) {
@@ -43,7 +43,7 @@ function decryptCredential(value, key) {
 
 async function openDesktopAiGateway({ installationId, runningBuild, temporaryRoot, tokenEncryptionKey,
   openJournal, freshEnrollmentAllowed, adapter, recoveryMode = false, verifyMaintenanceSeal, verifyMaintenanceCompletion,
-  catalog = contractCatalog, transport = createHttpsTransport(), windowsBoundary }) {
+  catalog = contractCatalog, buildMetadata = null, transport = createProviderTransport(buildMetadata), windowsBoundary }) {
   const mainEpoch = crypto.randomUUID(); let channelEpoch = crypto.randomBytes(32).toString('hex');
   let capability = crypto.randomBytes(32).toString('hex');
   let core; let bridge; let directory; let authority; let closed = false; let closePromise;

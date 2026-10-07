@@ -12,9 +12,16 @@ final class TsRequestBudget {
     private int files;
 
     void add(TsAnalyzeDtos.FilePayload file) {
-        bytes += JSON.writeValueAsBytes(file).length + (files == 0 ? 0 : 1);
+        if (!tryAdd(file)) requireWithinLimit(files + 1, Long.MAX_VALUE);
+    }
+
+    /** Adds the file when the single request stays within its limits; otherwise leaves the budget unchanged. */
+    boolean tryAdd(TsAnalyzeDtos.FilePayload file) {
+        long next = bytes + JSON.writeValueAsBytes(file).length + (files == 0 ? 0 : 1);
+        if (files + 1 > MAX_FILES || next > MAX_BYTES) return false;
+        bytes = next;
         files++;
-        requireWithinLimit(files, bytes);
+        return true;
     }
 
     static byte[] encode(TsAnalyzeDtos.Request request) {

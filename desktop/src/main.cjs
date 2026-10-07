@@ -3,14 +3,17 @@ const {
   BrowserWindow,
   dialog,
   ipcMain,
+  Menu,
+  net: electronNet,
   safeStorage,
   shell
 } = require('electron');
-const { spawn, spawnSync } = require('node:child_process');
+const { execFile, spawn, spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const net = require('node:net');
+const os = require('node:os');
 const path = require('node:path');
 const {
   loadDesktopSecrets, openSafetyLifecycle, requireBuildSequence, createSafeStorageWrapper, SafetyLifecycleError
@@ -37,7 +40,19 @@ const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
 const { RuntimeIntegrityError, integrityError, startupFailureCode,
   integrityDiagnostic, formatIntegrityDiagnostic } = require('./startup-diagnostics.cjs');
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
+const { TEST_ONLY_MODE, adapterIsolationRuntimeMode, openAdapterIsolation } = require('./adapter-isolation.cjs');
+const { openAdapterControl } = require('./adapter-control.cjs');
+const { openUpdateStartup } = require('./update-startup.cjs');
+const { startOwnerMemoryReporter } = require('./owner-memory.cjs');
 const packageMetadata = require('../package.json');
+
+// App documents and workers may run only bundled same-origin script and reach only the app origin.
+// Monaco and elk workers are emitted as same-origin files, so workers need no blob: source.
+const APP_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'", "script-src 'self'", "connect-src 'self'", "img-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'", "worker-src 'self'", "object-src 'none'", "base-uri 'none'",
+  "frame-ancestors 'none'"
+].join('; ');
 
 const children = new Map();
 const childStops = new Map();
@@ -48,6 +63,7 @@ let safetyLifecycle;
 let aiGateway;
 let aiPostgres;
 let backupRuntime;
+let updateStartup;
 let ownerLocks;
 let sourceVault;
 let sourceBroker;
@@ -64,6 +80,8 @@ let runtimeOperation = Promise.resolve();
 let startupPhase = 'MANIFEST';
 let shutdownPhase = 'QUEUED';
 let isolatedPlan;
+let adapterControl;
+let ownerMemory;
 function noteStartup(phase) {
   startupPhase = phase;
   console.error('DESKTOP_STARTUP ' + phase);
@@ -176,7 +194,7 @@ async function readAuthorizedRoots() {
 
 function loseRuntimeOwnership() {
   stopping = true; runtime = runtime || {}; runtime.ready = false; runtime.recoveryRequired = true;
-  clearTimeout(restartTimer); restartTimer = null;
+  clearTimeout(restartTimer); restartTimer = null; stopOwnerMemory();
   runtime.error = 'Desktop ownership was lost. Recovery is required before reopening.';
   mainWindow?.webContents.send('runtime:changed', publicRuntimeStatus());
   return Promise.allSettled([Promise.resolve().then(() => aiGateway?.latchOffline('USER_OFF')),
@@ -380,7 +398,7 @@ async function spawnManaged(name, command, args, options = {}) {
     if (!spawned && !(Number.isInteger(child.pid) && child.pid > 0)) { onStopped('spawn error'); return; }
     // A kill/IPC error is not exit evidence. Keep the live process owned until its real exit.
     runtime = runtime || { ready: false };
-    runtime.ready = false; runtime.recoveryRequired = true;
+    runtime.ready = false; runtime.recoveryRequired = true; stopOwnerMemory();
     runtime.error = 'A bundled service requires recovery before restart.';
     Promise.resolve().then(() => aiGateway?.latchOffline('USER_OFF')).catch(() => {});
   };
@@ -534,7 +552,67 @@ async function startRedis() {
   await (await spawnRedis())();
 }
 
+// ADR-01: production analysis runs only behind the attested XPC supervisor, reached by the backend
+// through main's control socket. Without it the adapter is ADAPTER_ISOLATION_UNAVAILABLE and every
+// TS analysis job fails with that code; no ordinary child or HTTP sidecar is started.
+function openAnalyzerIsolation(mode) {
+  return openAdapterIsolation({ mode, manifest: runtimeManifest,
+    appContents: path.resolve(path.dirname(process.execPath), '..'),
+    testOnly: mode === TEST_ONLY_MODE ? { execPath: process.execPath,
+      script: path.join(__dirname, '..', '..', 'analyzers', 'ts-analyzer', 'dist', 'stdio.js') } : undefined });
+}
+
+// One install-private socket for the app's lifetime; the capability is reissued per backend process.
+async function openAnalyzerControl() {
+  if (adapterControl) return;
+  try {
+    adapterControl = await openAdapterControl({ parents: [app.getPath('temp'), os.tmpdir()], handler: {
+      health: async () => { await (await runtime.adapterSession).verify(); },
+      analyze: async (body, options) => (await runtime.adapterSession).analyze(body, options)
+    } });
+    process.once('exit', () => adapterControl?.closeSync());
+  } catch (error) {
+    console.error('DESKTOP_ADAPTER_ISOLATION ' + (error?.code === 'ADAPTER_CONTROL_PATH_TOO_LONG' ? error.code : 'ADAPTER_CONTROL_FAILED'));
+  }
+}
+
+function analyzerMode() {
+  return adapterIsolationRuntimeMode({ metadata: packageMetadata, isPackaged: app.isPackaged, env: process.env });
+}
+
+function analyzerEnvironment() {
+  if (analyzerMode() === 'legacy-http') {
+    return {
+      TS_ANALYZER_BASE_URL: runtime.transport.analyzer.origin,
+      TS_ANALYZER_TLS_CERT_SHA256: runtime.transport.materials.analyzer.pin,
+      TS_ANALYZER_AUTH_TOKEN: runtime.transport.analyzerToken
+    };
+  }
+  return adapterControl
+    ? { TS_ANALYZER_CONTROL_SOCKET: adapterControl.socketPath, TS_ANALYZER_CONTROL_CAPABILITY: adapterControl.rotate() }
+    : {};
+}
+
 async function spawnAnalyzer() {
+  const mode = analyzerMode();
+  if (mode !== 'legacy-http') {
+    const state = runtime.adapterIsolation = { mode, isolated: false };
+    // Attestation (codesign verification of the service) overlaps the backend JVM start.
+    runtime.adapterSession = openAnalyzerIsolation(mode).then(opened => {
+      state.isolated = opened.isolated;
+      if (mode === TEST_ONLY_MODE) console.error('DESKTOP_ADAPTER_ISOLATION TEST_ONLY_UNSIGNED synthetic fixtures only');
+      return opened.session;
+    }, error => {
+      Object.assign(state, { code: 'ADAPTER_ISOLATION_UNAVAILABLE',
+        reason: error?.code === 'ADAPTER_ISOLATION_UNAVAILABLE' ? error.reason : 'UNEXPECTED' });
+      console.error('DESKTOP_ADAPTER_ISOLATION ADAPTER_ISOLATION_UNAVAILABLE ' + state.reason);
+      throw error;
+    });
+    runtime.adapterSession.catch(() => {});
+    await openAnalyzerControl();
+    return async () => { await runtime.adapterSession.catch(() => {}); };
+  }
+  runtime.adapterIsolation = { mode, isolated: false };
   const main = binary('ts-analyzer', 'dist', 'main.js');
   await spawnManaged('ts-analyzer', process.execPath, [main], {
     cwd: path.dirname(main),
@@ -558,7 +636,10 @@ async function startAnalyzer() {
   await (await spawnAnalyzer())();
 }
 
-async function authorizePath(selected, persist = true) {
+// A native-dialog result becomes a backend grant (exact canonical root, root identity, expiry and a
+// one-time nonce) that the renderer must present to preview and confirm that folder. RESTORE only
+// re-registers a root persisted for an existing project; it never yields a grant.
+async function authorizePath(selected, { restore = false } = {}) {
   const canonical = await fsp.realpath(assertAbsolutePath(selected));
   const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/api/desktop/paths`, {
     method: 'POST',
@@ -567,15 +648,31 @@ async function authorizePath(selected, persist = true) {
       'X-Code-Intelligence-Token': runtime.apiToken,
       'X-Code-Intelligence-Path-Token': runtime.pathToken
     },
-    body: JSON.stringify({ path: canonical })
+    body: JSON.stringify(restore ? { path: canonical, purpose: 'RESTORE' } : { path: canonical })
   });
   if (!response.ok) throw new Error(`Folder authorization failed (${response.status})`);
   const result = await response.json();
-  if (persist && !runtime.authorizedRoots.includes(result.path)) {
+  if (restore) return result.path;
+  if (typeof result.grant !== 'string' || typeof result.expiresAt !== 'string') throw new Error('Folder authorization failed');
+  if (!runtime.authorizedRoots.includes(result.path)) {
     runtime.authorizedRoots.push(result.path);
     await saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
   }
-  return result.path;
+  return { path: result.path, grant: result.grant, expiresAt: result.expiresAt };
+}
+
+// SEC-M-02: a dropped folder arrives as a renderer-supplied path. It is granted only after the user
+// confirms that exact canonical folder in a native dialog whose default answer refuses.
+async function authorizeDroppedPath(selected) {
+  const canonical = await fsp.realpath(selected);
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'question', buttons: ['Analyze folder', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true,
+    title: 'Analyze this folder?', message: 'Allow Code Intelligence to read this dropped folder?', detail: canonical
+  });
+  if (response !== 0) return null;
+  const granted = await authorizePath(canonical);
+  if (granted.path !== canonical) throw new Error('The dropped folder changed before it was authorized.');
+  return granted;
 }
 
 function nativeGithubClientId() {
@@ -608,9 +705,7 @@ async function spawnBackend({ maintenanceId = '', traceStartup = false } = {}) {
       SPRING_CONFIG_ADDITIONAL_LOCATION: runtime.transport.backendConfigUrl,
       TOKEN_ENC_KEY: runtime.secrets.tokenEncryptionKey,
       DATA_DIR: dataDir,
-      TS_ANALYZER_BASE_URL: runtime.transport.analyzer.origin,
-      TS_ANALYZER_TLS_CERT_SHA256: runtime.transport.materials.analyzer.pin,
-      TS_ANALYZER_AUTH_TOKEN: runtime.transport.analyzerToken,
+      ...analyzerEnvironment(),
       DESKTOP_API_TOKEN: runtime.apiToken,
       DESKTOP_PATH_TOKEN: runtime.pathToken,
       DESKTOP_LOCAL_IDENTITY: runtime.secrets.localIdentity,
@@ -634,7 +729,7 @@ async function restoreAuthorizedRoots() {
   assertSafetyReady();
   for (const root of [...runtime.authorizedRoots]) {
     try {
-      await authorizePath(root, false);
+      await authorizePath(root, { restore: true });
     } catch {
       runtime.authorizedRoots = runtime.authorizedRoots.filter((entry) => entry !== root);
     }
@@ -691,6 +786,7 @@ async function startRuntime() {
   assertSafetyReady();
   runtime.ready = true;
   restartAttempts = 0;
+  startOwnerMemory();
   mainWindow?.webContents.send('runtime:changed', publicRuntimeStatus());
 }
 
@@ -740,6 +836,7 @@ async function stopChild(name) {
 
 async function stopRuntime({ keepDatabase = false } = {}) {
   stopping = true;
+  stopOwnerMemory();
   clearTimeout(restartTimer);
   restartTimer = null;
   runtime = runtime || { ready: false };
@@ -813,6 +910,7 @@ function shutdownRuntime() {
   if (shutdownPromise) return shutdownPromise;
   quitting = true;
   stopping = true;
+  stopOwnerMemory();
   noteShutdown('QUEUED');
   clearTimeout(restartTimer);
   restartTimer = null;
@@ -870,7 +968,8 @@ function assertExternalUrl(raw) {
   }
   const url = new URL(raw);
   const allowedOrigins = new Set(['https://github.com', 'https://docs.github.com']);
-  if (url.origin === 'null'
+  if (url.protocol !== 'https:'
+      || url.origin === 'null'
       || url.username
       || url.password
       || !allowedOrigins.has(url.origin)) {
@@ -896,6 +995,30 @@ async function openBackupProductState() {
     connection: { host: '127.0.0.1', port: runtime.ports.postgres, user: 'codeintel' }, env: postgresEnvironment(),
     expectedDataDirectory: path.join(userData, 'postgres'), ownedPostgres: children.get('postgres'), dataRoot,
     ...(runtime.windowsBoundary ? { windowsBoundary: runtime.windowsBoundary } : {}) });
+}
+
+// 05 §4: main measures the owner tree rooted at itself for the backend's analysis memory watchdog,
+// so the backend never starts a process to do it. Windows has no /bin/ps; there the watchdog
+// stays unmeasured, as before.
+function startOwnerMemory() {
+  if (ownerMemory || quitting || runtime.windowsBoundary) return;
+  ownerMemory = startOwnerMemoryReporter({ root: process.pid, execFile, setTimeout, clearTimeout,
+    active: () => Boolean(runtime?.ready && !stopping), report: reportOwnerMemory });
+}
+
+function stopOwnerMemory() {
+  ownerMemory?.stop();
+  ownerMemory = null;
+}
+
+async function reportOwnerMemory(ownerTreeBytes) {
+  const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/api/desktop/owner-memory`, {
+    method: 'POST', signal: AbortSignal.timeout(5000),
+    headers: { 'Content-Type': 'application/json', 'X-Code-Intelligence-Token': runtime.apiToken,
+      'X-Code-Intelligence-Path-Token': runtime.pathToken }, body: JSON.stringify({ ownerTreeBytes })
+  });
+  if (!response.ok) return false;
+  return (await response.json())?.watching === true;
 }
 
 async function maintenanceControl(transactionId, operation) {
@@ -1011,12 +1134,13 @@ async function resumeAfterBackup({ transactionId, restored, recovery = false }) 
   }
   if (!restored) {
     for (const root of [...runtime.authorizedRoots]) {
-      try { await authorizePath(root, false); }
+      try { await authorizePath(root, { restore: true }); }
       catch { runtime.authorizedRoots = runtime.authorizedRoots.filter(entry => entry !== root); }
     }
     await saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
   }
   stopping = false; runtime.ready = true; runtime.error = null;
+  startOwnerMemory();
   if (restored) await mainWindow?.loadURL(runtime.apiBaseUrl);
   mainWindow?.webContents.send('runtime:changed', publicRuntimeStatus());
 }
@@ -1035,7 +1159,7 @@ function backupPorts() {
     async failure() {
       runtime.ready = false; runtime.recoveryRequired = true;
       runtime.error = 'Backup or restore requires offline recovery. Preserved data was not discarded.';
-      stopping = true; clearTimeout(restartTimer); restartTimer = null;
+      stopping = true; clearTimeout(restartTimer); restartTimer = null; stopOwnerMemory();
       // Stop every possible writer even if a different child fails to terminate. Keep PostgreSQL
       // owned for inspection; normal startup/AI remain blocked by the outstanding recovery state.
       const stopped = await Promise.allSettled(['backend', 'ts-analyzer', 'redis'].map(stopChild));
@@ -1126,7 +1250,7 @@ function registerIpc() {
   });
   ipcMain.handle('folder:authorize', (event, selected) => {
     assertTrustedRenderer(event);
-    return withRuntimeOperation(() => { assertSafetyReady(); return authorizePath(assertAbsolutePath(selected)); });
+    return withRuntimeOperation(() => { assertSafetyReady(); return authorizeDroppedPath(assertAbsolutePath(selected)); });
   });
   ipcMain.handle('external:open', (event, url) => {
     assertTrustedRenderer(event);
@@ -1177,6 +1301,15 @@ function createWindow() {
       } finally {
         callback({ requestHeaders: details.requestHeaders });
       }
+    }
+  );
+  mainWindow.webContents.session.webRequest.onHeadersReceived(
+    { urls: [`${appOrigin}/*`] },
+    (details, callback) => {
+      const responseHeaders = Object.fromEntries(Object.entries(details.responseHeaders ?? {})
+        .filter(([name]) => name.toLowerCase() !== 'content-security-policy'));
+      responseHeaders['Content-Security-Policy'] = [APP_CONTENT_SECURITY_POLICY];
+      callback({ responseHeaders });
     }
   );
   const allowAppNavigation = event => {
@@ -1281,7 +1414,7 @@ async function startApplication() {
         noteStartup('GATEWAY');
         aiGateway = await openDesktopAiGateway({ installationId: secrets.localIdentity, runningBuild,
           temporaryRoot: runtime.ipcRoot, tokenEncryptionKey: secrets.tokenEncryptionKey, windowsBoundary,
-          openJournal, freshEnrollmentAllowed, adapter: aiPostgres, recoveryMode: gatewayRecoveryMode,
+          openJournal, freshEnrollmentAllowed, adapter: aiPostgres, recoveryMode: gatewayRecoveryMode, buildMetadata: packageMetadata,
           verifyMaintenanceSeal: maintenanceVerifier, verifyMaintenanceCompletion: maintenanceVerifier });
         return aiGateway;
       },
@@ -1318,8 +1451,17 @@ async function startApplication() {
     if (quitting) return;
     noteStartup('AUTHORIZED_ROOTS');
     runtime.authorizedRoots = await readAuthorizedRoots();
+    // G-UPDATE: checkpoint before the backend may migrate; an unfinished upgrade is recovery-only.
+    if (process.platform === 'darwin' && runtimeManifest.backupProtocol === 3) {
+      updateStartup = await openUpdateStartup({ electron: { app, dialog, shell, net: electronNet, Menu }, safety: safetyLifecycle,
+        userData, runningBuild, runtimeRoot: runtimeRoot(), execPath: process.execPath, resourcesPath: process.resourcesPath,
+        stopRuntime: () => withRuntimeOperation(() => stopRuntime()),
+        quit: () => app.quit() });
+      if (!await updateStartup.beforeRuntime()) { app.quit(); return; }
+    }
     registerIpc();
     await startRuntime();
+    await updateStartup?.afterHealthy();
     if (!quitting) { noteStartup('WINDOW'); createWindow(); noteStartup('READY'); }
   } catch (error) {
     // Requested quit cancels further startup; the serialized shutdown still latches and closes B.
@@ -1327,6 +1469,7 @@ async function startApplication() {
     runtime = runtime || { ready: false };
     runtime.error = error.message;
     runtime.recoveryRequired = true;
+    await updateStartup?.onStartupFailure().catch(() => {});
     const code = startupFailureCode(error);
     console.error('DESKTOP_STARTUP ' + startupPhase + ' FAILED ' + code);
     dialog.showErrorBox('Code Intelligence could not start', error.message);

@@ -358,6 +358,28 @@ class LocalIngestPolicyTest {
         assertThat(target().resolve("c.txt")).doesNotExist();
     }
 
+    // 05 §1 / F11: a nested repository (submodule gitlink file or nested clone) is a default exclusion.
+    @ParameterizedTest
+    @ValueSource(strings = {"gitlink-file", "nested-clone"})
+    void submoduleWorkingTreesAreExcludedAndCountedOnce(String kind) throws Exception {
+        Path source = source("src/Main.java", "class Main {}\n");
+        write(source, ".gitmodules", "[submodule \"libs/sub\"]\n\tpath = libs/sub\n".getBytes());
+        if (kind.equals("gitlink-file")) write(source, "libs/sub/.git", "gitdir: ../../.git/modules/sub\n".getBytes());
+        else write(source, "libs/sub/.git/HEAD", "ref: refs/heads/main\n".getBytes());
+        write(source, "libs/sub/lib.ts", "export const fromSubmodule = 1;\n".getBytes());
+        write(source, "libs/sub/deep/more.ts", "export const deeper = 2;\n".getBytes());
+        List<Path> opened = new ArrayList<>();
+        LocalImportService service =
+                service(limits(100, 32 * 1024, 1024 * 1024), opened::add, LocalImportService::moveDirectory);
+
+        LocalImportService.LocalImportResult result = assertSameSelection(service, source);
+
+        assertThat(service.fingerprint(source).keySet()).containsExactlyInAnyOrder(".gitmodules", "src/Main.java");
+        assertThat(result.summary().excludedEntriesByReason()).isEqualTo(Map.of("SUBMODULE", 1));
+        assertThat(target().resolve("libs")).doesNotExist();
+        assertThat(opened).noneMatch(path -> path.toString().contains("libs/sub"));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"symlink", "hardlink", "symlink-directory"})
     void linkedInputsAreExcludedWithoutReadingTheirTargets(String kind) throws Exception {

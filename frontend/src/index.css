@@ -9,12 +9,12 @@
   --color-line: #26262c;
   --color-line-strong: #34343d;
   --color-ink: #dcdce2;
-  --color-ink-muted: #94949e;
-  --color-ink-faint: #64646e;
+  --color-ink-muted: #a8a8b2;
+  --color-ink-faint: #93939d;
   --color-accent: #6ea8fe;
   --color-ok: #89b884;
   --color-warn: #d4b46a;
-  --color-danger: #e06c75;
+  --color-danger: #e57d86;
 
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
@@ -76,6 +76,18 @@
 
 .architecture-flow {
   min-height: 0;
+}
+
+/* React Flow removes the outline of focused edges and nodes; keep a visible indicator. */
+.react-flow .react-flow__edge:focus-visible,
+.react-flow .react-flow__node:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.react-flow .react-flow__edge:focus-visible .react-flow__edge-path {
+  stroke: var(--color-accent);
+  stroke-width: 3;
 }
 
 .architecture-flow .react-flow {

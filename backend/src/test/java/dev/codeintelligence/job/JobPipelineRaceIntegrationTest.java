@@ -199,9 +199,11 @@ class JobPipelineRaceIntegrationTest {
 
     /**
      * Cancel while the real step row is RUNNING, either before its body starts or after its body
-     * finished but before the checkpoint. The body is not interrupted (B4: cancel takes effect
-     * after the running step); exclusivity must hold until the writer leaves, and nothing of the
-     * cancelled run may become current.
+     * finished but before the checkpoint. A body that starts after the cancel stops at its first
+     * cancellation checkpoint (T03; every step reports progress, which is one) and its row ends
+     * FAILED with "cancelled"; the GitHub clone of IMPORT has no checkpoint and completes, and
+     * FINALIZE refuses to publish a job that is no longer RUNNING. Exclusivity must hold until the
+     * writer leaves, and nothing of the cancelled run may become current.
      */
     @ParameterizedTest(name = "cancel {1} of {0}")
     @MethodSource("cancelPoints")
@@ -244,7 +246,12 @@ class JobPipelineRaceIntegrationTest {
 
         gate.release();
         assertThat(awaitTerminal(job)).isEqualTo("CANCELLED");
-        assertThat(stepStatus(job, step)).isEqualTo(step.equals(FinalizeStep.KEY) ? "FAILED" : "DONE");
+        if (point == RaceStepGates.Point.AFTER_BODY || step.equals("IMPORT")) {
+            assertThat(stepStatus(job, step)).isEqualTo(step.equals(FinalizeStep.KEY) ? "FAILED" : "DONE");
+        } else {
+            assertThat(stepStatus(job, step)).as("the body observed the cancel").isEqualTo("FAILED");
+            if (!step.equals(FinalizeStep.KEY)) assertThat(stepError(job, step)).isEqualTo("cancelled");
+        }
         assertLaterStepsNeverRan(job, step);
         assertThat(activeJobs(p.projectId())).isZero();
         assertUnchanged(p, before);
@@ -256,6 +263,68 @@ class JobPipelineRaceIntegrationTest {
         api.retry(job, HttpStatus.CONFLICT);
 
         assertFreshAnalysisPublishes(p, before, "v2-" + p.name());
+    }
+
+    /**
+     * T03 (05 §4): a cancel that lands inside the body of a long in-process step is observed by
+     * that body at its next cancellation checkpoint. The body stops without persisting further
+     * results, the worker leaves, and only then is the project released, within the 10 s bound
+     * counted from the moment the parked worker may continue. Nothing the stopped worker owned can
+     * change the cancelled job afterwards.
+     */
+    @ParameterizedTest(name = "cancel inside the body of {0}")
+    @ValueSource(strings = {"SOURCE_PARSING", "GRAPH_BUILD"})
+    void aCancelInsideALongInProcessStepIsObservedByItsBodyAndReleasesTheProjectWithinTheBound(String step)
+            throws Exception {
+        Analyzed p = analyzedProject();
+        Baseline before = baseline(p);
+        RaceRepos.commit(p.bare(), Map.of(RaceRepos.SERVICE, service("v2-" + p.name())), "second");
+        RacePublisher.Hold inside = publisher.holdInStepBody(p.projectId(), step);
+        long job = api.reanalyze(p.projectId());
+        inside.awaitParked();
+        assertThat(inside.jobId()).isEqualTo(job);
+        long staging = snapshotOf(job);
+        long nodesAtCancel = count("select count(*) from graph_nodes where snapshot_id=?", staging);
+
+        api.cancel(job, HttpStatus.ACCEPTED);
+        assertThat(jobStatus(job)).isEqualTo("CANCELLING");
+        assertThat(activeJobs(p.projectId()))
+                .as("CANCELLING keeps the active-job lock")
+                .isEqualTo(1);
+        long released = System.nanoTime();
+        inside.release();
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(50))
+                .until(() -> "CANCELLED".equals(jobStatus(job)) && activeJobs(p.projectId()) == 0);
+        Duration releaseTime = Duration.ofNanos(System.nanoTime() - released);
+        System.out.printf(
+                "T03 cancel inside %s: lock released %d ms after the worker resumed%n", step, releaseTime.toMillis());
+
+        assertThat(stepStatus(job, step)).as("the body observed the cancel").isEqualTo("FAILED");
+        assertThat(stepError(job, step)).isEqualTo("cancelled");
+        assertThat(count("select count(*) from graph_nodes where snapshot_id=?", staging))
+                .as("the stopped body persisted nothing after the cancel")
+                .isEqualTo(nodesAtCancel);
+        assertLaterStepsNeverRan(job, step);
+        assertThat(inside.thread().join(Duration.ofSeconds(10)))
+                .as("the worker thread has left")
+                .isTrue();
+        List<Map<String, Object>> stepsAfterExit = jdbc.queryForList(
+                "select step_key, status, attempt, error from analysis_job_steps where job_id=? order by seq", job);
+        assertThat(jobStatus(job)).isEqualTo("CANCELLED");
+        assertThat(snapshotStatus(staging)).isNotEqualTo("READY");
+        assertUnchanged(p, before);
+        api.retry(job, HttpStatus.CONFLICT);
+
+        assertFreshAnalysisPublishes(p, before, "v2-" + p.name());
+        assertThat(jobStatus(job))
+                .as("a later run cannot rewrite the cancelled job")
+                .isEqualTo("CANCELLED");
+        assertThat(jdbc.queryForList(
+                        "select step_key, status, attempt, error from analysis_job_steps where job_id=? order by seq",
+                        job))
+                .isEqualTo(stepsAfterExit);
     }
 
     static Stream<String> realSteps() {
@@ -898,6 +967,11 @@ class JobPipelineRaceIntegrationTest {
     private String stepStatus(long jobId, String step) {
         return jdbc.queryForObject(
                 "select status from analysis_job_steps where job_id=? and step_key=?", String.class, jobId, step);
+    }
+
+    private String stepError(long jobId, String step) {
+        return jdbc.queryForObject(
+                "select error from analysis_job_steps where job_id=? and step_key=?", String.class, jobId, step);
     }
 
     private int stepAttempt(long jobId, String step) {

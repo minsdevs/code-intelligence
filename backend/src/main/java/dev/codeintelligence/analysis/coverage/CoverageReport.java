@@ -20,7 +20,63 @@ public record CoverageReport(
         String supportStatus,
         LocalImportSummary localImport,
         Long snapshotId,
-        OutcomeSummary outcomes) {
+        OutcomeSummary outcomes,
+        List<CapabilityOutcome> capabilityOutcomes) {
+
+    /** Adapter capabilities in report order (03 AdapterDescriptor capability set). */
+    public static final List<String> CAPABILITIES = List.of("P", "S", "C", "F", "X");
+
+    public static final String NOT_RECORDED = "NOT_RECORDED";
+
+    /**
+     * Per-capability file partition (03 coverage invariants): eligible = successful + partial + failed + unsupported +
+     * pending; a cancelled attempt never publishes its snapshot, so its files stay pending. eligible + unmeasured equals
+     * the snapshot's file rows. Counts are null when the capability's outcomes were not recorded for this snapshot.
+     */
+    public record CapabilityOutcome(
+            String capability,
+            String measurementStatus,
+            Integer eligibleFiles,
+            Integer successfulFiles,
+            Integer partialFiles,
+            Integer failedFiles,
+            Integer unsupportedFiles,
+            Integer pendingFiles,
+            Integer unmeasuredFiles) {
+
+        public static CapabilityOutcome unrecorded(String capability, String measurementStatus) {
+            return new CapabilityOutcome(capability, measurementStatus, null, null, null, null, null, null, null);
+        }
+    }
+
+    public CoverageReport(
+            FileCoverage fileCoverage,
+            List<LanguageCoverage> languageCoverage,
+            List<ExcludedFolder> excludedFolders,
+            List<AnalyzerStatus> analyzerStatuses,
+            PartialResultInfo partialResults,
+            List<String> retryableIssues,
+            List<String> unsupportedItems,
+            String measurementStatus,
+            String supportStatus,
+            LocalImportSummary localImport,
+            Long snapshotId,
+            OutcomeSummary outcomes) {
+        this(
+                fileCoverage,
+                languageCoverage,
+                excludedFolders,
+                analyzerStatuses,
+                partialResults,
+                retryableIssues,
+                unsupportedItems,
+                measurementStatus,
+                supportStatus,
+                localImport,
+                snapshotId,
+                outcomes,
+                null);
+    }
 
     public record OutcomeSummary(
             int discoveredFiles,

@@ -53,11 +53,12 @@ export default function Sidebar() {
   })
 
   const accountQuery = useQuery({ queryKey: ['github-connection'], queryFn: getGithubConnection, retry: false })
-  const accountLabel = accountQuery.isPending ? '계정 확인 중'
-    : accountQuery.isError ? '계정 상태 확인 필요'
+  const accountLabel = accountQuery.isPending ? t('sidebar.accountChecking')
+    : accountQuery.isError ? t('sidebar.accountCheckNeeded')
       : accountQuery.data.reauthenticationReason === 'REFRESH_IN_PROGRESS' ? t('settings.githubRefreshing')
-      : accountQuery.data.reauthenticationReason ? 'GitHub 재인증 필요'
-      : accountQuery.data.connected ? `GitHub 연결됨 · ID ${accountQuery.data.githubId}` : '로컬 모드 · GitHub 로그인'
+      : accountQuery.data.reauthenticationReason ? t('settings.githubReauthNeeded')
+      : accountQuery.data.connected ? t('sidebar.githubConnected').replace('{id}', String(accountQuery.data.githubId))
+      : t('sidebar.localMode')
 
   const areas = areasQuery.data
   const projects = projectsQuery.data ?? []
@@ -193,7 +194,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <NavLink to="/settings#github-account" aria-label="계정 설정" title={accountLabel} className="mx-2 mb-2 flex shrink-0 items-center gap-2 rounded-md border border-line px-2.5 py-2 text-[12px] text-ink-muted hover:bg-surface-2">
+      <NavLink to="/settings#github-account" aria-label={t('analysis.accountSettings')} title={accountLabel} className="mx-2 mb-2 flex shrink-0 items-center gap-2 rounded-md border border-line px-2.5 py-2 text-[12px] text-ink-muted hover:bg-surface-2">
         <SlidersIcon className="shrink-0" />
         <span className={collapsed ? 'sr-only' : 'truncate'}>{accountLabel}</span>
       </NavLink>

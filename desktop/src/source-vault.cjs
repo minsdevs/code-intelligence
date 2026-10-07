@@ -25,6 +25,14 @@ const INSTALLATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const PROJECT_ID = /^[1-9][0-9]{0,18}$/;
 const MAX_PROJECT_ID = 9223372036854775807n;
 const PENDING_FILE = /^\.pending-[a-f0-9]{32}$/;
+// A batch is staged in memory and made durable together: one intent record, then per-blob file
+// and directory flushes that stay cheap because no blob is renamed after it is written.
+const MAX_BATCH_FILES = 512;
+const MAX_BATCH_BYTES = 16 * 1024 * 1024;
+const MAX_INTENT_BYTES = 128 * 1024;
+const BATCH_FORMAT = 'code-intelligence-source-batch';
+const BATCH_INTENT = '.batch-intent';
+const SESSION_ID = /^[a-f0-9]{32}$/;
 
 class SourceVaultError extends Error {
   constructor(code) {
@@ -237,6 +245,103 @@ async function unlinkOwned(file, expected) {
   checkPrivate(current, false);
   if (!sameIdentity(current, expected)) fail('SOURCE_VAULT_UNSAFE_PATH');
   await fs.unlink(file);
+}
+async function syncOpened(file, expected, directory) {
+  const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | (directory ? constants.O_DIRECTORY : 0));
+  try {
+    const opened = await handle.stat({ bigint: true });
+    checkPrivate(opened, directory);
+    if (!sameIdentity(opened, expected)) fail('SOURCE_VAULT_UNSAFE_PATH');
+    await handle.sync();
+  } finally { await handle.close(); }
+}
+
+// The intent lists only addresses a batch creates, so recovery never touches committed blobs.
+// Its MAC (a subkey of a retained source key) keeps a damaged record from directing deletions.
+function intentMac(key, body) {
+  const subkey = Buffer.from(crypto.hkdfSync('sha256', key, Buffer.alloc(0), BATCH_FORMAT, 32));
+  try { return crypto.createHmac('sha256', subkey).update(body).digest('hex'); } finally { subkey.fill(0); }
+}
+function intentBody(installationId, keyId, projects, addresses) {
+  return JSON.stringify({ format: BATCH_FORMAT, major: FORMAT_MAJOR, installationId, keyId, projects, addresses });
+}
+function intentRecord(installationId, keyId, key, projects, addresses) {
+  const body = intentBody(installationId, keyId, projects, addresses);
+  return Buffer.from(`${body.slice(0, -1)},"mac":"${intentMac(key, body)}"}`, 'utf8');
+}
+function parseIntent(bytes, installationId, keys) {
+  let value;
+  try { value = JSON.parse(bytes.toString('utf8')); } catch { fail('SOURCE_VAULT_INTEGRITY'); }
+  if (value?.major !== FORMAT_MAJOR) fail('SOURCE_VAULT_UNSUPPORTED');
+  if (!fields(value, ['format', 'major', 'installationId', 'keyId', 'projects', 'addresses', 'mac'])
+      || value.format !== BATCH_FORMAT || value.installationId !== installationId || !fullMatch(value.keyId, KEY_ID)
+      || !Array.isArray(value.projects) || !Array.isArray(value.addresses)
+      || value.addresses.length < 1 || value.addresses.length > MAX_BATCH_FILES
+      || value.projects.length > value.addresses.length || !fullMatch(value.mac, SHA256)) fail('SOURCE_VAULT_INTEGRITY');
+  for (const address of value.addresses) {
+    if (!fields(address, ['projectId', 'sha256']) || !fullMatch(address.sha256, SHA256)) fail('SOURCE_VAULT_INTEGRITY');
+    try { projectArgument(address.projectId); } catch { fail('SOURCE_VAULT_INTEGRITY'); }
+  }
+  for (const projectId of value.projects) {
+    if (!value.addresses.some(address => address.projectId === projectId)) fail('SOURCE_VAULT_INTEGRITY');
+  }
+  const key = keys.get(value.keyId);
+  if (!key) fail('SOURCE_VAULT_KEY_MISSING');
+  const body = intentBody(installationId, value.keyId, value.projects, value.addresses);
+  const expected = Buffer.from(intentMac(key, body), 'hex');
+  if (!crypto.timingSafeEqual(expected, Buffer.from(value.mac, 'hex'))
+      || !Buffer.from(`${body.slice(0, -1)},"mac":"${value.mac}"}`, 'utf8').equals(bytes)) fail('SOURCE_VAULT_INTEGRITY');
+  return value;
+}
+// Runs under the exclusive owner lock before the opening scan. No address listed in a durable
+// intent was covered by an acknowledged barrier, so its residue is removed rather than isolated.
+async function recoverBatch(sourceRoot, installationId, keys, fault) {
+  const entries = await fs.opendir(sourceRoot);
+  const pending = [];
+  try { for await (const entry of entries) if (fullMatch(entry.name, PENDING_FILE)) pending.push(entry.name); }
+  finally { await entries.close().catch(() => {}); }
+  // An intent temp file was never renamed, and every mkdir follows the rename's root flush.
+  for (const name of pending) {
+    const file = path.join(sourceRoot, name);
+    const stat = await fs.lstat(file, { bigint: true });
+    checkPrivate(stat, false);
+    await unlinkOwned(file, stat);
+  }
+  if (pending.length) await syncDirectory(sourceRoot);
+  const intent = path.join(sourceRoot, BATCH_INTENT);
+  if (!await statOrMissing(intent)) return;
+  const stored = await readPrivateFile(intent, MAX_INTENT_BYTES, 'SOURCE_VAULT_MISSING');
+  const record = parseIntent(stored.bytes, installationId, keys);
+  const projects = new Set();
+  for (const { projectId, sha256 } of record.addresses) {
+    const projectDirectory = path.join(sourceRoot, projectId);
+    const project = await statOrMissing(projectDirectory);
+    if (!project) continue;
+    checkPrivate(project, true);
+    projects.add(projectId);
+    const directory = path.join(projectDirectory, sha256);
+    const address = await statOrMissing(directory);
+    if (!address) continue;
+    checkPrivate(address, true);
+    for (const name of await fs.readdir(directory)) {
+      if (name !== 'blob.bin' && !fullMatch(name, PENDING_FILE)) fail('SOURCE_VAULT_UNSAFE_PATH');
+      const file = path.join(directory, name);
+      const stat = await fs.lstat(file, { bigint: true });
+      checkPrivate(stat, false);
+      await unlinkOwned(file, stat);
+    }
+    await fs.rmdir(directory);
+  }
+  for (const projectId of projects) {
+    const projectDirectory = path.join(sourceRoot, projectId);
+    if (record.projects.includes(projectId) && await directoryEmpty(projectDirectory)) await fs.rmdir(projectDirectory);
+    else await syncDirectory(projectDirectory);
+  }
+  // Removals are durable before the record that names them disappears.
+  await syncDirectory(sourceRoot);
+  await fault?.('batch:recovered');
+  await unlinkOwned(intent, stored.stat);
+  await syncDirectory(sourceRoot);
 }
 
 async function acquireLock(directory) {
@@ -577,6 +682,7 @@ async function initialize(options, fresh, restoreStage = false) {
     // A trusted caller creates a new private stage, closes the live vault, then opens this
     // factory with the existing safety area B. Never resume into or merge a populated stage.
     if (restoreStage && !await directoryEmpty(sourceRoot)) fail('SOURCE_VAULT_NOT_FRESH');
+    if (!windows && !fresh && !restoreStage) await recoverBatch(sourceRoot, installationId, keys, fault);
     const store = await scanSourceStore(sourceRoot, maxStoreEntries);
     if (restoreStage && store.entries.size !== 0) fail('SOURCE_VAULT_NOT_FRESH');
 
@@ -586,6 +692,15 @@ async function initialize(options, fresh, restoreStage = false) {
     let closePromise;
     let pending = 0;
     let queue = Promise.resolve();
+    // Staged blobs exist only in memory until a flush; receipts name this handle's session so a
+    // barrier after a reopen can never vouch for blobs that a closed or crashed handle dropped.
+    const session = crypto.randomBytes(16).toString('hex');
+    let sequence = 0;
+    let batch = [];
+    const stagedAddresses = new Map();
+    const stagedProjects = new Set();
+    let reservedBytes = 0;
+    let reservedEntries = 0;
     const ensureUsable = () => {
       nativeStorage?.assertLive();
       if (closed || closing || poisoned || ownerLocks !== undefined && !lock.isHeld()) fail('SOURCE_VAULT_CLOSED');
@@ -607,7 +722,7 @@ async function initialize(options, fresh, restoreStage = false) {
     const publicInfo = () => Object.freeze({ format: FORMAT_MAJOR, installationId,
       activeKeyId: [...keys.keys()].at(-1), keyIds: Object.freeze([...keys.keys()]),
       store: Object.freeze({ storedBytes: store.bytes, maxStoreBytes, entries: store.entries.size, maxStoreEntries }) });
-    const enqueue = (operation, cleanup) => {
+    const enqueue = (operation, cleanup, { flush = true, verify = true } = {}) => {
       try {
         ensureUsable();
         if (pending >= MAX_PENDING_OPERATIONS) fail('SOURCE_VAULT_LIMIT');
@@ -615,7 +730,9 @@ async function initialize(options, fresh, restoreStage = false) {
       pending += 1;
       const result = queue.then(async () => {
         if (poisoned) fail('SOURCE_VAULT_CLOSED');
-        await verifyRoots();
+        if (verify) await verifyRoots();
+        // Every other operation observes a store without unflushed staged blobs.
+        if (flush && batch.length) await flushBatch();
         return operation();
       }).catch(error => { throw safeError(error); }).finally(() => { pending -= 1; cleanup?.(); });
       queue = result.catch(() => {});
@@ -647,12 +764,13 @@ async function initialize(options, fresh, restoreStage = false) {
       }
       if (store.entries.size > maxStoreEntries) fail('SOURCE_VAULT_LIMIT');
     };
-    const readStoredEnvelope = async (expected) => {
+    // A batch passes the identities it has just created for addresses not yet in the ledger.
+    const readStoredEnvelope = async (expected, known = {}) => {
       const directory = address(expected);
       if (!await statOrMissing(path.dirname(directory), { directory: true })) fail('SOURCE_VAULT_MISSING');
       if (!await statOrMissing(directory, { directory: true })) fail('SOURCE_VAULT_MISSING');
-      const projectStat = await privateDirectory(path.dirname(directory), store.entries.get(expected.projectId));
-      const addressStat = await privateDirectory(directory, store.entries.get(`${expected.projectId}/${expected.sha256}`));
+      const projectStat = await privateDirectory(path.dirname(directory), known.projectStat ?? store.entries.get(expected.projectId));
+      const addressStat = await privateDirectory(directory, known.addressStat ?? store.entries.get(`${expected.projectId}/${expected.sha256}`));
       const encrypted = await readPrivateFile(path.join(directory, 'blob.bin'), MAX_FILE_BYTES + MAX_HEADER_BYTES + 12, 'SOURCE_VAULT_MISSING');
       try {
         await privateDirectory(path.dirname(directory), projectStat);
@@ -670,6 +788,160 @@ async function initialize(options, fresh, restoreStage = false) {
       const verified = decryptBlob(envelope, expected, installationId, keys);
       verified.bytes.fill(0);
     };
+    const takeBatch = () => {
+      const items = batch;
+      batch = []; stagedAddresses.clear(); stagedProjects.clear();
+      reservedBytes = 0; reservedEntries = 0;
+      return items;
+    };
+    const writeBatch = async (items) => {
+      const fresh = items.filter(item => item.envelope);
+      const newProjects = [...new Set(fresh.filter(item => item.newProject).map(item => item.expected.projectId))];
+      const intent = path.join(sourceRoot, BATCH_INTENT);
+      let intentStat;
+      if (fresh.length) {
+        if (await statOrMissing(intent)) fail('SOURCE_VAULT_UNSAFE_PATH');
+        const keyId = [...keys.keys()].at(-1);
+        const record = intentRecord(installationId, keyId, keys.get(keyId), newProjects,
+          fresh.map(({ expected }) => ({ projectId: expected.projectId, sha256: expected.sha256 })));
+        intentStat = await atomicWrite(sourceRoot, BATCH_INTENT, record, { fault, kind: 'batch-intent', checkOwnership });
+        await fault?.('batch:intent-written');
+      }
+      const projects = new Map();
+      const project = async (projectId) => {
+        if (projects.has(projectId)) return projects.get(projectId);
+        const directory = path.join(sourceRoot, projectId);
+        let stat;
+        if (newProjects.includes(projectId)) {
+          if (await statOrMissing(directory, { directory: true })) fail('SOURCE_VAULT_UNSAFE_PATH');
+          await mkdir(directory);
+          stat = await privateDirectory(directory);
+        } else stat = await privateDirectory(directory, store.entries.get(projectId));
+        projects.set(projectId, stat);
+        return stat;
+      };
+      const written = [];
+      await checkOwnership();
+      for (const item of fresh) {
+        await project(item.expected.projectId);
+        const directory = address(item.expected);
+        try { await mkdir(directory); }
+        catch (error) { if (error.code === 'EEXIST') fail('SOURCE_VAULT_UNSAFE_PATH'); throw error; }
+        const directoryStat = await fs.lstat(directory, { bigint: true });
+        checkPrivate(directoryStat, true);
+        // The intent covers this address, so it is written in place: a rename here would dirty
+        // the address directory again after the flush and cost one device flush per blob.
+        const file = path.join(directory, 'blob.bin');
+        const handle = await fs.open(file, constants.O_RDWR | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+        let fileStat;
+        const readback = Buffer.alloc(item.envelope.length);
+        try {
+          checkPrivate(await handle.stat({ bigint: true }), false);
+          await handle.writeFile(item.envelope);
+          await fault?.('batch:blob-written');
+          // Authenticate persisted bytes before a successful source publication. Closing before the
+          // flush below lets the batch's first device flush cover this file's data.
+          let offset = 0;
+          while (offset < readback.length) {
+            const { bytesRead } = await handle.read(readback, offset, readback.length - offset, offset);
+            if (bytesRead === 0) fail('SOURCE_VAULT_INTEGRITY');
+            offset += bytesRead;
+          }
+          fileStat = await handle.stat({ bigint: true });
+          checkPrivate(fileStat, false);
+          if (fileStat.size !== BigInt(item.envelope.length) || !readback.equals(item.envelope)) fail('SOURCE_VAULT_INTEGRITY');
+          decryptBlob(readback, item.expected, installationId, keys).bytes.fill(0);
+        } finally { readback.fill(0); await handle.close(); }
+        written.push({ item, directoryStat, fileStat });
+      }
+      const existing = [];
+      for (const item of items.filter(entry => !entry.envelope)) {
+        const projectStat = await project(item.expected.projectId);
+        const prefix = `${item.expected.projectId}/${item.expected.sha256}`;
+        const checked = await readStoredEnvelope(item.expected, { projectStat, addressStat: store.entries.get(prefix) });
+        try { decryptBlob(checked.bytes, item.expected, installationId, keys).bytes.fill(0); }
+        finally { checked.bytes.fill(0); }
+        existing.push({ item, directoryStat: store.entries.get(prefix), fileStat: checked.stat });
+      }
+      for (const { item, directoryStat, fileStat } of [...written, ...existing]) {
+        const directory = address(item.expected);
+        await syncOpened(path.join(directory, 'blob.bin'), fileStat, false);
+        await syncOpened(directory, directoryStat, true);
+      }
+      for (const projectId of projects.keys()) await syncDirectory(path.join(sourceRoot, projectId));
+      if (newProjects.length) await syncDirectory(sourceRoot);
+      await fault?.('batch:blobs-synced');
+      if (intentStat) {
+        await checkOwnership();
+        await unlinkOwned(intent, intentStat);
+        await syncDirectory(sourceRoot);
+        await fault?.('batch:intent-retired');
+      }
+      for (const projectId of newProjects) store.entries.set(projectId, directoryEntry(projects.get(projectId)));
+      for (const { item, directoryStat, fileStat } of written) {
+        const prefix = `${item.expected.projectId}/${item.expected.sha256}`;
+        store.entries.set(prefix, directoryEntry(directoryStat));
+        store.entries.set(`${prefix}/blob.bin`, { kind: 'file', bytes: Number(fileStat.size) });
+        store.bytes += Number(fileStat.size);
+      }
+    };
+    const flushBatch = async () => {
+      const items = takeBatch();
+      try { await writeBatch(items); }
+      catch (error) { poisoned = true; throw error; }
+      finally { for (const item of items) item.envelope?.fill(0); }
+    };
+    const storeNow = async (projectId, plaintext) => {
+      const sha256 = crypto.createHash('sha256').update(plaintext).digest('hex');
+      const expected = { projectId, sha256, byteSize: plaintext.length };
+      const projectDirectory = path.join(sourceRoot, projectId);
+      const directory = address(expected);
+      const prefix = `${projectId}/${sha256}`;
+      const knownProject = store.entries.get(projectId);
+      const knownAddress = store.entries.get(prefix);
+      if (knownProject) await privateDirectory(projectDirectory, knownProject);
+      else if (await statOrMissing(projectDirectory, { directory: true })) fail('SOURCE_VAULT_UNSAFE_PATH');
+      if (knownAddress) {
+        await privateDirectory(directory, knownAddress);
+        const existing = await readStored(expected);
+        try {
+          if (!existing.bytes.equals(plaintext)) fail('SOURCE_VAULT_INTEGRITY');
+          await syncDirectory(directory);
+          await verifyRoots();
+          return Object.freeze({ format: FORMAT_MAJOR, ...expected, keyId: existing.keyId, deduplicated: true });
+        } finally { existing.bytes.fill(0); }
+      }
+      // Native missing checks require existing retained ancestors; an absent project has no address.
+      if (knownProject && await statOrMissing(directory, { directory: true })) fail('SOURCE_VAULT_UNSAFE_PATH');
+      const keyId = [...keys.keys()].at(-1);
+      const encrypted = encryptBlob({ installationId, ...expected, keyId }, plaintext, keys.get(keyId));
+      // Reserve both payload and metadata entries BEFORE creating anything. Rename reuses the temp entry.
+      const requiredEntries = (knownProject ? 0 : 1) + 2;
+      if (store.bytes + encrypted.length > maxStoreBytes
+          || store.entries.size + requiredEntries > maxStoreEntries) fail('SOURCE_VAULT_LIMIT');
+      try {
+        await checkOwnership();
+        if (!knownProject) {
+          await mkdir(projectDirectory);
+          await privateDirectory(projectDirectory);
+          await syncDirectory(sourceRoot);
+        }
+        await checkOwnership(); await mkdir(directory);
+        // Interrupted reservations remain isolated; ambiguous existing residue is never overwritten/cleaned.
+        await privateDirectory(directory);
+        await syncDirectory(projectDirectory);
+        await atomicWrite(directory, 'blob.bin', encrypted, { fault, kind: 'blob', checkOwnership });
+        // Authenticate persisted bytes before a successful source publication on either platform.
+        const checked = await readStored(expected);
+        try { if (!checked.bytes.equals(plaintext)) fail('SOURCE_VAULT_INTEGRITY'); }
+        finally { checked.bytes.fill(0); }
+        await verifyRoots();
+        return Object.freeze({ format: FORMAT_MAJOR, ...expected, keyId, deduplicated: false });
+      } finally {
+        try { await accountAttempt(expected); }
+        catch (error) { poisoned = true; throw error; }
+      }
+    };
     const vault = {
       info() { ensureUsable(); return publicInfo(); },
       put(value) {
@@ -685,57 +957,82 @@ async function initialize(options, fresh, restoreStage = false) {
           // Snapshot caller-owned bytes before any await/queueing; never persist this buffer.
           plaintext = Buffer.from(value.bytes);
         } catch (error) { return Promise.reject(safeError(error)); }
+        return enqueue(() => storeNow(projectId, plaintext), () => plaintext.fill(0));
+      },
+      stage(value) {
+        let projectId;
+        let plaintext;
+        try {
+          ensureUsable();
+          if (restoreStage) fail('SOURCE_VAULT_MODE');
+          if (pending >= MAX_PENDING_OPERATIONS) fail('SOURCE_VAULT_LIMIT');
+          projectId = projectArgument(value?.projectId);
+          if (!(value?.bytes instanceof Uint8Array)) fail('SOURCE_VAULT_ARGUMENT');
+          if (value.bytes.byteLength > MAX_FILE_BYTES) fail('SOURCE_VAULT_LIMIT');
+          plaintext = Buffer.from(value.bytes);
+        } catch (error) { return Promise.reject(safeError(error)); }
+        // Staging in memory touches no path; any disk work below verifies the roots first.
         return enqueue(async () => {
+          const receipt = (stored) => {
+            sequence += 1;
+            return Object.freeze({ ...stored, session, sequence });
+          };
+          // Windows storage keeps its per-blob durable publication; the barrier then only checks the session.
+          if (windows) { await verifyRoots(); return receipt(await storeNow(projectId, plaintext)); }
           const sha256 = crypto.createHash('sha256').update(plaintext).digest('hex');
           const expected = { projectId, sha256, byteSize: plaintext.length };
-          const projectDirectory = path.join(sourceRoot, projectId);
-          const directory = address(expected);
           const prefix = `${projectId}/${sha256}`;
-          const knownProject = store.entries.get(projectId);
-          const knownAddress = store.entries.get(prefix);
-          if (knownProject) await privateDirectory(projectDirectory, knownProject);
-          else if (await statOrMissing(projectDirectory, { directory: true })) fail('SOURCE_VAULT_UNSAFE_PATH');
-          if (knownAddress) {
-            await privateDirectory(directory, knownAddress);
-            const existing = await readStored(expected);
-            try {
-              if (!existing.bytes.equals(plaintext)) fail('SOURCE_VAULT_INTEGRITY');
-              await syncDirectory(directory);
-              await verifyRoots();
-              return Object.freeze({ format: FORMAT_MAJOR, ...expected, keyId: existing.keyId, deduplicated: true });
-            } finally { existing.bytes.fill(0); }
-          }
-          // Native missing checks require existing retained ancestors; an absent project has no address.
-          if (knownProject && await statOrMissing(directory, { directory: true })) fail('SOURCE_VAULT_UNSAFE_PATH');
           const keyId = [...keys.keys()].at(-1);
-          const encrypted = encryptBlob({ installationId, ...expected, keyId }, plaintext, keys.get(keyId));
-          // Reserve both payload and metadata entries BEFORE creating anything. Rename reuses the temp entry.
-          const requiredEntries = (knownProject ? 0 : 1) + 2;
-          if (store.bytes + encrypted.length > maxStoreBytes
-              || store.entries.size + requiredEntries > maxStoreEntries) fail('SOURCE_VAULT_LIMIT');
-          try {
-            await checkOwnership();
-            if (!knownProject) {
-              await mkdir(projectDirectory);
-              await privateDirectory(projectDirectory);
-              await syncDirectory(sourceRoot);
-            }
-            await checkOwnership(); await mkdir(directory);
-            // Interrupted reservations remain isolated; ambiguous existing residue is never overwritten/cleaned.
-            await privateDirectory(directory);
-            await syncDirectory(projectDirectory);
-            await atomicWrite(directory, 'blob.bin', encrypted, { fault, kind: 'blob', checkOwnership });
-            // Authenticate persisted bytes before a successful source publication on either platform.
-            const checked = await readStored(expected);
-            try { if (!checked.bytes.equals(plaintext)) fail('SOURCE_VAULT_INTEGRITY'); }
-            finally { checked.bytes.fill(0); }
+          // Receipts carry the key that actually protects the stored bytes, which metadata binds to.
+          if (stagedAddresses.has(prefix))
+            return receipt({ format: FORMAT_MAJOR, ...expected, keyId: stagedAddresses.get(prefix), deduplicated: true });
+          if (store.entries.has(prefix)) {
             await verifyRoots();
-            return Object.freeze({ format: FORMAT_MAJOR, ...expected, keyId, deduplicated: false });
-          } finally {
-            try { await accountAttempt(expected); }
-            catch (error) { poisoned = true; throw error; }
+            const known = await readStored(expected);
+            try {
+              if (!known.bytes.equals(plaintext)) fail('SOURCE_VAULT_INTEGRITY');
+              // Re-verified and flushed with the batch, like a per-blob deduplicating put.
+              batch.push({ expected });
+              stagedAddresses.set(prefix, known.keyId);
+              return receipt({ format: FORMAT_MAJOR, ...expected, keyId: known.keyId, deduplicated: true });
+            } finally { known.bytes.fill(0); }
           }
-        }, () => plaintext.fill(0));
+          const envelope = encryptBlob({ installationId, ...expected, keyId }, plaintext, keys.get(keyId));
+          const newProject = !store.entries.has(projectId) && !stagedProjects.has(projectId);
+          // Reserve payload and metadata entries for the whole batch before anything is created.
+          const requiredEntries = (newProject ? 1 : 0) + 2;
+          if (store.bytes + reservedBytes + envelope.length > maxStoreBytes
+              || store.entries.size + reservedEntries + requiredEntries > maxStoreEntries) {
+            envelope.fill(0);
+            fail('SOURCE_VAULT_LIMIT');
+          }
+          batch.push({ expected, envelope, newProject });
+          stagedAddresses.set(prefix, keyId);
+          if (newProject) stagedProjects.add(projectId);
+          reservedBytes += envelope.length;
+          reservedEntries += requiredEntries;
+          const result = receipt({ format: FORMAT_MAJOR, ...expected, keyId, deduplicated: false });
+          if (batch.length >= MAX_BATCH_FILES || reservedBytes >= MAX_BATCH_BYTES) {
+            await verifyRoots();
+            await flushBatch();
+          }
+          return result;
+        }, () => plaintext.fill(0), { flush: false, verify: false });
+      },
+      barrier(value) {
+        try {
+          ensureUsable();
+          if (!value || typeof value !== 'object' || !fullMatch(value.session, SESSION_ID)
+              || !Number.isSafeInteger(value.sequence) || value.sequence < 1) fail('SOURCE_VAULT_ARGUMENT');
+        } catch (error) { return Promise.reject(safeError(error)); }
+        const target = { session: value.session, sequence: value.sequence };
+        // The queued flush made every blob staged by this session durable before this runs.
+        return enqueue(async () => {
+          if (target.session !== session) fail('SOURCE_VAULT_MISSING');
+          if (target.sequence > sequence) fail('SOURCE_VAULT_ARGUMENT');
+          await verifyRoots();
+          return Object.freeze({ format: FORMAT_MAJOR, ...target });
+        });
       },
       read(value) {
         let expected;
@@ -872,6 +1169,8 @@ async function initialize(options, fresh, restoreStage = false) {
         closing = true;
         closePromise = (async () => {
           await queue;
+          // Unflushed staged blobs were never acknowledged durable; their session ends here.
+          for (const item of takeBatch()) item.envelope?.fill(0);
           for (const key of keys.values()) key.fill(0);
           closed = true;
           try { await nativeStorage?.close(); }
@@ -897,4 +1196,4 @@ function openSourceVault(options) { return initialize(options, false); }
 function openSourceVaultRestoreStage(options) { return initialize(options, false, true); }
 
 module.exports = { createSourceVault, openSourceVault, openSourceVaultRestoreStage, SourceVaultError,
-  MAX_FILE_BYTES, MAX_STORE_BYTES, MAX_STORE_ENTRIES };
+  MAX_FILE_BYTES, MAX_STORE_BYTES, MAX_STORE_ENTRIES, MAX_BATCH_FILES, MAX_BATCH_BYTES };
