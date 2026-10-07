@@ -76,20 +76,20 @@ export default function FlowsPage() {
   if (invalidSnapshot || projectQuery.isError)
     return (
       <p role="alert" className="p-4">
-        분석 시점을 확인할 수 없습니다.
+        {t('workspace.snapshotUnknown')}
       </p>
     )
 
   if (projectQuery.isLoading)
     return (
       <p role="status" className="p-4">
-        분석 시점을 불러오는 중…
+        {t('workspace.snapshotLoading')}
       </p>
     )
   if (projectId != null && snapshotId == null)
     return (
       <p role="status" className="p-4">
-        완료된 분석 결과가 없습니다.
+        {t('workspace.noCompletedResult')}
       </p>
     )
 
@@ -188,10 +188,7 @@ export default function FlowsPage() {
             {t('flows.stepCount').replace('{count}', String(detail.steps.length))}
           </p>
 
-          <p className="mt-3 text-xs text-ink-muted">
-            기록된 정적 경로입니다. 목록의 끝은 실제 처리 종료를 뜻하지 않습니다. 동적 호출·미지원
-            연결 이후의 경로는 미확인입니다.
-          </p>
+          <p className="mt-3 text-xs text-ink-muted">{t('flows.staticPathNote')}</p>
           <p className="mt-1 text-xs text-ink-muted">{t('flows.stepConfidenceNote')}</p>
           <ol aria-label={t('flows.stepsLabel')} className="mt-5 flex flex-col">
             {detail.steps.map((step, index) => (

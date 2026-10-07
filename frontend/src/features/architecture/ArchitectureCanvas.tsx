@@ -39,7 +39,30 @@ export default function ArchitectureCanvas({ view, onOpenNode }: ArchitectureCan
     return [...types.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   }, [view])
 
-  const onNodeClick: NodeMouseHandler<Node<ArchitectureNodeData>> = (_event, node) => {
+  // Screen readers read these names; React Flow would otherwise fall back to database ids.
+  const flow = useMemo(() => {
+    const data = layoutQuery.data
+    if (!data) return null
+    const labels = new Map(data.nodes.map((node) => [node.id, node.data.label]))
+    return {
+      nodes: data.nodes.map((node) => ({
+        ...node,
+        ariaLabel:
+          node.data.kind === 'group'
+            ? t('arch.groupNode').replace('{layer}', node.data.label)
+            : [node.data.label, node.data.nodeType, node.data.filePath].filter(Boolean).join(' · '),
+      })),
+      edges: data.edges.map((edge, index) => ({
+        ...edge,
+        ariaLabel: t('graph.edgeName')
+          .replace('{source}', labels.get(edge.source) ?? t('graph.unknownItem'))
+          .replace('{target}', labels.get(edge.target) ?? t('graph.unknownItem'))
+          .replace('{details}', t('arch.edgeCount').replace('{count}', String(view.edges[index]?.count ?? ''))),
+      })),
+    }
+  }, [layoutQuery.data, view, t])
+
+  const openNode = (node: Node<ArchitectureNodeData>) => {
     if (node.data.kind !== 'node') return
     setSelected(node)
     if (node.data.nodeId != null) {
@@ -56,23 +79,38 @@ export default function ArchitectureCanvas({ view, onOpenNode }: ArchitectureCan
       onOpenNode(node.data.filePath, node.data.line)
     }
   }
+  const onNodeClick: NodeMouseHandler<Node<ArchitectureNodeData>> = (_event, node) => openNode(node)
 
   if (layoutQuery.isLoading) {
     return <p className="px-5 py-8 text-[13px] text-ink-muted">{t('arch.layoutLoading')}</p>
   }
-  if (layoutQuery.isError || !layoutQuery.data) {
+  if (layoutQuery.isError || !flow) {
     return <p className="px-5 py-8 text-[13px] text-ink-muted">{t('arch.layoutError')}</p>
   }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
-      <div className="architecture-flow relative h-full min-h-0 min-w-0 flex-1">
+      <div
+        className="architecture-flow relative h-full min-h-0 min-w-0 flex-1"
+        onKeyDown={(event) => {
+          // React Flow only selects a node on Enter; open it as a click does.
+          const element = (event.target as Element).closest('.react-flow__node')
+          const node = flow.nodes.find((item) => item.id === element?.getAttribute('data-id'))
+          if (event.key === 'Enter' && node) openNode(node)
+        }}
+      >
         <ReactFlow
-          nodes={layoutQuery.data.nodes}
-          edges={layoutQuery.data.edges}
+          nodes={flow.nodes}
+          edges={flow.edges}
           onNodeClick={onNodeClick}
           nodesDraggable={false}
           nodesConnectable={false}
+          deleteKeyCode={null}
+          ariaLabelConfig={{
+            'node.a11yDescription.default': t('graph.nodeHint'),
+            'node.a11yDescription.keyboardDisabled': t('graph.nodeHint'),
+            'edge.a11yDescription.default': t('graph.edgeHint'),
+          }}
           elementsSelectable
           fitView
           proOptions={{ hideAttribution: true }}

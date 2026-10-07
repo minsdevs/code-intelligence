@@ -26,22 +26,24 @@ export default function RepoStep(props: RepoStepProps) {
   )
 }
 
-function installationError(error: unknown): string {
-  if (error instanceof ApiError && error.status === 429)
-    return 'GitHub 요청 한도에 도달했습니다. 잠시 뒤 다시 시도하세요.'
+function installationError(t: (key: string) => string, error: unknown): string {
+  if (error instanceof ApiError && error.status === 429) return t('installations.rateLimited')
   if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
-    return 'GitHub App 설치와 저장소 선택 권한을 확인하세요. 조직의 승인이 필요할 수 있습니다.'
+    return t('installations.forbidden')
   }
-  return error instanceof ApiError ? error.message : 'GitHub App 설치 목록을 가져오지 못했습니다.'
+  return error instanceof ApiError ? error.message : t('installations.failed')
 }
 
 function InstallationRepoStep(props: RepoStepProps) {
+  const t = useT()
   const [page, setPage] = useState(1)
   const [epoch, setEpoch] = useState(0)
   const [result, setResult] = useState<GithubInstallationList | null>(null)
   const [loaded, setLoaded] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // The failure is kept as-is and worded at render time, so the language can change.
+  const [failure, setFailure] = useState<{ error: unknown } | null>(null)
+  const error = failure && installationError(t, failure.error)
   const key = `${page}:${epoch}`
   const loading = key !== loaded
   const { onUnauthorized } = props
@@ -54,7 +56,7 @@ function InstallationRepoStep(props: RepoStepProps) {
         setSelectedId((current) =>
           data.items.some((item) => item.id === current && !item.suspended) ? current : null,
         )
-        setError(null)
+        setFailure(null)
         setLoaded(key)
       })
       .catch((error: unknown) => {
@@ -63,7 +65,7 @@ function InstallationRepoStep(props: RepoStepProps) {
           onUnauthorized()
           return
         }
-        setError(installationError(error))
+        setFailure({ error })
         setLoaded(key)
       })
     return () => {
@@ -76,29 +78,24 @@ function InstallationRepoStep(props: RepoStepProps) {
   }
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      <h2 className="text-[15px] font-semibold text-ink">GitHub App 설치 선택</h2>
-      <p className="text-[13px] text-ink-muted">
-        설치된 계정 또는 조직을 선택하세요. 선택한 설치에서 허용된 저장소만 표시합니다.
-      </p>
-      {loading && <p role="status">설치 목록을 불러오는 중…</p>}
+      <h2 className="text-[15px] font-semibold text-ink">{t('installations.title')}</h2>
+      <p className="text-[13px] text-ink-muted">{t('installations.description')}</p>
+      {loading && <p role="status">{t('installations.loading')}</p>}
       {error && (
         <div role="alert">
           {error}{' '}
           <button type="button" onClick={() => setEpoch((value) => value + 1)}>
-            다시 시도
+            {t('installations.retry')}
           </button>
         </div>
       )}
       {!loading && !error && result && (
         <>
           {result.items.length === 0 ? (
-            <p>
-              접근 가능한 설치가 없습니다. GitHub에서 이 App을 설치하고 분석할 저장소를 선택하세요.
-              조직에서는 관리자 승인이 필요할 수 있습니다.
-            </p>
+            <p>{t('installations.empty')}</p>
           ) : (
             <label className="flex flex-col gap-1.5">
-              설치된 계정 · 조직
+              {t('installations.label')}
               <select
                 value={selectedId ?? ''}
                 onChange={(event) =>
@@ -106,11 +103,13 @@ function InstallationRepoStep(props: RepoStepProps) {
                 }
                 className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-ink"
               >
-                <option value="">설치를 선택하세요</option>
+                <option value="">{t('installations.choose')}</option>
                 {result.items.map((item) => (
                   <option key={item.id} value={item.id} disabled={item.suspended}>
-                    {item.accountLogin ?? `설치 ${item.id}`} · {item.appSlug ?? 'GitHub App'}
-                    {item.suspended ? ' · 일시 중지됨' : ''}
+                    {item.accountLogin ??
+                      t('installations.fallbackName').replace('{id}', String(item.id))}{' '}
+                    · {item.appSlug ?? 'GitHub App'}
+                    {item.suspended ? t('installations.suspended') : ''}
                   </option>
                 ))}
               </select>
@@ -118,11 +117,11 @@ function InstallationRepoStep(props: RepoStepProps) {
           )}
           <div className="flex gap-3">
             <button type="button" disabled={page <= 1} onClick={() => changePage(page - 1)}>
-              이전 설치 페이지
+              {t('installations.previous')}
             </button>
-            <span>{page} 페이지</span>
+            <span>{t('installations.page').replace('{page}', String(page))}</span>
             <button type="button" disabled={!result.hasNext} onClick={() => changePage(page + 1)}>
-              다음 설치 페이지
+              {t('installations.next')}
             </button>
           </div>
         </>
@@ -190,7 +189,7 @@ function RepoListStep({
             ? err instanceof ApiError
               ? err.message
               : t('repo.listError')
-            : installationError(err),
+            : installationError(t, err),
         )
         setLoadedKey(requestKey)
       })
@@ -282,9 +281,7 @@ function RepoListStep({
       <div>
         <h2 className="text-[15px] font-semibold text-ink">{t('repo.title')}</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{t('repo.description')}</p>
-        <p className="mt-1 text-[12px] text-ink-muted">
-          검색은 현재 페이지의 저장소 이름에 적용됩니다. 다른 결과는 다음 페이지에서 확인하세요.
-        </p>
+        <p className="mt-1 text-[12px] text-ink-muted">{t('repo.searchScope')}</p>
       </div>
 
       <label className="flex flex-col gap-1.5">

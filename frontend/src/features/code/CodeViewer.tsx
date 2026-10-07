@@ -6,6 +6,7 @@ import { getFileContent } from '../../api/files'
 import type { FileContent } from '../../api/types'
 import { useT } from '../../lib/i18n'
 import { configureMonaco } from '../../lib/monacoSetup'
+import { MONACO_THEME } from '../../lib/monacoTheme'
 import { queryError } from './codeLocation'
 import { monacoLanguage } from './language'
 import OpenInIdeButton from './OpenInIdeButton'
@@ -62,11 +63,9 @@ export default function CodeViewer({
   if (sourceContext === 'unknown')
     return (
       <section className="px-5 py-8" data-testid="source-unavailable">
-        <p role="status">
-          SOURCE_CONTEXT_UNKNOWN · 이 근거의 snapshot은 미확인입니다. 현재 파일로 대체하지 않습니다.
-        </p>
+        <p role="status">{t('codeViewer.contextUnknown')}</p>
         <button type="button" onClick={onOpenCurrent}>
-          현재 소스 별도 열기 / Open current source
+          {t('codeViewer.openCurrent')}
         </button>
       </section>
     )
@@ -79,7 +78,7 @@ export default function CodeViewer({
           · {query.error.message}
         </p>
         <button type="button" onClick={onOpenCurrent}>
-          현재 소스 별도 열기 / Open current source
+          {t('codeViewer.openCurrent')}
         </button>
       </section>
     )
@@ -115,9 +114,9 @@ export default function CodeViewer({
   if (query.data && !query.isFetching && !contentMatches)
     return (
       <section className="px-5 py-8" data-testid="source-unavailable">
-        <p role="alert">EVIDENCE_STALE · 응답의 snapshot/path를 확인할 수 없습니다.</p>
+        <p role="alert">{t('codeViewer.stale')}</p>
         <button type="button" onClick={onOpenCurrent}>
-          현재 소스 별도 열기 / Open current source
+          {t('codeViewer.openCurrent')}
         </button>
       </section>
     )
@@ -134,14 +133,14 @@ export default function CodeViewer({
         )}
       </header>
       <p className="px-4 py-1 text-[11px] text-ink-muted" data-testid="source-context">
-        Snapshot #{query.data.resolvedSnapshotId} · {query.data.snapshotTime ?? '시간 미확인'} ·{' '}
-        {query.data.currentSnapshot ? '현재 / Current' : '과거 / Historical'}
-        {sourceContext === 'current' ? ' · 현재 소스' : ''}
+        Snapshot #{query.data.resolvedSnapshotId} ·{' '}
+        {query.data.snapshotTime ?? t('codeViewer.timeUnknown')} ·{' '}
+        {t(query.data.currentSnapshot ? 'codeViewer.current' : 'codeViewer.historical')}
+        {sourceContext === 'current' ? t('codeViewer.currentSource') : ''}
       </p>
       {legacyEvidence && (
         <p role="status" className="px-4 py-1 text-[11px] text-warn">
-          LEGACY_SOURCE_UNVERIFIED · snapshot 원본은 확인했지만 분석 근거가 같은 bytes에서
-          생성됐는지는 미검증입니다. 줄 강조를 하지 않습니다.
+          {t('codeViewer.legacy')}
         </p>
       )}
       <div className="min-h-0 flex-1" data-testid="code-viewer">
@@ -205,7 +204,7 @@ function VerifiedSourceEditor({
       path={`snapshot://${projectId}/${file.resolvedSnapshotId}/${file.contentOid}/${file.path}`}
       value={file.content}
       language={monacoLanguage(file.path, file.language)}
-      theme="vs-dark"
+      theme={MONACO_THEME}
       height="100%"
       onMount={handleMount}
       options={{

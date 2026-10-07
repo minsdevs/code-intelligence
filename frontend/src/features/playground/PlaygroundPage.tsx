@@ -178,13 +178,13 @@ export default function PlaygroundPage() {
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
             className="mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink"
-          >세션 저장</button>
+          >{t('playground.saveSession')}</button>
           <button
             type="button"
             onClick={() => useUiStore.setState({ aiPanelOpen: true, pendingIntent: 'EXPLAIN', focusedFile: selectedPaths[0] ?? null, focusedNode: null, focusedCommitSha: null, focusedFindingId: null, focusedNoteId: null, focusedTaskId: null })}
             className="ml-2 mt-3 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink"
-          >AI 패널에서 질문 준비</button>
-          <p className="mt-2 text-xs text-ink-muted">세션과 제안 코드는 로컬에 저장됩니다. AI 패널에서 질문을 입력하고 전송할 컨텍스트·프롬프트·비용을 승인하세요. 첫 선택 파일만 패널에 지정하며 제안 코드와 다른 파일은 자동 전송하지 않습니다.</p>
+          >{t('playground.prepareQuestion')}</button>
+          <p className="mt-2 text-xs text-ink-muted">{t('playground.localNote')}</p>
         </div>
         {localError && <p role="alert" className="px-4 py-2 text-danger">{localError}</p>}
         {result?.lastExplanation && (

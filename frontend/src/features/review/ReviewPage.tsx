@@ -141,10 +141,10 @@ function ReviewDetail({
           onClick={onOpenAssistant}
           className="rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink hover:bg-surface-3 disabled:opacity-60"
         >
-          AI 패널에서 근거 검토
+          {t('review.aiCheck')}
         </button>
       </div>
-      <p className="mt-3 text-xs text-ink-muted">저장된 리뷰는 아래에서 확인할 수 있습니다. 새 AI 설명은 패널에서 질문과 선택한 코드의 프롬프트·비용을 확인하고 승인하세요. PR 전체를 자동 전송하지 않습니다.</p>
+      <p className="mt-3 text-xs text-ink-muted">{t('review.aiNote')}</p>
       {pull.body && (
         <p className="mt-3 whitespace-pre-wrap text-[13px] text-ink-muted">{pull.body}</p>
       )}
