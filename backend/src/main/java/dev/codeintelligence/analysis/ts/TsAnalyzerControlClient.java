@@ -42,11 +42,16 @@ final class TsAnalyzerControlClient {
     }
 
     void health() {
-        accept(exchange("health", null), "ts-analyzer health failed");
+        accept(exchange("health", null, timeout), "ts-analyzer health failed");
     }
 
     TsAnalyzeDtos.Response analyze(TsAnalyzeDtos.Request request) {
-        JsonNode result = accept(exchange("analyze", TsRequestBudget.encode(request)), "ts-analyzer request failed");
+        return analyze(request, timeout);
+    }
+
+    TsAnalyzeDtos.Response analyze(TsAnalyzeDtos.Request request, Duration timeout) {
+        JsonNode result =
+                accept(exchange("analyze", TsRequestBudget.encode(request), timeout), "ts-analyzer request failed");
         if (result == null || !result.isObject()) throw new TsAnalyzerException("ts-analyzer request failed", null);
         try {
             return JSON.treeToValue(result, TsAnalyzeDtos.Response.class);
@@ -74,7 +79,7 @@ final class TsAnalyzerControlClient {
         throw new TsAnalyzerException(failure, null);
     }
 
-    private JsonNode exchange(String op, byte[] body) {
+    private JsonNode exchange(String op, byte[] body, Duration timeout) {
         byte[] request = envelope(op, body);
         try (SocketChannel channel = SocketChannel.open(StandardProtocolFamily.UNIX)) {
             // Closing the channel unblocks a pending read; an interrupted job thread closes it as well.

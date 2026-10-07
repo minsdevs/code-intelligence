@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
@@ -93,10 +94,11 @@ final class TsProjectSession {
             }
             call(client, command("seal", id, null, null, null, manifest));
             List<TsAnalyzeDtos.Response> pages = new ArrayList<>();
-            TsAnalyzeDtos.Response first = page(client, command("analyze", id, null, null, null, null), id, 0);
+            TsAnalyzeDtos.Response first = page(
+                    client, command("analyze", id, null, null, null, null), id, 0, analyzeTimeout(client, manifest));
             pages.add(first);
             for (int page = 1; page < first.session().pages(); page++) {
-                pages.add(page(client, command("page", id, null, page, null, null), id, page));
+                pages.add(page(client, command("page", id, null, page, null, null), id, page, client.timeout()));
             }
             return TsAnalyzeDtos.Response.concat(pages);
         } catch (JobCancelledException stopped) {
@@ -114,10 +116,21 @@ final class TsProjectSession {
         }
     }
 
+    /**
+     * The sealed project is extracted inside the one {@code analyze} command, so it gets the
+     * configured request timeout once per single-request budget of source it carries (G-PERF
+     * medium: about 25 MiB took 37 s against the 30 s request timeout). Cancellation and the job
+     * limits still stop it earlier.
+     */
+    static Duration analyzeTimeout(TsAnalyzerClient client, Manifest manifest) {
+        long budgets = Math.max(1, (manifest.bytes() + TsRequestBudget.MAX_BYTES - 1) / TsRequestBudget.MAX_BYTES);
+        return client.timeout().multipliedBy(budgets);
+    }
+
     private static TsAnalyzeDtos.Response page(
-            TsAnalyzerClient client, TsAnalyzeDtos.SessionCommand command, String id, int expected) {
+            TsAnalyzerClient client, TsAnalyzeDtos.SessionCommand command, String id, int expected, Duration timeout) {
         TsAnalyzeDtos.Response response =
-                JobCancellation.interruptibly(() -> client.analyze(TsAnalyzeDtos.Request.session(command)));
+                JobCancellation.interruptibly(() -> client.analyze(TsAnalyzeDtos.Request.session(command), timeout));
         TsAnalyzeDtos.SessionReply reply = response.session();
         if (reply == null
                 || !id.equals(reply.id())
