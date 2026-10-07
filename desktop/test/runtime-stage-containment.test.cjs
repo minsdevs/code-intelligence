@@ -130,7 +130,7 @@ test('PG build path inputs must be absolute and normalized', async (t) => {
 
 // Execute the whole actual stage script. All build/config commands and native metadata
 // readers are synthetic; filesystem copies, guards, materializers and publisher are real.
-async function fullStage(t, { pkgOutside = false, elf = false, wrongJava = false, elfVector = false, missingVector = false } = {}) {
+async function fullStage(t, { pkgOutside = false, elf = false, wrongJava = false, elfVector = false, missingVector = false, adapterIsolation } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-stage-complete-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const repo = path.join(root, 'repo'), desktop = path.join(repo, 'desktop');
@@ -156,7 +156,17 @@ async function fullStage(t, { pkgOutside = false, elf = false, wrongJava = false
   write(repo, 'backend/src/main/resources/db/migration/V1__synthetic.sql', '-- synthetic');
   write(repo, 'analyzers/ts-analyzer/dist/index.js', '// synthetic');
   for (const name of ['package.json', 'package-lock.json']) write(repo, `analyzers/ts-analyzer/${name}`, '{}');
-  write(desktop, 'package.json', JSON.stringify({ build: { mac: { minimumSystemVersion: '13.0' } } }));
+  write(desktop, 'package.json', JSON.stringify({ version: '0.1.0', build: { appId: 'dev.example', mac: { minimumSystemVersion: '13.0' } },
+    ...(adapterIsolation ? { adapterIsolation } : {}) }));
+  // ADR-01 supervisor staging is recorded, not compiled: the native build has its own opt-in test.
+  const adapterCalls = [];
+  const adapterSupervisor = {
+    compile(output) { adapterCalls.push(['compile', output]); fs.mkdirSync(output, { recursive: true }); return output; },
+    async assembleService(options) {
+      adapterCalls.push(['assemble', { ...options, analyzerFiles: fs.readdirSync(options.analyzer).sort() }]);
+      fs.mkdirSync(path.join(options.destination, 'AdapterSupervisor.xpc'));
+    },
+  };
   const pgConfig = path.join(root, 'selected/pg_config');
   const env = { CODE_INTELLIGENCE_BUILD_SEQUENCE: '1', JAVA_HOME: path.join(root, 'selected/java'), PG_CONFIG: pgConfig, REDIS_SERVER: redis };
   const exit = [], calls = [];
@@ -194,14 +204,14 @@ async function fullStage(t, { pkgOutside = false, elf = false, wrongJava = false
     await vm.runInNewContext(`(async () => { 'use strict';
       ${source.replace(/^import .*;\n/gm, '').replaceAll('import.meta.url', 'moduleURL')}
     })()`, {
-      fs, path, crypto, fileURLToPath, execFileSync, Buffer, runtimeStage: { createRuntimeStage, requireBuildSequence: require('../scripts/runtime-stage.cjs').requireBuildSequence },
+      fs, path, crypto, fileURLToPath, execFileSync, Buffer, adapterSupervisor, adapterIsolation: require('../src/adapter-isolation.cjs'), runtimeStage: { createRuntimeStage, requireBuildSequence: require('../scripts/runtime-stage.cjs').requireBuildSequence },
       nativePolicy: policyWrapper, moduleURL: pathToFileURL(path.join(desktop, 'scripts/stage-runtime.mjs')).href,
       process: { env, platform: 'darwin', arch: 'arm64', stdout: { write() {} }, stderr: { write() {} }, on(name, handler) { assert.equal(name, 'exit'); exit.push(handler); } },
       console: { log() {} },
     }, { timeout: 10000 });
   } catch (value) { error = value; }
   finally { for (const handler of exit) handler(); }
-  return { desktop, previous, error, gateCalls, required, modules, calls };
+  return { desktop, previous, error, gateCalls, required, modules, calls, adapterCalls };
 }
 
 test('whole stage preserves the old runtime after external pkglibdir merge and final gate failure', async (t) => {
@@ -239,4 +249,23 @@ test('whole stage refuses a missing pgvector plugin despite present control and 
   assert.equal(f.error.code, 'NATIVE_RUNTIME_POLICY'); assert.ok(f.error.findings.some(item => item.code === 'REQUIRED_MODULE_MISSING'));
   assert.equal(fs.readFileSync(f.previous, 'utf8'), 'old complete runtime');
   assert.deepEqual(fs.readdirSync(path.join(f.desktop, 'stage')), ['runtime']);
+});
+test('an xpc-required stage assembles the supervisor beside the runtime and leaves the analyzer out of the runtime', async (t) => {
+  const f = await fullStage(t, { adapterIsolation: 'xpc-required' }); assert.equal(f.error, undefined);
+  const stage = path.join(f.desktop, 'stage');
+  assert.deepEqual(f.adapterCalls.map(([name]) => name), ['compile', 'assemble']);
+  const [, assembled] = f.adapterCalls[1];
+  assert.equal(assembled.destination, path.join(stage, 'adapter-supervisor'));
+  assert.equal(assembled.binaries, path.join(stage, 'adapter-supervisor', 'bin'));
+  assert.equal(assembled.electronApp, path.join(f.desktop, 'node_modules/electron/dist/Electron.app'));
+  assert.deepEqual([assembled.appId, assembled.version, assembled.analyzerFiles], ['dev.example', '0.1.0', ['dist', 'package-lock.json', 'package.json']]);
+  assert.ok(fs.existsSync(path.join(stage, 'adapter-supervisor', 'AdapterSupervisor.xpc')));
+  const manifest = JSON.parse(fs.readFileSync(path.join(stage, 'runtime/runtime-manifest.json')));
+  assert.deepEqual(Object.keys(manifest.files).filter(name => name.startsWith('ts-analyzer/')), []);
+  assert.equal(fs.existsSync(path.join(stage, 'runtime/ts-analyzer')), false);
+});
+test('the default stage keeps the analyzer in the runtime and builds no supervisor', async (t) => {
+  const f = await fullStage(t); assert.equal(f.error, undefined); assert.deepEqual(f.adapterCalls, []);
+  const manifest = JSON.parse(fs.readFileSync(path.join(f.desktop, 'stage/runtime/runtime-manifest.json')));
+  assert.ok(manifest.files['ts-analyzer/dist/index.js']);
 });
