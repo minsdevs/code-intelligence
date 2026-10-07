@@ -139,6 +139,34 @@ async function stageAdapterSupervisor({ plan, runtime, desktop, manifest, appId,
     analyzerTreeSha256: analyzerTree.inventory.sha256, runtimeFilesRemoved: removed.length } };
 }
 
+// The reused runtime carries the baseline's reviewed Flyway files for backup staging. A newer source
+// may only append migrations: every staged file must be unchanged and every added one must sort after
+// the last staged version; the manifest gains the exact hash of each appended file.
+const MIGRATION_NAME = /^V([0-9]+)__[A-Za-z0-9_]+\.sql$/;
+function replaceBackupMigrations(plan, runtime, source, manifest) {
+  plan.assertIdentity();
+  const target = path.join(runtime, 'backend/backup-migrations');
+  ownedDirectory(plan, runtime); ownedDirectory(plan, target);
+  const version = name => {
+    const match = MIGRATION_NAME.exec(name); if (!match) assert.fail('BACKUP_MIGRATION_NAME'); return Number(match[1]);
+  };
+  const staged = fs.readdirSync(target).sort((a, b) => version(a) - version(b));
+  const wanted = fs.readdirSync(source).sort((a, b) => version(a) - version(b));
+  for (const name of staged) {
+    if (!wanted.includes(name) || hash(path.join(source, name)) !== hash(path.join(target, name))) assert.fail('BACKUP_MIGRATION_CHANGED');
+  }
+  const last = staged.length ? version(staged[staged.length - 1]) : 0, added = wanted.filter(name => !staged.includes(name));
+  if (added.some(name => version(name) <= last)) assert.fail('BACKUP_MIGRATION_ORDER');
+  const files = { ...manifest.files };
+  for (const name of added) {
+    const file = path.join(source, name), stat = fs.lstatSync(file);
+    assert(stat.isFile() && !stat.isSymbolicLink(), 'BACKUP_MIGRATION_NAME');
+    const copied = path.join(target, name); fs.copyFileSync(file, copied, fs.constants.COPYFILE_EXCL); fs.chmodSync(copied, 0o644);
+    files['backend/backup-migrations/' + name] = hash(copied); assert.equal(files['backend/backup-migrations/' + name], hash(file));
+  }
+  return { manifest: added.length ? { ...manifest, files } : manifest, evidence: { added } };
+}
+
 function replaceAnalyzerBuild(plan, runtime, compiled, manifest) {
   plan.assertIdentity();
   ownedDirectory(plan, runtime); ownedDirectory(plan, compiled);
@@ -347,6 +375,8 @@ async function main(argv = process.argv.slice(2)) {
       work, 'jar-readback', { ...fixedEnv, HOME: path.join(work, 'home'), TMPDIR: path.join(work, 'tmp') }, 120000);
     const readback = JSON.parse(fs.readFileSync(path.join(evidence, 'jar-readback.json'))); assert.equal(readback.status, 'PASS');
     assert.equal(hash(originalJar), report.compiledJarSha256); fs.renameSync(temporaryJar, targetJar); report.jar = readback;
+    const migrations = replaceBackupMigrations(plan, stage, path.join(repo, 'backend/src/main/resources/db/migration'), originalManifest);
+    report.backupMigrationsAdded = migrations.evidence.added; save();
     for (const name of fs.readdirSync(path.join(repo, 'backend/src/main/resources/db/migration')))
       assert.equal(hash(path.join(repo, 'backend/src/main/resources/db/migration', name)), hash(path.join(stage, 'backend/backup-migrations', name)));
     const analyzerInputs = { packageJsonSha256: hash(path.join(analyzer, 'package.json')),
@@ -355,7 +385,7 @@ async function main(argv = process.argv.slice(2)) {
       || analyzerInputs.packageLockSha256 !== hash(path.join(stage, 'ts-analyzer/package-lock.json'));
     let replacement;
     if (!analyzerDependenciesChanged) {
-      replacement = replaceAnalyzerBuild(plan, stage, path.join(analyzer, 'dist'), originalManifest);
+      replacement = replaceAnalyzerBuild(plan, stage, path.join(analyzer, 'dist'), migrations.manifest);
     } else {
       const production = path.join(work, 'analyzer-production');
       fs.mkdirSync(production, { mode: 0o700 });
@@ -372,7 +402,7 @@ async function main(argv = process.argv.slice(2)) {
           npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false', NPM_CONFIG_UPDATE_NOTIFIER: 'false' }, 120000);
       assert.equal(hash(path.join(production, 'package.json')), analyzerInputs.packageJsonSha256, 'ANALYZER_DEPENDENCY_INPUT_CHANGED');
       assert.equal(hash(path.join(production, 'package-lock.json')), analyzerInputs.packageLockSha256, 'ANALYZER_DEPENDENCY_INPUT_CHANGED');
-      replacement = replaceAnalyzerRuntime(plan, stage, path.join(analyzer, 'dist'), production, originalManifest, analyzerInputs);
+      replacement = replaceAnalyzerRuntime(plan, stage, path.join(analyzer, 'dist'), production, migrations.manifest, analyzerInputs);
     }
     report.analyzer = replacement.evidence;
     const previousControl = path.join(work, 'previous-control-runtime');
@@ -471,6 +501,6 @@ function candidatePackagerConfig(baseBuild, output, desktop) {
     directories: { output }, mac: { ...baseBuild.mac, identity: '-', notarize: false },
     npmRebuild: false, nodeGypRebuild: false, buildDependenciesFromSource: false, electronDist: path.join(desktop, 'node_modules/electron/dist') };
 }
-module.exports = { VALIDATION_AI_PROVIDER_ORIGIN, argumentsForCandidate, candidatePackagerConfig, replaceAnalyzerBuild,
+module.exports = { VALIDATION_AI_PROVIDER_ORIGIN, argumentsForCandidate, candidatePackagerConfig, replaceAnalyzerBuild, replaceBackupMigrations,
   replaceAnalyzerRuntime, stageAdapterSupervisor, main };
 if (require.main === module) main().catch(error => { console.error(error.code || error.name); process.exitCode = 1; });

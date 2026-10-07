@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const crypto = require('node:crypto');
 const { VALIDATION_AI_PROVIDER_ORIGIN, argumentsForCandidate, candidatePackagerConfig, replaceAnalyzerBuild,
-  replaceAnalyzerRuntime, stageAdapterSupervisor } = require('../build-candidate.cjs');
+  replaceAnalyzerRuntime, replaceBackupMigrations, stageAdapterSupervisor } = require('../build-candidate.cjs');
 const { validationProviderTarget } = require('../../../desktop/src/ai-https-transport.cjs');
 const { requireValidationOnlyProviderVariant } = require('../../../desktop/scripts/desktop-build-gate.cjs');
 const sha = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -264,3 +264,46 @@ test('the xpc-required stage refuses a reused stage, a changed analyzer copy or 
   assert.ok(fs.existsSync(path.join(drift.runtime, 'ts-analyzer')));
 });
 
+
+function migrationFixture(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-migration-stage-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.chmodSync(root, 0o700);
+  const runtime = path.join(root, 'runtime'), staged = path.join(runtime, 'backend/backup-migrations'), source = path.join(root, 'source');
+  fs.mkdirSync(staged, { recursive: true, mode: 0o700 }); fs.mkdirSync(source, { mode: 0o700 });
+  const files = {};
+  for (const [name, body] of [['V1__init.sql', 'create table a(id int);'], ['V2__more.sql', 'create table b(id int);']]) {
+    for (const directory of [staged, source]) fs.writeFileSync(path.join(directory, name), body, { mode: 0o644 });
+    files['backend/backup-migrations/' + name] = sha(path.join(staged, name));
+  }
+  const manifest = { files: { ...files, 'jre/bin/java': 'retained-native-hash' } };
+  return { root, runtime, staged, source, manifest, plan: { workRoot: root, assertIdentity() { assert.equal(fs.realpathSync(root), root); } } };
+}
+
+test('a reused runtime gains newly added Flyway migrations with exact hashes; reviewed ones never change', t => {
+  const f = migrationFixture(t);
+  fs.writeFileSync(path.join(f.source, 'V3__indexes.sql'), 'create index i on a(id);');
+  fs.writeFileSync(path.join(f.source, 'V4__scope.sql'), 'alter table b add column s text;');
+  const result = replaceBackupMigrations(f.plan, f.runtime, f.source, f.manifest);
+  assert.deepEqual(result.evidence.added, ['V3__indexes.sql', 'V4__scope.sql']);
+  for (const name of ['V1__init.sql', 'V2__more.sql', 'V3__indexes.sql', 'V4__scope.sql']) {
+    assert.equal(sha(path.join(f.staged, name)), sha(path.join(f.source, name)));
+    assert.equal(result.manifest.files['backend/backup-migrations/' + name], sha(path.join(f.source, name)));
+  }
+  assert.equal(result.manifest.files['jre/bin/java'], 'retained-native-hash');
+  // Nothing new: unchanged manifest, nothing added.
+  const again = migrationFixture(t);
+  assert.deepEqual(replaceBackupMigrations(again.plan, again.runtime, again.source, again.manifest),
+    { manifest: again.manifest, evidence: { added: [] } });
+});
+
+test('a reused runtime refuses changed, removed or out-of-order migrations', t => {
+  const changed = migrationFixture(t); fs.writeFileSync(path.join(changed.source, 'V2__more.sql'), 'edited');
+  assert.throws(() => replaceBackupMigrations(changed.plan, changed.runtime, changed.source, changed.manifest), /BACKUP_MIGRATION_CHANGED/);
+  const removed = migrationFixture(t); fs.rmSync(path.join(removed.source, 'V1__init.sql'));
+  assert.throws(() => replaceBackupMigrations(removed.plan, removed.runtime, removed.source, removed.manifest), /BACKUP_MIGRATION_CHANGED/);
+  const early = migrationFixture(t); fs.writeFileSync(path.join(early.source, 'V2__other.sql'), 'x');
+  assert.throws(() => replaceBackupMigrations(early.plan, early.runtime, early.source, early.manifest), /BACKUP_MIGRATION_ORDER/);
+  const odd = migrationFixture(t); fs.writeFileSync(path.join(odd.source, 'notes.txt'), 'x');
+  assert.throws(() => replaceBackupMigrations(odd.plan, odd.runtime, odd.source, odd.manifest), /BACKUP_MIGRATION_NAME/);
+});
