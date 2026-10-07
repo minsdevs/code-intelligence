@@ -1,0 +1,738 @@
+{
+  "format": 1,
+  "unit": "gate-sec",
+  "gate": "G-SEC",
+  "date": "2026-10-07",
+  "statement": "Internal check that prepares, and does not replace, the independent G-SEC review; no signed-helper C15 evidence.",
+  "branch": "worktree-agent-adc5afddf7b377171",
+  "base": "bcd8081",
+  "candidate": {
+    "path": ".native-product-1lvULq",
+    "buildSequence": "1791292686000",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+    "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+    "invalidatedBy": "a8e6101 (GitCloneService)"
+  },
+  "runs": [
+    {
+      "name": "gitclone-red",
+      "cwd": "backend",
+      "command": "./gradlew --offline test --tests 'dev.codeintelligence.github.SecurityGitImportExecutionTest' --rerun",
+      "precondition": "GitCloneService.java replaced by `git show HEAD:<path>`",
+      "evidence": "validation/local/security-internal-review/redgreen-gitclone-red",
+      "tests": 4,
+      "failed": 1,
+      "result": "FAIL as expected (executed-sentinel-evil)"
+    },
+    {
+      "name": "gitclone-green",
+      "cwd": "backend",
+      "command": "./gradlew --offline test --tests 'dev.codeintelligence.github.SecurityGitImportExecutionTest' --tests 'dev.codeintelligence.github.*' --rerun",
+      "evidence": "validation/local/security-internal-review/redgreen-gitclone-green",
+      "tests": 71,
+      "failed": 0,
+      "skipped": 1,
+      "result": "PASS"
+    },
+    {
+      "name": "backend-security-suites",
+      "cwd": "backend",
+      "command": "./gradlew --offline test --tests 'dev.codeintelligence.common.SecuritySourceExecutionTest' --tests 'dev.codeintelligence.common.config.SecurityLocalApiBoundaryTest' --tests 'dev.codeintelligence.common.config.DesktopSecurityConfigurationTest' --tests 'dev.codeintelligence.github.*' --tests 'dev.codeintelligence.auth.*' --rerun",
+      "evidence": "validation/local/security-internal-review/backend-security-suites",
+      "tests": 279,
+      "passed": 272,
+      "failed": 0,
+      "skipped": 7,
+      "skippedReasons": {
+        "GithubCredentialStorePostgresTest": "6, opt-in CI_GITHUB_STORE_REAL",
+        "SecurityGitTransportRedirectTest": "1, @Disabled SEC-M-03"
+      }
+    },
+    {
+      "name": "desktop-security-renderer-boundary",
+      "cwd": "desktop",
+      "command": "node --test test/security-renderer-boundary.test.cjs",
+      "evidence": "validation/local/security-internal-review/desktop-security-renderer-boundary",
+      "tests": 10,
+      "passed": 8,
+      "failed": 0,
+      "todo": 2,
+      "todoFindings": [
+        "SEC-M-02",
+        "SEC-L-01"
+      ]
+    },
+    {
+      "name": "desktop-existing-security-suites",
+      "cwd": "desktop",
+      "command": "node --test test/main-runtime-gateway*.test.cjs test/service-transport*.test.cjs test/preload-version*.test.cjs test/native-runtime-policy*.test.cjs",
+      "evidence": "validation/local/security-internal-review/desktop-existing-security-suites",
+      "tests": 195,
+      "passed": 191,
+      "failed": 0,
+      "skipped": 4
+    },
+    {
+      "name": "frontend-security-rendering",
+      "cwd": "frontend",
+      "command": "npx vitest run src/features/security-rendering.test.tsx",
+      "evidence": "validation/local/security-internal-review/frontend-security-rendering",
+      "tests": 3,
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "name": "analyzer-execution-1",
+      "cwd": ".",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-sec env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/security-analyzer-execution.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\"",
+      "evidence": "validation/local/security-internal-review/analyzer-AuwyRv",
+      "status": "FAIL",
+      "violations": 1,
+      "note": "case-swapped stat of the analyzer's own typescript.js on case-insensitive APFS; probe classification fixed in 320ee21; record kept"
+    },
+    {
+      "name": "analyzer-execution-2",
+      "cwd": ".",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-sec env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/security-analyzer-execution.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\"",
+      "evidence": "validation/local/security-internal-review/analyzer-1Ofv74",
+      "status": "PASS",
+      "violations": 0,
+      "caseFoldedInstall": 1,
+      "symbolCount": 0
+    },
+    {
+      "name": "packaged-probe",
+      "cwd": ".",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-sec env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/security-packaged-probe.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\"",
+      "evidence": "validation/local/security-internal-review/packaged-zeF2B1",
+      "status": "COMPLETE",
+      "cleanupConfirmed": true
+    },
+    {
+      "name": "packaged-probe-previous-session",
+      "evidence": "validation/local/security-internal-review/packaged-xEV5KE",
+      "status": "RUNNING (session stopped; kept)",
+      "note": "signing fields empty: probe dropped codesign stderr, fixed before packaged-zeF2B1"
+    }
+  ],
+  "findings": [
+    {
+      "id": "SEC-H-01",
+      "severity": "High",
+      "status": "FIXED",
+      "commit": "a8e6101",
+      "paths": [
+        "backend/src/main/java/dev/codeintelligence/github/GitCloneService.java"
+      ],
+      "summary": "user-configured filter driver selected by hostile .gitattributes ran on clone checkout/fetch reset",
+      "redGreen": [
+        "validation/local/security-internal-review/redgreen-gitclone-red",
+        "validation/local/security-internal-review/redgreen-gitclone-green"
+      ]
+    },
+    {
+      "id": "SEC-H-02",
+      "severity": "High",
+      "status": "OPEN",
+      "paths": [
+        "desktop/src/main.cjs"
+      ],
+      "summary": "ADR-01 XPC/App Sandbox isolation not implemented; analyzer is an ordinary ELECTRON_RUN_AS_NODE child with loopback HTTPS"
+    },
+    {
+      "id": "SEC-M-01",
+      "severity": "Medium",
+      "status": "OPEN",
+      "summary": "no CSP delivered; inline script, eval, cross-origin fetch/img allowed"
+    },
+    {
+      "id": "SEC-M-02",
+      "severity": "Medium",
+      "status": "OPEN",
+      "paths": [
+        "desktop/src/main.cjs"
+      ],
+      "summary": "folder:authorize grants renderer-supplied absolute paths without native confirmation"
+    },
+    {
+      "id": "SEC-M-03",
+      "severity": "Medium",
+      "status": "OPEN",
+      "paths": [
+        "backend/src/main/java/dev/codeintelligence/github/GitCloneService.java"
+      ],
+      "summary": "clone credentials forwarded to a cross-origin redirect target"
+    },
+    {
+      "id": "SEC-M-04",
+      "severity": "Medium",
+      "status": "OPEN",
+      "summary": "fuses RunAsNode/NODE_OPTIONS/inspect enabled, asar integrity off (packaging)"
+    },
+    {
+      "id": "SEC-L-01",
+      "severity": "Low",
+      "status": "OPEN",
+      "paths": [
+        "desktop/src/main.cjs"
+      ],
+      "summary": "blob:https://github.com/... passes origin-only external open allowlist"
+    },
+    {
+      "id": "SEC-L-02",
+      "severity": "Low",
+      "status": "OPEN",
+      "paths": [
+        "desktop/src/main.cjs"
+      ],
+      "summary": "postgres server env carries PGPASSWORD"
+    },
+    {
+      "id": "SEC-L-03",
+      "severity": "Low",
+      "status": "OPEN",
+      "summary": "local API accepts foreign Host with token and no Origin"
+    },
+    {
+      "id": "SEC-L-04",
+      "severity": "Low",
+      "status": "OPEN",
+      "summary": "backend JVM holds 3 UDP sockets on *, unattributed"
+    }
+  ],
+  "matrixCounts": {
+    "PASS": 26,
+    "FAIL": 10,
+    "NOT RUN": 13,
+    "BLOCKED": 2
+  },
+  "matrix": [
+    {
+      "id": "SEC-R01a",
+      "source": "\u00a71",
+      "requirement": "Path grant only with main-only path capability; renderer/general bearer \u2192 403",
+      "enforcement": "backend common/config desktop capability gate",
+      "evidence": "SecurityLocalApiBoundaryTest.pathGrantNeedsTheMainOnlyPathCapabilityEvenFromTheTrustedOrigin; packaged localApi.withToken.pathGrantWithoutPathToken=403",
+      "level": "unit+packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R01b",
+      "source": "\u00a71",
+      "requirement": "Only native dialog results are granted as folder capability",
+      "enforcement": "desktop/src/main.cjs folder:authorize",
+      "evidence": "security-renderer-boundary todo 'a renderer-supplied folder path is not granted\u2026'",
+      "level": "unit",
+      "status": "FAIL",
+      "note": "SEC-M-02"
+    },
+    {
+      "id": "SEC-R02",
+      "source": "\u00a71",
+      "requirement": "Home/volume/system roots and nested secret folders refused",
+      "enforcement": "local ingest",
+      "evidence": "gate-import-evidence matrix",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "owned by gate-import-evidence"
+    },
+    {
+      "id": "SEC-R03",
+      "source": "\u00a71",
+      "requirement": "symlink/race/hardlink/special files excluded (lstat+no-follow+fstat)",
+      "enforcement": "local ingest",
+      "evidence": "gate-import-evidence matrix",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "owned by gate-import-evidence"
+    },
+    {
+      "id": "SEC-R04",
+      "source": "\u00a71",
+      "requirement": "Preview digest + 10 min preview token; changed content 409",
+      "enforcement": "local ingest",
+      "evidence": "gate-import-evidence matrix",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "owned by gate-import-evidence"
+    },
+    {
+      "id": "SEC-R05",
+      "source": "\u00a71",
+      "requirement": "50,000 files/512 MiB/2 MiB text limits; no archive auto-extract",
+      "enforcement": "local ingest",
+      "evidence": "gate-import-evidence matrix",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "owned by gate-import-evidence"
+    },
+    {
+      "id": "SEC-R06",
+      "source": "\u00a71",
+      "requirement": "Secret file/content exclusion reused across copy/cache/backup/export/AI",
+      "enforcement": "local ingest",
+      "evidence": "gate-import-evidence matrix",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "owned by gate-import-evidence"
+    },
+    {
+      "id": "SEC-R07a",
+      "source": "\u00a71",
+      "requirement": "No code execution from configuration (backend: process/script/classloader entry points, build files inert)",
+      "enforcement": "backend",
+      "evidence": "SecuritySourceExecutionTest (4)",
+      "level": "unit",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R07b",
+      "source": "\u00a71/ADR-01",
+      "requirement": "Packaged TS analyzer: hostile tsconfig/package scripts/imports execute nothing and read nothing outside",
+      "enforcement": "analyzers/ts-analyzer",
+      "evidence": "security-analyzer-execution.cjs analyzer-1Ofv74 (analyzer-AuwyRv kept: probe false positive)",
+      "level": "packaged binary (Node mode)",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R08",
+      "source": "\u00a71",
+      "requirement": "Case-fold/Unicode alias collisions fail explicitly",
+      "enforcement": "local ingest",
+      "evidence": "gate-import-evidence matrix",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "owned by gate-import-evidence"
+    },
+    {
+      "id": "SEC-R09",
+      "source": "\u00a71",
+      "requirement": "GitHub import HTTPS github.com verified repo identity only",
+      "enforcement": "backend github/RepoRef",
+      "evidence": "RepoRefTest (25)",
+      "level": "unit",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R10",
+      "source": "\u00a71",
+      "requirement": "Branch pinned to commit OID",
+      "enforcement": "backend github/GitCloneService.headOf",
+      "evidence": "none identified",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "no proving test identified by this unit"
+    },
+    {
+      "id": "SEC-R11",
+      "source": "\u00a71",
+      "requirement": "Submodules not auto-tracked",
+      "enforcement": "GitCloneService",
+      "evidence": "SecurityGitImportExecutionTest.submodulesAreRecordedButNeverClonedOrCheckedOut",
+      "level": "unit (real JGit)",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R12",
+      "source": "\u00a71",
+      "requirement": "No LFS/filter execution",
+      "enforcement": "GitCloneService.disableFilterDrivers",
+      "evidence": "SecurityGitImportExecutionTest.userConfiguredSmudgeDriver\u2026 (red on HEAD, green with a8e6101)",
+      "level": "unit (real JGit)",
+      "status": "PASS",
+      "note": "fixed SEC-H-01"
+    },
+    {
+      "id": "SEC-R13",
+      "source": "\u00a71",
+      "requirement": "No hook execution; tree entries cannot plant .git config/hooks",
+      "enforcement": "GitCloneService/JGit path checks",
+      "evidence": "SecurityGitImportExecutionTest.treeEntriesTargetingTheGitDirectoryCannotPlantHooksOrConfiguration",
+      "level": "unit (real JGit)",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R14",
+      "source": "\u00a71",
+      "requirement": "No credential helper execution",
+      "enforcement": "GitCloneService UsernamePasswordCredentialsProvider",
+      "evidence": "SecuritySourceExecutionTest static rule covers backend code only",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "JGit internals not covered"
+    },
+    {
+      "id": "SEC-R15",
+      "source": "\u00a71",
+      "requirement": "Quarantine 0700, 512 MiB budget, cleanup after interruption",
+      "enforcement": "import",
+      "evidence": "gate-import-evidence matrix",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "owned by gate-import-evidence"
+    },
+    {
+      "id": "SEC-R16",
+      "source": "\u00a71",
+      "requirement": "Repository storage stays inside repos root",
+      "enforcement": "GitCloneService",
+      "evidence": "SecurityGitImportExecutionTest.cloneRefusesRepositoryStorageOutsideItsRootEvenForHostileRemoteNames",
+      "level": "unit",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R17",
+      "source": "\u00a71",
+      "requirement": "userData 0700 / files 0600",
+      "enforcement": "desktop runtime",
+      "evidence": "packaged profileModes: 70 dirs, 1704 files, 0 deviations",
+      "level": "packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R21",
+      "source": "\u00a72",
+      "requirement": "Tokens/BYOK: backend encryption + safeStorage wrapping, no plaintext fallback",
+      "enforcement": "desktop/src/main.cjs:131 isEncryptionAvailable",
+      "evidence": "purpose-keyring.test.cjs, ai-desktop-gateway.test.cjs (not run here)",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "owned by gate-cost"
+    },
+    {
+      "id": "SEC-R22a",
+      "source": "\u00a72",
+      "requirement": "No runtime secrets in profile files, logs, app stdout/stderr",
+      "enforcement": "desktop/backend",
+      "evidence": "packaged plaintextSecrets: 6 secrets, 1704 files/58.6 MB + stdout/stderr, 0 hits",
+      "level": "packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R22b",
+      "source": "\u00a72",
+      "requirement": "No GitHub/BYOK token in diagnostics export or crash dump",
+      "enforcement": "desktop/backend",
+      "evidence": "none in this run",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "packaged run had no GitHub token or BYOK key"
+    },
+    {
+      "id": "SEC-R23",
+      "source": "\u00a72",
+      "requirement": "No secrets in child argv",
+      "enforcement": "desktop runtime",
+      "evidence": "packaged processes: 24, secretsInArgv 0",
+      "level": "packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R24",
+      "source": "\u00a72",
+      "requirement": "Child env carries only required values",
+      "enforcement": "desktop/src/main.cjs postgresEnvironment()",
+      "evidence": "packaged: postgres server env has PGPASSWORD=DB password",
+      "level": "packaged",
+      "status": "FAIL",
+      "note": "SEC-L-02"
+    },
+    {
+      "id": "SEC-R25",
+      "source": "\u00a72",
+      "requirement": "Local import/parser: no external egress, no remote schema fetch",
+      "enforcement": "analyzers",
+      "evidence": "analyzer-1Ofv74: 0 net/dns/http calls; remote dynamic import not fetched",
+      "level": "packaged binary",
+      "status": "PASS",
+      "note": "product contract only; OS-level is SEC-R51"
+    },
+    {
+      "id": "SEC-R26",
+      "source": "\u00a72",
+      "requirement": "GitHub: redirect re-check, no cross-origin Authorization",
+      "enforcement": "GitCloneService transport",
+      "evidence": "SecurityGitTransportRedirectTest (reproduced, @Disabled)",
+      "level": "unit",
+      "status": "FAIL",
+      "note": "SEC-M-03"
+    },
+    {
+      "id": "SEC-R27",
+      "source": "\u00a72",
+      "requirement": "Egress dispatcher refuses DNS rebinding/redirect/IPv6/userinfo/encoded hosts/private destinations (AI)",
+      "enforcement": "desktop ai-https-transport",
+      "evidence": "ai-https-transport.test.cjs, ai-egress*.test.cjs",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "owned by gate-cost"
+    },
+    {
+      "id": "SEC-R28",
+      "source": "\u00a72",
+      "requirement": "No certificate-check disable fallback (renderer session)",
+      "enforcement": "desktop/src/main.cjs certificate pinning",
+      "evidence": "security-renderer-boundary 'certificate pinning refuses other hosts\u2026'",
+      "level": "unit",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R30",
+      "source": "\u00a72",
+      "requirement": "Renderer sandbox, contextIsolation, nodeIntegration off",
+      "enforcement": "desktop/src/main.cjs BrowserWindow",
+      "evidence": "security-renderer-boundary 'the only window has the hardened webPreferences\u2026'; packaged webPreferences",
+      "level": "unit+packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R31",
+      "source": "\u00a72",
+      "requirement": "No new windows",
+      "enforcement": "main.cjs setWindowOpenHandler",
+      "evidence": "unit; packaged window.open null, windows 1",
+      "level": "unit+packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R32",
+      "source": "\u00a72",
+      "requirement": "No navigation",
+      "enforcement": "main.cjs will-navigate",
+      "evidence": "unit; packaged http/file/data navigation stayed",
+      "level": "unit+packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R33",
+      "source": "\u00a72",
+      "requirement": "No remote content",
+      "enforcement": "renderer/CSP",
+      "evidence": "packaged: cross-origin fetch and img reached loopback listener",
+      "level": "packaged",
+      "status": "FAIL",
+      "note": "SEC-M-01"
+    },
+    {
+      "id": "SEC-R34",
+      "source": "\u00a72",
+      "requirement": "Source/Markdown/metadata/AI text escaped and sanitised",
+      "enforcement": "frontend",
+      "evidence": "security-rendering.test.tsx (3)",
+      "level": "unit (jsdom)",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R35",
+      "source": "\u00a72",
+      "requirement": "CSP maintained",
+      "enforcement": "backend/main",
+      "evidence": "packaged documentCsp null, no meta, inline script and eval ran",
+      "level": "packaged",
+      "status": "FAIL",
+      "note": "SEC-M-01"
+    },
+    {
+      "id": "SEC-R36",
+      "source": "\u00a72",
+      "requirement": "IPC sender frame/origin, schema and permission checks",
+      "enforcement": "main.cjs ipcMain handlers, preload.cjs",
+      "evidence": "security-renderer-boundary (IPC surface, forged senders, schema, preload API); packaged externalOpen/synthetic grant rejected",
+      "level": "unit+packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R37",
+      "source": "B11",
+      "requirement": "External IDE open disabled; only github.com/docs.github.com https",
+      "enforcement": "main.cjs assertExternalUrl",
+      "evidence": "security-renderer-boundary 'external open accepts only canonical\u2026'; packaged vscode:/file:/javascript: rejected",
+      "level": "unit+packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R38",
+      "source": "\u00a72/B11",
+      "requirement": "External open refuses non-https schemes inheriting an allowlisted origin",
+      "enforcement": "main.cjs assertExternalUrl",
+      "evidence": "security-renderer-boundary todo (blob:https://github.com/\u2026)",
+      "level": "unit",
+      "status": "FAIL",
+      "note": "SEC-L-01"
+    },
+    {
+      "id": "SEC-R40",
+      "source": "\u00a72",
+      "requirement": "Local API and services bound to loopback",
+      "enforcement": "desktop runtime",
+      "evidence": "packaged listeners: all TCP on 127.0.0.1 (UDP * noted as SEC-L-04)",
+      "level": "packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R41",
+      "source": "\u00a72",
+      "requirement": "Installation token required",
+      "enforcement": "DesktopAuthenticationFilter",
+      "evidence": "SecurityLocalApiBoundaryTest; DesktopAuthenticationFilterTest (13); packaged noToken 401\u00d74",
+      "level": "unit+packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R42",
+      "source": "\u00a72",
+      "requirement": "CSRF/CORS/Origin validation (cross-site, other loopback port, null, fetch metadata, preflight)",
+      "enforcement": "backend security chain",
+      "evidence": "SecurityLocalApiBoundaryTest (3 cases); DesktopSecurityConfigurationTest (4); packaged 403\u00d75",
+      "level": "unit+packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R43a",
+      "source": "\u00a72",
+      "requirement": "DNS-rebinding page cannot use the API",
+      "enforcement": "backend",
+      "evidence": "SecurityLocalApiBoundaryTest.dnsRebinding\u2026; packaged rebinding without token 401, with attacker Origin 403",
+      "level": "unit+packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R43b",
+      "source": "\u00a72",
+      "requirement": "Host header validated",
+      "enforcement": "backend",
+      "evidence": "packaged rebindingHostNoOrigin with token \u2192 200",
+      "level": "packaged",
+      "status": "FAIL",
+      "note": "SEC-L-03"
+    },
+    {
+      "id": "SEC-R44",
+      "source": "\u00a72",
+      "requirement": "PostgreSQL loopback only, password required",
+      "enforcement": "desktop runtime",
+      "evidence": "packaged pg listener 127.0.0.1; psql without password refused for codeintel/postgres",
+      "level": "packaged",
+      "status": "PASS",
+      "note": "per-install uniqueness not compared across two installs"
+    },
+    {
+      "id": "SEC-R45",
+      "source": "\u00a72",
+      "requirement": "Redis loopback only, authentication required",
+      "enforcement": "desktop runtime",
+      "evidence": "packaged redis probe did not run (listener unattributed)",
+      "level": "-",
+      "status": "NOT RUN",
+      "note": "probe role attribution"
+    },
+    {
+      "id": "SEC-R46",
+      "source": "\u00a72",
+      "requirement": "Analyzer endpoint authenticated",
+      "enforcement": "ts-analyzer",
+      "evidence": "packaged /health, /analyze without token 401",
+      "level": "packaged",
+      "status": "PASS",
+      "note": null
+    },
+    {
+      "id": "SEC-R50",
+      "source": "ADR-01",
+      "requirement": "Production parser isolated by XPC/App Sandbox + stdio; no HTTP sidecar in production",
+      "enforcement": "desktop/src/main.cjs analyzer spawn",
+      "evidence": "code reading: ELECTRON_RUN_AS_NODE child with loopback HTTPS; no XPC code",
+      "level": "code",
+      "status": "FAIL",
+      "note": "SEC-H-02"
+    },
+    {
+      "id": "SEC-R51",
+      "source": "C15",
+      "requirement": "Signed helper OS denial of file/network access",
+      "enforcement": "-",
+      "evidence": "-",
+      "level": "-",
+      "status": "BLOCKED",
+      "note": "Developer ID signing + ADR-01 implementation"
+    },
+    {
+      "id": "SEC-R52",
+      "source": "G-SEC",
+      "requirement": "Independent review High 0",
+      "enforcement": "-",
+      "evidence": "-",
+      "level": "-",
+      "status": "BLOCKED",
+      "note": "independent reviewer"
+    },
+    {
+      "id": "SEC-R53",
+      "source": "\u00a72/Electron checklist",
+      "requirement": "Fuses prevent ELECTRON_RUN_AS_NODE/NODE_OPTIONS injection; asar integrity",
+      "enforcement": "packaging",
+      "evidence": "packaged fuses + effectiveNodeModes (both honored)",
+      "level": "packaged",
+      "status": "FAIL",
+      "note": "SEC-M-04"
+    },
+    {
+      "id": "SEC-R54",
+      "source": "\u00a72/Electron checklist",
+      "requirement": "--inspect/remote debugging not honored by the packaged app",
+      "enforcement": "packaging",
+      "evidence": "EnableNodeCliInspectArguments ENABLE; Playwright --inspect=0/--remote-debugging-port=0 honored",
+      "level": "packaged",
+      "status": "FAIL",
+      "note": "SEC-M-04"
+    },
+    {
+      "id": "SEC-R55",
+      "source": "task",
+      "requirement": "Entitlements and hardened runtime recorded as built",
+      "enforcement": "packaging",
+      "evidence": "packaged static.signing: 8 binaries adhoc,runtime; 5 entitlements each",
+      "level": "packaged",
+      "status": "PASS",
+      "note": "recording row; narrowing in SEC-M-04 plan"
+    }
+  ],
+  "sha256": {
+    "validation/local/security-internal-review/packaged-zeF2B1/result.json": "cd6022244761064bcee7f96959227f31e4bc5852bf6b4d2fe895b5673ebe1ca6",
+    "validation/local/security-internal-review/analyzer-1Ofv74/result.json": "37ef729e16d5fac4c1229ba015cf950a8a218f2ed4637cf023c2d4ba8fd3730c",
+    "validation/local/security-internal-review/analyzer-AuwyRv/result.json": "1133b0cba44db3ac4d91a16a7a597565f6d4f5e78f5e8f7a21efdcad0a12cc14",
+    "validation/local/security-internal-review/packaged-xEV5KE/result.json": "7f4a1a7ae87f47348dd62adccfdfcb6a8ebf77e86e24a28865816b00f8abb761",
+    "validation/local/security-internal-review/redgreen-gitclone-red/TEST-dev.codeintelligence.github.SecurityGitImportExecutionTest.xml": "817ef4b3c6b077d081577236a0fdd11b7cf23c2eec261f2f3b37346cd099e42e",
+    "validation/local/security-internal-review/redgreen-gitclone-green/TEST-dev.codeintelligence.github.SecurityGitImportExecutionTest.xml": "c19b883e0ad379732284f4607219f5aa16463532b950ae5cb013573f7b3cca37",
+    "validation/local/security-internal-review/repro-git-filter-before-fix/TEST-dev.codeintelligence.github.SecurityGitImportExecutionTest.xml": "32cc31b095e038a3e355a1f9cc137d3941433abe30582cb2f90f098fd97c3f81",
+    "validation/local/security-internal-review/repro-clone-redirect-credentials/TEST-dev.codeintelligence.github.SecurityGitTransportRedirectTest.xml": "1670ed5220a588171351359cc42f00e8d2b562765344eccab3a42502c9ff3976",
+    "validation/local/security-internal-review/backend-security-suites/gradle.log": "43a4a1b2c3c225f93b2d2bfeabe8043e22abd2e4926ab5d778ec9549b7a7563d",
+    "validation/local/security-internal-review/desktop-security-renderer-boundary/node-test.log": "0097bc375d2d5acae4d49719aa44ec73bf146ceeec897b170e75ed510008805b",
+    "validation/local/security-internal-review/desktop-existing-security-suites/node-test.log": "a52b305ebda654dbb6d7d276bfb7562144a4c09e16132019d310060fd8e01e55",
+    "validation/local/security-internal-review/frontend-security-rendering/vitest.log": "c94a2c5101b851482eeb587e35af73fbe51ed2709395cde94bcd8c1193a4e45b",
+    "validation/pre-release/security-packaged-probe.cjs": "a35fc4af4a578dee45353681c46fd90ea589dcc36062241421e8ba7b3ef027ed",
+    "validation/pre-release/security-analyzer-execution.cjs": "f01ee27ec8c01b444724a1c5fb0f0cb157bc731dca392e3d762f8b7d597df807",
+    "backend/src/main/java/dev/codeintelligence/github/GitCloneService.java": "84f19199dc4156bc9da89731f7c908b873632a9f3f74bd51f3765259998ba726"
+  }
+}
