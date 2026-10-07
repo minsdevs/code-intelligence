@@ -43,5 +43,23 @@
       "maxArchiveBytes": 4194304,
       "licenseFile": "LICENSE"
     }
-  ]
+  ],
+  "jre": {
+    "id": "temurin-jdk",
+    "vendor": "Eclipse Adoptium",
+    "version": "21.0.12+8",
+    "fullVersion": "21.0.12+8-LTS",
+    "vendorVersion": "Temurin-21.0.12+8",
+    "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12%2B8/OpenJDK21U-jdk_aarch64_mac_hotspot_21.0.12_8.tar.gz",
+    "sha256": "021d629349ebc12a409faa517b837ec80ceee8f58a5ac85c788ecad07ca6881c",
+    "bytes": 200069721,
+    "checksumSource": "observed SHA-256 of the JDK archive the Gradle foojay toolchain resolver provisioned for this repository's Java 21 toolchain; URL follows the Adoptium release naming; not compared with the Adoptium-published checksum",
+    "sourceRepository": "https://github.com/adoptium/jdk21u",
+    "sourceRevision": "04806bcb1d50",
+    "sourceUrl": "https://github.com/adoptium/jdk21u/tree/04806bcb1d50",
+    "sourceArchiveUrl": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12%2B8/OpenJDK21U-jdk-sources_21.0.12_8.tar.gz",
+    "buildRepository": "https://github.com/adoptium/temurin-build",
+    "buildRevision": "e6ba7dec3d07654074559310376a3ae89da5f4ac",
+    "license": "GPL-2.0-only WITH Classpath-exception-2.0"
+  }
 }
