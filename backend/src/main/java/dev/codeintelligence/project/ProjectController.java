@@ -22,13 +22,18 @@ public class ProjectController {
 
     public record CreateProjectRequest(String repoOwner, String repoName, String url, String branch) {}
 
-    public record CreateLocalProjectRequest(String path, String name, String previewToken) {}
+    /** {@code grant} is the native-dialog selection grant, spent by this confirmation. */
+    public record CreateLocalProjectRequest(String path, String name, String previewToken, String grant) {
+        public CreateLocalProjectRequest(String path, String name, String previewToken) {
+            this(path, name, previewToken, null);
+        }
+    }
 
-    public record LocalPreviewRequest(String path, String name) {}
+    public record LocalPreviewRequest(String path, String name, String grant) {}
 
     public record PreviewTokenRequest(String previewToken) {}
 
-    public record RelinkLocalProjectRequest(String path) {}
+    public record RelinkLocalProjectRequest(String path, String grant) {}
 
     public record CreateProjectResponse(ProjectResponse project, long jobId) {}
 
@@ -63,7 +68,7 @@ public class ProjectController {
     @PostMapping("/local/preview")
     public LocalSourcePreview previewLocal(
             @RequestBody LocalPreviewRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
-        return approvals.previewInitial(user.userId(), request.path(), request.name());
+        return approvals.previewInitial(user.userId(), request.path(), request.name(), request.grant());
     }
 
     @PostMapping("/{projectId}/local-preview")
@@ -107,7 +112,7 @@ public class ProjectController {
             @PathVariable long projectId,
             @RequestBody RelinkLocalProjectRequest request,
             @AuthenticationPrincipal AuthenticatedUser user) {
-        return projectService.relinkLocalSource(projectId, user.userId(), request.path());
+        return projectService.relinkLocalSource(projectId, user.userId(), request.path(), request.grant());
     }
 
     @DeleteMapping("/{projectId}")

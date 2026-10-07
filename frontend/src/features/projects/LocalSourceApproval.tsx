@@ -10,7 +10,9 @@ import type { LocalImportExclusionReason, LocalSourcePreview } from '../../api/t
 import { useT } from '../../lib/i18n'
 import { importExclusionLabels, isLocalSourcePreview } from './localSourcePreview'
 
-type Source = { operation: 'INITIAL'; path: string } | { operation: 'REFRESH'; projectId: number }
+type Source =
+  | { operation: 'INITIAL'; path: string; grant?: string }
+  | { operation: 'REFRESH'; projectId: number }
 type Phase = 'idle' | 'previewing' | 'ready' | 'submitting' | 'checking' | 'uncertain' | 'started'
 type Props = {
   source: Source
@@ -34,9 +36,17 @@ async function responseDeadline<T>(pending: Promise<T>): Promise<T> {
   }
 }
 
+// A picked folder's grant is sent with every preview and spent by the confirmation.
+function selection(source: Extract<Source, { operation: 'INITIAL' }>) {
+  return source.grant ? { grant: source.grant } : {}
+}
+
 /** Each source gets a separate lifetime, so a late response cannot approve another source. */
 export default function LocalSourceApproval(props: Props) {
-  const scope = props.source.operation === 'INITIAL' ? props.source.path : props.source.projectId
+  const scope =
+    props.source.operation === 'INITIAL'
+      ? `${props.source.path}:${props.source.grant ?? ''}`
+      : props.source.projectId
   return <ApprovalFlow key={`${props.source.operation}:${scope}`} {...props} />
 }
 
@@ -92,7 +102,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
     try {
       const next =
         source.operation === 'INITIAL'
-          ? await responseDeadline(previewLocalProject(source.path))
+          ? await responseDeadline(previewLocalProject(source.path, selection(source)))
           : await responseDeadline(previewLocalRefresh(source.projectId))
       if (!active.current) return
       if (!isLocalSourcePreview(next, source.operation)) throw new Error('Invalid preview')
@@ -165,7 +175,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
       let jobId: number
       if (source.operation === 'INITIAL') {
         const created = await responseDeadline(
-          createLocalProject(source.path, preview.previewToken),
+          createLocalProject(source.path, preview.previewToken, selection(source)),
         )
         projectId = created.project.id
         jobId = created.jobId

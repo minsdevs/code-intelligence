@@ -26,10 +26,16 @@ export function createProject(
   })
 }
 
-export function previewLocalProject(path: string, name?: string): Promise<LocalSourcePreview> {
+/** `grant` is the native-dialog folder grant; a configured server root needs none. */
+export type LocalSelectionOptions = { name?: string; grant?: string }
+
+export function previewLocalProject(
+  path: string,
+  { name, grant }: LocalSelectionOptions = {},
+): Promise<LocalSourcePreview> {
   return apiSend<LocalSourcePreview>('/api/projects/local/preview', {
     method: 'POST',
-    body: { path, name: name || undefined },
+    body: { path, name: name || undefined, grant },
     retryOnCsrfFailure: false,
   })
 }
@@ -53,21 +59,21 @@ export function getLocalPreviewOutcome(previewToken: string): Promise<LocalPrevi
 export function createLocalProject(
   path: string,
   previewToken: string,
-  name?: string,
+  { name, grant }: LocalSelectionOptions = {},
 ): Promise<CreateProjectResponse> {
   return apiSend<CreateProjectResponse>('/api/projects/local', {
     method: 'POST',
-    body: { path, name: name || undefined, previewToken },
+    body: { path, name: name || undefined, previewToken, grant },
     retryOnCsrfFailure: false,
   })
 }
 export function deleteProject(projectId: number): Promise<void> {
   return apiSend(`/api/projects/${projectId}`, { method: 'DELETE' })
 }
-export function relinkLocalProject(projectId: number, path: string): Promise<Project> {
+export function relinkLocalProject(projectId: number, path: string, grant: string): Promise<Project> {
   return apiSend<Project>(`/api/projects/${projectId}/local-source`, {
     method: 'PATCH',
-    body: { path },
+    body: { path, grant },
   })
 }
 

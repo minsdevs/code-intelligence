@@ -107,6 +107,8 @@ public class ProjectService {
                 .toString());
         long jobId = jobService.enqueue(project.getId(), JobType.IMPORT);
         approvals.bind(approval, project.getId(), jobId);
+        // Spent last: any failure above rolls back and leaves the selection grant usable.
+        localImportService.consumeGrant(Path.of(approval.binding().canonicalRoot()), request.grant());
         return new CreatedProject(toResponse(project, ProjectSummaries.empty()), jobId);
     }
 
@@ -124,7 +126,7 @@ public class ProjectService {
     }
 
     @Transactional
-    public ProjectResponse relinkLocalSource(long projectId, long userId, String path) {
+    public ProjectResponse relinkLocalSource(long projectId, long userId, String path, String grant) {
         if (!StringUtils.hasText(path)) {
             throw new LocalImportException("path is required", null);
         }
@@ -137,7 +139,8 @@ public class ProjectService {
             throw new ProjectConflictException(
                     "Wait for the active analysis to finish before choosing another source.");
         }
-        Path authorizedPath = localImportService.validateSource(Path.of(path));
+        Path authorizedPath = localImportService.validateGranted(Path.of(path), grant);
+        localImportService.consumeGrant(authorizedPath, grant);
         project.updateLocalPath(authorizedPath.toString());
         return toResponse(project, loadSummaries(List.of(project)));
     }

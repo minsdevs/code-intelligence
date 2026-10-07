@@ -133,9 +133,34 @@ class LocalImportServiceTest {
 
         assertThatThrownBy(() -> desktopOnlyService.validateSource(selected)).isInstanceOf(LocalImportException.class);
 
-        Path granted = desktopPaths.authorize(selected);
+        Path granted = desktopPaths.authorize(selected).path();
 
         assertThat(desktopOnlyService.validateSource(selected)).isEqualTo(granted);
+    }
+
+    @Test
+    void desktopGrantCoversOnlyTheChosenRootNotItsDescendants() throws IOException {
+        Path selected = Files.createDirectories(tempDir.resolve("picked-root"));
+        Path nested = Files.createDirectories(selected.resolve("nested/deeper"));
+        var desktopOnlyService = new LocalImportService(
+                appProperties, new LocalImportProperties(""), analysisProperties(), desktopPaths);
+
+        desktopPaths.authorize(selected);
+
+        assertThatThrownBy(() -> desktopOnlyService.validateSource(nested)).isInstanceOf(LocalImportException.class);
+    }
+
+    @Test
+    void desktopGrantIsRefusedWhenTheChosenFolderIsSwapped() throws IOException {
+        Path selected = Files.createDirectories(tempDir.resolve("swapped-root"));
+        var desktopOnlyService = new LocalImportService(
+                appProperties, new LocalImportProperties(""), analysisProperties(), desktopPaths);
+        desktopPaths.authorize(selected);
+
+        Files.move(selected, tempDir.resolve("swapped-root-original"));
+        Files.createDirectories(selected);
+
+        assertThatThrownBy(() -> desktopOnlyService.validateSource(selected)).isInstanceOf(LocalImportException.class);
     }
 
     @Test

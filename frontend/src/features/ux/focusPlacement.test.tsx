@@ -85,7 +85,11 @@ function renderWizard() {
 describe('focus placement', () => {
   it('moves focus to the local import heading after a folder is chosen', async () => {
     window.codeIntelligenceDesktop = {
-      pickFolder: vi.fn(async () => '/fixture/orders'),
+      pickFolder: vi.fn(async () => ({
+        path: '/fixture/orders',
+        grant: 'g'.repeat(64),
+        expiresAt: '2099-01-01T00:00:00Z',
+      })),
       authorizeDroppedFolder: vi.fn(),
     } as unknown as typeof window.codeIntelligenceDesktop
     renderWizard()

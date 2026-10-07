@@ -63,10 +63,15 @@ public class LocalSourceApprovalService {
 
     public record Outcome(String state, Long projectId, Long jobId) {}
 
+    /** Server-root form (configured allowed roots); a desktop selection needs its grant. */
     public LocalSourcePreview previewInitial(long userId, String path, String name) {
+        return previewInitial(userId, path, name, null);
+    }
+
+    public LocalSourcePreview previewInitial(long userId, String path, String name, String grant) {
         return boundedInspection(() -> {
             checkQuota(userId);
-            LocalSourceInspection inspection = imports.inspect(sourcePath(path));
+            LocalSourceInspection inspection = imports.inspectGranted(sourcePath(path), grant);
             String projectName = projectName(name, inspection.binding());
             Changes changes = changes(inspection.gitFingerprints(), Map.of());
             return transactions.execute(tx -> {
@@ -370,7 +375,13 @@ public class LocalSourceApprovalService {
     }
 
     private void verifyRoot(LocalSourceBinding binding, String submittedPath) {
-        Path resolved = imports.validateSource(sourcePath(submittedPath));
+        Path resolved;
+        try {
+            resolved = imports.validateSource(sourcePath(submittedPath));
+        } catch (LocalImportException e) {
+            // The previewed root lost its authority (for example a selection grant refused for a swapped folder).
+            throw LocalSourceApprovalException.sourceChanged();
+        }
         try (SourceAccess.Scope ignored = SourceAccess.open(resolved, "source")) {
             SourceAccess.Identity identity = SourceAccess.identity(resolved);
             if (!resolved.toString().equals(binding.canonicalRoot())

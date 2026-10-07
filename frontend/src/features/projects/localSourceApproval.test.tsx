@@ -82,7 +82,7 @@ describe('local source approval', () => {
     expect(previewLocalProject).not.toHaveBeenCalled()
     expect(createLocalProject).not.toHaveBeenCalled()
     const confirm = await initialReview()
-    expect(previewLocalProject).toHaveBeenCalledWith('/fixture/source')
+    expect(previewLocalProject).toHaveBeenCalledWith('/fixture/source', {})
     expect(createLocalProject).not.toHaveBeenCalled()
     expect(screen.getByText('미리보기에서 선택한 파일: 3개')).toBeInTheDocument()
     expect(screen.getByText('검사 중 읽은 바이트: 128')).toBeInTheDocument()
@@ -98,6 +98,7 @@ describe('local source approval', () => {
     expect(createLocalProject).toHaveBeenCalledExactlyOnceWith(
       '/fixture/source',
       'opaque-token-never-display',
+      {},
     )
     expect(getLocalPreviewOutcome).not.toHaveBeenCalled()
   })
@@ -313,6 +314,7 @@ describe('local source approval', () => {
       expect(createLocalProject).toHaveBeenCalledExactlyOnceWith(
         '/fixture/new',
         'opaque-token-never-display',
+        {},
       ),
     )
   })

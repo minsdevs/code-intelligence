@@ -604,12 +604,12 @@ class LocalSourceApprovalIntegrationTest {
         var preview = approvals.previewRefresh(project, f.user());
         Path replacement = Files.createDirectories(root.resolve("replacement-" + UUID.randomUUID()));
         Files.writeString(replacement.resolve("a.txt"), "AAAA");
-        projects.relinkLocalSource(project, f.user(), replacement.toString());
+        projects.relinkLocalSource(project, f.user(), replacement.toString(), null);
         rejected(() -> projects.reanalyze(project, f.user(), preview.previewToken()), "LOCAL_SOURCE_CHANGED");
         assertCounts(f.user(), 1, 0, 0);
         long active = job(project, "RUNNING");
         assertThatThrownBy(() ->
-                        projects.relinkLocalSource(project, f.user(), f.source().toString()))
+                        projects.relinkLocalSource(project, f.user(), f.source().toString(), null))
                 .isInstanceOf(ProjectConflictException.class);
         assertThat(jdbc.queryForObject("select local_path from projects where id = ?", String.class, project))
                 .isEqualTo(replacement.toRealPath().toString());

@@ -2,6 +2,7 @@ import { useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { registerPat } from '../../api/auth'
 import { ApiError } from '../../api/client'
 import type { MeResponse } from '../../api/types'
+import type { FolderGrant } from '../../desktop'
 import GithubConnectControl from '../settings/GithubConnectControl'
 import { useT } from '../../lib/i18n'
 
@@ -9,7 +10,7 @@ import { useT } from '../../lib/i18n'
 type ConnectStepProps = {
   me: MeResponse | null
   onConnected: () => Promise<void>
-  onLocalPath: (path: string) => void
+  onLocalPath: (selection: FolderGrant) => void
 }
 
 export default function ConnectStep({ me, onConnected, onLocalPath }: ConnectStepProps) {
@@ -49,8 +50,8 @@ export default function ConnectStep({ me, onConnected, onLocalPath }: ConnectSte
     if (!desktop) return
     setError(null)
     try {
-      const path = await desktop.pickFolder()
-      if (path) onLocalPath(path)
+      const selection = await desktop.pickFolder()
+      if (selection) onLocalPath(selection)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open the folder picker.')
     }
@@ -62,8 +63,8 @@ export default function ConnectStep({ me, onConnected, onLocalPath }: ConnectSte
     if (!desktop || !file) return
     setError(null)
     try {
-      const path = await desktop.authorizeDroppedFolder(file)
-      if (path) onLocalPath(path)
+      const selection = await desktop.authorizeDroppedFolder(file)
+      if (selection) onLocalPath(selection)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not authorize the dropped folder.')
     }

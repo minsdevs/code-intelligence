@@ -272,12 +272,12 @@ class EvidenceHistoryIntegrationTest {
                 unique);
         source = Files.createDirectories(root.resolve("sources/c06-project"));
         for (var file : initialTree().entrySet()) write(file.getKey(), file.getValue());
-        desktopPaths.authorize(source);
-        var preview = approvals.previewInitial(user, source.toString(), "C06 evidence history");
+        String grant = desktopPaths.authorize(source).nonce();
+        var preview = approvals.previewInitial(user, source.toString(), "C06 evidence history", grant);
         var created = projects.createFromLocal(
                 user,
                 new ProjectController.CreateLocalProjectRequest(
-                        source.toString(), "C06 evidence history", preview.previewToken()));
+                        source.toString(), "C06 evidence history", preview.previewToken(), grant));
         project = created.project().id();
         Map<String, byte[]> approved = currentBytes();
         long snapshot = run(created.jobId());

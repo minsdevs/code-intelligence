@@ -53,7 +53,10 @@ function loadMain() {
     setTimeout, clearTimeout });
   vm.runInContext(fs.readFileSync(path.join(sourceRoot, 'main.cjs'), 'utf8'), context);
   const run = source => vm.runInContext(source, context);
-  context.syntheticRequest = async (url, init) => { requests.push({ url, init }); return { ok: true, json: async () => ({ path: '/synthetic' }) }; };
+  let response = { path: '/synthetic' };
+  context.syntheticRequest = async (url, init) => { requests.push({ url, init }); return { ok: true, json: async () => response }; };
+  context.syntheticDialogs = dialogs;
+  context.syntheticFolder = fs.realpathSync(require('node:os').tmpdir());
   context.syntheticOperation = name => operations.push(name);
   run(`mainWindow = new BrowserWindow({}); mainWindow.webContents.mainFrame.url = '${ORIGIN}/projects';
     runtime = { apiBaseUrl: '${ORIGIN}', apiToken: '${TOKEN}', pathToken: 'p'.repeat(64), authorizedRoots: [], ready: true,
@@ -61,9 +64,11 @@ function loadMain() {
         verifyBackendCertificate: (data, host) => data === 'pinned' && host === '127.0.0.1' } };
     safetyLifecycle = { diagnostics: () => ({ aiOff: true, recoveryOnly: false }) };
     stopRuntime = async () => syntheticOperation('stop'); startRuntime = async () => syntheticOperation('start');
+    saveEncryptedJson = async () => syntheticOperation('persist');
     registerIpc();`);
   const trusted = () => ({ sender: browser[0].webContents, senderFrame: browser[0].webContents.mainFrame });
-  return { handlers, browser, opened, dialogs, requests, operations, run, trusted };
+  return { handlers, browser, opened, dialogs, requests, operations, run, trusted,
+    folder: context.syntheticFolder, respond: value => { response = value; } };
 }
 
 async function invoke(h, channel, event, ...args) {
@@ -263,15 +268,43 @@ test('preload exposes a frozen fixed API that cannot reach arbitrary IPC channel
   assert.deepEqual(sent.slice(1), [['folder:authorize', '/Users/synthetic/project'], ['external:open', 'https://github.com/']]);
 });
 
-// Open finding SEC-M-02 (see docs/audit/security-internal-review-2026-10-07.md). The main process
-// grants any absolute path that a compromised renderer sends on folder:authorize; 05 §1 requires
-// that only a native dialog result is granted. Kept as TODO until a main-side confirmation exists.
-test('a renderer-supplied folder path is not granted without a main-process native confirmation',
-  { todo: 'SEC-M-02 open: folder:authorize trusts any absolute path from the renderer' }, async () => {
-    const h = loadMain();
-    await invoke(h, 'folder:authorize', h.trusted(), '/').catch(() => {});
-    assert.ok(h.dialogs.length > 0 || h.requests.length === 0, 'grant reached the backend without a native confirmation');
-  });
+// SEC-M-02 (docs/audit/security-internal-review-2026-10-07.md): 05 §1 grants only native dialog
+// results. A renderer-supplied (dropped) path reaches the backend grant only after the user confirms
+// that exact canonical folder in a main-process native dialog.
+test('a renderer-supplied folder path is not granted without a main-process native confirmation', async () => {
+  const h = loadMain();
+  assert.equal(await invoke(h, 'folder:authorize', h.trusted(), '/'), null, 'a declined confirmation grants nothing');
+  assert.equal(h.dialogs.length, 1, 'the dropped path is shown in a native confirmation');
+  assert.equal(h.requests.length, 0, 'grant reached the backend without a native confirmation');
+  const [window, options] = h.dialogs[0];
+  assert.equal(window, h.run('mainWindow'));
+  assert.equal(options.detail, '/');
+  assert.equal(options.cancelId, options.defaultId, 'the default answer is to refuse');
+});
+
+test('a confirmed dropped folder and a picked folder each return the backend grant, never a bare path', async () => {
+  const h = loadMain();
+  h.run(`dialog.showMessageBox = async (...values) => { syntheticDialogs.push(values); return { response: 0 }; };
+    dialog.showOpenDialog = async (...values) => { syntheticDialogs.push(values); return { canceled: false, filePaths: [syntheticFolder] }; };`);
+  const grant = { path: h.folder, grant: 'g'.repeat(64), expiresAt: '2026-10-07T10:15:00Z' };
+  h.respond(grant);
+  assert.deepEqual(JSON.parse(JSON.stringify(await invoke(h, 'folder:authorize', h.trusted(), h.folder))), grant);
+  assert.deepEqual(JSON.parse(JSON.stringify(await invoke(h, 'folder:pick', h.trusted()))), grant);
+  assert.equal(h.requests.length, 2);
+  for (const request of h.requests) {
+    assert.deepEqual(JSON.parse(request.init.body), { path: h.folder });
+    assert.equal(request.init.headers['X-Code-Intelligence-Path-Token'], 'p'.repeat(64));
+  }
+  assert.equal(h.dialogs.length, 2, 'one confirmation for the drop and one folder dialog for the pick');
+  assert.deepEqual(h.operations, ['persist'], 'the granted root is persisted once for later project refresh');
+});
+
+test('a confirmed drop whose canonical folder changes before the grant is refused', async () => {
+  const h = loadMain();
+  h.run(`dialog.showMessageBox = async (...values) => { syntheticDialogs.push(values); return { response: 0 }; };`);
+  h.respond({ path: '/somewhere/else', grant: 'g'.repeat(64), expiresAt: '2026-10-07T10:15:00Z' });
+  await assert.rejects(invoke(h, 'folder:authorize', h.trusted(), h.folder), /changed/);
+});
 
 // SEC-L-01: a blob: URL inherits the origin of its inner https URL, so an origin-only allowlist
 // handed the OS a non-https scheme. assertExternalUrl also requires the https: protocol.

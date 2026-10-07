@@ -1238,7 +1238,7 @@ class ImportSecretsCorpusIntegrationTest {
                 new Tree(c.id(), Files.createDirectories(root.resolve("sources").resolve(c.id())));
         try {
             c.build().build(tree);
-            if (tree.granted()) desktopPaths.authorize(tree.root);
+            if (tree.granted()) tree.grant = desktopPaths.authorize(tree.root).nonce();
             switch (c.kind()) {
                 case ACCEPT -> {
                     if (c.race() == null) acceptFull(c, tree, outcome);
@@ -1265,12 +1265,12 @@ class ImportSecretsCorpusIntegrationTest {
     private void acceptFull(Case c, Tree tree, Map<String, Object> outcome) throws Exception {
         TreeState before = TreeState.of(tree.root);
         long user = user(c.id());
-        LocalSourcePreview preview = approvals.previewInitial(user, tree.root.toString(), "C05 " + c.id());
+        LocalSourcePreview preview = approvals.previewInitial(user, tree.root.toString(), "C05 " + c.id(), tree.grant);
         assertPreview(c, preview, outcome);
         var created = projects.createFromLocal(
                 user,
                 new ProjectController.CreateLocalProjectRequest(
-                        tree.root.toString(), "C05 " + c.id(), preview.previewToken()));
+                        tree.root.toString(), "C05 " + c.id(), preview.previewToken(), tree.grant));
         long project = created.project().id();
         runWorker(created.jobId());
         assertThat(jobs.findJob(created.jobId()).orElseThrow().status()).isEqualTo(JobStatus.DONE);
@@ -1321,7 +1321,7 @@ class ImportSecretsCorpusIntegrationTest {
     private void acceptLight(Case c, Tree tree, Map<String, Object> outcome) throws Exception {
         TreeState before = TreeState.of(tree.root);
         long user = user(c.id());
-        LocalSourcePreview preview = approvals.previewInitial(user, tree.root.toString(), "C05 " + c.id());
+        LocalSourcePreview preview = approvals.previewInitial(user, tree.root.toString(), "C05 " + c.id(), tree.grant);
         assertPreview(c, preview, outcome);
         // Same production copy (selection, staging verifier, synthetic Git); only the vault sink is omitted.
         LocalSourceBinding binding = imports.inspect(tree.root).binding();
@@ -1353,7 +1353,7 @@ class ImportSecretsCorpusIntegrationTest {
         TreeState before = c.kind() == Kind.REJECT ? TreeState.of(tree.root) : null;
         long user = user(c.id());
         Throwable preview = catchFailure(
-                () -> approvals.previewInitial(user, tree.submitted().toString(), "C05 " + c.id()));
+                () -> approvals.previewInitial(user, tree.submitted().toString(), "C05 " + c.id(), tree.grant));
         assertThat(reason(preview)).as("preview reason").isEqualTo(c.reason());
         outcome.put("preview", "REJECTED: " + c.reason());
         Path target = app.reposRoot().resolve("c05-reject-" + c.id());
@@ -1450,12 +1450,12 @@ class ImportSecretsCorpusIntegrationTest {
 
     private Initial initialImport(Case c, Tree tree) throws Exception {
         long user = user(c.id());
-        LocalSourcePreview preview = approvals.previewInitial(user, tree.root.toString(), "C05 " + c.id());
+        LocalSourcePreview preview = approvals.previewInitial(user, tree.root.toString(), "C05 " + c.id(), tree.grant);
         assertThat(preview.localImport().acceptedFiles()).isEqualTo(c.selected().size());
         var created = projects.createFromLocal(
                 user,
                 new ProjectController.CreateLocalProjectRequest(
-                        tree.root.toString(), "C05 " + c.id(), preview.previewToken()));
+                        tree.root.toString(), "C05 " + c.id(), preview.previewToken(), tree.grant));
         runWorker(created.jobId());
         assertThat(jobs.findJob(created.jobId()).orElseThrow().status()).isEqualTo(JobStatus.DONE);
         long project = created.project().id();
@@ -1702,6 +1702,7 @@ class ImportSecretsCorpusIntegrationTest {
         Path root;
         Path submitted;
         boolean granted = true;
+        String grant;
         final List<Path> absent = new ArrayList<>();
         final List<Path> cleanup = new ArrayList<>();
         final List<Path> mounts = new ArrayList<>();
