@@ -23,7 +23,7 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Opt-in new fixture only, actual V1-V27 migrations and independent committed JDBC transactions. */
+/** Opt-in new fixture only, actual V1-V29 migrations and independent committed JDBC transactions. */
 @EnabledIfEnvironmentVariable(named = "CI_GITHUB_STORE_REAL", matches = "1")
 @Timeout(60)
 class GithubCredentialStorePostgresTest {
@@ -61,7 +61,7 @@ class GithubCredentialStorePostgresTest {
                 .migrate();
         assertThat(jdbc.queryForObject(
                         "select count(*) from flyway_schema_history where success and type='SQL'", Long.class))
-                .isEqualTo(27L);
+                .isEqualTo(29L);
     }
 
     @BeforeEach

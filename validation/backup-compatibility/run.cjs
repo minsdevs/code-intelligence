@@ -16,10 +16,13 @@ const PAYLOAD = require('../../desktop/src/backup-payload.cjs');
 const { createBackupDatabaseControl } = require('../../desktop/src/backup-database.cjs');
 const { createDesktopBackupRuntime, BackupRuntimeError } = require('../../desktop/src/backup-runtime.cjs');
 const { encryptFile } = require('../../desktop/src/backup-archive.cjs');
-const { REVIEWED_SCHEMA, REVIEWED_V26_SCHEMA } = require('../../desktop/src/backup-export-policy.cjs');
+const { REVIEWED_SCHEMA, REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA } = require('../../desktop/src/backup-export-policy.cjs');
 const MIGRATIONS = path.join(REPO, 'backend/src/main/resources/db/migration');
 const INSTALLATION = '11111111-2222-4333-8444-555555555555';
 const LEGACY_COMMIT = '4d8946c7b18b1cdee4f6f86b1e30fc9d469d923f';
+// Source of candidate LA8ZS9: the shipped V27 exporter and payload writer.
+const V27_COMMIT = '42d326022da8c5d223aff178adb44c940240420e';
+const CURRENT_SCHEMA = REVIEWED_SCHEMA.migrations.length;
 const OLD_VECTOR = Object.freeze({
   version: '0.8.1', commit: '778dacf20c07caf904557a88705142631818d8cb',
   // Observed SHA-256 of the official immutable source files, not maintainer signatures.
@@ -262,15 +265,16 @@ async function main(argv) {
         targetDatabase: await databaseFacts(target.database) };
     }
     let stockArchive, stockSource;
-    await check('stock-v27-to-v27-0.8.7', async () => {
+    await check(`stock-v${CURRENT_SCHEMA}-to-v${CURRENT_SCHEMA}-0.8.7`, async () => {
       const source = await initialized(), target = await initialized(); await seed(source.database);
       assert.equal(await vectorVersion(source.database), '0.8.7'); assert.equal(await vectorVersion(target.database), '0.8.7');
-      const before = await rawRowsHash(source.database), archive = await exportPayload('stock-v27', source);
+      const before = await rawRowsHash(source.database), archive = await exportPayload(`stock-v${CURRENT_SCHEMA}`, source);
       await load(target, archive); assert.equal(await rawRowsHash(source.database), before);
       assert.equal(await sql(target.database, 'select content_md from notes;'), 'preserved');
       assert.equal(await sql(target.database, 'select vector_dims(embedding)::text||\':\'||(embedding <=> embedding)::text from summaries;'), '1536:0');
       stockArchive = archive; stockSource = source;
-      await unchangedArchive(archive); return { schema: 27, vector: '0.8.7', rows: archive.summary.rowCount,
+      assert.equal(archive.summary.schema.migrations.length, CURRENT_SCHEMA);
+      await unchangedArchive(archive); return { schema: CURRENT_SCHEMA, vector: '0.8.7', rows: archive.summary.rowCount,
         catalogSha256: archive.summary.catalogSha256, sourceRowsUnchanged: true, payloadSha256: archive.fileSha256,
         sourceDatabase: await databaseFacts(source.database), targetDatabase: await databaseFacts(target.database) };
     });
@@ -284,7 +288,7 @@ async function main(argv) {
       finally { await fs.writeFile(control, currentControl); }
       assert.equal(await vectorVersion(oldSource.database), '0.8.1');
       assert.equal(sha(await fs.readFile(copiedVector)), vectorHash);
-      oldRows = await rawRowsHash(oldSource.database); oldArchive = await exportPayload('old-sql-v27', oldSource);
+      oldRows = await rawRowsHash(oldSource.database); oldArchive = await exportPayload(`old-sql-v${CURRENT_SCHEMA}`, oldSource);
       const evidence = await rejected(oldArchive); assert.equal(await rawRowsHash(oldSource.database), oldRows);
       return { ...evidence, sourceSqlVersion: '0.8.1', targetSqlVersion: '0.8.7', binarySha256: vectorHash,
         sourceRowsUnchanged: true, sourceRowsSha256: oldRows, catalogSha256: oldArchive.summary.catalogSha256,
@@ -293,7 +297,7 @@ async function main(argv) {
     await check('explicit-update-new-export-passes-old-export-still-refused', async () => {
       await sql(oldSource.database, "alter extension vector update to '0.8.7';");
       assert.equal(await vectorVersion(oldSource.database), '0.8.7'); assert.equal(await rawRowsHash(oldSource.database), oldRows);
-      const updated = await exportPayload('updated-sql-v27', oldSource), target = await initialized();
+      const updated = await exportPayload(`updated-sql-v${CURRENT_SCHEMA}`, oldSource), target = await initialized();
       assert.notEqual(updated.summary.catalogSha256, oldArchive.summary.catalogSha256);
       assert.deepEqual(updated.rows, oldArchive.rows); await load(target, updated);
       assert.equal(await sql(target.database, 'select content_md from notes;'), 'preserved');
@@ -304,37 +308,77 @@ async function main(argv) {
         oldPayloadStillRejected: oldRejected, automaticArchiveConversion: false,
         sourceDatabase: await databaseFacts(oldSource.database), targetDatabase: await databaseFacts(target.database) };
     });
-    let legacyArchive;
-    await check('pinned-historical-v26-to-v27-same-0.8.7', async () => {
-      const legacySource = path.join(fixture, 'legacy-src'), migrations = path.join(fixture, 'legacy-migrations');
+    // A frozen historical producer (export adapter + payload writer) at its own pinned migrations.
+    async function legacyProducer(commit, schema) {
+      const label = `v${schema.migrations.length}`;
+      const legacySource = path.join(fixture, `legacy-src-${label}`), migrations = path.join(fixture, `legacy-migrations-${label}`);
       await fs.cp(path.join(REPO, 'desktop/src'), legacySource, { recursive: true }); await fs.mkdir(migrations, { mode: 0o700 });
       const sourceHashes = {};
       for (const name of ['backup-export-policy.cjs', 'backup-postgres.cjs', 'backup-payload.cjs', 'backup-source-selection.cjs']) {
-        const result = spawnSync('/usr/bin/git', ['show', `${LEGACY_COMMIT}:desktop/src/${name}`],
+        const result = spawnSync('/usr/bin/git', ['show', `${commit}:desktop/src/${name}`],
           { cwd: REPO, env: SYSTEM_ENV, encoding: 'utf8', maxBuffer: 1024 * 1024 });
-        assert.equal(result.status, 0, 'Pinned V26 source missing from local history');
+        assert.equal(result.status, 0, `Pinned ${label} source missing from local history`);
         sourceHashes[name] = sha(result.stdout); await fs.writeFile(path.join(legacySource, name), result.stdout, { mode: 0o600 });
       }
-      for (const m of REVIEWED_V26_SCHEMA.migrations) await fs.copyFile(path.join(MIGRATIONS, m.filename), path.join(migrations, m.filename));
-      const legacy = require(path.join(legacySource, 'backup-postgres.cjs')), legacyPayload = require(path.join(legacySource, 'backup-payload.cjs'));
-      const source = await initialized(legacy, migrations), target = await initialized(); await seed(source.database);
+      for (const m of schema.migrations) await fs.copyFile(path.join(MIGRATIONS, m.filename), path.join(migrations, m.filename));
+      return { sourceHashes, migrations, adapter: require(path.join(legacySource, 'backup-postgres.cjs')),
+        payload: require(path.join(legacySource, 'backup-payload.cjs')) };
+    }
+    let legacyArchive;
+    await check(`pinned-historical-v26-to-v${CURRENT_SCHEMA}-same-0.8.7`, async () => {
+      const legacy = await legacyProducer(LEGACY_COMMIT, REVIEWED_V26_SCHEMA);
+      const source = await initialized(legacy.adapter, legacy.migrations), target = await initialized(); await seed(source.database);
       assert.equal(await vectorVersion(source.database), '0.8.7');
       const before = await rawRowsHash(source.database, REVIEWED_V26_SCHEMA);
-      const archive = await exportPayload('historical-v26', source, legacy, migrations, legacyPayload);
+      const archive = await exportPayload('historical-v26', source, legacy.adapter, legacy.migrations, legacy.payload);
       legacyArchive = archive;
       assert.equal(archive.summary.schema.migrations.length, 26); await load(target, archive);
       assert.equal(await rawRowsHash(source.database, REVIEWED_V26_SCHEMA), before);
       assert.equal(await sql(target.database, "select analysis_status||':'||analysis_targeted::text||':'||(analysis_reason is null)::text from files;"), 'LEGACY_UNMEASURED:false:true');
       assert.equal(await sql(target.database, 'select count(*) from snapshot_inventory_measurements;'), '0');
-      assert.equal(await sql(target.database, 'select count(*) from flyway_schema_history where success;'), '27');
+      assert.equal(await sql(target.database, 'select count(*) from flyway_schema_history where success;'), String(CURRENT_SCHEMA));
       assert.equal(await sql(target.database, 'select content_md from notes;'), 'preserved');
       assert.equal(await sql(target.database, 'select vector_dims(embedding)::text||\':\'||(embedding <=> embedding)::text from summaries;'), '1536:0');
-      await unchangedArchive(archive); return { legacyCommit: LEGACY_COMMIT, sourceHashes, vector: '0.8.7',
-        sourceSchema: 26, targetSchema: 27, sourceRowsUnchanged: true, measurements: 0, payloadSha256: archive.fileSha256,
+      await unchangedArchive(archive); return { legacyCommit: LEGACY_COMMIT, sourceHashes: legacy.sourceHashes, vector: '0.8.7',
+        sourceSchema: 26, targetSchema: CURRENT_SCHEMA, sourceRowsUnchanged: true, measurements: 0, payloadSha256: archive.fileSha256,
+        sourceDatabase: await databaseFacts(source.database), targetDatabase: await databaseFacts(target.database) };
+    });
+    let legacyV27Archive;
+    await check(`pinned-historical-v27-to-v${CURRENT_SCHEMA}-same-0.8.7`, async () => {
+      const legacy = await legacyProducer(V27_COMMIT, REVIEWED_V27_SCHEMA);
+      const source = await initialized(legacy.adapter, legacy.migrations), target = await initialized(); await seed(source.database);
+      await sql(source.database, `update files set analysis_status='PARTIAL',analysis_reason='PARSE_ERROR',analysis_targeted=true;
+        insert into snapshot_inventory_measurements(snapshot_id,discovered_files,excluded_for_count,excluded_for_size,excluded_binary,excluded_submodules)
+          values(3,7,1,2,3,0);`);
+      assert.equal(await vectorVersion(source.database), '0.8.7');
+      const before = await rawRowsHash(source.database, REVIEWED_V27_SCHEMA);
+      const archive = await exportPayload('historical-v27', source, legacy.adapter, legacy.migrations, legacy.payload);
+      legacyV27Archive = archive;
+      assert.equal(archive.summary.schema.migrations.length, 27); assert.deepEqual(archive.summary.schema, REVIEWED_V27_SCHEMA);
+      const restored = await load(target, archive);
+      // V27 rows are V29 rows: every restored table digest equals the archived one.
+      for (const [table, digest] of Object.entries(archive.summary.tableSha256)) {
+        if (archive.summary.tableCounts[table] !== '0') assert.equal(restored.tableSha256[table], digest, `${table} restored unchanged`);
+      }
+      assert.equal(await rawRowsHash(source.database, REVIEWED_V27_SCHEMA), before);
+      assert.equal(await sql(target.database, "select analysis_status||':'||analysis_reason||':'||analysis_targeted::text from files;"), 'PARTIAL:PARSE_ERROR:true');
+      assert.equal(await sql(target.database, 'select discovered_files from snapshot_inventory_measurements;'), '7');
+      assert.equal(await sql(target.database, 'select count(*) from flyway_schema_history where success;'), String(CURRENT_SCHEMA));
+      assert.equal(await sql(target.database, `select count(*) from pg_indexes where schemaname='public' and indexname in
+        ('idx_graph_edges_source_node_id','idx_graph_edges_target_node_id','idx_graph_nodes_file_id','idx_feature_links_node_id',
+         'idx_flows_entry_node_id','idx_flow_steps_node_id','idx_flow_steps_edge_id','idx_analysis_findings_node_id',
+         'idx_ai_conversations_snapshot_id');`), '9');
+      assert.equal(await sql(target.database, `select count(*) from information_schema.columns where table_schema='public'
+        and column_name='scope' and is_nullable='YES' and table_name in ('local_source_approvals','job_local_source_inputs');`), '2');
+      assert.equal(await sql(target.database, 'select content_md from notes;'), 'preserved');
+      assert.equal(await sql(target.database, 'select vector_dims(embedding)::text||\':\'||(embedding <=> embedding)::text from summaries;'), '1536:0');
+      await unchangedArchive(archive); return { legacyCommit: V27_COMMIT, sourceHashes: legacy.sourceHashes, vector: '0.8.7',
+        sourceSchema: 27, targetSchema: CURRENT_SCHEMA, sourceRowsUnchanged: true, rowsUnchanged: true, v28Indexes: 9,
+        nullableScopeColumns: 2, payloadSha256: archive.fileSha256, catalogSha256: archive.summary.catalogSha256,
         sourceDatabase: await databaseFacts(source.database), targetDatabase: await databaseFacts(target.database) };
     });
     let preflightLive;
-    await check('disposable-preflight-real-controller-v27-v26-and-old-sql-refusal', async () => {
+    await check(`disposable-preflight-real-controller-v${CURRENT_SCHEMA}-v27-v26-and-old-sql-refusal`, async () => {
       const initializedLive = await initialized(); await seed(initializedLive.database);
       await closeAdapter(initializedLive.adapter);
       preflightLive = `ci_backup_live_${crypto.randomBytes(8).toString('hex')}`;
@@ -343,7 +387,8 @@ async function main(argv) {
       const live = beforeDatabases.find(row => row.name === preflightLive); assert(live?.allowConnections);
       const controller = await databaseControl(preflightLive), results = [];
       try {
-        for (const [label, archive, incompatible] of [['stock-v27', stockArchive, false], ['legacy-v26', legacyArchive, false], ['old-sql-v27', oldArchive, true]]) {
+        for (const [label, archive, incompatible] of [[`stock-v${CURRENT_SCHEMA}`, stockArchive, false], ['legacy-v27', legacyV27Archive, false],
+          ['legacy-v26', legacyArchive, false], [`old-sql-v${CURRENT_SCHEMA}`, oldArchive, true]]) {
           const reader = await PG.createBackupPostgres(options(preflightLive, MIGRATIONS, 'export')); adapters.add(reader);
           const owner = await reader.readRestoreIdentity(); await closeAdapter(reader);
           let probe, callbackError, closed = false;
