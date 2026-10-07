@@ -205,9 +205,13 @@ async function main(argv = process.argv.slice(2)) {
     await noActiveJob(projectId);
   }
   async function importFolder(folder) {
+    // A same-path pushState keeps the mounted wizard (and a finished job's progress view), so
+    // leave the route first to start the import from a freshly mounted wizard.
+    await navigate('/projects');
+    await expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible();
     await navigate('/import');
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true });
-    await expect(picker).toBeVisible();
+    await expect(picker).toBeVisible().catch(() => { throw new Error('IMPORT_PICKER_NOT_VISIBLE'); });
     const bounds = await picker.boundingBox(); assert(bounds, 'PICKER_NOT_VISIBLE');
     const cdp = await page.context().newCDPSession(page);
     try {
@@ -362,7 +366,8 @@ async function main(argv = process.argv.slice(2)) {
     failure = error;
     report.status = 'FAIL';
     report.failure = { phase: report.phase, code: /^[A-Z][A-Z0-9_]{2,80}$/.test(error?.message || '') ? error.message : 'JOB_RACE_STEP_FAILED',
-      errorName: ['AssertionError', 'TimeoutError', 'Error'].includes(error?.name) ? error.name : null };
+      errorName: ['AssertionError', 'TimeoutError', 'Error'].includes(error?.name) ? error.name : null,
+      detail: String(error?.message || '').split('\n')[0].replace(/[^ -~\uAC00-\uD7A3]/g, '?').slice(0, 200) };
   } finally {
     try { await close(); } catch { if (!failure) { report.status = 'FAIL'; report.failure = { phase: 'cleanup', code: 'CLEANUP_FAILED' }; } else report.cleanupFailure = true; }
     try {
