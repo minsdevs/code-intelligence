@@ -449,7 +449,84 @@
   },
   "releaseVerdict": "NO_GO",
   "performanceSeries": {
-    "status": "RUNNING",
-    "note": "filled after the run"
+    "status": "FAIL",
+    "measurementStatus": "INCOMPLETE",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-LA8ZS9/Code Intelligence Validation.app\" --class small --series-20",
+    "cwd": "~/Dev/ci-gate (detached 19300fa, short-path worktree)",
+    "nativeLock": "coordinator, acquired 2026-10-07T06:33:30Z",
+    "evidence": "validation/local/workload-performance/run-vSLN0r",
+    "resultSha256": "fdb202ce055a3f36cf3a9814c94e9851c22ca6564ac73f4e4843bf84f87c06d5",
+    "resourceSamplesSha256": "87d7f389f8e56b4ae8015a05b50a087c569795aeda1439dc32ee8d7b23dd4cab",
+    "fixtureTreeSha256": "88140e38aad65eb0c15290a41a17fa68bb7c664193d84587b03023dff6fb254e",
+    "requestedRuns": 20,
+    "executedRuns": 12,
+    "passRuns": 11,
+    "failedRuns": 1,
+    "unexecutedRuns": 8,
+    "interruption": {
+      "run": 12,
+      "failure": "STARTUP_PROCESS_EXITED",
+      "exitSignal": "SIGKILL",
+      "phase": "INCREMENTAL",
+      "at": "2026-10-07T09:10:20Z",
+      "cause": "[INFERENCE] external: the launching session ended; not sent by the runner"
+    },
+    "runnerAssessmentFailures": [
+      "ANALYSISMS_P95_EXCEEDED",
+      "CLEANUP_UNCONFIRMED",
+      "RSS_CEILING_EXCEEDED",
+      "RUN_FAILED",
+      "RUN_NOT_EXECUTED",
+      "SAMPLING_INCOMPLETE"
+    ],
+    "quietMachine": false,
+    "loadAverage1mAtRunStart": {
+      "min": 4.54,
+      "max": 33.32,
+      "seriesStart": 4.01
+    },
+    "observations": {
+      "analysisMs": {
+        "n": 12,
+        "min": 55120,
+        "median": 58022.5,
+        "max": 60570,
+        "limitP95": 30000
+      },
+      "analysisPeakRssKiB": {
+        "n": 12,
+        "min": 3179104,
+        "max": 3424448,
+        "overCeiling": 12,
+        "ceiling": 3145728
+      },
+      "refreshMs": {
+        "n": 11,
+        "min": 678689,
+        "max": 701680,
+        "crossDomainStepMs": {
+          "min": 643834,
+          "max": 662990
+        },
+        "countsEqualToFull": 11
+      },
+      "cancelReleaseMs": {
+        "n": 11,
+        "min": 23171,
+        "max": 27398,
+        "limitMax": 10000
+      },
+      "cancelUiAckMs": {
+        "n": 11,
+        "min": 0,
+        "max": 1
+      },
+      "readyMs": {
+        "min": 9004,
+        "max": 10321
+      }
+    },
+    "profileLogs": "run-vSLN0r/profile-logs (warm-up desktop-run-g1FlaX, run 12 desktop-run-hZUm0Z); synthetic profiles and fixture clone removed after copying",
+    "decision": "user (2026-10-07): record as interrupted; run the next twenty-run series on the next candidate with the cancel/performance fixes, on a quiet machine"
   }
 }

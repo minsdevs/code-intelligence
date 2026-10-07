@@ -105,13 +105,52 @@ with `ISOLATED_RUN_INVALID` before the app was launched or an evidence directory
 | G-COST packaged first-run probe | **PASS**, no failures | `cost-egress-packaged/probe-BTcHgg` |
 | G-UX scripted pilot | COMPLETED, 190 states, 0 step errors | `pre-release-ux/ux-6PUoj4` |
 | Offline SBOM | 350 components, 0 unattributed, third-party notices index PRESENT, missing licence text 96 → 15 | `sbom/run-Ekjp6L` |
-| G-PERF small `--series-20` | see below | `workload-performance/` |
+| G-PERF small `--series-20` | **FAIL / INCOMPLETE**: 12 of 20 runs executed, 11 PASS functionally, run 12 ended by an external SIGKILL; every executed analysis 55.1–60.6 s (p95 limit 30 s) and 3.03–3.27 GiB peak RSS (ceiling 3 GiB); see below | `workload-performance/run-vSLN0r` |
 
 On the pilot, the strings behind F1 ("확인된 정적 관계") and F4 ("확인된 흐름 따라가기")
 no longer appear, the overview link reads "기록된 정적 흐름", and analysis progress is
 now announced through a status region (A11; 1lvULq announced nothing). F2/F3 remain
 covered by the unit tests only. The G-UX, G-JOB and stage 7 audits record the
 1lvULq results; these LA8ZS9 observations are added here, not rewritten there.
+
+## G-PERF small twenty-run series (interrupted)
+
+`env -i … node validation/pre-release/run-workload-benchmark.cjs --app <LA8ZS9> --class small --series-20`,
+started 15:33 KST under the native lock from `~/Dev/ci-gate`, one warm-up launch, a new synthetic
+profile per run, fixture tree `88140e38…6254e` (1,000 files, 5,242,880 bytes). Raw result
+`workload-performance/run-vSLN0r/result.json` (SHA-256 `fdb202ce…7c06d5`), samples
+`resource-samples.csv` (`87d7f389…cab`), runner stdout `series-stdout.log`, runtime logs of the
+warm-up and the killed run in `profile-logs/`.
+
+The series did not finish. At 18:10 KST, during the 1% refresh of run 12, the app process tree
+received SIGKILL from outside the runner (`STARTUP_PROCESS_EXITED`, exit signal `SIGKILL`, shutdown
+phase `SAFETY_OFF`/`RUNNING`, backend log ends without a shutdown record). [INFERENCE] The session
+that had launched the series ended at that time and its process group was killed; the runner then
+wrote its result. The runner's own assessment is `FAIL`, `measurementStatus: INCOMPLETE`
+(`ANALYSISMS_P95_EXCEEDED`, `RSS_CEILING_EXCEEDED`, `RUN_FAILED`, `RUN_NOT_EXECUTED`,
+`SAMPLING_INCOMPLETE`, `CLEANUP_UNCONFIRMED`). The machine was not quiet: 1-minute load at run start
+was 4.5–9.0 in eleven runs and 33.3 in run 9 (series start 4.01). The numbers below are therefore
+observations of a failing candidate, not acceptance measurements, and they are kept as recorded.
+
+| Observation (executed runs) | Result | Limit |
+| --- | --- | --- |
+| Functional status | 11 PASS, 1 FAIL (external SIGKILL), 8 not executed | 20 runs |
+| Analysis, approve → overview | 55,120–60,570 ms in all 12 analyses, median 58,023 ms | p95 ≤ 30,000 ms |
+| Peak owner-tree RSS, analysis | 3,179,104–3,424,448 KiB; 12 of 12 over the ceiling | ≤ 3,145,728 KiB |
+| Analysis steps (run 12) | `IMPORT` 25.8 s, `SOURCE_PARSING` 18.1 s, `TS_PARSING` 8.7 s, all others ≤ 1.3 s | — |
+| 1% refresh (full reanalysis) | 678,689–701,680 ms in 11 of 11; `CROSS_DOMAIN` 643,834–662,990 ms of it; counts equal to the full analysis in 11 of 11 | — (medium: p95 ≤ 30 s) |
+| Cancel UI ack / lock release | 0–1 ms / 23,171–27,398 ms in 11 of 11 | ≤ 500 ms / p95 ≤ 5 s, max 10 s |
+| Graph API search / node page / relations | 29–46 / 206–260 / 7–16 ms | p95 ≤ 500 ms (medium) |
+| Warm startup ready | 9,004–10,321 ms | (startup gate measured separately) |
+
+What this settles: G-PERF small analysis fails on LA8ZS9 independent of the incomplete series,
+because every executed run exceeds both limits. Finding 5 of the
+[workload-performance audit](workload-performance-2026-10-07.md) is no longer a single observation:
+the refresh's `CROSS_DOMAIN` step took 644–663 s in 11 of 11 runs while the same step took 36 ms in
+the first analysis (High, open, root cause not yet identified). The cancel release (finding 4 and
+G-JOB D2/T03) exceeded the 10 s maximum in 11 of 11 runs. Per the user's decision, no second LA8ZS9
+series was run; the next twenty-run series runs on the next candidate that carries the cancel and
+performance fixes, on a quiet machine.
 
 ## Space handling
 
@@ -128,7 +167,8 @@ runtime logs were copied beside each result (`profile-logs/`).
 
 No gate is complete. Open product work before a release candidate: ADR-01
 analyzer isolation and Electron fuses/CSP (G-SEC), the updater with migration
-checkpoint and rollback floor (G-UPDATE), working cancel within 10s (G-JOB/G-PERF),
+checkpoint and rollback floor (G-UPDATE), working cancel within 10s (G-JOB/G-PERF), small-class
+analysis time and RSS and the refresh `CROSS_DOMAIN` slowdown (G-PERF),
 flow/impact verdicts (G-UX), CONFIG/MIGRATION spans, v0 pin pruning and capability
 coverage (G-EVIDENCE), medium/large workload limits (G-PERF), and the licence
 obligations listed in the stage 7 audit. User or external input is needed for the
