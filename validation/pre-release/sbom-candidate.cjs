@@ -793,7 +793,7 @@ function cycloneDx(result, meta) {
       .filter(item => refs.has(item.ref) || item.ref === 'app'),
     compositions: [{ aggregate: result.unattributed.length ? 'incomplete' : 'complete', assemblies: ['app'] },
       // Minified browser assets are bound to lockfile declarations, not bytes.
-      { aggregate: 'incomplete', assemblies: ['first-party:frontend'] }] };
+      ...(refs.has('first-party:frontend') ? [{ aggregate: 'incomplete', assemblies: ['first-party:frontend'] }] : [])] };
 }
 
 // Structural subset of the CycloneDX 1.5 JSON schema that this generator uses.
