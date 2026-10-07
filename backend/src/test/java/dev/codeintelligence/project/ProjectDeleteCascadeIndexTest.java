@@ -56,8 +56,7 @@ class ProjectDeleteCascadeIndexTest {
                   and not exists (select 1 from pg_index i
                                   where i.indrelid = c.conrelid and i.indkey[0] = c.conkey[1])
                 order by 1
-                """, String.class))
-                .isEmpty();
+                """, String.class)).isEmpty();
     }
 
     @Test
