@@ -30,6 +30,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * G-PERF memory harness below the packaged app: every analysis step after IMPORT runs on a
@@ -51,6 +52,12 @@ class WorkloadMemoryHarnessTest {
     static void props(DynamicPropertyRegistry registry) {
         registry.add("app.data-dir", () -> dataDir.toString());
         registry.add("app.ts-analyzer.base-url", () -> System.getProperty("workload.ts-url"));
+        // Optional: plans of statements slower than this go to the PostgreSQL log (auto_explain).
+        String explainMs = System.getProperty("workload.explain-ms");
+        if (explainMs != null && explainMs.matches("[0-9]+"))
+            registry.add(
+                    "spring.datasource.hikari.connection-init-sql",
+                    () -> "load 'auto_explain'; set auto_explain.log_min_duration = '" + explainMs + "ms'");
     }
 
     @Autowired
@@ -58,6 +65,9 @@ class WorkloadMemoryHarnessTest {
 
     @Autowired
     Pipeline pipeline;
+
+    @Autowired
+    PostgreSQLContainer postgres;
 
     @Test
     void analyzesTheWorkloadFixtureWithinTheBackendHeap() throws Exception {
@@ -87,6 +97,8 @@ class WorkloadMemoryHarnessTest {
             }
         }
         System.out.println("[workload-memory] steps " + rows);
+        String explainLog = System.getProperty("workload.explain-log");
+        if (explainLog != null) Files.writeString(Path.of(explainLog), postgres.getLogs());
         assertThat(jdbc.queryForObject(
                         "select status from snapshots where id = ?",
                         String.class,
