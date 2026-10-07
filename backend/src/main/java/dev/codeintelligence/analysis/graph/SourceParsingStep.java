@@ -22,6 +22,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -79,18 +85,37 @@ public class SourceParsingStep implements JobStep {
             if ("java".equalsIgnoreCase(file.language()) || file.path().endsWith(".java"))
                 FileAnalysisOutcome.record(jdbc, snapshotId, file.path(), "TARGETED", "JAVA_PARSER_STARTED");
         }
-        for (CodeAnalyzer analyzer : matching) {
-            try {
-                acc.add(analyzer.analyze(new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory)));
-            } catch (JobCancelledException cancelled) {
-                throw cancelled;
-            } catch (RuntimeException e) {
-                log.warn(
-                        "Analyzer {} failed; isolating per file",
-                        analyzer.getClass().getSimpleName(),
-                        e);
-                isolatePerFile(analyzer, ctx, snapshotId, inventory, acc, failures);
+        // No analyzer reads another's result. The first (the Java analyzer, by order) runs here and
+        // the others run meanwhile, in order, on one helper thread; results merge in analyzer order.
+        ExecutorService helper = Executors.newSingleThreadExecutor(runnable ->
+                Thread.ofPlatform().daemon().name("source-parsing-analyzers").unstarted(runnable));
+        try {
+            List<Future<AnalysisResult>> later = new ArrayList<>();
+            for (CodeAnalyzer analyzer : matching.subList(1, matching.size())) {
+                later.add(helper.submit(() -> analyzer.analyze(
+                        new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory))));
             }
+            for (int index = 0; index < matching.size(); index++) {
+                CodeAnalyzer analyzer = matching.get(index);
+                try {
+                    acc.add(
+                            index == 0
+                                    ? analyzer.analyze(new AnalysisContext(
+                                            ctx.projectId(), snapshotId, ctx.clonePath(), inventory))
+                                    : await(later.get(index - 1)));
+                } catch (JobCancelledException cancelled) {
+                    throw cancelled;
+                } catch (RuntimeException e) {
+                    log.warn(
+                            "Analyzer {} failed; isolating per file",
+                            analyzer.getClass().getSimpleName(),
+                            e);
+                    isolatePerFile(analyzer, ctx, snapshotId, inventory, acc, failures);
+                }
+            }
+        } finally {
+            // After a cancel or failure the remaining analyzers' results are not used.
+            helper.shutdownNow();
         }
         ctx.updateProgress(70);
         persistence.persist(ctx.projectId(), snapshotId, acc.toResult());
@@ -100,6 +125,25 @@ public class SourceParsingStep implements JobStep {
         failures.addAll(acc.snapshotFailures());
         persistFailures(ctx.projectId(), snapshotId, failures);
         ctx.updateProgress(100);
+    }
+
+    /** A helper-thread analyzer's result; a cancel is still noticed while waiting for it. */
+    private static AnalysisResult await(Future<AnalysisResult> result) {
+        while (true) {
+            JobCancellation.checkpoint();
+            try {
+                return result.get(200, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException waiting) {
+                // checkpoint again
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("interrupted while waiting for an analyzer", e);
+            } catch (ExecutionException e) {
+                if (e.getCause() instanceof RuntimeException failure) throw failure;
+                if (e.getCause() instanceof Error error) throw error;
+                throw new IllegalStateException(e.getCause());
+            }
+        }
     }
 
     private void isolatePerFile(
