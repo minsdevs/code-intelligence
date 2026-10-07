@@ -121,7 +121,7 @@ const HOSTILE_EXTERNAL = ['javascript:alert(document.domain)', 'file:///Applicat
   'https://gist.github.com/', 'https://api.github.com/', 'https://codeload.github.com/o/r', 'https://127.0.0.1:41000/',
   'https://[::ffff:8c52:7903]/', 'https://2398795651/', 'data:text/html,<script>alert(1)</script>',
   'about:blank', 'not a url'];
-// blob: URLs report the origin of their inner URL; see the SEC-L-01 TODO below.
+// blob: URLs report the origin of their inner URL (SEC-L-01).
 const INNER_ORIGIN_SCHEMES = ['blob:https://github.com/00000000-0000-0000-0000-000000000000',
   'blob:https://docs.github.com/00000000-0000-0000-0000-000000000000'];
 
@@ -273,11 +273,9 @@ test('a renderer-supplied folder path is not granted without a main-process nati
     assert.ok(h.dialogs.length > 0 || h.requests.length === 0, 'grant reached the backend without a native confirmation');
   });
 
-// Open finding SEC-L-01: assertExternalUrl compares URL.origin only, and a blob: URL inherits the
-// origin of its inner https URL, so the OS receives a non-https scheme. Fix: also require
-// url.protocol === 'https:'. Kept as TODO; the allowlisted host is unchanged and no IDE scheme passes.
-test('external open and window.open refuse non-https schemes that inherit an allowlisted origin',
-  { todo: 'SEC-L-01 open: blob:https://github.com/... passes the origin-only allowlist' }, async () => {
+// SEC-L-01: a blob: URL inherits the origin of its inner https URL, so an origin-only allowlist
+// handed the OS a non-https scheme. assertExternalUrl also requires the https: protocol.
+test('external open and window.open refuse non-https schemes that inherit an allowlisted origin', async () => {
     const h = loadMain();
     for (const url of INNER_ORIGIN_SCHEMES) await assert.rejects(invoke(h, 'external:open', h.trusted(), url), url);
     h.run('createWindow();');

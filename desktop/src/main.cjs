@@ -878,7 +878,8 @@ function assertExternalUrl(raw) {
   }
   const url = new URL(raw);
   const allowedOrigins = new Set(['https://github.com', 'https://docs.github.com']);
-  if (url.origin === 'null'
+  if (url.protocol !== 'https:'
+      || url.origin === 'null'
       || url.username
       || url.password
       || !allowedOrigins.has(url.origin)) {
