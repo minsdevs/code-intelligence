@@ -68,8 +68,8 @@ public class WhatIfService {
         ImpactService.ImpactView impact =
                 impactService.impact(projectId, userId, request.nodeId(), null, request.depth());
         String context = buildContext(snapshotId, impact);
-        String userPrompt =
-                SecretMask.redact(PromptBuilder.user("If this node changes, what breaks in production?", context));
+        String userPrompt = PersonalDataMask.mask(
+                SecretMask.redact(PromptBuilder.user("If this node changes, what breaks in production?", context)));
         AIProvider.ChatResponse raw = usage.chat(
                 userId, projectId, provider, "what-if", new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
         AIProvider.ChatResponse validated = validator.validate(projectId, snapshotId, raw);

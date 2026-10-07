@@ -12,6 +12,7 @@
 const fs = require('node:fs/promises');
 const syncFs = require('node:fs');
 const crypto = require('node:crypto');
+const http = require('node:http');
 const path = require('node:path');
 const vm = require('node:vm');
 
@@ -36,7 +37,7 @@ const { createSourceBroker } = require('../../src/source-broker.cjs');
 const PUBLIC_SYNTHETIC_KEY = 'sk-publicSyntheticDesktopCostKey0123456789';
 const DAY = 24 * 60 * 60 * 1000;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-let lifecycle, adapter, root, sourceVault, sourceBroker, authority, stopping = false;
+let lifecycle, adapter, root, sourceVault, sourceBroker, authority, providerServer, stopping = false;
 
 function syntheticStorage() {
   const key = Buffer.alloc(32, 53);
@@ -135,6 +136,41 @@ async function transport(request) {
   return providerResponse(mode, request.requestId);
 }
 
+// PK-08 seam-free mode: a real loopback HTTP fake provider behind the production transport composition
+// (gateway default -> createProviderTransport(validation build metadata) -> node:http). It records what
+// arrived on the wire; it cannot see request IDs, so it writes its own file. Anything that is not the
+// provider call (for example a stray local port probe on this shared host) is answered 404 and recorded
+// separately, never counted as a provider request.
+async function startHttpProvider() {
+  let count = 0;
+  const server = http.createServer((incoming, response) => {
+    const chunks = [];
+    incoming.on('data', chunk => chunks.push(chunk));
+    incoming.on('end', () => {
+      const body = Buffer.concat(chunks);
+      if (incoming.method !== 'POST' || incoming.url !== '/v1/chat/completions') {
+        record('http-stray.jsonl', { method: incoming.method, path: incoming.url, bytes: body.length,
+          authorizationPresent: incoming.headers.authorization !== undefined })
+          .finally(() => { response.writeHead(404); response.end(); });
+        return;
+      }
+      count++;
+      record('http-provider.jsonl', { method: incoming.method, path: incoming.url,
+        remoteAddress: incoming.socket.remoteAddress, contentType: incoming.headers['content-type'] ?? null,
+        credentialMatched: incoming.headers.authorization === `Bearer ${PUBLIC_SYNTHETIC_KEY}`,
+        bodyBase64: body.toString('base64'), wireSha256: crypto.createHash('sha256').update(body).digest('hex') })
+        .then(() => {
+          const answer = providerResponse('success', `http-${count}`);
+          response.writeHead(answer.statusCode, { 'Content-Type': 'application/json', 'x-request-id': answer.providerRequestId });
+          response.end(answer.body);
+        }, () => { response.destroy(); });
+    });
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  providerServer = server;
+  return { origin: `http://127.0.0.1:${server.address().port}` };
+}
+
 // Arms the journal's own fault hook only for the selected append after the core's verification.
 function journalHooks(callbacks) {
   let armed = null;
@@ -174,6 +210,7 @@ async function stop() {
   } catch { failed = true; }
   try { if (lifecycle) await lifecycle.close(); } catch { failed = true; }
   try { if (adapter) await adapter.close(); } catch { failed = true; }
+  if (providerServer) { providerServer.closeAllConnections(); await new Promise(resolve => providerServer.close(() => resolve())); }
   if (root) await fs.writeFile(path.join(root, 'closed.json'), JSON.stringify({ closed: !failed }), { mode: 0o600 });
   if (failed) process.exitCode = 1;
 }
@@ -197,11 +234,15 @@ async function main() {
   await fs.mkdir(userData, { mode: 0o700 });
   await fs.mkdir(temporaryRoot, { mode: 0o700 });
   let gateway;
+  const httpProvider = config.validationProvider === true ? await startHttpProvider() : null;
+  const providerOptions = httpProvider
+    ? { buildMetadata: { name: 'code-intelligence-validation', validationAiProviderOrigin: httpProvider.origin } }
+    : { transport };
   lifecycle = await lifecycleModule().openSafetyLifecycle({ userData, safeStorage: syntheticStorage(),
     installationId: config.installationId, runningBuild: '100',
     createGateway: async ({ openJournal, freshEnrollmentAllowed }) => {
       gateway = await openDesktopAiGateway({ installationId: config.installationId, runningBuild: '100', temporaryRoot,
-        tokenEncryptionKey: config.tokenEncryptionKey, freshEnrollmentAllowed, adapter, catalog, transport,
+        tokenEncryptionKey: config.tokenEncryptionKey, freshEnrollmentAllowed, adapter, catalog, ...providerOptions,
         openJournal: callbacks => openJournal(journalHooks(callbacks)) });
       return gateway;
     } });

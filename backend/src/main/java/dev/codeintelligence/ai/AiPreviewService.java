@@ -83,7 +83,7 @@ public class AiPreviewService {
 
         String text = structured.text();
         List<String> fileRefs = structured.fileRefs();
-        String copyablePrompt = SecretMask.redact(PromptBuilder.user(question, text));
+        String copyablePrompt = PersonalDataMask.mask(SecretMask.redact(PromptBuilder.user(question, text)));
 
         // Build context items from structured blocks (with deterministic IDs)
         List<ContextItem> items = new ArrayList<>();
@@ -93,7 +93,7 @@ public class AiPreviewService {
                     block.type(),
                     block.label().length() > 80 ? block.label().substring(0, 80) + "..." : block.label(),
                     block.content().length(),
-                    block.content().contains("[REDACTED]")));
+                    block.content().contains("[REDACTED]") || PersonalDataMask.detects(block.content())));
         }
 
         // Count masked secrets

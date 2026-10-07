@@ -1319,7 +1319,7 @@ async function startApplication() {
         noteStartup('GATEWAY');
         aiGateway = await openDesktopAiGateway({ installationId: secrets.localIdentity, runningBuild,
           temporaryRoot: runtime.ipcRoot, tokenEncryptionKey: secrets.tokenEncryptionKey, windowsBoundary,
-          openJournal, freshEnrollmentAllowed, adapter: aiPostgres, recoveryMode: gatewayRecoveryMode,
+          openJournal, freshEnrollmentAllowed, adapter: aiPostgres, recoveryMode: gatewayRecoveryMode, buildMetadata: packageMetadata,
           verifyMaintenanceSeal: maintenanceVerifier, verifyMaintenanceCompletion: maintenanceVerifier });
         return aiGateway;
       },

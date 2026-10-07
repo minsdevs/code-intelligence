@@ -544,6 +544,17 @@ test('actual main startup passes fresh enrollment before paths file and private 
   assert.equal([...h.handlers.keys()].some(name => /activate|gateway|settle|enrollment|permit/.test(name)), false);
 });
 
+test('the AI gateway receives only the packaged build metadata, whatever the shell environment says', async t => {
+  const packaged = { name: 'code-intelligence-validation', validationAiProviderOrigin: 'http://127.0.0.1:47613' };
+  const h = await harness(t, { modules: { '../package.json': packaged } });
+  h.context.process.env.validationAiProviderOrigin = 'http://127.0.0.1:1234';
+  h.context.process.env.CODE_INTELLIGENCE_AI_PROVIDER_ORIGIN = 'http://127.0.0.1:1234';
+  await h.start();
+  assert.equal(h.run('runtime.ready'), true);
+  assert.equal(h.controls.gatewayOptions.buildMetadata, packaged);
+  assert.equal(h.controls.gatewayOptions.transport, undefined);
+});
+
 test('packaged public GitHub client ID reaches backend without a shell environment', async t => {
   const h = await harness(t, { modules: { '../package.json': { githubNativeClientId: 'Iv1.synthetic-public-client' } } });
   delete h.context.process.env.GITHUB_NATIVE_CLIENT_ID;
