@@ -21,8 +21,15 @@ const BUILD = /^(0|[1-9][0-9]{0,18})$/;
 const HASH = /^[0-9a-f]{64}$/;
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
+const MESSAGES = Object.freeze({
+  UPDATE_CHECKPOINT_CAPACITY: 'There is not enough free space for the pre-upgrade checkpoint. The upgrade was not started; existing data was not changed.',
+  UPDATE_CHECKPOINT_RECOVERY_REQUIRED: 'An earlier data upgrade did not complete. Restore the pre-upgrade checkpoint before starting.',
+});
 class UpdateCheckpointError extends Error {
-  constructor(code) { super(code); this.name = 'UpdateCheckpointError'; this.code = code; this.recoveryOnly = true; }
+  constructor(code) {
+    super(MESSAGES[code] || `The pre-upgrade checkpoint could not be verified (${code}). Existing data was not changed.`);
+    this.name = 'UpdateCheckpointError'; this.code = code; this.recoveryOnly = true;
+  }
 }
 const fail = (code = 'UPDATE_CHECKPOINT_INVALID') => { throw new UpdateCheckpointError(code); };
 
@@ -161,9 +168,15 @@ async function openUpdateCheckpoints({ userData, runningBuild, targetFlyway, bun
         previousBundle: recorded?.bundle ?? null, targetBuild: runningBuild, targetFlyway,
         journal: { sequence: journal.sequence, headHash: journal.headHash }, sources: await sourceIdentities(), createdAt: now() };
       await save(record);
-      await cloneTree(live, path.join(directory, 'postgres'));
-      await privateDirectory(path.join(directory, 'postgres'));
-      await syncDirectory(directory);
+      try {
+        await cloneTree(live, path.join(directory, 'postgres'));
+        await privateDirectory(path.join(directory, 'postgres'));
+        await syncDirectory(directory);
+      } catch (error) {
+        // Nothing migrated yet: drop the partial copy and refuse the upgrade rather than run it unprotected.
+        await fs.rm(directory, { recursive: true, force: true }).catch(() => {});
+        throw new UpdateCheckpointError(error?.code === 'ENOSPC' ? 'UPDATE_CHECKPOINT_CAPACITY' : 'UPDATE_CHECKPOINT_STORAGE');
+      }
       record.state = 'MIGRATING'; await save(record);
       return Object.freeze({ ...record });
     },

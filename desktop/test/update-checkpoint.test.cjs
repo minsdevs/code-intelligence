@@ -31,6 +31,7 @@ async function profile(t) {
   const open = (runningBuild, targetFlyway) => openUpdateCheckpoints({ userData, runningBuild, targetFlyway, bundle: bundle(runningBuild) });
   return { userData, live, open, root: path.join(userData, 'update-checkpoints') };
 }
+const exists = file => fs.lstat(file).then(() => true, () => false);
 async function tree(root) {
   const result = {};
   for (const entry of await fs.readdir(root, { withFileTypes: true, recursive: true })) {
@@ -161,6 +162,19 @@ test('a running cluster or replaced source roots refuse the checkpoint or the re
   await fs.mkdir(path.join(p.userData, 'data', 'sources'), { mode: 0o700 });
   await assert.rejects(checkpoints.restore(id), { code: 'UPDATE_CHECKPOINT_SOURCES_CHANGED' });
   assert.equal((await checkpoints.pending()).state, 'FAILED');
+});
+
+test('a checkpoint that cannot be completed refuses the upgrade, removes the partial copy and leaves the cluster untouched', darwin, async t => {
+  const p = await profile(t);
+  await startedBuild(p);
+  const blocked = path.join(p.live, 'base', '1', '1259');
+  await fs.chmod(blocked, 0o000); t.after(() => fs.chmod(blocked, 0o600).catch(() => {}));
+  const checkpoints = await p.open('200', 27);
+  await assert.rejects(checkpoints.beforeMigration({ journal: JOURNAL }), { code: 'UPDATE_CHECKPOINT_STORAGE', message: /Existing data was not changed/ });
+  assert.equal(await exists(path.join(p.root, checkpointIdFor('100', '200'))), false);
+  assert.equal(await checkpoints.pending(), null);
+  await fs.chmod(blocked, 0o600);
+  assert.equal(await fs.readFile(blocked, 'utf8'), 'schema 26 relation bytes');
 });
 
 test('the user may retry the same upgrade on top of the kept image; finished checkpoints are retained one deep', darwin, async t => {
