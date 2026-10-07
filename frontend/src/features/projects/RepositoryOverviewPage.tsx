@@ -334,7 +334,7 @@ function SnapshotOverview({
               className="text-accent"
               to={`/projects/${projectId}/flows?snapshotId=${snapshotId}`}
             >
-              확인된 흐름 따라가기 →
+              기록된 정적 흐름 따라가기 →
             </Link>
           </div>
         </article>

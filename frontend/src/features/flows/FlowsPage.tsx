@@ -169,6 +169,7 @@ export default function FlowsPage() {
             기록된 정적 경로입니다. 목록의 끝은 실제 처리 종료를 뜻하지 않습니다. 동적 호출·미지원
             연결 이후의 경로는 미확인입니다.
           </p>
+          <p className="mt-1 text-xs text-ink-muted">{t('flows.stepConfidenceNote')}</p>
           <ol aria-label={t('flows.stepsLabel')} className="mt-5 flex flex-col">
             {detail.steps.map((step, index) => (
               <li key={step.seq} className="relative flex gap-3 pb-4 pl-8">
