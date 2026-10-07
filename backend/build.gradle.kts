@@ -292,6 +292,7 @@ tasks.test {
     exclude("**/SnapshotSourceContractIntegrationTest.class")
     // Needs the real sidecar supplied by accuracyTest, never an in-process analyzer fake.
     exclude("**/ReactRouteBindingIntegrationTest.class")
+    exclude("**/WorkloadMemoryHarnessTest.class")
 }
 val buildSnapshotSourceFrontend by tasks.registering(Exec::class) {
     description = "Builds the real UI before snapshot source integration tests."
@@ -327,6 +328,35 @@ tasks.register<Test>("accuracyTest") {
         require(tsUrl.get().matches(Regex("http://127\\.0\\.0\\.1:[0-9]+"))) { "Only a local analyzer is allowed." }
         systemProperty("accuracy.ts-url", tsUrl.get())
     }
+    outputs.upToDateWhen { false }
+    testLogging {
+        events("passed", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = true
+    }
+}
+
+tasks.register<Test>("workloadMemoryTest") {
+    description = "G-PERF backend heap harness; run via ../validation/pre-release/workload-backend-memory.cjs."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter { includeTestsMatching("dev.codeintelligence.analysis.WorkloadMemoryHarnessTest") }
+    val fixture = providers.gradleProperty("workloadFixture")
+    val tsUrl = providers.gradleProperty("workloadTsUrl")
+    val heap = providers.gradleProperty("workloadHeap").orElse("2048m")
+    val dumpDir = providers.gradleProperty("workloadHeapDumpDir")
+    doFirst {
+        require(fixture.isPresent && tsUrl.isPresent) { "Use validation/pre-release/workload-backend-memory.cjs." }
+        require(tsUrl.get().matches(Regex("http://127\\.0\\.0\\.1:[0-9]+"))) { "Only a local analyzer is allowed." }
+        systemProperty("workload.fixture", fixture.get())
+        systemProperty("workload.ts-url", tsUrl.get())
+    }
+    // The desktop backend's heap options (desktop/src/jvm-options.cjs) with an optional heap dump.
+    minHeapSize = "64m"
+    maxHeapSize = heap.get()
+    jvmArgs("-XX:+UseSerialGC")
+    if (dumpDir.isPresent) jvmArgs("-XX:+HeapDumpOnOutOfMemoryError", "-XX:HeapDumpPath=${dumpDir.get()}")
     outputs.upToDateWhen { false }
     testLogging {
         events("passed", "failed")
