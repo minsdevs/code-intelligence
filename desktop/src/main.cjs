@@ -11,6 +11,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const net = require('node:net');
+const os = require('node:os');
 const path = require('node:path');
 const {
   loadDesktopSecrets, openSafetyLifecycle, requireBuildSequence, createSafeStorageWrapper, SafetyLifecycleError
@@ -37,7 +38,8 @@ const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
 const { RuntimeIntegrityError, integrityError, startupFailureCode,
   integrityDiagnostic, formatIntegrityDiagnostic } = require('./startup-diagnostics.cjs');
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
-const { adapterIsolationMode, openAdapterIsolation } = require('./adapter-isolation.cjs');
+const { TEST_ONLY_MODE, adapterIsolationRuntimeMode, openAdapterIsolation } = require('./adapter-isolation.cjs');
+const { openAdapterControl } = require('./adapter-control.cjs');
 const packageMetadata = require('../package.json');
 
 // App documents and workers may run only bundled same-origin script and reach only the app origin.
@@ -73,6 +75,7 @@ let runtimeOperation = Promise.resolve();
 let startupPhase = 'MANIFEST';
 let shutdownPhase = 'QUEUED';
 let isolatedPlan;
+let adapterControl;
 function noteStartup(phase) {
   startupPhase = phase;
   console.error('DESKTOP_STARTUP ' + phase);
@@ -543,20 +546,65 @@ async function startRedis() {
   await (await spawnRedis())();
 }
 
+// ADR-01: production analysis runs only behind the attested XPC supervisor, reached by the backend
+// through main's control socket. Without it the adapter is ADAPTER_ISOLATION_UNAVAILABLE and every
+// TS analysis job fails with that code; no ordinary child or HTTP sidecar is started.
+function openAnalyzerIsolation(mode) {
+  return openAdapterIsolation({ mode, manifest: runtimeManifest,
+    appContents: path.resolve(path.dirname(process.execPath), '..'),
+    testOnly: mode === TEST_ONLY_MODE ? { execPath: process.execPath,
+      script: path.join(__dirname, '..', '..', 'analyzers', 'ts-analyzer', 'dist', 'stdio.js') } : undefined });
+}
+
+// One install-private socket for the app's lifetime; the capability is reissued per backend process.
+async function openAnalyzerControl() {
+  if (adapterControl) return;
+  try {
+    adapterControl = await openAdapterControl({ parents: [app.getPath('temp'), os.tmpdir()], handler: {
+      health: async () => { await (await runtime.adapterSession).verify(); },
+      analyze: async (body, options) => (await runtime.adapterSession).analyze(body, options)
+    } });
+    process.once('exit', () => adapterControl?.closeSync());
+  } catch (error) {
+    console.error('DESKTOP_ADAPTER_ISOLATION ' + (error?.code === 'ADAPTER_CONTROL_PATH_TOO_LONG' ? error.code : 'ADAPTER_CONTROL_FAILED'));
+  }
+}
+
+function analyzerMode() {
+  return adapterIsolationRuntimeMode({ metadata: packageMetadata, isPackaged: app.isPackaged, env: process.env });
+}
+
+function analyzerEnvironment() {
+  if (analyzerMode() === 'legacy-http') {
+    return {
+      TS_ANALYZER_BASE_URL: runtime.transport.analyzer.origin,
+      TS_ANALYZER_TLS_CERT_SHA256: runtime.transport.materials.analyzer.pin,
+      TS_ANALYZER_AUTH_TOKEN: runtime.transport.analyzerToken
+    };
+  }
+  return adapterControl
+    ? { TS_ANALYZER_CONTROL_SOCKET: adapterControl.socketPath, TS_ANALYZER_CONTROL_CAPABILITY: adapterControl.rotate() }
+    : {};
+}
+
 async function spawnAnalyzer() {
-  const mode = adapterIsolationMode(packageMetadata);
+  const mode = analyzerMode();
   if (mode !== 'legacy-http') {
-    // ADR-01: production analysis runs only behind the attested XPC supervisor. Without it the
-    // adapter is ADAPTER_ISOLATION_UNAVAILABLE; no ordinary child or HTTP sidecar is started.
-    try {
-      await openAdapterIsolation({ mode, runtimeRoot: runtimeRoot(), manifest: runtimeManifest });
-      runtime.adapterIsolation = { mode, isolated: true };
-    } catch (error) {
-      runtime.adapterIsolation = { mode, isolated: false, code: 'ADAPTER_ISOLATION_UNAVAILABLE',
-        reason: error?.code === 'ADAPTER_ISOLATION_UNAVAILABLE' ? error.reason : 'UNEXPECTED' };
-      console.error('DESKTOP_ADAPTER_ISOLATION ADAPTER_ISOLATION_UNAVAILABLE ' + runtime.adapterIsolation.reason);
-    }
-    return async () => {};
+    const state = runtime.adapterIsolation = { mode, isolated: false };
+    // Attestation (codesign verification of the service) overlaps the backend JVM start.
+    runtime.adapterSession = openAnalyzerIsolation(mode).then(opened => {
+      state.isolated = opened.isolated;
+      if (mode === TEST_ONLY_MODE) console.error('DESKTOP_ADAPTER_ISOLATION TEST_ONLY_UNSIGNED synthetic fixtures only');
+      return opened.session;
+    }, error => {
+      Object.assign(state, { code: 'ADAPTER_ISOLATION_UNAVAILABLE',
+        reason: error?.code === 'ADAPTER_ISOLATION_UNAVAILABLE' ? error.reason : 'UNEXPECTED' });
+      console.error('DESKTOP_ADAPTER_ISOLATION ADAPTER_ISOLATION_UNAVAILABLE ' + state.reason);
+      throw error;
+    });
+    runtime.adapterSession.catch(() => {});
+    await openAnalyzerControl();
+    return async () => { await runtime.adapterSession.catch(() => {}); };
   }
   runtime.adapterIsolation = { mode, isolated: false };
   const main = binary('ts-analyzer', 'dist', 'main.js');
@@ -632,9 +680,7 @@ async function spawnBackend({ maintenanceId = '', traceStartup = false } = {}) {
       SPRING_CONFIG_ADDITIONAL_LOCATION: runtime.transport.backendConfigUrl,
       TOKEN_ENC_KEY: runtime.secrets.tokenEncryptionKey,
       DATA_DIR: dataDir,
-      TS_ANALYZER_BASE_URL: runtime.transport.analyzer.origin,
-      TS_ANALYZER_TLS_CERT_SHA256: runtime.transport.materials.analyzer.pin,
-      TS_ANALYZER_AUTH_TOKEN: runtime.transport.analyzerToken,
+      ...analyzerEnvironment(),
       DESKTOP_API_TOKEN: runtime.apiToken,
       DESKTOP_PATH_TOKEN: runtime.pathToken,
       DESKTOP_LOCAL_IDENTITY: runtime.secrets.localIdentity,
