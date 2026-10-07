@@ -1,8 +1,10 @@
 package dev.codeintelligence.analysis.java;
 
 import com.github.javaparser.JavaParser;
+import com.github.javaparser.JavaToken;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ParserConfiguration;
+import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
@@ -23,6 +25,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
+import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
@@ -63,13 +66,16 @@ import org.springframework.stereotype.Component;
 /**
  * JavaParser + JavaSymbolSolver analyzer (§10.2). ReflectionTypeSolver is JRE-only so library
  * methods (e.g. JpaRepository) stay unresolved and become CALLS/POSSIBLE; in-source calls are
- * CONFIRMED.
+ * CONFIRMED, except virtual calls on an interface or abstract receiver, which become CALLS/POSSIBLE
+ * to their class-hierarchy implementation candidates. Every CALLS edge carries its call site.
  */
 @Component
 public class JavaAnalyzer implements CodeAnalyzer {
 
     private static final Logger log = LoggerFactory.getLogger(JavaAnalyzer.class);
     private static final int EXCERPT_LEN = 80;
+    /** Candidate sets above this size are not published as candidates (T00 candidate contract). */
+    private static final int MAX_CANDIDATES = 5;
 
     @Override
     public boolean supports(FileInventory inventory) {
@@ -174,6 +180,9 @@ public class JavaAnalyzer implements CodeAnalyzer {
     private void registerType(TypeDeclaration<?> type, String pkg, String filePath, Collector collector) {
         String fqcn = fqcn(pkg, type);
         collector.projectTypes.add(fqcn);
+        if (type instanceof ClassOrInterfaceDeclaration coi && (coi.isInterface() || coi.isAbstract())) {
+            collector.virtualTypes.add(fqcn);
+        }
         String typeKey = NaturalKeys.javaType(fqcn);
         collector.put(GraphNodeDraft.of(
                 nodeTypeOf(type), typeKey, type.getNameAsString(), filePath, lineStart(type), lineEnd(type)));
@@ -205,7 +214,15 @@ public class JavaAnalyzer implements CodeAnalyzer {
         annotate(type, typeKey, cu, pkg, filePath, collector);
         visitImports(cu, typeKey, collector);
         if (type instanceof ClassOrInterfaceDeclaration coi) {
-            visitHeritage(coi, typeKey, cu, pkg, filePath, collector);
+            visitHeritage(coi, fqcn, cu, pkg, filePath, collector);
+        } else if (type instanceof NodeWithImplements<?> implementing) {
+            // Records and enums dispatch interface calls too; record them for class-hierarchy candidates.
+            for (ClassOrInterfaceType impl : implementing.getImplementedTypes()) {
+                collector
+                        .supertypes
+                        .computeIfAbsent(fqcn, key -> new java.util.LinkedHashSet<>())
+                        .add(JavaTypeNames.resolve(impl, cu, pkg));
+            }
         }
         if (type instanceof EnumDeclaration enm) {
             for (EnumConstantDeclaration constant : enm.getEntries()) {
@@ -274,13 +291,16 @@ public class JavaAnalyzer implements CodeAnalyzer {
 
     private void visitHeritage(
             ClassOrInterfaceDeclaration type,
-            String typeKey,
+            String fqcn,
             CompilationUnit cu,
             String pkg,
             String filePath,
             Collector collector) {
+        String typeKey = NaturalKeys.javaType(fqcn);
+        Set<String> supertypes = collector.supertypes.computeIfAbsent(fqcn, key -> new java.util.LinkedHashSet<>());
         for (ClassOrInterfaceType ext : type.getExtendedTypes()) {
             String target = JavaTypeNames.resolve(ext, cu, pkg);
+            supertypes.add(target);
             GraphNodeType targetKind = type.isInterface() ? GraphNodeType.INTERFACE : GraphNodeType.CLASS;
             ensureType(target, targetKind, filePath, collector);
             collector.edge(typeKey, NaturalKeys.javaType(target), GraphEdgeType.EXTENDS, EdgeConfidence.CONFIRMED);
@@ -288,6 +308,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
         for (ClassOrInterfaceType impl : type.getImplementedTypes()) {
             String target = JavaTypeNames.resolve(impl, cu, pkg);
+            supertypes.add(target);
             ensureType(target, GraphNodeType.INTERFACE, filePath, collector);
             collector.edge(typeKey, NaturalKeys.javaType(target), GraphEdgeType.IMPLEMENTS, EdgeConfidence.CONFIRMED);
             usesType(typeKey, target, filePath, collector);
@@ -346,6 +367,14 @@ public class JavaAnalyzer implements CodeAnalyzer {
         collector.put(GraphNodeDraft.of(
                 GraphNodeType.METHOD, methodKey, methodName, filePath, lineStart(callable), lineEnd(callable)));
         collector.projectMethods.put(methodKey, methodName);
+        if (callable instanceof MethodDeclaration method
+                && !method.isStatic()
+                && method.getBody().isPresent()) {
+            collector
+                    .concreteMethods
+                    .computeIfAbsent(ownerFqcn, key -> new ArrayList<>())
+                    .add(new DeclaredMethod(methodKey, methodName, params));
+        }
         collector.edge(ownerKey, methodKey, GraphEdgeType.DECLARES, EdgeConfidence.CONFIRMED);
         collector.evidences.add(declarationEvidence(methodKey, filePath, callable));
         annotate(callable, methodKey, cu, pkg, filePath, collector);
@@ -387,6 +416,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
             String pkg,
             String filePath,
             Collector collector) {
+        Map<String, Object> site = callSite(call, filePath);
         Optional<ResolvedMethodDeclaration> resolved = resolveMethod(call);
         if (resolved.isPresent() && isProjectSource(resolved.get(), collector)) {
             ResolvedMethodDeclaration method = resolved.get();
@@ -399,7 +429,17 @@ public class JavaAnalyzer implements CodeAnalyzer {
                     collector.projectTypes.contains(targetFqcn) ? filePathOf(method, filePath) : null,
                     Map.of(),
                     collector);
-            collector.edge(callerKey, targetKey, GraphEdgeType.CALLS, EdgeConfidence.CONFIRMED);
+            Optional<String> virtualReceiver = virtualReceiver(call, method, enclosingFqcn, cu, pkg, collector);
+            if (virtualReceiver.isPresent()) {
+                publishDispatchCandidates(
+                        callerKey,
+                        targetKey,
+                        dispatchTargets(virtualReceiver.get(), method.getName(), resolvedParams(method), collector),
+                        site,
+                        collector);
+                return;
+            }
+            collector.edge(callerKey, targetKey, GraphEdgeType.CALLS, EdgeConfidence.CONFIRMED, site);
             return;
         }
         collector.unresolvedFiles.add(filePath);
@@ -409,7 +449,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
         if (receiver.isPresent() && collector.projectTypes.contains(receiver.get())) {
             String targetFqcn = receiver.get();
             String targetKey = NaturalKeys.javaMethod(targetFqcn, methodName, argTypes);
-            Map<String, Object> metadata = new LinkedHashMap<>();
+            Map<String, Object> metadata = new LinkedHashMap<>(site);
             metadata.put("candidateSignatures", List.of(signature(targetFqcn, methodName, argTypes)));
             metadata.put("resolution", "unresolved");
             ensureMethod(
@@ -429,7 +469,117 @@ public class JavaAnalyzer implements CodeAnalyzer {
         if (candidates.isEmpty()) {
             return;
         }
-        Map<String, Object> metadata = Map.of("candidateSignatures", candidates);
+        Map<String, Object> metadata = new LinkedHashMap<>(site);
+        metadata.put("candidateSignatures", candidates);
+        for (String candidate : candidates) {
+            collector.edge(callerKey, candidate, GraphEdgeType.CALLS, EdgeConfidence.POSSIBLE, metadata);
+        }
+    }
+
+    /** Call-site evidence: the call's lines and its callee text exactly as written (scope through name). */
+    private Map<String, Object> callSite(MethodCallExpr call, String filePath) {
+        Map<String, Object> site = new LinkedHashMap<>();
+        site.put("filePath", filePath);
+        call.getBegin().ifPresent(position -> site.put("lineStart", position.line));
+        call.getEnd().ifPresent(position -> site.put("lineEnd", position.line));
+        calleeText(call).ifPresent(text -> site.put("expression", text));
+        return site;
+    }
+
+    private Optional<String> calleeText(MethodCallExpr call) {
+        Optional<JavaToken> last = call.getName().getTokenRange().map(range -> range.getEnd());
+        if (call.getTokenRange().isEmpty() || last.isEmpty()) {
+            return Optional.empty();
+        }
+        StringBuilder text = new StringBuilder();
+        for (JavaToken token = call.getTokenRange().get().getBegin();
+                token != null;
+                token = token.getNextToken().orElse(null)) {
+            text.append(token.getText());
+            if (token == last.get()) {
+                return Optional.of(text.toString());
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * The receiver's static type when the call dispatches virtually on an interface or abstract class. Static,
+     * private, final and super calls, and calls on a concrete receiver, bind statically.
+     */
+    private Optional<String> virtualReceiver(
+            MethodCallExpr call,
+            ResolvedMethodDeclaration method,
+            String enclosingFqcn,
+            CompilationUnit cu,
+            String pkg,
+            Collector collector) {
+        try {
+            if (method.isStatic()
+                    || method.accessSpecifier() == AccessSpecifier.PRIVATE
+                    || call.getScope().filter(Expression::isSuperExpr).isPresent()
+                    || method.toAst()
+                            .filter(ast -> ast instanceof MethodDeclaration declaration && declaration.isFinal())
+                            .isPresent()) {
+                return Optional.empty();
+            }
+        } catch (RuntimeException e) {
+            return Optional.empty();
+        }
+        return receiverType(call, enclosingFqcn, cu, pkg).filter(collector.virtualTypes::contains);
+    }
+
+    /** Class-hierarchy candidates: concrete overrides in the receiver and its project subtypes, in source order. */
+    private List<String> dispatchTargets(String receiver, String name, List<String> params, Collector collector) {
+        List<String> targets = new ArrayList<>();
+        for (var owner : collector.concreteMethods.entrySet()) {
+            if (!isSubtype(owner.getKey(), receiver, collector)) {
+                continue;
+            }
+            List<DeclaredMethod> sameArity = owner.getValue().stream()
+                    .filter(method ->
+                            method.name().equals(name) && method.params().size() == params.size())
+                    .toList();
+            List<DeclaredMethod> exact = sameArity.stream()
+                    .filter(method -> method.params().equals(params))
+                    .toList();
+            (exact.isEmpty() ? sameArity : exact).forEach(method -> targets.add(method.key()));
+        }
+        return targets;
+    }
+
+    private boolean isSubtype(String type, String receiver, Collector collector) {
+        Set<String> seen = new java.util.HashSet<>();
+        List<String> pending = new ArrayList<>(List.of(type));
+        while (!pending.isEmpty()) {
+            String current = pending.removeLast();
+            if (current.equals(receiver)) {
+                return true;
+            }
+            if (seen.add(current)) {
+                pending.addAll(collector.supertypes.getOrDefault(current, Set.of()));
+            }
+        }
+        return false;
+    }
+
+    private void publishDispatchCandidates(
+            String callerKey,
+            String declaredKey,
+            List<String> candidates,
+            Map<String, Object> site,
+            Collector collector) {
+        Map<String, Object> metadata = new LinkedHashMap<>(site);
+        metadata.put("resolution", "inferred");
+        metadata.put("declaredTarget", declaredKey);
+        if (candidates.isEmpty() || candidates.size() > MAX_CANDIDATES) {
+            // No publishable implementation set: keep the declared method as the only, inferred, target.
+            metadata.put("targetCandidates", List.of());
+            metadata.put("candidateCount", candidates.size());
+            collector.edge(callerKey, declaredKey, GraphEdgeType.CALLS, EdgeConfidence.POSSIBLE, metadata);
+            return;
+        }
+        metadata.put("targetCandidates", List.copyOf(candidates));
         for (String candidate : candidates) {
             collector.edge(callerKey, candidate, GraphEdgeType.CALLS, EdgeConfidence.POSSIBLE, metadata);
         }
@@ -685,6 +835,12 @@ public class JavaAnalyzer implements CodeAnalyzer {
         private final Set<String> unresolvedFiles = new java.util.HashSet<>();
         private final Set<String> projectTypes = new java.util.LinkedHashSet<>();
         private final Map<String, String> projectMethods = new LinkedHashMap<>();
+        /** Interfaces and abstract classes declared in project source. */
+        private final Set<String> virtualTypes = new java.util.HashSet<>();
+        /** Direct extends/implements targets of each project type. */
+        private final Map<String, Set<String>> supertypes = new LinkedHashMap<>();
+        /** Instance methods with a body (including interface defaults), by declaring project type. */
+        private final Map<String, List<DeclaredMethod>> concreteMethods = new LinkedHashMap<>();
 
         void put(GraphNodeDraft node) {
             GraphNodeDraft existing = nodes.get(node.naturalKey());
@@ -735,4 +891,6 @@ public class JavaAnalyzer implements CodeAnalyzer {
     }
 
     private record ParsedUnit(InventoriedFile file, CompilationUnit cu, String pkg) {}
+
+    private record DeclaredMethod(String key, String name, List<String> params) {}
 }
