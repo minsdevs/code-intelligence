@@ -15,6 +15,8 @@ const TABLES = REVIEWED_SCHEMA.tables;
 const POLICY = createBackupExportPolicy(REVIEWED_SCHEMA);
 const SEQUENCES = TABLES.flatMap(t => t.columns.filter(c => c.generation !== 'none')
   .map(c => ({ table: t.name, column: c.name, key: `${t.name}.${c.name}`, name: `${t.name}_${c.name}_seq` })));
+// Restore-only reviewed inventories (see backup-export-policy). Their catalogs come from pinned SQL only.
+const LEGACY_CATALOGS = [26, 27];
 const FINANCIAL = new Set(['ai_budget_gate', 'ai_request_ledger', 'ai_usage_evidence']);
 const FUNCTIONS = ['guard_ai_cost_immutability', 'protect_sealed_source_entry', 'protect_snapshot_source_identity',
   'protect_source_blob', 'protect_source_manifest', 'reject_local_source_input_update'];
@@ -252,11 +254,11 @@ function summary(ownerUserId, catalogSha256) {
     tableCounts: Object.fromEntries(TABLES.map(t => [t.name, '0'])),
     tableSha256: Object.fromEntries(TABLES.map(t => [t.name, digest('')])), rowCount: '0' };
 }
-function validateSummary(value, { allowV26 = false } = {}) {
+function validateSummary(value, { allowLegacy = false } = {}) {
   exact(value, ['version', 'schema', 'ownerUserId', 'catalogSha256', 'sequenceHighWater', 'preferenceRevisionHighWater', 'tableCounts', 'tableSha256', 'rowCount'], 'INTEGRITY');
   if (value.version !== 1 || !positiveId(value.ownerUserId) || !hash(value.catalogSha256)) fail('INTEGRITY');
   let inputPolicy;
-  try { inputPolicy = allowV26 ? createBackupRestorePolicy(value.schema) : createBackupExportPolicy(value.schema); } catch { fail('SCHEMA'); }
+  try { inputPolicy = allowLegacy ? createBackupRestorePolicy(value.schema) : createBackupExportPolicy(value.schema); } catch { fail('SCHEMA'); }
   const inputTables = value.schema.tables;
   validateSequenceHighWater(value.sequenceHighWater);
   validateRevisions(value.preferenceRevisionHighWater);
@@ -368,7 +370,7 @@ async function createBackupPostgres(options) {
     `--host=${connection.host}`, `--port=${connection.port}`, `--username=${connection.user}`, `--dbname=${connection.database}`, '--file=-'];
   let closed = false, queued = 0, serial = Promise.resolve(), active = null, terminationFailed = false;
   const closing = deferred();
-  let initializedCatalog = null, initializedV26Catalog = null, stagingUsed = false, stagingLoaded = false;
+  let initializedCatalog = null, initializedLegacyCatalogs = null, stagingUsed = false, stagingLoaded = false;
   function run(script, onLine, readOnly) {
     if (closed) return Promise.reject(new BackupPostgresError('CLOSED'));
     if (queued >= LIMITS.queued) return Promise.reject(new BackupPostgresError('BUSY'));
@@ -488,7 +490,7 @@ async function createBackupPostgres(options) {
 
   async function initializeStaging() {
     if (mode !== 'staging' || initializedCatalog !== null || stagingUsed) fail('STAGING');
-    stagingUsed = true; let headerSeen = false; const verified = deferred();
+    stagingUsed = true; let headerSeen = false; const verified = deferred(); initializedLegacyCatalogs = new Map();
     async function* script() {
       yield `do $empty$ begin if exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
         where n.nspname='public') or exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
@@ -496,10 +498,10 @@ async function createBackupPostgres(options) {
       yield 'set local search_path=public,pg_catalog;\n';
       for (const migration of migrations) {
         yield `${migration.sql}\n`;
-        if (migration.version === 26) {
-          // Derive the legacy fingerprint only from pinned local SQL in our empty staging DB.
+        if (LEGACY_CATALOGS.includes(migration.version)) {
+          // Derive each legacy fingerprint only from pinned local SQL in our empty staging DB.
           yield 'set local search_path=pg_catalog,public;\n';
-          yield `select jsonb_build_object('kind','legacyCatalog','catalog',${CATALOG_SQL});\n`;
+          yield `select jsonb_build_object('kind','legacyCatalog','version',${migration.version},'catalog',${CATALOG_SQL});\n`;
           yield 'set local search_path=public,pg_catalog;\n';
         }
       }
@@ -520,13 +522,13 @@ async function createBackupPostgres(options) {
     try {
       await run(script, value => {
         if (value.kind === 'legacyCatalog') {
-          exact(value, ['kind', 'catalog'], 'SCHEMA');
-          if (initializedV26Catalog || headerSeen) fail('SCHEMA');
-          initializedV26Catalog = digest(canonical(value.catalog)); return;
+          exact(value, ['kind', 'version', 'catalog'], 'SCHEMA');
+          if (headerSeen || value.version !== LEGACY_CATALOGS[initializedLegacyCatalogs.size]) fail('SCHEMA');
+          initializedLegacyCatalogs.set(value.version, digest(canonical(value.catalog))); return;
         }
-        if (headerSeen || !initializedV26Catalog) fail('SCHEMA'); initializedCatalog = validateHeader(value, migrations, false);
+        if (headerSeen || initializedLegacyCatalogs.size !== LEGACY_CATALOGS.length) fail('SCHEMA'); initializedCatalog = validateHeader(value, migrations, false);
         headerSeen = true; verified.resolve(); }, false);
-    } catch (error) { initializedCatalog = null; initializedV26Catalog = null; verified.reject(error); throw error; }
+    } catch (error) { initializedCatalog = null; initializedLegacyCatalogs = null; verified.reject(error); throw error; }
     if (!headerSeen) fail('SCHEMA'); stagingUsed = false;
     return freeze({ version: 1, schema: REVIEWED_SCHEMA, catalogSha256: initializedCatalog });
   }
@@ -549,9 +551,10 @@ async function createBackupPostgres(options) {
   function assertRestoreCompatibility({ expected: supplied, liveOwnerUserId } = {}) {
     if (closed) fail('CLOSED');
     if (mode !== 'staging' || !initializedCatalog || stagingUsed) fail('STAGING');
-    const expected = validateSummary(supplied, { allowV26: true });
-    const legacy = expected.schema.migrations.length === 26;
-    if (expected.catalogSha256 !== (legacy ? initializedV26Catalog : initializedCatalog)) fail('SCHEMA');
+    const expected = validateSummary(supplied, { allowLegacy: true });
+    const version = expected.schema.migrations.length;
+    const catalog = version === REVIEWED_SCHEMA.migrations.length ? initializedCatalog : initializedLegacyCatalogs.get(version);
+    if (!catalog || expected.catalogSha256 !== catalog) fail('SCHEMA');
     if (!positiveId(liveOwnerUserId) || liveOwnerUserId !== expected.ownerUserId) fail('OWNER');
     return expected;
   }
@@ -639,7 +642,7 @@ async function createBackupPostgres(options) {
     const started = performance.now();
     const expected = assertRestoreCompatibility({ expected: supplied, liveOwnerUserId });
     const inputPolicy = createBackupRestorePolicy(expected.schema);
-    const legacy = inputPolicy.schema.migrations.length === 26;
+    const v26 = inputPolicy.schema.migrations.length === 26;
     const liveRevisions = validateRevisions(livePreferenceRevisionHighWater);
     if (!rows || typeof writeAccounting !== 'function') fail();
     const iteratorFunction = rows[Symbol.asyncIterator] || rows[Symbol.iterator];
@@ -650,7 +653,7 @@ async function createBackupPostgres(options) {
     const accounting = [], preferences = new Map(), legacyPreferences = new Map(), users = new Map();
     let heldBytes = 0, ownerSeen = false, sourceComplete = false, readbackEnded = false, offSeen = false;
     const targetCounts = { ...expected.tableCounts }, targetHashes = { ...expected.tableSha256 };
-    if (legacy) { targetCounts.snapshot_inventory_measurements = '0'; targetHashes.snapshot_inventory_measurements = digest(''); }
+    if (v26) { targetCounts.snapshot_inventory_measurements = '0'; targetHashes.snapshot_inventory_measurements = digest(''); }
     let inputRows = 0, readTable = null, readIndex = -1, readCount = 0, readHash, headerSeen = false;
     const accepted = deferred(), verified = deferred();
     function retain(value) { heldBytes += Buffer.byteLength(canonical(value)); if (heldBytes > LIMITS.accountingBytes) fail('LIMIT'); }
@@ -672,7 +675,7 @@ async function createBackupPostgres(options) {
       const iterator = iteratorFunction.call(rows);
       for (const table of TABLES) {
         const count = Number(expected.tableCounts[table.name] || '0'), observedHash = crypto.createHash('sha256');
-        const upgradedHash = legacy && table.name === 'files' ? crypto.createHash('sha256') : null;
+        const upgradedHash = v26 && table.name === 'files' ? crypto.createHash('sha256') : null;
         for (let index = 0; index < count; index++) {
           const next = await iterator.next(); if (next.done) fail('INTEGRITY');
           const row = next.value;

@@ -124,9 +124,9 @@ function sourceRecord(value) {
     finally { bytes.fill(0); }
   } else fail('SOURCE');
 }
-function stateMachine(installationId, runningBuild, allowV26 = false) {
+function stateMachine(installationId, runningBuild, allowLegacy = false) {
   const identityHash = identity(installationId); decimal(runningBuild);
-  let fileVersion;
+  let v26Files;
   let header, summary, tableIndex = -1, source = null, records = 0, rows = 0, sources = 0, ended = false, metadataBytes = 0;
   const counts = Object.fromEntries(TABLES.map(name => [name, 0]));
   const hashes = Object.fromEntries(TABLES.map(name => [name, crypto.createHash('sha256')]));
@@ -143,19 +143,20 @@ function stateMachine(installationId, runningBuild, allowV26 = false) {
         if (summary) fail('ORDER'); exact(record, ['kind', 'row']);
         let rowPolicy = POLICY;
         if (record.row?.table === 'files') {
-          const version = allowV26 && !Object.hasOwn(record.row.values || {}, 'analysis_status') ? 26 : 27;
-          if (fileVersion && fileVersion !== version) fail('ROW'); fileVersion = version;
-          if (version === 26) rowPolicy = V26_POLICY;
+          const v26 = allowLegacy && !Object.hasOwn(record.row.values || {}, 'analysis_status');
+          if (v26Files !== undefined && v26Files !== v26) fail('ROW'); v26Files = v26;
+          if (v26) rowPolicy = V26_POLICY;
         }
         validateRow(record.row, rowPolicy);
         const index = TABLES.indexOf(record.row.table); if (index < tableIndex) fail('ORDER'); tableIndex = index;
         counts[record.row.table]++; rows++; hashes[record.row.table].update(canonical(record.row)).update('\n');
       } else if (record.kind === 'DATABASE') {
         if (summary) fail('ORDER'); exact(record, ['kind', 'summary']); const s = record.summary;
-        try { validateBackupSummary(s, { allowV26 }); } catch { fail('SUMMARY'); }
-        const version = s.schema.migrations.length;
-        if (fileVersion && fileVersion !== version) fail('SUMMARY');
-        if (version === 26 && counts.snapshot_inventory_measurements !== 0) fail('SUMMARY');
+        try { validateBackupSummary(s, { allowLegacy }); } catch { fail('SUMMARY'); }
+        // V27 and V29 rows share one shape; only the exact V26 inventory carries V26 file rows.
+        const v26 = s.schema.migrations.length === 26;
+        if (v26Files !== undefined && v26Files !== v26) fail('SUMMARY');
+        if (v26 && counts.snapshot_inventory_measurements !== 0) fail('SUMMARY');
         if (s.rowCount !== String(rows)) fail('SUMMARY');
         for (const { name } of s.schema.tables) if (s.tableCounts?.[name] !== String(counts[name])
             || s.tableSha256?.[name] !== hashes[name].digest('hex')) fail('SUMMARY');
