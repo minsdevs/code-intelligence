@@ -1,0 +1,517 @@
+{
+  "format": 1,
+  "gate": "G-JOB",
+  "auditItem": "B4",
+  "date": "2026-10-07",
+  "status": "PARTIAL_NOT_DECLARED_PASS",
+  "releaseVerdict": "NO_GO",
+  "branch": "worktree-agent-ac262e7b572d9d21c",
+  "worktree": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-ac262e7b572d9d21c",
+  "baseCommit": "bcd8081abe786b8559ea93a2797b94c4731cd218",
+  "commits": {
+    "8b3fa28": "Fence a stale job worker's final transitions to its own run (product fix D1)",
+    "679f1fd": "Add G-JOB analyzer-worker and packaged-app race runners",
+    "cb2514e": "Start each job-race import from a freshly mounted wizard (runner defect R1)"
+  },
+  "productPathsChanged": {
+    "backend/src/main/java/dev/codeintelligence/job/JobWorker.java": "D1: serialize run claims and final transitions; per-run ownership token"
+  },
+  "candidate": {
+    "path": ".native-product-1lvULq/Code Intelligence Validation.app",
+    "builtFrom": "9211e88",
+    "containsD1Fix": false,
+    "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+    "hashesUnchangedAfterRun": true
+  },
+  "commands": [
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-ac262e7b572d9d21c",
+      "command": "node validation/pre-release/job-race-backend.cjs --socket unix://$HOME/.docker/run/docker.sock --with-analyzer --tests dev.codeintelligence.job.JobPipelineRaceIntegrationTest --tests dev.codeintelligence.job.JobAnalyzerWorkerRaceIntegrationTest",
+      "evidence": "validation/local/job-race/backend-T0lTsd",
+      "result": "PASS 60/60"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-ac262e7b572d9d21c",
+      "command": "node validation/pre-release/job-race-backend.cjs --socket unix://$HOME/.docker/run/docker.sock --tests 'dev.codeintelligence.job.JobPipelineRaceIntegrationTest.aFailedWorker*'",
+      "evidence": "validation/local/job-race/backend-p1SZCL",
+      "result": "PASS 2/2"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-ac262e7b572d9d21c",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-job env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/job-race-product.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\"",
+      "evidence": "validation/local/job-race/product-u8kj3a",
+      "result": "PASS 8/8 checks, 3/3 clean shutdowns"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-ac262e7b572d9d21c",
+      "command": "node --test validation/pre-release/test/job-race.test.cjs",
+      "evidence": null,
+      "result": "3 pass / 0 fail"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-ac262e7b572d9d21c",
+      "command": "node validation/pre-release/run-docker-integration.cjs --suite backend --socket unix://$HOME/.docker/run/docker.sock",
+      "evidence": "validation/local/docker-integration/backend-oH0pXu",
+      "result": "FAIL 1726/1743, 1 fail, 16 skipped"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-ac262e7b572d9d21c",
+      "command": "node validation/pre-release/run-docker-integration.cjs --suite events --socket unix://$HOME/.docker/run/docker.sock",
+      "evidence": "validation/local/docker-integration/events-D9fXKL",
+      "result": "PASS 19/19"
+    }
+  ],
+  "evidence": {
+    "job-race/backend-T0lTsd": {
+      "resultSha256": "04de54f5bd6aa43469101bc8b008b37d638d707af579e61510aab89445108248",
+      "status": "PASS",
+      "revision": "679f1fd0e580dcb8c635533674338648be2a6f12",
+      "totals": {
+        "task": "test",
+        "tests": 60,
+        "pass": 60,
+        "fail": 0,
+        "skipped": 0,
+        "startTime": 1791305022661,
+        "endTime": 1791305137740
+      },
+      "checks": null,
+      "failure": null
+    },
+    "job-race/backend-p1SZCL": {
+      "resultSha256": "0d5b99dfcb4c94599dabab662ac3f059ad138e5c8c7a86ce1b7e93d63bd7b2d3",
+      "status": "PASS",
+      "revision": "679f1fd0e580dcb8c635533674338648be2a6f12",
+      "totals": {
+        "task": "test",
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "skipped": 0,
+        "startTime": 1791346125306,
+        "endTime": 1791346143897
+      },
+      "checks": null,
+      "failure": null
+    },
+    "job-race/product-u8kj3a": {
+      "resultSha256": "5032ddbf65ed8b6ce7500667dc0751cb49bc9ec5d4343b213aff3fe925f6ceaf",
+      "status": "PASS",
+      "revision": "cb2514e0ec87f5691ce2e874e1a50b410b39d780",
+      "totals": null,
+      "checks": 8,
+      "failure": null
+    },
+    "job-race/product-6BsHhc": {
+      "resultSha256": "83bf3845666dedfb9609d1f74c564a26acfce22ec1736db9dc9dee05998ba748",
+      "status": "FAIL",
+      "revision": "679f1fd0e580dcb8c635533674338648be2a6f12",
+      "totals": null,
+      "checks": 1,
+      "failure": {
+        "phase": "baseline-import",
+        "code": "JOB_RACE_STEP_FAILED",
+        "errorName": "Error"
+      }
+    },
+    "docker-integration/backend-oH0pXu": {
+      "resultSha256": "7e731ae526c4e1c1b6b2beca5ee18f5b23eb1b059f6076ad51cd61c05c47fa27",
+      "status": "FAIL",
+      "revision": "679f1fd0e580dcb8c635533674338648be2a6f12",
+      "totals": {
+        "task": "test",
+        "tests": 1743,
+        "pass": 1726,
+        "fail": 1,
+        "skipped": 16,
+        "startTime": 1791304608180,
+        "endTime": 1791304959750
+      },
+      "checks": null,
+      "failure": {
+        "code": "VERIFICATION_ASSERTION"
+      }
+    },
+    "docker-integration/events-D9fXKL": {
+      "resultSha256": "69a4faff29f0d6b3a77d972029fb633a8c3e4d0221686f382d420eb102945978",
+      "status": "PASS",
+      "revision": "679f1fd0e580dcb8c635533674338648be2a6f12",
+      "totals": {
+        "task": "test",
+        "tests": 19,
+        "pass": 19,
+        "fail": 0,
+        "skipped": 0,
+        "startTime": 1791305005638,
+        "endTime": 1791305007969
+      },
+      "checks": null,
+      "failure": null
+    },
+    "job-race/backend-ZJr98L": {
+      "resultSha256": "5b9b4ae88bcbcbeccd1d7c039f0f23e56737f6d81a9dae1c5c61f301977375fb",
+      "status": "FAIL",
+      "revision": "bcd8081abe786b8559ea93a2797b94c4731cd218",
+      "totals": {
+        "task": "test",
+        "tests": 2,
+        "pass": 0,
+        "fail": 2,
+        "skipped": 0,
+        "startTime": 1791303771807,
+        "endTime": 1791303785984
+      },
+      "checks": null,
+      "failure": {
+        "code": "GRADLE_VERIFICATION_FAILED\n\n1 !== 0\n"
+      }
+    },
+    "job-race/backend-BXOE4N": {
+      "resultSha256": "b485745b11d14b3bbeda93ced42738c3de0692bcb0655883b5b18715eea77736",
+      "status": "FAIL",
+      "revision": "bcd8081abe786b8559ea93a2797b94c4731cd218",
+      "totals": {
+        "task": "test",
+        "tests": 3,
+        "pass": 2,
+        "fail": 1,
+        "skipped": 0,
+        "startTime": 1791303640237,
+        "endTime": 1791303663424
+      },
+      "checks": null,
+      "failure": {
+        "code": "GRADLE_VERIFICATION_FAILED\n\n1 !== 0\n"
+      }
+    },
+    "job-race/backend-nRrZ1Z": {
+      "resultSha256": "3db7c8064a298f9182b90883b55ca43d776e9e10983a06ac16858e37ec0ca179",
+      "status": "FAIL",
+      "revision": "bcd8081abe786b8559ea93a2797b94c4731cd218",
+      "totals": {
+        "task": "test",
+        "tests": 55,
+        "pass": 20,
+        "fail": 35,
+        "skipped": 0,
+        "startTime": 1791303843312,
+        "endTime": 1791303882508
+      },
+      "checks": null,
+      "failure": {
+        "code": "GRADLE_VERIFICATION_FAILED\n\n1 !== 0\n"
+      }
+    },
+    "job-race/backend-9mpIzz": {
+      "resultSha256": "10a6f89c8f27641eaf56334af6e9b568b945ea884da5c31f20b986becf94f686",
+      "status": "FAIL",
+      "revision": "bcd8081abe786b8559ea93a2797b94c4731cd218",
+      "totals": {
+        "task": "test",
+        "tests": 59,
+        "pass": 58,
+        "fail": 1,
+        "skipped": 0,
+        "startTime": 1791303948940,
+        "endTime": 1791304072482
+      },
+      "checks": null,
+      "failure": {
+        "code": "GRADLE_VERIFICATION_FAILED\n\n1 !== 0\n"
+      }
+    },
+    "job-race/backend-7WmrMK": {
+      "resultSha256": "5df0802e9383fc02bbd23a263f59a2a3e52c784ea1ec5916cf8b781a5c001afe",
+      "status": "RUNNING",
+      "revision": "bcd8081abe786b8559ea93a2797b94c4731cd218",
+      "totals": null,
+      "checks": null,
+      "failure": null
+    },
+    "job-race/backend-TgjHZM": {
+      "resultSha256": "c60ca7416ea7c02c1567416c89406eb259d93413f39b9a838d032133a1673aeb",
+      "status": "FAIL",
+      "revision": "8b3fa2829252164466fa80d92609ed19c96a449e",
+      "totals": {
+        "task": "test",
+        "tests": 31,
+        "pass": 30,
+        "fail": 1,
+        "skipped": 0,
+        "startTime": 1791304368556,
+        "endTime": 1791304451706
+      },
+      "checks": null,
+      "failure": {
+        "code": "GRADLE_VERIFICATION_FAILED"
+      }
+    },
+    "job-race/backend-QqCUWm": {
+      "resultSha256": "b825083c3a05fc3d4336467f6715d6eeda8f11b8e6d92b535d502a96c05aa299",
+      "status": "PASS",
+      "revision": "8b3fa2829252164466fa80d92609ed19c96a449e",
+      "totals": {
+        "task": "test",
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0,
+        "startTime": 1791304517762,
+        "endTime": 1791304556720
+      },
+      "checks": null,
+      "failure": null
+    }
+  },
+  "matrix": [
+    {
+      "id": "J01",
+      "requirement": "cancel before/after body of all 15 steps",
+      "kind": "backend",
+      "status": "PASS",
+      "note": "30/30 backend-T0lTsd"
+    },
+    {
+      "id": "J02",
+      "requirement": "fail at every step then retry",
+      "kind": "backend",
+      "status": "PASS",
+      "note": "15/15 backend-T0lTsd"
+    },
+    {
+      "id": "J03",
+      "requirement": "FINALIZE commit vs cancel/delete/reanalyze row race",
+      "kind": "backend",
+      "status": "PASS",
+      "note": "4/4"
+    },
+    {
+      "id": "J04",
+      "requirement": "concurrent starts / retry vs new analysis: one writer",
+      "kind": "backend",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "id": "J05",
+      "requirement": "queued cancel runs no step",
+      "kind": "backend",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "id": "J06",
+      "requirement": "stale worker fencing (D1)",
+      "kind": "backend",
+      "status": "PASS",
+      "note": "RED 0/2 backend-ZJr98L before fix; 2/2 backend-T0lTsd and backend-p1SZCL after"
+    },
+    {
+      "id": "J07",
+      "requirement": "lost pub/sub progress",
+      "kind": "backend",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "id": "J08",
+      "requirement": "matrix enumerates every production step",
+      "kind": "backend",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "id": "J09",
+      "requirement": "full reanalysis equivalence/retraction (C07 substitute)",
+      "kind": "backend",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "id": "J10",
+      "requirement": "real analyzer killed mid-request",
+      "kind": "worker",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "id": "J11",
+      "requirement": "analyzer dead before request",
+      "kind": "worker",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "id": "J12",
+      "requirement": "late analyzer result after cancel only in own staging",
+      "kind": "worker",
+      "status": "PASS",
+      "note": ""
+    },
+    {
+      "id": "J13",
+      "requirement": "cancel bound worker exit+lock release max 10 s",
+      "kind": "worker+packaged",
+      "status": "FAIL",
+      "note": "D2; T03 not implemented; packaged single observations 12453/12891 ms"
+    },
+    {
+      "id": "J14",
+      "requirement": "cancel timing SLO (ack<=500ms, p95<=5s)",
+      "kind": "-",
+      "status": "NOT RUN",
+      "note": "timing not acceptance on shared machine"
+    },
+    {
+      "id": "J15",
+      "requirement": "packaged UI cancel during TS_PARSING",
+      "kind": "packaged pre-D1",
+      "status": "PASS",
+      "note": "product-u8kj3a"
+    },
+    {
+      "id": "J16",
+      "requirement": "packaged delete 409 while RUNNING/CANCELLING; API cancel keeps previous result",
+      "kind": "packaged pre-D1",
+      "status": "PASS",
+      "note": "product-u8kj3a"
+    },
+    {
+      "id": "J17",
+      "requirement": "packaged analyzer owner SIGKILL mid-request",
+      "kind": "packaged pre-D1",
+      "status": "PASS",
+      "note": "product-u8kj3a"
+    },
+    {
+      "id": "J18",
+      "requirement": "packaged backend owner SIGKILL mid-job + startup recovery",
+      "kind": "packaged pre-D1",
+      "status": "PASS",
+      "note": "product-u8kj3a"
+    },
+    {
+      "id": "J19",
+      "requirement": "packaged restart keeps jobs terminal, no lock",
+      "kind": "packaged pre-D1",
+      "status": "PASS",
+      "note": "product-u8kj3a"
+    },
+    {
+      "id": "J20",
+      "requirement": "packaged later reanalysis succeeds, history retained",
+      "kind": "packaged pre-D1",
+      "status": "PASS",
+      "note": "product-u8kj3a"
+    },
+    {
+      "id": "J21",
+      "requirement": "packaged delete after terminal persists across restart",
+      "kind": "packaged pre-D1",
+      "status": "PASS",
+      "note": "product-u8kj3a"
+    },
+    {
+      "id": "J22",
+      "requirement": "packaged rows on candidate containing D1 fix",
+      "kind": "-",
+      "status": "BLOCKED",
+      "note": "input: candidate rebuilt from >= 8b3fa28"
+    },
+    {
+      "id": "J23",
+      "requirement": "power loss",
+      "kind": "-",
+      "status": "BLOCKED",
+      "note": "input: sacrificial machine/VM with hard power cut"
+    },
+    {
+      "id": "J24",
+      "requirement": "C07 defined 20-sequence corpus",
+      "kind": "-",
+      "status": "NOT RUN",
+      "note": "corpus not defined in repository"
+    },
+    {
+      "id": "J25",
+      "requirement": "C07 incremental cells",
+      "kind": "-",
+      "status": "N/A",
+      "note": "incremental analysis out of release scope"
+    },
+    {
+      "id": "J26",
+      "requirement": "C15 worker sandbox OS denial",
+      "kind": "-",
+      "status": "N/A",
+      "note": "G-SEC/T03"
+    },
+    {
+      "id": "J27",
+      "requirement": "existing backend/events suites not regressed",
+      "kind": "backend",
+      "status": "FAIL",
+      "note": "backend-oH0pXu 1726/1743, 1 fail LocalIngestPolicyTest unix socket path too long (worktree path length, environmental); events 19/19"
+    }
+  ],
+  "counts": {
+    "PASS": 19,
+    "FAIL": 2,
+    "NOT RUN": 2,
+    "BLOCKED": 2,
+    "N/A": 2
+  },
+  "defects": [
+    {
+      "id": "D1",
+      "severity": "High",
+      "state": "fixed (product, needs candidate rebuild)",
+      "test": "JobPipelineRaceIntegrationTest.aFailedWorkerStillExiting*"
+    },
+    {
+      "id": "D2",
+      "severity": "gate gap (T03 unimplemented)",
+      "state": "open",
+      "test": "JobAnalyzerWorkerRaceIntegrationTest.cancelWaitsForTheInFlightRequestUntilItsReadTimeoutAndAStaleResultWritesNothing"
+    },
+    {
+      "id": "D3",
+      "severity": "Low",
+      "state": "open",
+      "summary": "no cancel control in LocalSourceStatus re-analysis view"
+    },
+    {
+      "id": "D4",
+      "severity": "observation",
+      "state": "not reproduced",
+      "summary": "no Redis command timeout on synchronous publish path"
+    },
+    {
+      "id": "D5",
+      "severity": "Low",
+      "state": "observation",
+      "summary": "same-path /import navigation keeps finished job view"
+    },
+    {
+      "id": "R1",
+      "severity": "runner",
+      "state": "fixed in cb2514e",
+      "summary": "product-6BsHhc baseline-import picker not visible after same-path pushState; not load/timeout"
+    }
+  ],
+  "cleanup": "removed /private/tmp/cnjp-* and /private/tmp/cnjr-* synthetic profiles (~1.35 GiB) after recording results",
+  "limits": [
+    "timing values are single observations on a shared machine",
+    "packaged rows on pre-D1 candidate",
+    "no power loss run",
+    "no independent reviewer"
+  ],
+  "safety": {
+    "realAccount": false,
+    "paidAI": false,
+    "keychain": "mock",
+    "signing": false,
+    "push": false
+  }
+}
