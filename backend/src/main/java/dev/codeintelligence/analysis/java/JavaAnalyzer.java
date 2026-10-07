@@ -107,48 +107,67 @@ public class JavaAnalyzer implements CodeAnalyzer {
         // tokens costs about 80x its source in heap. Retaining all of them exhausted the 2 GiB
         // backend heap at 26 MB of Java (G-PERF medium), so every pass parses again, one file at
         // a time, and only the parsed file list is kept.
-        JavaParser parser = createParser(sourceRoots);
+        ParserConfiguration configuration = createConfiguration(sourceRoots);
         try {
-            analyze(ctx, parser, collector);
+            analyze(ctx, configuration, collector);
         } finally {
             releaseFacades();
         }
         return collector.toResult();
     }
 
-    private void analyze(AnalysisContext ctx, JavaParser parser, Collector collector) {
+    private void analyze(AnalysisContext ctx, ParserConfiguration configuration, Collector collector) {
         List<InventoriedFile> parsed = new ArrayList<>();
-        for (InventoriedFile file :
-                ctx.inventory().files().stream().filter(JavaAnalyzer::isJava).toList()) {
-            JobCancellation.checkpoint();
-            ParsedUnit unit;
-            try {
-                unit = parseFile(ctx, parser, file);
-            } catch (Exception e) {
-                log.warn("Skipping Java file {}: {}", file.path(), e.toString());
-                collector.evidences.add(parseFailure(file, e, ctx.clonePath()));
-                collector.outcomes.put(
-                        file.path(), new FileAnalysisOutcome(file.path(), "FAILED", "JAVA_PARSE_FAILED"));
-                continue;
+        try (ParseAhead<InventoriedFile, ParsedUnit> units = parseAhead(
+                ctx,
+                configuration,
+                ctx.inventory().files().stream().filter(JavaAnalyzer::isJava).toList())) {
+            while (units.hasNext()) {
+                JobCancellation.checkpoint();
+                ParseAhead.Result<InventoriedFile, ParsedUnit> result = units.next();
+                InventoriedFile file = result.file();
+                ParsedUnit unit;
+                try {
+                    unit = result.get();
+                } catch (Exception e) {
+                    log.warn("Skipping Java file {}: {}", file.path(), e.toString());
+                    collector.evidences.add(parseFailure(file, e, ctx.clonePath()));
+                    collector.outcomes.put(
+                            file.path(), new FileAnalysisOutcome(file.path(), "FAILED", "JAVA_PARSE_FAILED"));
+                    continue;
+                }
+                registerTypes(unit, collector);
+                parsed.add(file);
             }
-            registerTypes(unit, collector);
-            parsed.add(file);
         }
-        for (InventoriedFile file : parsed) {
-            JobCancellation.checkpoint();
-            visitMembers(reparse(ctx, parser, file), collector);
+        try (ParseAhead<InventoriedFile, ParsedUnit> units = parseAhead(ctx, configuration, parsed)) {
+            while (units.hasNext()) {
+                JobCancellation.checkpoint();
+                visitMembers(reparsed(units.next()), collector);
+            }
         }
-        for (InventoriedFile file : parsed) {
-            JobCancellation.checkpoint();
-            ParsedUnit unit = reparse(ctx, parser, file);
-            visitCalls(unit, collector);
-            collector.outcomes.put(
-                    unit.file.path(),
-                    new FileAnalysisOutcome(
-                            unit.file.path(),
-                            collector.unresolvedFiles.contains(unit.file.path()) ? "PARTIAL" : "SUCCESS",
-                            collector.unresolvedFiles.contains(unit.file.path()) ? "UNRESOLVED_CALLS" : "JAVA_PARSED"));
+        try (ParseAhead<InventoriedFile, ParsedUnit> units = parseAhead(ctx, configuration, parsed)) {
+            while (units.hasNext()) {
+                JobCancellation.checkpoint();
+                ParsedUnit unit = reparsed(units.next());
+                visitCalls(unit, collector);
+                collector.outcomes.put(
+                        unit.file.path(),
+                        new FileAnalysisOutcome(
+                                unit.file.path(),
+                                collector.unresolvedFiles.contains(unit.file.path()) ? "PARTIAL" : "SUCCESS",
+                                collector.unresolvedFiles.contains(unit.file.path())
+                                        ? "UNRESOLVED_CALLS"
+                                        : "JAVA_PARSED"));
+            }
         }
+    }
+
+    /** Parses ahead on helper threads (parsing is most of this analyzer's time); visits stay in order here. */
+    private ParseAhead<InventoriedFile, ParsedUnit> parseAhead(
+            AnalysisContext ctx, ParserConfiguration configuration, List<InventoriedFile> files) {
+        return new ParseAhead<>(
+                files, () -> new JavaParser(configuration), (parser, file) -> parseFile(ctx, parser, file));
     }
 
     private static boolean isJava(InventoriedFile file) {
@@ -156,7 +175,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
                 || file.path().toLowerCase(Locale.ROOT).endsWith(".java");
     }
 
-    private static JavaParser createParser(Set<Path> sourceRoots) {
+    private static ParserConfiguration createConfiguration(Set<Path> sourceRoots) {
         CombinedTypeSolver typeSolver = new CombinedTypeSolver(
                 CombinedTypeSolver.ExceptionHandlers.IGNORE_NONE, List.of(), cache(JavaAnalyzer::solvedTrees));
         for (Path root : sourceRoots) {
@@ -173,7 +192,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
         ParserConfiguration configuration = new ParserConfiguration();
         configuration.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
         configuration.setSymbolResolver(new JavaSymbolSolver(typeSolver));
-        return new JavaParser(configuration);
+        return configuration;
     }
 
     /** Like the solver's own size-limited caches (softly held values, least recently used evicted), by weight. */
@@ -203,11 +222,12 @@ public class JavaAnalyzer implements CodeAnalyzer {
     }
 
     /** A later pass over a file that parsed in the first pass; the analysis workspace is read-only. */
-    private ParsedUnit reparse(AnalysisContext ctx, JavaParser parser, InventoriedFile file) {
+    private static ParsedUnit reparsed(ParseAhead.Result<InventoriedFile, ParsedUnit> result) {
         try {
-            return parseFile(ctx, parser, file);
-        } catch (RuntimeException e) {
-            throw new IllegalStateException("Java source changed during analysis: " + file.path(), e);
+            return result.get();
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Java source changed during analysis: " + result.file().path(), e);
         }
     }
 

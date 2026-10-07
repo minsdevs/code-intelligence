@@ -18,31 +18,36 @@ class JavaParseSupportTest {
     Path repo;
 
     /**
-     * G-PERF finding 3: each annotation extractor parsed every Java file up front and held all
-     * syntax trees at once, so heap (and with it the backend's resident memory) grew with the
-     * project. Units must be parsed one at a time as the caller iterates.
+     * G-PERF medium/large SOURCE_PARSING: parsing was most of the step's CPU time and ran on the
+     * job thread only. Files are now parsed a few ahead on helper threads while the caller walks the
+     * current tree, still delivered in order and still bounded: never the whole project (G-PERF
+     * finding 3: the extractors once held every syntax tree at once; this test replaces the earlier
+     * strictly one-at-a-time {@code parsesEachFileOnlyWhenTheCallerReachesIt}).
      */
     @Test
-    void parsesEachFileOnlyWhenTheCallerReachesIt() throws Exception {
-        Files.writeString(repo.resolve("A.java"), "class A {}");
-        Files.writeString(repo.resolve("B.java"), "class B {}");
-        Files.writeString(repo.resolve("notes.txt"), "not java");
-        AnalysisContext ctx = new AnalysisContext(
-                1,
-                1,
-                repo,
-                FileInventory.of(List.of(
-                        new InventoriedFile("A.java", "java", 10, 1, "a"),
-                        new InventoriedFile("notes.txt", null, 8, 1, "n"),
-                        new InventoriedFile("B.java", "java", 10, 1, "b"))));
+    void parsesABoundedNumberOfFilesAheadAndDeliversThemInOrder() throws Exception {
+        int files = 4 * ParseAhead.AHEAD + 4;
+        List<InventoriedFile> inventory = new java.util.ArrayList<>();
+        for (int i = 0; i < files; i++) {
+            Files.writeString(repo.resolve("F" + i + ".java"), "class F" + i + " {}");
+            inventory.add(new InventoriedFile("F" + i + ".java", "java", 10, 1, "f" + i));
+        }
+        AnalysisContext ctx = new AnalysisContext(1, 1, repo, FileInventory.of(inventory));
 
         Iterator<JavaParseSupport.ParsedJavaFile> units =
                 JavaParseSupport.parseJavaFiles(ctx).iterator();
-        assertThat(units.next().cu().getType(0).getNameAsString()).isEqualTo("A");
-        Files.writeString(repo.resolve("B.java"), "class Later {}");
+        assertThat(units.next().cu().getType(0).getNameAsString()).isEqualTo("F0");
+        // While the caller works on F0, the helpers parse ahead; then every later file changes.
+        Thread.sleep(1_000);
+        for (int i = 1; i < files; i++) Files.writeString(repo.resolve("F" + i + ".java"), "class Later" + i + " {}");
 
-        assertThat(units.hasNext()).isTrue();
-        assertThat(units.next().cu().getType(0).getNameAsString()).isEqualTo("Later");
+        int parsedAhead = 0;
+        for (int i = 1; i < files; i++) {
+            String name = units.next().cu().getType(0).getNameAsString();
+            assertThat(name).isIn("F" + i, "Later" + i);
+            if (name.equals("F" + i)) parsedAhead++;
+        }
         assertThat(units.hasNext()).isFalse();
+        assertThat(parsedAhead).isBetween(1, ParseAhead.AHEAD);
     }
 }

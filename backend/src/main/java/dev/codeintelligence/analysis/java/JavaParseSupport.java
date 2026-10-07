@@ -26,21 +26,26 @@ final class JavaParseSupport {
     private JavaParseSupport() {}
 
     /**
-     * Parses lazily, one file per iteration step, so a caller holds a single syntax tree at a time
-     * instead of the whole project's (heap and resident memory then do not grow with the project).
+     * Parses lazily and in order, a few files ahead on helper threads ({@link ParseAhead}), so a
+     * caller holds a bounded number of syntax trees instead of the whole project's (heap and
+     * resident memory then do not grow with the project).
      */
     static Iterable<ParsedJavaFile> parseJavaFiles(AnalysisContext ctx) {
         return () -> new Iterator<>() {
-            private final JavaParser parser = parser();
-            private final Iterator<InventoriedFile> files =
-                    ctx.inventory().files().iterator();
+            private final ParseAhead<InventoriedFile, ParsedJavaFile> parses = new ParseAhead<>(
+                    ctx.inventory().files().stream()
+                            .filter(JavaParseSupport::isJava)
+                            .toList(),
+                    JavaParseSupport::parser,
+                    (parser, file) -> parse(ctx, parser, file));
             private ParsedJavaFile next;
 
             @Override
             public boolean hasNext() {
-                while (next == null && files.hasNext()) {
-                    next = parse(ctx, parser, files.next());
+                while (next == null && parses.hasNext()) {
+                    next = parses.next().value();
                 }
+                if (next == null) parses.close();
                 return next != null;
             }
 
