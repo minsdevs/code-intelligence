@@ -513,10 +513,13 @@ export const en: Record<string, string> = {
   // ── evidence ────────────────────────────────────────────────────────────
   'evidence.none': 'No evidence.',
 
+  // ── relation verdicts and progress announcements (G-UX) ─────────────────
   'relation.confidence.CONFIRMED': 'Static target confirmed (CONFIRMED)',
   'relation.confidence.LIKELY': 'Inferred (LIKELY)',
   'relation.confidence.POSSIBLE': 'Inferred, weak (POSSIBLE)',
   'relation.confidence.unknown': 'Unresolved ({value})',
+  'progress.announceStep': 'Analysis step {index}/{total}: {step} {status}',
+  'progress.announceWaiting': 'Analysis queued',
 }
 
 export const ko: Record<string, string> = {
@@ -1008,8 +1011,11 @@ export const ko: Record<string, string> = {
 
   'evidence.none': 'evidence가 없습니다.',
 
+  // ── relation verdicts and progress announcements (G-UX) ─────────────────
   'relation.confidence.CONFIRMED': '정적 대상 확인 (CONFIRMED)',
   'relation.confidence.LIKELY': '추정 (LIKELY)',
   'relation.confidence.POSSIBLE': '추정 · 약함 (POSSIBLE)',
   'relation.confidence.unknown': '해석 불가 ({value})',
+  'progress.announceStep': '분석 단계 {index}/{total}: {step} {status}',
+  'progress.announceWaiting': '분석 대기 중',
 }

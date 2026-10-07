@@ -51,6 +51,20 @@ function statusLabel(status: StepStatus, t: (key: string) => string): string {
   }
 }
 
+// Polite live text so step progress is perceivable without the colour marks. It exists only
+// while the job runs: terminal states are announced by the host (navigation on DONE, the
+// GitHub status region) or by this view's own alert/status, so nothing is spoken twice.
+function progressAnnouncement(job: JobDetail | null, steps: JobStep[], t: (key: string) => string): string {
+  if (!job || isTerminal(job.status)) return ''
+  const index = steps.findIndex((step) => step.status === 'RUNNING')
+  if (index < 0) return t('progress.announceWaiting')
+  return t('progress.announceStep')
+    .replace('{index}', String(index + 1))
+    .replace('{total}', String(steps.length))
+    .replace('{step}', pipelineLabel(steps[index].stepKey))
+    .replace('{status}', statusLabel(steps[index].status, t))
+}
+
 export default function ProgressStep(props: ProgressStepProps) {
   return <JobProgress key={props.jobId} {...props} />
 }
@@ -310,6 +324,16 @@ function JobProgress({
         </p>
       </div>
 
+      {(!job || !isTerminal(job.status)) && (
+        <p
+          role="status"
+          aria-live="polite"
+          data-testid="analysis-progress-announcement"
+          className="sr-only"
+        >
+          {progressAnnouncement(job, steps, t)}
+        </p>
+      )}
       <ol aria-label={t('progress.pipelineLabel')} className="flex flex-col gap-1.5">
         {steps.map((step) => (
           <li
