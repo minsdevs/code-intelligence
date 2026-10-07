@@ -47,20 +47,20 @@ export default function FeaturesPage() {
   if (invalidSnapshot || projectQuery.isError)
     return (
       <p role="alert" className="p-4">
-        분석 시점을 확인할 수 없습니다.
+        {t('workspace.snapshotUnknown')}
       </p>
     )
 
   if (projectQuery.isLoading)
     return (
       <p role="status" className="p-4">
-        분석 시점을 불러오는 중…
+        {t('workspace.snapshotLoading')}
       </p>
     )
   if (projectId != null && snapshotId == null)
     return (
       <p role="status" className="p-4">
-        완료된 분석 결과가 없습니다.
+        {t('workspace.noCompletedResult')}
       </p>
     )
 
@@ -108,7 +108,7 @@ export default function FeaturesPage() {
           <h3 className="text-[15px] font-semibold text-ink">{detail.name}</h3>
           <p className="mt-1 flex flex-wrap gap-x-3 font-mono text-[12px] text-ink-faint">
             <span>{detail.detection}</span>
-            <span>정적 규칙으로 묶은 기능 후보</span>
+            <span>{t('features.candidateGroup')}</span>
           </p>
           <h4 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
             {t('features.links')}
@@ -172,6 +172,7 @@ function FeatureNode({
   selectedId: number | null
   onSelect: (id: number) => void
 }) {
+  const t = useT()
   const active = node.id === selectedId
   return (
     <li>
@@ -184,7 +185,7 @@ function FeatureNode({
         }`}
       >
         <span className="text-[13px] text-ink">{node.name}</span>
-        <span className="font-mono text-[11px] text-ink-faint">{node.detection} · 기능 후보</span>
+        <span className="font-mono text-[11px] text-ink-faint">{node.detection} · {t('features.candidate')}</span>
       </button>
       {node.children.length > 0 && (
         <ul className="ml-3 border-l border-line pl-2">

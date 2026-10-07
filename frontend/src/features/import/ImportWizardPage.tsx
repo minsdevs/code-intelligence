@@ -173,14 +173,14 @@ function LocalImportConfirm({
   onStarted: (projectId: number, jobId: number) => void
   onCancel: () => void
 }) {
+  const t = useT()
   const [busy, setBusy] = useState(false)
   return (
     <div className="flex max-w-lg flex-col gap-4">
       <div>
-        <h2 className="text-[15px] font-semibold text-ink">로컬 가져오기 확인</h2>
+        <h2 className="text-[15px] font-semibold text-ink">{t('import.localConfirmTitle')}</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
-          폴더를 확인하고 미리보기를 요청하세요. 가져올 파일을 검토한 뒤 별도로 승인하면 분석을
-          시작합니다.
+          {t('import.localConfirmDesc')}
         </p>
       </div>
 

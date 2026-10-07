@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- provider + its hooks are co-located by design */
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Lang } from './translations'
 import { translate, readStoredLang, storeLang } from './i18n-core'
 
@@ -24,6 +24,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     storeLang(next)
   }
   const t = (key: string) => translate(lang, key)
+  // Screen readers pick pronunciation from <html lang>; it must follow the UI language.
+  useEffect(() => {
+    document.documentElement.lang = lang
+  }, [lang])
   return <I18nContext.Provider value={{ lang, setLang, t }}>{children}</I18nContext.Provider>
 }
 

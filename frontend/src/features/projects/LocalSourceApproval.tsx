@@ -7,6 +7,7 @@ import {
   reanalyzeLocalProject,
 } from '../../api/projects'
 import type { LocalImportExclusionReason, LocalSourcePreview } from '../../api/types'
+import { useT } from '../../lib/i18n'
 import { importExclusionLabels, isLocalSourcePreview } from './localSourcePreview'
 
 type Source = { operation: 'INITIAL'; path: string } | { operation: 'REFRESH'; projectId: number }
@@ -40,6 +41,7 @@ export default function LocalSourceApproval(props: Props) {
 }
 
 function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Props) {
+  const t = useT()
   const [phase, setPhase] = useState<Phase>('idle')
   const [preview, setPreview] = useState<LocalSourcePreview | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -65,7 +67,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
       if (locked.current) return
       setPreview(null)
       setPhase('idle')
-      setMessage('미리보기가 만료되었습니다. 새 미리보기를 확인한 뒤 다시 승인하세요.')
+      setMessage('preview.expired')
     }
     const remaining = Date.parse(preview.expiresAt) - Date.now()
     if (remaining <= 0) {
@@ -95,7 +97,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
     } catch {
       if (!active.current) return
       setPhase('idle')
-      setMessage('미리보기를 만들 수 없습니다. 원본 폴더와 연결 상태를 확인한 뒤 다시 시도하세요.')
+      setMessage('preview.failed')
     } finally {
       if (active.current) locked.current = false
     }
@@ -127,16 +129,14 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
       ) {
         outcomeToken.current = null
         setPhase('idle')
-        setMessage('이 승인으로 시작된 작업이 없습니다. 새 미리보기를 확인한 뒤 다시 승인하세요.')
+        setMessage('preview.abandoned')
       } else {
         throw new Error('Invalid outcome')
       }
     } catch {
       if (!active.current) return
       setPhase('uncertain')
-      setMessage(
-        '요청 결과를 확인할 수 없습니다. 중복 실행을 막기 위해 새 승인을 잠시 중단했습니다. 작업 상태 확인을 다시 시도하세요.',
-      )
+      setMessage('preview.uncertain')
     } finally {
       if (active.current) locked.current = false
     }
@@ -147,7 +147,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
     if (Date.parse(preview.expiresAt) <= Date.now()) {
       setPreview(null)
       setPhase('idle')
-      setMessage('미리보기가 만료되었습니다. 새 미리보기를 확인한 뒤 다시 승인하세요.')
+      setMessage('preview.expired')
       return
     }
     locked.current = true
@@ -188,43 +188,52 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
   }
 
   return (
-    <div className="mt-3 space-y-3 text-[12px]" aria-label="Local source approval">
+    <div className="mt-3 space-y-3 text-[12px]" aria-label={t('preview.approvalRegion')}>
       {preview && (
         <section
-          aria-label="확인할 가져오기 미리보기"
+          aria-label={t('preview.region')}
           className="space-y-2 rounded-md border border-line bg-surface-2 p-3"
         >
-          <h3 className="font-semibold text-ink">{preview.sourceName} · 가져오기 미리보기</h3>
+          <h3 className="font-semibold text-ink">
+            {t('preview.title').replace('{name}', preview.sourceName)}
+          </h3>
           <p className="text-ink-muted">
-            기준 스냅샷:{' '}
-            {preview.snapshotId == null ? '없음 (처음 분석)' : `#${preview.snapshotId}`}
+            {t('preview.baseSnapshot')}
+            {preview.snapshotId == null ? t('preview.firstAnalysis') : `#${preview.snapshotId}`}
           </p>
           <p className="font-mono text-ink">
-            추가 {preview.changes.added} · 수정 {preview.changes.modified} · 삭제{' '}
-            {preview.changes.deleted}
+            {t('preview.changes')
+              .replace('{added}', String(preview.changes.added))
+              .replace('{modified}', String(preview.changes.modified))
+              .replace('{deleted}', String(preview.changes.deleted))}
           </p>
-          <p>미리보기에서 선택한 파일: {preview.localImport.acceptedFiles.toLocaleString()}개</p>
-          <p>검사 중 읽은 바이트: {preview.localImport.bytesRead.toLocaleString()}</p>
-          <p className="text-ink-muted">가져오기 선택 결과이며 분석 성공·완료를 뜻하지 않습니다.</p>
-          <dl aria-label="가져오기 제외 항목" className="text-ink-muted">
+          <p>
+            {t('preview.accepted').replace(
+              '{count}',
+              preview.localImport.acceptedFiles.toLocaleString(),
+            )}
+          </p>
+          <p>
+            {t('preview.bytes').replace('{count}', preview.localImport.bytesRead.toLocaleString())}
+          </p>
+          <p className="text-ink-muted">{t('preview.notSuccess')}</p>
+          <dl aria-label={t('preview.exclusions')} className="text-ink-muted">
             {Object.entries(importExclusionLabels).map(([reason, label]) => {
               const count =
                 preview.localImport.excludedEntriesByReason[reason as LocalImportExclusionReason] ??
                 0
               return count > 0 ? (
                 <div key={reason} className="flex gap-2">
-                  <dt>{label}</dt>
-                  <dd>{count.toLocaleString()}개 항목</dd>
+                  <dt>{t(label)}</dt>
+                  <dd>{t('preview.entries').replace('{count}', count.toLocaleString())}</dd>
                 </div>
               ) : null
             })}
           </dl>
-          <p className="text-ink-faint">
-            폴더 단위 제외는 1개 항목으로 셉니다. 하위 항목 수는 측정하지 않았습니다.
-          </p>
+          <p className="text-ink-faint">{t('preview.folderNote')}</p>
           {preview.changedPaths.length > 0 && (
             <details>
-              <summary className="cursor-pointer">미리보기의 변경 경로 (최대 20개)</summary>
+              <summary className="cursor-pointer">{t('preview.changedPaths')}</summary>
               <ul className="max-h-28 overflow-auto font-mono">
                 {preview.changedPaths.slice(0, 20).map((path, index) => (
                   <li key={`${index}:${path}`}>{path}</li>
@@ -232,9 +241,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
               </ul>
             </details>
           )}
-          <p className="text-ink-faint">
-            승인은 발급 후 10분 동안 한 번만 사용할 수 있습니다. 원본이 바뀌면 새 확인이 필요합니다.
-          </p>
+          <p className="text-ink-faint">{t('preview.tokenNote')}</p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -242,9 +249,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
               onClick={() => void confirm()}
               className="rounded-md bg-accent px-3 py-1.5 font-medium text-surface-0 disabled:opacity-60"
             >
-              {source.operation === 'INITIAL'
-                ? '확인한 파일 가져오기 및 분석'
-                : '변경 확인 후 전체 재분석'}
+              {t(source.operation === 'INITIAL' ? 'preview.approveInitial' : 'preview.approveRefresh')}
             </button>
             <button
               type="button"
@@ -254,7 +259,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
               }}
               className="rounded-md border border-line px-3 py-1.5"
             >
-              미리보기 취소
+              {t('preview.cancel')}
             </button>
           </div>
         </section>
@@ -266,25 +271,29 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
           onClick={() => void loadPreview()}
           className="rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-ink disabled:opacity-60"
         >
-          {phase === 'previewing'
-            ? '검사 중…'
-            : source.operation === 'INITIAL'
-              ? '가져올 파일 미리보기'
-              : '변경 사항 미리보기'}
+          {t(
+            phase === 'previewing'
+              ? 'preview.inspecting'
+              : source.operation === 'INITIAL'
+                ? 'preview.requestInitial'
+                : 'preview.requestRefresh',
+          )}
         </button>
       )}
       {(phase === 'submitting' || phase === 'checking' || phase === 'started') && (
         <p role="status" className="text-ink-muted">
-          {phase === 'submitting'
-            ? '분석 시작 요청 중…'
-            : phase === 'checking'
-              ? '기존 작업 확인 중…'
-              : '분석 작업을 시작했습니다.'}
+          {t(
+            phase === 'submitting'
+              ? 'preview.submitting'
+              : phase === 'checking'
+                ? 'preview.checking'
+                : 'preview.started',
+          )}
         </p>
       )}
       {message && (
         <p role="alert" className="text-danger">
-          {message}
+          {t(message)}
         </p>
       )}
       {phase === 'uncertain' && (
@@ -298,7 +307,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
           }}
           className="rounded-md border border-line px-3 py-1.5"
         >
-          작업 상태 다시 확인
+          {t('preview.recheck')}
         </button>
       )}
     </div>

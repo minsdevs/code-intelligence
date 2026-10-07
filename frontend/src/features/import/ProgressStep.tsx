@@ -367,7 +367,7 @@ function JobProgress({
         <div role="alert" className="rounded-md border border-danger/40 bg-surface-1 px-3 py-2.5">
           <p className="text-[13px] text-danger">
             {needsPreview
-              ? '승인한 원본을 사용할 수 없어 분석을 중단했습니다. 기존 프로젝트에서 새 미리보기를 확인한 뒤 다시 승인하세요.'
+              ? t('progress.previewRequired')
               : (error ?? job?.error ?? t('progress.failed'))}
           </p>
           {job?.status === 'FAILED' &&
@@ -378,14 +378,14 @@ function JobProgress({
                 className="mt-2 rounded-md border border-line-strong px-3 py-1.5 text-[13px]"
                 onClick={() => onSourcePreviewRequired(job.projectId)}
               >
-                기존 프로젝트에서 새 미리보기
+                {t('progress.newPreview')}
               </button>
             ) : (
               <Link
                 className="mt-2 inline-block text-[13px] underline"
                 to={`/projects/${job.projectId}`}
               >
-                기존 프로젝트에서 새 미리보기
+                {t('progress.newPreview')}
               </Link>
             ))}
           {job?.status === 'FAILED' && needsSourceFix && (

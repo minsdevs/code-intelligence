@@ -716,20 +716,24 @@ async function main(argv = process.argv.slice(2)) {
       }, 240000);
     }
 
-    // Screen inventory used for language/size/zoom/motion measurements.
+    // Screen inventory used for language/size/zoom/motion measurements. Selectors accept the
+    // Korean and English UI text, because English mode no longer renders hard-coded Korean.
+    const resultsTable = /^(분석 결과 표|Analysis results table)$/;
+    const relationsRegion = /^(선택한 코드 주변 관계|Relations around the selected code)$/;
+    const relationsLoading = /^(관계를 불러오는 중…|Loading relations…)$/;
     const screens = [
       { id: 'home', route: () => '/' },
       { id: 'projects', route: () => '/projects' },
       { id: 'import-connect', route: () => '/import' },
-      { id: 'overview-entrypoints', route: () => overviewRoute, ready: () => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible() },
-      { id: 'overview-files', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: '파일 · 분석 상태', exact: true }).click() },
-      { id: 'overview-symbols', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: '심볼 · 함수 · 클래스', exact: true }).click() },
-      { id: 'overview-dependencies', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: '선언된 외부 패키지', exact: true }).click() },
+      { id: 'overview-entrypoints', route: () => overviewRoute, ready: () => expect(page.getByRole('table', { name: resultsTable })).toBeVisible() },
+      { id: 'overview-files', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: /^(파일 · 분석 상태|Files · analysis status)$/ }).click() },
+      { id: 'overview-symbols', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: /^(심볼 · 함수 · 클래스|Symbols · functions · classes)$/ }).click() },
+      { id: 'overview-dependencies', route: () => overviewRoute, prepare: () => page.getByRole('button', { name: /^(선언된 외부 패키지|Declared external packages)$/ }).click() },
       { id: 'overview-neighborhood', route: () => `${overviewRoute}?snapshotId=${ctx.snapshotId}&nodeId=${ctx.nodes?.orderService}`,
-        ready: () => expect(page.getByRole('region', { name: '선택한 코드 주변 관계', exact: true }).getByText('관계를 불러오는 중…', { exact: true })).toHaveCount(0) },
+        ready: () => expect(page.getByRole('region', { name: relationsRegion }).getByText(relationsLoading)).toHaveCount(0) },
       { id: 'overview-coverage', route: () => overviewRoute, prepare: async () => {
-        await page.getByText('분석 범위와 미확인 사항', { exact: true }).click();
-        await expect(page.getByRole('region', { name: '분석 범위 보고서', exact: true })).toBeVisible(); } },
+        await page.getByText(/^(분석 범위와 미확인 사항|Analysis coverage and unverified parts)$/).click();
+        await expect(page.getByRole('region', { name: /^(분석 범위 보고서|Analysis coverage report)$/ })).toBeVisible(); } },
       { id: 'features', route: () => `/projects/${ctx.projectId}/features`, prepare: async () => {
         const tree = page.getByRole('tree').or(page.getByRole('list', { name: /Feature tree|기능 트리|Feature/ }));
         const first = tree.getByRole('button').first();
@@ -749,7 +753,7 @@ async function main(argv = process.argv.slice(2)) {
         await box.fill('Order'); await page.keyboard.press('Enter'); } },
       { id: 'settings', route: () => '/settings' },
       { id: 'ai-panel', route: () => `${overviewRoute}?snapshotId=${ctx.snapshotId}&nodeId=${ctx.nodes?.orderService}`, prepare: async () => {
-        await page.getByRole('button', { name: 'AI 설명 준비 · 전송 전 확인', exact: true }).click();
+        await page.getByRole('button', { name: /^(AI 설명 준비 · 전송 전 확인|Prepare AI explanation · review before sending)$/ }).click();
         await settle(800); }, cleanup: async () => {
         const collapse = page.getByRole('button', { name: /^(Collapse AI panel|AI 패널 접기)$/ });
         if (await collapse.count()) await collapse.first().click(); } },

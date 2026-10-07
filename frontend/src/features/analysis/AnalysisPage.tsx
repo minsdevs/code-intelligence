@@ -108,7 +108,7 @@ export default function AnalysisPage() {
               checked={includeHidden}
               onChange={(event) => setIncludeHidden(event.target.checked)}
             />
-            숨긴 오탐 표시
+            {t('analysis.showHiddenFalsePositives')}
           </label>
         </div>
         {findingsError && (
@@ -217,7 +217,7 @@ export default function AnalysisPage() {
       <aside className="flex w-[24rem] shrink-0 flex-col bg-surface-1" aria-label="Impact">
         <div className="border-b border-line px-4 py-3">
           <h2 className="text-[13px] font-semibold text-ink">Impact</h2>
-          <p className="mt-2 text-xs text-ink-muted">정적 관계의 검토 후보입니다. 실제 실행 영향은 미확인이고 관계 미발견은 영향 없음이 아닙니다.</p>
+          <p className="mt-2 text-xs text-ink-muted">{t('analysis.impact.intro')}</p>
           <label className="mt-2 block text-[12px] text-ink-muted">
             {t('analysis.nodeSearch')}
             <input
@@ -286,7 +286,9 @@ export default function AnalysisPage() {
               >
                 {impactQuery.data.riskLevel}
               </span>
-              <span className="text-[13px] text-ink-muted">정적 관계 기반 참고 점수 {impactQuery.data.riskScore}</span>
+              <span className="text-[13px] text-ink-muted">
+                {t('analysis.impact.referenceScore').replace('{score}', String(impactQuery.data.riskScore))}
+              </span>
             </p>
             <p className="mt-1 text-xs text-ink-muted">{t('analysis.impact.scoreRule')}</p>
             {impactQuery.data.dependents.length === 0 ? (
@@ -315,9 +317,9 @@ export default function AnalysisPage() {
               }}
               className="mt-4 rounded-md border border-line-strong bg-surface-2 px-3 py-1.5 text-[12px] text-ink"
             >
-              AI 패널에서 영향 근거 확인
+              {t('analysis.impact.aiCheck')}
             </button>
-            <p className="mt-2 text-xs text-ink-muted">질문을 입력하고 컨텍스트·프롬프트·비용을 확인한 뒤 승인하세요. 버튼만으로 AI 요청을 보내지 않습니다.</p>
+            <p className="mt-2 text-xs text-ink-muted">{t('analysis.impact.aiNote')}</p>
           </div>
         )}
       </aside>

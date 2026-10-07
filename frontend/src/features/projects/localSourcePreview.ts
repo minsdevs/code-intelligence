@@ -1,15 +1,16 @@
 import type { LocalImportExclusionReason, LocalSourcePreview } from '../../api/types'
 
+/** Translation keys of the exclusion reasons, in display order. */
 export const importExclusionLabels: Record<LocalImportExclusionReason, string> = {
-  GENERATED_DIRECTORY: '생성·의존성 폴더',
-  SECRET_PATH: '민감 경로',
-  IGNORED: '제외 규칙',
-  BINARY: '바이너리 파일',
-  OVERSIZED: '파일 크기 제한',
-  FILE_LIMIT: '파일 수 제한',
-  SYMLINK: '심볼릭 링크',
-  HARD_LINK: '하드 링크',
-  SECRET_CONTENT: '민감 내용',
+  GENERATED_DIRECTORY: 'preview.exclusion.GENERATED_DIRECTORY',
+  SECRET_PATH: 'preview.exclusion.SECRET_PATH',
+  IGNORED: 'preview.exclusion.IGNORED',
+  BINARY: 'preview.exclusion.BINARY',
+  OVERSIZED: 'preview.exclusion.OVERSIZED',
+  FILE_LIMIT: 'preview.exclusion.FILE_LIMIT',
+  SYMLINK: 'preview.exclusion.SYMLINK',
+  HARD_LINK: 'preview.exclusion.HARD_LINK',
+  SECRET_CONTENT: 'preview.exclusion.SECRET_CONTENT',
 }
 
 function boundedInteger(value: unknown, maximum: number): value is number {

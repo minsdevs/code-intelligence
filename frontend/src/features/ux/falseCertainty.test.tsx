@@ -144,9 +144,9 @@ describe('impact never reads as a guarantee', () => {
   })
 
   it.each([
-    ['ko', /영향이 없다는 증거가 아닙니다/, /역방향 의존이 없습니다/],
-    ['en', /not proof of no impact/, /^No reverse dependencies\.$/],
-  ])('describes an empty reverse-dependency result as not found, not as absence (%s)', async (lang, expected, forbidden) => {
+    ['ko', /영향이 없다는 증거가 아닙니다/, /역방향 의존이 없습니다/, '관계 미발견은 영향 없음이 아닙니다'],
+    ['en', /not proof of no impact/, /^No reverse dependencies\.$/, 'finding no relation does not mean no impact'],
+  ])('describes an empty reverse-dependency result as not found, not as absence (%s)', async (lang, expected, forbidden, intro) => {
     window.localStorage.setItem('code-intelligence.lang', lang)
     stubApi(impactRoutes([]))
     renderRoute(<AnalysisPage />, '/projects/:projectId/analysis', '/projects/7/analysis')
@@ -156,7 +156,8 @@ describe('impact never reads as a guarantee', () => {
     const panel = screen.getByRole('complementary', { name: 'Impact' })
     await waitFor(() => expect(panel).toHaveTextContent(expected))
     expect(within(panel).queryByText(forbidden)).not.toBeInTheDocument()
-    expect(panel).toHaveTextContent('관계 미발견은 영향 없음이 아닙니다')
+    // The panel intro is in the UI language (G-UX A18); it was hard-coded Korean before.
+    expect(panel).toHaveTextContent(intro)
   })
 })
 
