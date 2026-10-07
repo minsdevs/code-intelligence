@@ -1,0 +1,58 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-t00-typescript-calls",
+  "cases": [
+    {
+      "caseId": "dev-typescript-calls.invalid",
+      "cellId": "T-P",
+      "patternId": "invalid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "NEGATIVE",
+      "source": {
+        "path": "source/invalid.ts",
+        "sha256": "a3fb1bf706e21f00ff73d9143b409bc650fc8c59d1f35d5e1a9e349f7c2d721c",
+        "namespace": "synthetic-typescript-calls",
+        "start": 0,
+        "end": 26
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": false,
+        "diagnostics": [
+          "SYNTAX_ERROR"
+        ],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed typescript-calls.invalid: the parameter list and body are incomplete."
+    },
+    {
+      "caseId": "dev-typescript-calls.dynamic",
+      "cellId": "T-C",
+      "patternId": "dynamic-unresolved",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "NEGATIVE",
+      "source": {
+        "path": "source/calls.ts",
+        "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+        "namespace": "synthetic-typescript-calls",
+        "start": 397,
+        "end": 413
+      },
+      "expected": {
+        "resolution": "UNRESOLVED",
+        "targets": [],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": "DYNAMIC_TARGET"
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed typescript-calls.dynamic: computed member on an any-typed receiver."
+    }
+  ]
+}

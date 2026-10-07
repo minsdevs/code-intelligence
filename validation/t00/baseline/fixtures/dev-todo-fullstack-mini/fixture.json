@@ -1,0 +1,2050 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-todo-fullstack-mini",
+  "fixtureVersion": "1.0.0",
+  "corpusId": "accuracy-development-baseline",
+  "license": {
+    "spdx": "MIT",
+    "status": "AUTHOR_DECLARED"
+  },
+  "origin": {
+    "kind": "SYNTHETIC",
+    "projectId": "todo-mini",
+    "uri": "urn:code-intelligence:backend-test-fixtures:fullstack-mini",
+    "commit": null
+  },
+  "scenarioFamilyId": "todo-crud-fullstack",
+  "generatorFamilyId": "todo-mini-hand-authored",
+  "split": "DEVELOPMENT",
+  "versions": [
+    {
+      "name": "java",
+      "version": "21"
+    },
+    {
+      "name": "spring-boot",
+      "version": "3.4.0"
+    },
+    {
+      "name": "spring-mvc",
+      "version": "6.2.0"
+    },
+    {
+      "name": "jakarta-persistence",
+      "version": "3.1.0"
+    },
+    {
+      "name": "postgresql",
+      "version": "16"
+    },
+    {
+      "name": "typescript",
+      "version": "5.9.3"
+    }
+  ],
+  "capabilities": [
+    "J-P",
+    "J-S",
+    "J-C",
+    "J-F",
+    "J-D",
+    "SQL-P",
+    "SQL-S",
+    "X-DATA",
+    "T-P",
+    "T-S"
+  ],
+  "patterns": [
+    {
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null
+    },
+    {
+      "cellId": "J-S",
+      "patternId": "type-declaration",
+      "stratum": null
+    },
+    {
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null
+    },
+    {
+      "cellId": "J-S",
+      "patternId": "inheritance-span",
+      "stratum": null
+    },
+    {
+      "cellId": "J-C",
+      "patternId": "direct-source-call",
+      "stratum": null
+    },
+    {
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null
+    },
+    {
+      "cellId": "J-F",
+      "patternId": "literal-route",
+      "stratum": null
+    },
+    {
+      "cellId": "J-D",
+      "patternId": "schema-table",
+      "stratum": null
+    },
+    {
+      "cellId": "SQL-P",
+      "patternId": "create-table",
+      "stratum": null
+    },
+    {
+      "cellId": "SQL-S",
+      "patternId": "schema-table",
+      "stratum": null
+    },
+    {
+      "cellId": "SQL-S",
+      "patternId": "column-span",
+      "stratum": null
+    },
+    {
+      "cellId": "X-DATA",
+      "patternId": "datasource-schema-table",
+      "stratum": null
+    },
+    {
+      "cellId": "X-DATA",
+      "patternId": "name-only",
+      "stratum": null
+    },
+    {
+      "cellId": "T-P",
+      "patternId": "valid-syntax",
+      "stratum": null
+    },
+    {
+      "cellId": "T-S",
+      "patternId": "component-span",
+      "stratum": null
+    }
+  ],
+  "source": [
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "sha256": "e45d04b5d5e680dddee0f9d9910b4fe8ad6fd6b82182871ccbbf893d6a2cead5",
+      "bytes": 107,
+      "namespace": "todo-repo"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "sha256": "e774f2faa3b7ecdea5a68b66e986a394f56063929607636c60bf5715e60905ba",
+      "bytes": 468,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "sha256": "57b69fa739285157a635853d65206cfb46c8816faab650cb19f1e6f4466ead83",
+      "bytes": 26,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "sha256": "1e6e5bf5825073b2704a02cb0bdbd39d7c0800c865655baed716d1f2204d420e",
+      "bytes": 316,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "sha256": "1ce0de648b72861d578fe49a1d6babe9c9bdfd6c16846f3bbb2654c1efe8991d",
+      "bytes": 661,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "sha256": "0051aae8acc708659f82940f66e636cc3e32a5895fbd4bdfa8bf108b69f5a5e3",
+      "bytes": 1045,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "sha256": "faa7548f4bfebf63eadadc7021790e85a923c9b68d5e7ff2d33e9f99697fcb63",
+      "bytes": 795,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "sha256": "e6e42a4bd208c7ca66b95642f9b48f15fc529540f867a0f271d0f4a64f00bb72",
+      "bytes": 207,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "sha256": "cf739f90108c3c4512bb358bff898245388a1b7c5e6df9dae12d0a16e64775ea",
+      "bytes": 178,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "sha256": "ce4208cbc82a2fa2a5a1f607962d7338290dea27bb3ac7110d5f52c442dc3929",
+      "bytes": 659,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "sha256": "b8c91c1b0d473b39018b39b00fd5c38773f1ebfd40777c9a1b9dea2a7c418131",
+      "bytes": 148,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "sha256": "07e09c6bb03e0b347c330c5d49e51decf3bcd8c2fbbadd6557f30a0ebbcf66bd",
+      "bytes": 119,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "sha256": "be1852622194209344ffe1d9fa1b00f82d94e392173d7c7fd71aefb273852dd0",
+      "bytes": 45,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "sha256": "5e4781e4855293f1788c139de64522d664718a3a4e4b57c0030f65d842fa9c11",
+      "bytes": 126,
+      "namespace": "todo-backend"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "sha256": "ad57bc0e627192d5ea711e30c552de292fc5522eba986920d3dd2fe3143dbb08",
+      "bytes": 144,
+      "namespace": "todo-repo"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "sha256": "3d7ba196c803b671c9a83222c9ac3f8cdd3e9fa9c9060b738a66fee9f5515b57",
+      "bytes": 210,
+      "namespace": "todo-frontend"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "sha256": "8e0d22260d4dd289b90fe37b97aaf51f88adf9f459785de7f035f87bd20367e3",
+      "bytes": 258,
+      "namespace": "todo-frontend"
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "sha256": "b78e6e49a4378f86883d72ab821654b4ea971ae4930f88db2158dc15cb0ff70c",
+      "bytes": 378,
+      "namespace": "todo-frontend"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "sha256": "9d723cf2c5397b07adda29153da26be2757dc55e0d731b6376de79a85997da0f",
+      "bytes": 186,
+      "namespace": "todo-frontend"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "sha256": "6228e247a45fefaf9cb9d145f437d536cbbc10f8c6048c7395cf55a1959fc9db",
+      "bytes": 88,
+      "namespace": "todo-frontend"
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "sha256": "b1de0de2281a4057c8e8144857d694713821680d95c91faaa36625c63e78cee3",
+      "bytes": 212,
+      "namespace": "todo-frontend"
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "sha256": "fac36f1ced86e0707cc3875b50b924869bb551cce642d7a4e6ebd8cf3dd40047",
+      "bytes": 55,
+      "namespace": "todo-frontend"
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "sha256": "000e6cc93c28b3a82c4e5ccd148b0522a4b1171f9cf89494e49872f68939b9b0",
+      "bytes": 199,
+      "namespace": "todo-frontend"
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "sha256": "0055b6981484fd27a3d74378195fa664531692332e89ee13f4919080cf12db45",
+      "bytes": 102,
+      "namespace": "todo-frontend"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "sha256": "7db6d23b3af97d73ef5c8772218c1b065c25f763d6a327d11d28480a99bee4bd",
+      "bytes": 71,
+      "namespace": "todo-frontend"
+    }
+  ],
+  "eligibility": [
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/build.gradle",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/settings.gradle",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/domain/Todo.java",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/AuthService.java",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/application.yml",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "OUTSIDE_R1_SQL_SUBSET"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "OUTSIDE_R1_SQL_SUBSET"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "OUTSIDE_R1_SQL_SUBSET"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/backend/src/test/java/com/example/todo/TodoServiceTest.java",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/docker-compose.yml",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/index.html",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/package.json",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/App.tsx",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.test.tsx",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/components/TodoItem.tsx",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/main.tsx",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/pages/HomePage.tsx",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/src/pages/TodosPage.tsx",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/tsconfig.json",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "cellId": "J-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "cellId": "J-F",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "cellId": "J-D",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "cellId": "SQL-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "cellId": "SQL-S",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "cellId": "X-DATA",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NOT_IN_CELL_LANGUAGE"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "NO_EXISTING_ORACLE"
+    },
+    {
+      "path": "source/frontend/vite.config.ts",
+      "cellId": "T-S",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    }
+  ],
+  "gold": {
+    "path": "gold.json",
+    "sha256": "3e2cbb0df43dc527dc3d96738f1dfe47a23d849a19cfbec285eae93f95d1b4b9"
+  },
+  "negatives": {
+    "path": "negatives.json",
+    "sha256": "8af07e86ff9d467638b4a89c78aff315d0b3ed5abe6da8feb624fc2e6198153d"
+  },
+  "review": {
+    "path": "review.json",
+    "sha256": "45695d53ba55b77c51a4c4f994508b67b784e8bef5a51efea9ce5d97e32eb0dd"
+  }
+}

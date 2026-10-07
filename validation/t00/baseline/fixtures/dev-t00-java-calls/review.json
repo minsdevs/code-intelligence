@@ -1,0 +1,14 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-t00-java-calls",
+  "author": {
+    "id": "gate-accuracy-transcriber",
+    "kind": "AGENT",
+    "method": "SOURCE_AUTHORED"
+  },
+  "status": "AUTHOR_PROVISIONAL",
+  "goldSha256": "579d70dfde071cc948e2606c104309279cef43e90d6bcc8bc49d38dda36a6f16",
+  "negativesSha256": "3f20ab53760c2cee82d0f32662e37e01756aa4b22a2489b4d1b1e9be95763828",
+  "reviews": [],
+  "adjudicator": null
+}

@@ -1,0 +1,107 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-t00-typescript-calls",
+  "fixtureVersion": "1.0.0",
+  "corpusId": "accuracy-development-baseline",
+  "license": {
+    "spdx": "MIT",
+    "status": "AUTHOR_DECLARED"
+  },
+  "origin": {
+    "kind": "SYNTHETIC",
+    "projectId": "t00-synthetic-project",
+    "uri": "urn:code-intelligence:t00:synthetic-contract-selftest",
+    "commit": null
+  },
+  "scenarioFamilyId": "t00-call-abstention-family",
+  "generatorFamilyId": "t00-hand-authored-family",
+  "split": "DEVELOPMENT",
+  "versions": [
+    {
+      "name": "typescript",
+      "version": "5.9.3"
+    }
+  ],
+  "capabilities": [
+    "T-P",
+    "T-C"
+  ],
+  "patterns": [
+    {
+      "cellId": "T-P",
+      "patternId": "valid-syntax",
+      "stratum": null
+    },
+    {
+      "cellId": "T-P",
+      "patternId": "invalid-syntax",
+      "stratum": null
+    },
+    {
+      "cellId": "T-C",
+      "patternId": "direct-source-call",
+      "stratum": null
+    },
+    {
+      "cellId": "T-C",
+      "patternId": "dynamic-unresolved",
+      "stratum": null
+    }
+  ],
+  "source": [
+    {
+      "path": "source/calls.ts",
+      "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+      "bytes": 418,
+      "namespace": "synthetic-typescript-calls"
+    },
+    {
+      "path": "source/invalid.ts",
+      "sha256": "a3fb1bf706e21f00ff73d9143b409bc650fc8c59d1f35d5e1a9e349f7c2d721c",
+      "bytes": 26,
+      "namespace": "synthetic-typescript-calls"
+    }
+  ],
+  "eligibility": [
+    {
+      "path": "source/calls.ts",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/calls.ts",
+      "cellId": "T-C",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/invalid.ts",
+      "cellId": "T-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/invalid.ts",
+      "cellId": "T-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "INVALID_SYNTAX"
+    }
+  ],
+  "gold": {
+    "path": "gold.json",
+    "sha256": "e3519052b99059b125d8f0bd0003e166260007ef84f0bcab7011c129c8842666"
+  },
+  "negatives": {
+    "path": "negatives.json",
+    "sha256": "6df5e10d90465682d8541926c30ce9c8bce82ed23b3b77c9e0f3ce139d2449d1"
+  },
+  "review": {
+    "path": "review.json",
+    "sha256": "f65813abc0f7e608b206a129b18c2dc948b69e080d3456af58722ea85000ea64"
+  }
+}
