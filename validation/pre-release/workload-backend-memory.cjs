@@ -11,6 +11,7 @@
 //     [--files N --bytes B] [--heap-dump-dir <dir>] [--keep-fixture]
 //     [--explain-ms <ms> --explain-log <file>]   plans of slower statements (auto_explain, PostgreSQL log)
 //     [--jfr <file>]                             CPU profile of the test JVM (JFR, profile settings)
+//     [--jvm-args "<-X options>"]                extra collector/heap options to compare (observation only)
 const assert = require('node:assert/strict');
 const { spawn, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -65,6 +66,11 @@ async function main() {
     }
     const jfr = option('--jfr');
     if (jfr) args.push(`-PworkloadJfr=${path.resolve(jfr)}`);
+    const jvmArgs = option('--jvm-args');
+    if (jvmArgs) {
+      assert(/^(-X[A-Za-z0-9:+=._-]+ ?)+$/.test(jvmArgs), 'JVM_ARGS_INVALID');
+      args.push(`-PworkloadJvmArgs=${jvmArgs}`);
+    }
     // The test JVM prints its pid; both processes' RSS is sampled every 500 ms.
     const peaks = { analyzer: 0, testJvm: 0 };
     let testJvm = null;
