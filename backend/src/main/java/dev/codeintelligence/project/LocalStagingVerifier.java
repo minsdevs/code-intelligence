@@ -24,6 +24,7 @@ final class LocalStagingVerifier {
     private final LocalSourcePolicy.Limits limits;
     private final LongSupplier clock;
     private final long started;
+    private long consumerNanos;
     private final Object rootKey;
     private final String device;
     private final Scan original;
@@ -64,7 +65,11 @@ final class LocalStagingVerifier {
             Stamp stamp = entry.getValue();
             byte[] bytes = read(file, stamp);
             manifest.add(name, bytes.length, LocalSourceManifest.sha256().digest(bytes));
+            // The time limit bounds reading the source. Product-owned writes in the consumer
+            // (repository objects, retained source) are not source inspection time.
+            long consumerStarted = clock.getAsLong();
             sink.accept(expected.get(name), bytes);
+            consumerNanos += clock.getAsLong() - consumerStarted;
             requireSame(file, stamp);
         }
         if (manifest.count() != binding.selectedFiles()
@@ -163,7 +168,8 @@ final class LocalStagingVerifier {
     }
 
     private void check() {
-        if (Thread.currentThread().isInterrupted() || clock.getAsLong() - started > limits.nanos()) throw changed();
+        if (Thread.currentThread().isInterrupted() || clock.getAsLong() - started - consumerNanos > limits.nanos())
+            throw changed();
     }
 
     private static Stamp directory(Path path) throws IOException {
