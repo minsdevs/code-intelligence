@@ -26,6 +26,19 @@ const sequences = REVIEWED_SCHEMA.tables.flatMap(t => t.columns.filter(c => c.ge
 const zeroSequences = () => Object.fromEntries(sequences.map(s => [s.key, '0']));
 const functions = ['guard_ai_cost_immutability', 'protect_sealed_source_entry', 'protect_snapshot_source_identity',
   'protect_source_blob', 'protect_source_manifest', 'reject_local_source_input_update'];
+// Mirrors the reviewed inventories: V27 lacks the V29 scope columns, V26 also the V27 outcome columns/table.
+function legacyCatalog(current, version) {
+  const catalog = copy(current);
+  for (const table of catalog.tables.filter(t => ['local_source_approvals', 'job_local_source_inputs'].includes(t.name))) {
+    table.columns = table.columns.filter(c => c.name !== 'scope');
+  }
+  if (version === 26) {
+    catalog.tables = catalog.tables.filter(t => t.name !== 'snapshot_inventory_measurements');
+    catalog.tables.find(t => t.name === 'files').columns = catalog.tables.find(t => t.name === 'files').columns
+      .filter(c => !['analysis_status', 'analysis_reason', 'analysis_targeted'].includes(c.name));
+  }
+  return catalog;
+}
 async function header(owner = true) {
   const catalog = { tables: REVIEWED_SCHEMA.tables.map(t => ({ name: t.name, kind: 'r', rls: false, forceRls: false,
     columns: t.columns.map(c => ({ ...c, default: null })) })), constraints: [], indexes: [], triggers: [],
@@ -84,11 +97,8 @@ async function fixture(t, patch = {}) {
         if (controls.hang || call.closed) return;
         if (controls.stderr) child.stderr.write(controls.stderr);
         if (sql.includes("'kind','legacyCatalog'")) {
-          const catalog = copy(controls.header.catalog);
-          catalog.tables = catalog.tables.filter(t => t.name !== 'snapshot_inventory_measurements');
-          catalog.tables.find(t => t.name === 'files').columns = catalog.tables.find(t => t.name === 'files').columns
-            .filter(c => !['analysis_status', 'analysis_reason', 'analysis_targeted'].includes(c.name));
-          emit({ kind: 'legacyCatalog', catalog });
+          const version = Number(sql.match(/'kind','legacyCatalog','version',([0-9]+),/)[1]);
+          emit({ kind: 'legacyCatalog', version, catalog: legacyCatalog(controls.header.catalog, version) });
         } else if (sql.includes("'kind','header'")) {
           const h = copy(controls.header);
           const needsOwner = sql.includes('min(id) filter'); h.owner = needsOwner ? h.owner : null;
@@ -612,11 +622,7 @@ test('real isolated PostgreSQL typed export and trigger-respecting staging round
 
 function legacySummary(h, rows) {
   const result = summaryFor(h, rows); result.schema = REVIEWED_V26_SCHEMA;
-  const catalog = copy(h.catalog);
-  catalog.tables = catalog.tables.filter(t => t.name !== 'snapshot_inventory_measurements');
-  catalog.tables.find(t => t.name === 'files').columns = catalog.tables.find(t => t.name === 'files').columns
-    .filter(c => !['analysis_status', 'analysis_reason', 'analysis_targeted'].includes(c.name));
-  result.catalogSha256 = sha(canonical(catalog));
+  result.catalogSha256 = sha(canonical(legacyCatalog(h.catalog, 26)));
   delete result.tableCounts.snapshot_inventory_measurements; delete result.tableSha256.snapshot_inventory_measurements;
   return result;
 }
