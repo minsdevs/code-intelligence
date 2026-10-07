@@ -27,6 +27,8 @@ final class FeatureLinkBuilder {
     private final Map<String, GraphNode> nodesByKey;
     private final Map<Long, List<GraphEdge>> out;
     private final Map<Long, List<GraphEdge>> in;
+    /** DB_ENTITY nodes with a file, in node order: a feature checks these, not the whole graph. */
+    private final List<GraphNode> tables;
 
     FeatureLinkBuilder(List<GraphNode> nodes, List<GraphEdge> edges) {
         this.nodesById = new LinkedHashMap<>();
@@ -35,6 +37,9 @@ final class FeatureLinkBuilder {
             nodesById.put(node.id(), node);
             nodesByKey.put(node.naturalKey(), node);
         }
+        this.tables = nodes.stream()
+                .filter(node -> "DB_ENTITY".equals(node.nodeType()) && node.filePath() != null)
+                .toList();
         this.out = new HashMap<>();
         this.in = new HashMap<>();
         for (GraphEdge edge : edges) {
@@ -156,12 +161,8 @@ final class FeatureLinkBuilder {
             if (other != null && "ENTITY".equals(other.layer()) && other.filePath() != null)
                 entityFiles.add(other.filePath());
         }
-        for (GraphNode node : nodesById.values()) {
-            if ("DB_ENTITY".equals(node.nodeType())
-                    && node.filePath() != null
-                    && entityFiles.contains(node.filePath())) {
-                included.add(node.id());
-            }
+        for (GraphNode table : tables) {
+            if (entityFiles.contains(table.filePath())) included.add(table.id());
         }
     }
 

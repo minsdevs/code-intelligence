@@ -64,6 +64,43 @@ class FeatureLinkBuilderScaleTest {
         assertThat(elapsedMs).isLessThan(BUDGET_MS);
     }
 
+    /**
+     * The large workload has one feature per frontend route prefix (about 4,250) over a 768k-node
+     * graph; every feature still scanned all graph nodes for tables (119 s in FEATURE_DETECTION).
+     */
+    @Test
+    void linkingManySmallFeaturesDoesNotScanTheWholeGraphForEach() {
+        int routes = 4_000;
+        int otherNodes = 400_000;
+        List<FeatureLinkBuilder.GraphNode> nodes = new ArrayList<>();
+        List<FeatureLinkBuilder.GraphEdge> edges = new ArrayList<>();
+        for (int i = 0; i < otherNodes; i++)
+            nodes.add(node(1_000_000L + i, "METHOD", "m" + i, null, "src/M" + i + ".ts"));
+        for (int i = 0; i < routes; i++) {
+            long base = 10L * i;
+            String entityFile = "src/main/java/m" + i + "/Item.java";
+            nodes.add(node(base, "FE_ROUTE", "route:/p" + i, null, "web/src/pages/p" + i + "/Page.tsx"));
+            nodes.add(node(base + 1, "CLASS", "java:m" + i + ".Item", "ENTITY", entityFile));
+            nodes.add(node(base + 2, "DB_ENTITY", "db:item" + i, null, entityFile));
+            edges.add(new FeatureLinkBuilder.GraphEdge(base, base + 1, "USES_TYPE"));
+        }
+        FeatureLinkBuilder linker = new FeatureLinkBuilder(nodes, edges);
+
+        long started = System.nanoTime();
+        int links = 0;
+        for (int i = 0; i < routes; i++) {
+            List<FeatureLinkBuilder.Link> feature = linker.linksFor(Set.of("route:/p" + i));
+            assertThat(feature)
+                    .extracting(FeatureLinkBuilder.Link::nodeId)
+                    .containsExactlyInAnyOrder(10L * i, 10L * i + 1, 10L * i + 2);
+            links += feature.size();
+        }
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000;
+
+        assertThat(links).isEqualTo(3 * routes);
+        assertThat(elapsedMs).isLessThan(BUDGET_MS);
+    }
+
     private static FeatureLinkBuilder.GraphNode node(long id, String type, String key, String layer, String file) {
         return new FeatureLinkBuilder.GraphNode(id, type, key, key, file, layer);
     }
