@@ -477,20 +477,20 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       report.importStage = 'PREVIEW';
       const [response] = await perform(() => Promise.all([
         page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local/preview' && response.request().method() === 'POST', { timeout: deadline.limit() }),
-        page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click(),
+        page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).click(),
       ]));
       return response;
-    });
+    }).catch(error => { report.dropConfirmationAttempt = error?.dropConfirmation ?? null; throw error; });
     (report.dropConfirmations ??= []).push(confirmation);
     report.importHttp = { preview: previewResponse.status() };
     assert.ok(previewResponse.ok());
     const preview = await perform(() => previewResponse.json());
-    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
+    await perform(() => expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible());
     const firstResultStarted = performance.now();
     report.importStage = 'APPROVE';
     const [created] = await perform(() => Promise.all([
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/local' && response.request().method() === 'POST', { timeout: deadline.limit() }),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click(),
+      page.getByRole('button', { name: /^(Import and analyze the reviewed files|확인한 파일 가져오기 및 분석)$/ }).click(),
     ]));
     report.importHttp.created = created.status();
     assert.ok(created.ok());
@@ -517,21 +517,21 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     const project = await api(`/api/projects/${projectId}`); snapshotId = project.currentSnapshot.id;
     phase('import-default-repository-overview');
     await perform(() => expect(page).toHaveURL(new RegExp('/projects/' + projectId + '/overview$')));
-    await perform(() => expect(page.getByLabel('레포 개요', { exact: true })).toBeVisible());
-    await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible());
+    await perform(() => expect(page.getByLabel(/^(Repository overview|레포 개요)$/)).toBeVisible());
+    await perform(() => expect(page.getByRole('table', { name: /^(Analysis results table|분석 결과 표)$/ })).toBeVisible());
     report.firstResult = { scope: 'one-file TypeScript synthetic fixture; approved import click to populated native overview',
       elapsedMs: Math.round(performance.now() - firstResultStarted), snapshotId, localImport };
     await perform(() => expect(page.getByRole('link', { name: /^(Growth|Tasks)$/ })).toHaveCount(0));
-    await perform(() => expect(page.getByLabel('개요 분석 시점', { exact: true })).toHaveValue('current'));
-    await perform(() => page.getByRole('button', { name: '파일 · 분석 상태', exact: true }).click());
+    await perform(() => expect(page.getByLabel(/^(Overview analysis point|개요 분석 시점)$/)).toHaveValue('current'));
+    await perform(() => page.getByRole('button', { name: /^(Files · analysis status|파일 · 분석 상태)$/ }).click());
     const searchStarted = performance.now();
-    await perform(() => page.getByRole('searchbox', { name: '분석 결과 검색', exact: true }).fill('acceptance.ts'));
-    const table = page.getByRole('table', { name: '분석 결과 표', exact: true });
+    await perform(() => page.getByRole('searchbox', { name: /^(Search analysis results|분석 결과 검색)$/ }).fill('acceptance.ts'));
+    const table = page.getByRole('table', { name: /^(Analysis results table|분석 결과 표)$/ });
     await perform(() => expect(table.getByText('acceptance.ts', { exact: true }).first()).toBeVisible());
     report.firstResult.searchRenderMs = Math.round(performance.now() - searchStarted);
-    await perform(() => table.getByRole('button', { name: '관련 심볼', exact: true }).first().click());
-    await perform(() => table.getByRole('button', { name: '관계 · 함께 확인할 곳', exact: true }).first().click());
-    await perform(() => expect(page.getByRole('region', { name: '선택한 코드 주변 관계', exact: true })).toBeVisible());
+    await perform(() => table.getByRole('button', { name: /^(Related symbols|관련 심볼)$/ }).first().click());
+    await perform(() => table.getByRole('button', { name: /^(Relations · places to check together|관계 · 함께 확인할 곳)$/ }).first().click());
+    await perform(() => expect(page.getByRole('region', { name: /^(Relations around the selected code|선택한 코드 주변 관계)$/ })).toBeVisible());
     await captureSizes('repository-overview');
     report.checks.push('import-default-overview-snapshot-table-filter-local-relations-without-ai');
     await verifySnapshotContract(snapshotId, 'first-import');
@@ -565,12 +565,12 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await sourceContent(first, snapshotId);
     report.checks.push('real-main-quiescent-backup-and-resume');
     phase('synthetic-reanalysis'); fs.writeFileSync(sourceFile, second, { mode: 0o600 });
-    await perform(() => page.getByRole('button', { name: '상태 새로고침', exact: true }).click());
-    await perform(() => page.getByRole('button', { name: '변경 사항 미리보기', exact: true }).click());
-    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
+    await perform(() => page.getByRole('button', { name: /^(Refresh status|상태 새로고침)$/ }).click());
+    await perform(() => page.getByRole('button', { name: /^(Preview changes|변경 사항 미리보기)$/ }).click());
+    await perform(() => expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible());
     const [refreshed] = await perform(() => Promise.all([
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/' + projectId + '/reanalyze' && response.request().method() === 'POST', { timeout: deadline.limit() }),
-      page.getByRole('button', { name: '변경 확인 후 전체 재분석', exact: true }).click(),
+      page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click(),
     ]));
     assert.ok(refreshed.ok());
     await awaitJob((await perform(() => refreshed.json())).jobId);
@@ -613,7 +613,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     phase('representative-repository-overview-navigation');
     await perform(() => expect(page).toHaveURL(new RegExp('/projects/' + projectId + '/overview$')));
     phase('representative-repository-overview-table');
-    await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible());
+    await perform(() => expect(page.getByRole('table', { name: /^(Analysis results table|분석 결과 표)$/ })).toBeVisible());
     report.representativeRepository = {
       scope: 'filtered current Code Intelligence desktop/frontend/backend/TypeScript analyzer source; no dependency install or repository scripts executed',
       sourceFiles: copied.files, sourceSha256: copied.sha256, localImport: larger.localImport,
@@ -623,31 +623,31 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     report.representativeRepository.fileOutcomes = files.reduce((counts, file) => {
       const status = file.analysisStatus ?? 'LEGACY_UNMEASURED'; counts[status] = (counts[status] ?? 0) + 1; return counts;
     }, {});
-    await perform(() => page.getByRole('button', { name: '파일 · 분석 상태', exact: true }).click());
+    await perform(() => page.getByRole('button', { name: /^(Files · analysis status|파일 · 분석 상태)$/ }).click());
     const entrypoints = await api(`/api/projects/${projectId}/graph/nodes?snapshotId=${snapshotId}&category=entrypoints&page=1&size=2&sort=path`);
     assert.equal(entrypoints.resolvedSnapshotId, snapshotId);
     assert.ok(entrypoints.items.length > 0, 'Representative repository must have confirmed entrypoint rows');
-    await perform(() => page.getByRole('button', { name: '요청 · 화면 진입점', exact: true }).click());
-    await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })
+    await perform(() => page.getByRole('button', { name: /^(Request · screen entry points|요청 · 화면 진입점)$/ }).click());
+    await perform(() => expect(page.getByRole('table', { name: /^(Analysis results table|분석 결과 표)$/ })
       .locator('tbody tr').filter({ hasText: entrypoints.items[0].name }).first()).toBeVisible());
     report.representativeRepository.entrypointCount = entrypoints.total;
-    await perform(() => page.getByRole('button', { name: '파일 · 분석 상태', exact: true }).click());
+    await perform(() => page.getByRole('button', { name: /^(Files · analysis status|파일 · 분석 상태)$/ }).click());
     const representativePath = 'frontend/src/features/import/ImportWizardPage.tsx';
     const searchStartedLarge = performance.now();
-    await perform(() => page.getByRole('searchbox', { name: '분석 결과 검색', exact: true }).fill(representativePath));
-    const largeTable = page.getByRole('table', { name: '분석 결과 표', exact: true });
+    await perform(() => page.getByRole('searchbox', { name: /^(Search analysis results|분석 결과 검색)$/ }).fill(representativePath));
+    const largeTable = page.getByRole('table', { name: /^(Analysis results table|분석 결과 표)$/ });
     await perform(() => expect(largeTable.getByRole('link', { name: representativePath, exact: true })).toBeVisible());
     report.representativeRepository.fileSearchRenderMs = Math.round(performance.now() - searchStartedLarge);
-    await perform(() => largeTable.getByRole('button', { name: '관련 심볼', exact: true }).click());
+    await perform(() => largeTable.getByRole('button', { name: /^(Related symbols|관련 심볼)$/ }).click());
     const relationStarted = performance.now();
-    await perform(() => largeTable.getByRole('button', { name: '관계 · 함께 확인할 곳', exact: true }).first().click());
-    const neighborhood = page.getByRole('region', { name: '선택한 코드 주변 관계', exact: true });
-    await perform(() => expect(neighborhood.getByLabel('관계 방향', { exact: true })).toBeVisible());
-    await perform(() => expect(neighborhood.getByText('관계를 불러오는 중…', { exact: true })).toHaveCount(0));
+    await perform(() => largeTable.getByRole('button', { name: /^(Relations · places to check together|관계 · 함께 확인할 곳)$/ }).first().click());
+    const neighborhood = page.getByRole('region', { name: /^(Relations around the selected code|선택한 코드 주변 관계)$/ });
+    await perform(() => expect(neighborhood.getByLabel(/^(Relation direction|관계 방향)$/)).toBeVisible());
+    await perform(() => expect(neighborhood.getByText(/^(Loading relations…|관계를 불러오는 중…)$/)).toHaveCount(0));
     await perform(() => expect(neighborhood.getByRole('alert')).toHaveCount(0));
     report.representativeRepository.relationRenderMs = Math.round(performance.now() - relationStarted);
     await captureSizes('representative-repository');
-    await perform(() => neighborhood.getByRole('link', { name: '선택한 항목의 보관된 소스', exact: true }).click());
+    await perform(() => neighborhood.getByRole('link', { name: /^(Stored source of the selected item|선택한 항목의 보관된 소스)$/ }).click());
     await perform(() => expect(page.getByTestId('source-context')).toContainText('Snapshot #' + snapshotId));
     await perform(() => expect(page.getByTestId('code-viewer').locator('.monaco-editor').first())
       .toHaveAttribute('data-uri', new RegExp('^snapshot://' + projectId + '/' + snapshotId + '/')));
@@ -674,7 +674,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     phase('representative-repository-restart'); await close(); await launch();
     assert.equal((await api(`/api/projects/${projectId}`)).currentSnapshot.id, snapshotId);
     await navigate(`/projects/${projectId}/overview`);
-    await perform(() => expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible());
+    await perform(() => expect(page.getByRole('table', { name: /^(Analysis results table|분석 결과 표)$/ })).toBeVisible());
     report.checks.push('representative-repository-results-survive-packaged-app-restart');
 
     phase('react-default-route-import');

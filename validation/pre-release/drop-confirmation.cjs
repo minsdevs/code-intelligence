@@ -60,8 +60,19 @@ async function withDropConfirmation(app, folder, action, { timeoutMs = 10000 } =
   try { requests = await bounded(handle.evaluate(value => value.restore()), timeoutMs, 'DROP_CONFIRMATION_RESTORE_TIMEOUT'); }
   catch (error) { failure ||= error; }
   try { await bounded(handle.dispose(), timeoutMs, 'DROP_CONFIRMATION_DISPOSE_TIMEOUT'); } catch (error) { failure ||= error; }
-  if (failure) throw failure;
+  if (failure) {
+    // Keep the action failure primary, but say whether the confirmation was asked and what differed.
+    if (failure && typeof failure === 'object') failure.dropConfirmation = describeRequests(requests, expected);
+    throw failure;
+  }
   return { result, confirmation: verifyDropConfirmation(requests, expected) };
 }
 
-module.exports = { DROP_CONFIRMATION, installDropConfirmation, verifyDropConfirmation, withDropConfirmation };
+// Evidence-safe summary: counts and the names of differing fields, never the requested values.
+function describeRequests(requests, expected) {
+  if (!Array.isArray(requests)) return { readable: false };
+  return { readable: true, requests: requests.length, differing: requests.map(request => Object.keys(expected)
+    .filter(key => JSON.stringify(request?.[key]) !== JSON.stringify(expected[key]))) };
+}
+
+module.exports = { DROP_CONFIRMATION, describeRequests, installDropConfirmation, verifyDropConfirmation, withDropConfirmation };
