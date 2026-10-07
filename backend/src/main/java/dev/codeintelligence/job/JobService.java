@@ -104,12 +104,17 @@ public class JobService {
         }
     }
 
-    /** CANCELLING retains exclusivity until the RUNNING step finishes and the worker exits. */
+    /**
+     * CANCELLING retains exclusivity until the worker has left the RUNNING step. The step is told to
+     * stop (T03): its body observes the cancel at its next checkpoint and an in-flight worker request
+     * is interrupted, so the lock is released within the cancel bound instead of after the step.
+     */
     public void cancel(long jobId, long userId) {
         requireOwnedJob(jobId, userId);
         if (!repository.markJobCancelled(jobId)) {
             throw new JobConflictException("Job is already finished.");
         }
+        worker.requestCancel(jobId);
         publisher.publish(jobId);
     }
 

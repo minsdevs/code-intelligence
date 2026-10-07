@@ -32,7 +32,8 @@ const NETWORK_MODULE = /require\(\s*['"](?:node:)?(https?|http2|net|tls|dgram|dn
 // Reviewed inventory: module -> network builtins it may load, and why.
 const NETWORK_INVENTORY = Object.freeze({
   'adapter-control.cjs': { modules: ['net'], reason: 'private backend<->main analyzer control Unix-domain socket, capability-authenticated (ADR-01)' },
-  'ai-https-transport.cjs': { modules: ['dns', 'https', 'net'], reason: 'sole provider transport: fixed api.openai.com HTTPS, DNS pinned to public answers' },
+  'ai-https-transport.cjs': { modules: ['dns', 'http', 'https', 'net'],
+    reason: 'sole provider transport: fixed api.openai.com HTTPS, DNS pinned to public answers; plain HTTP only to the validation-build loopback fake provider' },
   'ai-egress-bridge.cjs': { modules: ['net'], reason: 'private backend<->main Unix-domain socket, capability-authenticated' },
   'main.cjs': { modules: ['net'], reason: 'loopback port reservation for bundled services' },
   'service-transport.cjs': { modules: ['https', 'tls'], reason: 'loopback TLS to bundled backend/analyzer with pinned per-run CA' },
@@ -48,15 +49,24 @@ test('only reviewed desktop modules load network-capable builtins', () => {
   assert.deepEqual(observed, Object.fromEntries(Object.entries(NETWORK_INVENTORY).map(([name, value]) => [name, value.modules])));
 });
 
+// Reviewed exception (G-UPDATE NU-01): main hands Electron net to the user-initiated updater, which
+// has exactly one GET call site to its pinned HTTPS manifest/artifact host, with redirects refused.
+const ELECTRON_NET = Object.freeze({ 'main.cjs': 'import', 'update-service.cjs': 'request' });
+
 test('desktop code has no fetch, WebSocket, Electron net or command-line HTTP client', () => {
   for (const name of desktopFiles) {
     const text = read(path.join(desktopSource, name));
     assert.doesNotMatch(text, /\bfetch\s*\(/, `${name} must not call fetch`);
     assert.doesNotMatch(text, /new\s+WebSocket\b|EventSource\s*\(/, `${name} must not open a WebSocket/EventSource`);
-    assert.doesNotMatch(text, /\bnet\.request\s*\(|session\.fetch|ClientRequest/, `${name} must not use Electron net`);
+    if (ELECTRON_NET[name] === 'request') {
+      assert.equal([...text.matchAll(/\bnet\.request\s*\(/g)].length, 1, `${name} has one reviewed Electron net call site`);
+      assert.match(text, /net\.request\(\{ method: 'GET', url, redirect: 'error', credentials: 'omit', useSessionCookies: false/);
+      assert.doesNotMatch(text, /session\.fetch|ClientRequest/, `${name} must not use another Electron net path`);
+    } else assert.doesNotMatch(text, /\bnet\.request\s*\(|session\.fetch|ClientRequest/, `${name} must not use Electron net`);
     assert.doesNotMatch(text, /['"`](?:\/usr\/bin\/)?(?:curl|wget)['"`]/, `${name} must not spawn curl/wget`);
     const electron = /const\s*\{([^}]*)\}\s*=\s*require\(['"]electron['"]\)/.exec(text);
-    if (electron) assert.equal(electron[1].split(',').map(s => s.trim()).includes('net'), false, `${name} must not import Electron net`);
+    if (electron) assert.equal(electron[1].split(',').map(s => s.trim().split(':')[0].trim()).includes('net'), ELECTRON_NET[name] === 'import',
+      `${name} must not import Electron net`);
   }
 });
 
@@ -79,11 +89,34 @@ test('provider hosts appear only in the fixed endpoint table and the sole transp
 
 test('the HTTPS transport is composed only by the private desktop gateway', () => {
   const users = desktopFiles.filter(name => read(path.join(desktopSource, name)).includes('createHttpsTransport'));
-  assert.deepEqual(users, ['ai-desktop-gateway.cjs', 'ai-https-transport.cjs']);
+  assert.deepEqual(users, ['ai-https-transport.cjs']);
+  const providerUsers = desktopFiles.filter(name => read(path.join(desktopSource, name)).includes('createProviderTransport'));
+  assert.deepEqual(providerUsers, ['ai-desktop-gateway.cjs', 'ai-https-transport.cjs']);
   const gatewayUsers = desktopFiles.filter(name => read(path.join(desktopSource, name)).includes('openDesktopAiGateway'));
   assert.deepEqual(gatewayUsers, ['ai-desktop-gateway.cjs', 'main.cjs']);
   const coreUsers = desktopFiles.filter(name => /require\(['"]\.\/ai-egress\.cjs['"]\)/.test(read(path.join(desktopSource, name))));
   assert.deepEqual(coreUsers, ['ai-desktop-gateway.cjs']);
+});
+
+// PK-08: the loopback fake-provider origin is a build-time value of the packaged package.json only.
+test('the validation fake-provider variant comes only from build metadata, never from runtime input', () => {
+  const transport = read(path.join(desktopSource, 'ai-https-transport.cjs'));
+  assert.doesNotMatch(transport, /process\.(?:env|argv)|require\(['"](?:node:)?fs|readFile|electron/);
+  assert.equal([...transport.matchAll(/\bhttp\.request\s*\(/g)].length, 1);
+  assert.match(transport, /http\.request\(\{ protocol: 'http:', hostname: target\.hostname,/);
+  assert.match(transport, /\^http:\\\/\\\/\(127\\\.0\\\.0\\\.1\|\\\[::1\\\]\):/);
+  const gateway = read(path.join(desktopSource, 'ai-desktop-gateway.cjs'));
+  assert.match(gateway, /buildMetadata = null, transport = createProviderTransport\(buildMetadata\)/);
+  const main = read(path.join(desktopSource, 'main.cjs'));
+  assert.match(main, /^const packageMetadata = require\('\.\.\/package\.json'\);$/m);
+  assert.deepEqual([...main.matchAll(/buildMetadata: ([A-Za-z.]+)/g)].map(match => match[1]), ['packageMetadata']);
+  for (const name of desktopFiles) {
+    const text = read(path.join(desktopSource, name));
+    if (name !== 'ai-https-transport.cjs') assert.equal(text.includes('validationAiProviderOrigin'), false, name);
+  }
+  // The release configuration never carries the variant; only the candidate builder adds it.
+  const pkg = JSON.parse(read(path.join(repo, 'desktop/package.json')));
+  assert.equal(JSON.stringify(pkg).includes('validationAiProviderOrigin'), false);
 });
 
 test('the egress core has exactly one transport call site, after the journal permit and final barrier', () => {

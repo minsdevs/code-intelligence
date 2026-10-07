@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "purpose": "code-intelligence-update-manifest",
+  "product": "code-intelligence",
+  "bundleId": "dev.codeintelligence.desktop",
+  "teamId": null,
+  "channel": "stable",
+  "manifestUrl": null,
+  "allowedHosts": [],
+  "keys": []
+}

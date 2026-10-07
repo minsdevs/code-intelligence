@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.codeintelligence.analysis.core.FileInventoryScanner;
 import dev.codeintelligence.common.AppProperties;
+import dev.codeintelligence.job.BoundJobCancellation;
+import dev.codeintelligence.job.JobCancelledException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -359,6 +361,61 @@ class LocalSourceBindingTest {
                 .isEqualTo(inspection.gitFingerprints().get("a.txt"));
         assertThat(result.summary().acceptedFiles())
                 .isEqualTo(inspection.binding().selectedFiles());
+    }
+
+    /** T03/finding 4: a cancel during the per-file source copy stops before the next file is read. */
+    @Test
+    void aCancelDuringTheSourceCopyStopsBeforeTheNextFileAndKeepsTheOldTarget() throws Exception {
+        Path source = oldTargetAndNewSource();
+        Files.writeString(source.resolve("b.txt"), "BBBB");
+        var approved = service().inspect(source).binding();
+        List<String> opened = new ArrayList<>();
+        try (BoundJobCancellation job = BoundJobCancellation.bind()) {
+            var importer = new LocalImportService(
+                    new AppProperties(temp.resolve("data").toString(), 2),
+                    new LocalImportProperties(temp.toRealPath().toString()),
+                    new DesktopPathAuthorizationService(),
+                    new LocalSourcePolicy(limits(), () -> 0, new LocalSourcePolicy.ReadObserver() {
+                        @Override
+                        public void beforeOpen(Path path) {
+                            opened.add(path.getFileName().toString());
+                        }
+
+                        @Override
+                        public void afterRead(Path path, long bytesRead) {
+                            job.cancel();
+                        }
+                    }),
+                    LocalImportService::moveDirectory,
+                    staging -> {});
+            AtomicBoolean published = new AtomicBoolean();
+            assertThatThrownBy(() -> importer.importApproved(approved, target(), () -> published.set(true)))
+                    .isInstanceOf(JobCancelledException.class);
+            assertThat(published).isFalse();
+        }
+        assertThat(opened).containsExactly("a.txt");
+        oldTargetIsIntact();
+    }
+
+    /** T03/finding 4: a cancel during staged-byte verification stops before the next file is consumed. */
+    @Test
+    void aCancelDuringStagedVerificationStopsBeforeTheNextFileAndKeepsTheOldTarget() throws Exception {
+        Path source = oldTargetAndNewSource();
+        Files.writeString(source.resolve("b.txt"), "BBBB");
+        var approved = service().inspect(source).binding();
+        List<String> consumed = new ArrayList<>();
+        AtomicBoolean published = new AtomicBoolean();
+        try (BoundJobCancellation job = BoundJobCancellation.bind()) {
+            assertThatThrownBy(() -> service()
+                            .importApproved(approved, target(), () -> published.set(true), (path, oid, bytes) -> {
+                                consumed.add(path);
+                                job.cancel();
+                            }))
+                    .isInstanceOf(JobCancelledException.class);
+        }
+        assertThat(consumed).containsExactly("a.txt");
+        assertThat(published).isFalse();
+        oldTargetIsIntact();
     }
 
     @Test

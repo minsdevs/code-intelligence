@@ -1,12 +1,11 @@
 'use strict';
-// G-UPDATE fixture-key rehearsal of the REFERENCE manifest contract
-// (validation/pre-release/update-manifest-reference.cjs). Every key is generated in memory
-// for this process and discarded; no key is read from or written to disk. The product has
-// no updater yet, so a PASS here is a contract rehearsal, never a G-UPDATE PASS.
+// G-UPDATE manifest contract on the product module (desktop/src/update-manifest.cjs). Every key
+// is generated in memory for this process and discarded; no key is read from or written to disk.
+// A PASS here is fixture-key evidence, never a G-UPDATE PASS on a real release key and host.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const reference = require('../../validation/pre-release/update-manifest-reference.cjs');
+const manifests = require('../src/update-manifest.cjs');
 
 const release = crypto.generateKeyPairSync('ed25519');
 const attacker = crypto.generateKeyPairSync('ed25519');
@@ -28,13 +27,13 @@ function context(changes = {}) {
       arch: 'arm64', osVersion: '13.6', buildSequence: '150', schemaFlyway: 27, safetyJournalMajor: 1 },
     state: { highWaterBuild: '150', lastManifestSerial: 41 }, ...changes };
 }
-const signed = (value = body(), privateKey = release.privateKey, keyId = 'release-2026') => reference.signManifest(value, { keyId, privateKey });
-const rejects = (envelope, code, ctx = context()) => assert.throws(() => reference.verifyUpdateManifest(envelope, ctx), { code });
+const signed = (value = body(), privateKey = release.privateKey, keyId = 'release-2026') => manifests.signManifest(value, { keyId, privateKey });
+const rejects = (envelope, code, ctx = context()) => assert.throws(() => manifests.verifyUpdateManifest(envelope, ctx), { code });
 
 test('a correctly signed, current, compatible manifest and matching artifact are accepted', () => {
-  const result = reference.verifyUpdateManifest(signed(), context());
+  const result = manifests.verifyUpdateManifest(signed(), context());
   assert.equal(result.manifest.buildSequence, '200'); assert.equal(result.acceptedSerial, 42);
-  assert.equal(reference.verifyArtifactBytes(ARTIFACT, result.manifest), true);
+  assert.equal(manifests.verifyArtifactBytes(ARTIFACT, result.manifest), true);
 });
 
 test('forged signature: an attacker key under the pinned key ID is rejected before the body is trusted', () => {
@@ -52,11 +51,11 @@ test('tampered manifest or artifact: any changed field or byte is rejected', () 
     b => { b.artifact.url = 'https://updates.example.invalid/other.dmg'; }, b => { b.minimumSystemVersion = '12.0'; }]) {
     const envelope = signed(); mutate(envelope.body); rejects(envelope, 'UPDATE_SIGNATURE_INVALID');
   }
-  const manifest = reference.verifyUpdateManifest(signed(), context()).manifest;
+  const manifest = manifests.verifyUpdateManifest(signed(), context()).manifest;
   const tampered = Buffer.from(ARTIFACT); tampered[10] ^= 1;
-  assert.throws(() => reference.verifyArtifactBytes(tampered, manifest), { code: 'UPDATE_ARTIFACT_HASH' });
-  assert.throws(() => reference.verifyArtifactBytes(Buffer.concat([ARTIFACT, Buffer.from('x')]), manifest), { code: 'UPDATE_ARTIFACT_SIZE' });
-  assert.throws(() => reference.verifyArtifactBytes(ARTIFACT.subarray(1), manifest), { code: 'UPDATE_ARTIFACT_SIZE' });
+  assert.throws(() => manifests.verifyArtifactBytes(tampered, manifest), { code: 'UPDATE_ARTIFACT_HASH' });
+  assert.throws(() => manifests.verifyArtifactBytes(Buffer.concat([ARTIFACT, Buffer.from('x')]), manifest), { code: 'UPDATE_ARTIFACT_SIZE' });
+  assert.throws(() => manifests.verifyArtifactBytes(ARTIFACT.subarray(1), manifest), { code: 'UPDATE_ARTIFACT_SIZE' });
 });
 
 test('wrong platform, architecture or product identity is rejected even when correctly signed', () => {
@@ -102,7 +101,7 @@ test('exceptional downgrade only through a signed recovery manifest bound to a c
     schema: { flyway: 27, safetyJournalMajor: 1, backupFormat: 3 },
     recovery: { checkpointId: CHECKPOINT, checkpointSchemaFlyway: 27, reason: 'rollback after failed 0.2.0 migration' }, ...changes });
   const checkpoint = { id: CHECKPOINT, schemaFlyway: 27, createdByBuild: '120' };
-  assert.equal(reference.verifyUpdateManifest(signed(recovery()), context({ checkpoint })).manifest.kind, 'recovery');
+  assert.equal(manifests.verifyUpdateManifest(signed(recovery()), context({ checkpoint })).manifest.kind, 'recovery');
   rejects(signed(recovery()), 'UPDATE_RECOVERY_CHECKPOINT');
   rejects(signed(recovery()), 'UPDATE_RECOVERY_CHECKPOINT', context({ checkpoint: { ...checkpoint, id: crypto.randomUUID() } }));
   rejects(signed(recovery()), 'UPDATE_RECOVERY_CHECKPOINT', context({ checkpoint: { ...checkpoint, schemaFlyway: 28 } }));
@@ -113,28 +112,28 @@ test('exceptional downgrade only through a signed recovery manifest bound to a c
 });
 
 test('installed app identity comes from its code signature and notarization, not from the manifest', () => {
-  const manifest = reference.verifyUpdateManifest(signed(), context()).manifest;
+  const manifest = manifests.verifyUpdateManifest(signed(), context()).manifest;
   const good = { codesignStrictDeep: true, teamId: 'ABCDE12345', bundleId: 'dev.codeintelligence.desktop', gatekeeperNotarized: true,
     stapled: true, buildSequence: '200' };
-  assert.equal(reference.verifyInstalledIdentity(good, manifest), true);
+  assert.equal(manifests.verifyInstalledIdentity(good, manifest), true);
   for (const [change, code] of [[{ codesignStrictDeep: false }, 'UPDATE_APP_SIGNATURE_INVALID'], [{ teamId: 'ZZZZZ99999' }, 'UPDATE_APP_TEAM_MISMATCH'],
     [{ bundleId: 'x' }, 'UPDATE_APP_BUNDLE_MISMATCH'], [{ gatekeeperNotarized: false }, 'UPDATE_APP_NOT_NOTARIZED'],
     [{ stapled: false }, 'UPDATE_APP_NOT_NOTARIZED'], [{ buildSequence: '199' }, 'UPDATE_APP_BUILD_MISMATCH']]) {
-    assert.throws(() => reference.verifyInstalledIdentity({ ...good, ...change }, manifest), { code });
+    assert.throws(() => manifests.verifyInstalledIdentity({ ...good, ...change }, manifest), { code });
   }
 });
 
 test('high-water state is monotonic: installs raise it and a restored older state never lowers it', () => {
   const live = { highWaterBuild: '200', lastManifestSerial: 42 };
-  assert.deepEqual({ ...reference.mergeAfterRestore(live, { highWaterBuild: '150', lastManifestSerial: 30 }) }, live);
-  assert.deepEqual({ ...reference.mergeAfterRestore(live, { highWaterBuild: '1000', lastManifestSerial: 50 }) }, { highWaterBuild: '1000', lastManifestSerial: 50 });
-  assert.deepEqual({ ...reference.raiseHighWater(live, { installedBuild: '9', acceptedSerial: 1 }) }, live);
-  assert.equal(reference.raiseHighWater({ highWaterBuild: '99', lastManifestSerial: 0 }, { installedBuild: '100' }).highWaterBuild, '100');
+  assert.deepEqual({ ...manifests.mergeAfterRestore(live, { highWaterBuild: '150', lastManifestSerial: 30 }) }, live);
+  assert.deepEqual({ ...manifests.mergeAfterRestore(live, { highWaterBuild: '1000', lastManifestSerial: 50 }) }, { highWaterBuild: '1000', lastManifestSerial: 50 });
+  assert.deepEqual({ ...manifests.raiseHighWater(live, { installedBuild: '9', acceptedSerial: 1 }) }, live);
+  assert.equal(manifests.raiseHighWater({ highWaterBuild: '99', lastManifestSerial: 0 }, { installedBuild: '100' }).highWaterBuild, '100');
 });
 
 test('canonical encoding rejects values that could be signed ambiguously', () => {
-  assert.equal(reference.canonical({ b: 1, a: [true, null, 'x'] }), '{"a":[true,null,"x"],"b":1}');
+  assert.equal(manifests.canonical({ b: 1, a: [true, null, 'x'] }), '{"a":[true,null,"x"],"b":1}');
   for (const value of [{ a: 1.5 }, { a: Number.MAX_SAFE_INTEGER + 1 }, { a: undefined }, { a: new Date(0) }]) {
-    assert.throws(() => reference.canonical(value), { code: 'UPDATE_MANIFEST_SCHEMA' });
+    assert.throws(() => manifests.canonical(value), { code: 'UPDATE_MANIFEST_SCHEMA' });
   }
 });

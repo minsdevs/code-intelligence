@@ -505,7 +505,8 @@ abstract class CostEgressHarness {
                 throws Exception {
             String installation = environment.getRequiredProperty("app.desktop.local-identity");
             Path root = Path.of(environment.getRequiredProperty("app.data-dir")).getParent();
-            return new NodeRuntime(postgres, json, installation, root);
+            boolean validationProvider = environment.getProperty("ci.c13.validation-provider", Boolean.class, false);
+            return new NodeRuntime(postgres, json, installation, root, validationProvider);
         }
 
         @Bean
@@ -526,7 +527,13 @@ abstract class CostEgressHarness {
         private Integer exitStatus;
         private String closedRecord;
 
-        NodeRuntime(PostgreSQLContainer postgres, JsonMapper json, String installation, Path root) throws Exception {
+        NodeRuntime(
+                PostgreSQLContainer postgres,
+                JsonMapper json,
+                String installation,
+                Path root,
+                boolean validationProvider)
+                throws Exception {
             this.json = json;
             this.root = root;
             directory = Files.createDirectory(root.resolve("main"));
@@ -598,7 +605,9 @@ abstract class CostEgressHarness {
                             "databasePassword",
                             postgres.getPassword(),
                             "tokenEncryptionKey",
-                            TOKEN_KEY)),
+                            TOKEN_KEY,
+                            "validationProvider",
+                            validationProvider)),
                     StandardCharsets.UTF_8);
             Files.setPosixFilePermissions(config, PosixFilePermissions.fromString("rw-------"));
             control(Map.of("mode", "success", "release", true));
@@ -664,6 +673,16 @@ abstract class CostEgressHarness {
 
         List<Map<String, Object>> events() throws IOException {
             return lines("transports.jsonl");
+        }
+
+        /** Requests received by the loopback HTTP fake provider (validation-provider mode only). */
+        List<Map<String, Object>> httpProviderRequests() throws IOException {
+            return lines("http-provider.jsonl");
+        }
+
+        /** Non-provider requests to that port (stray local probes), answered 404 and kept for the record. */
+        List<Map<String, Object>> httpStrayRequests() throws IOException {
+            return lines("http-stray.jsonl");
         }
 
         List<Map<String, Object>> faults() throws IOException {

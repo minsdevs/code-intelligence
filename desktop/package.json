@@ -38,6 +38,7 @@
     "afterPack": "./scripts/electron-fuses.cjs",
     "files": [
       "src/**/*",
+      "build/update-keys.json",
       "package.json"
     ],
     "extraResources": [

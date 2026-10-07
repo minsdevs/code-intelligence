@@ -7,6 +7,8 @@ import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.SafeRelativePath;
 import dev.codeintelligence.analysis.graph.GraphPersistenceService;
 import dev.codeintelligence.common.AnalysisProperties;
+import dev.codeintelligence.job.JobCancellation;
+import dev.codeintelligence.job.JobCancelledException;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import java.io.IOException;
@@ -69,7 +71,12 @@ public class TsParsingStep implements JobStep {
         }
         recordAll(snapshotId, files, "TARGETED", "PARSER_STARTED");
         try {
-            client.health();
+            JobCancellation.interruptibly(() -> {
+                client.health();
+                return null;
+            });
+        } catch (JobCancelledException cancelled) {
+            throw cancelled;
         } catch (RuntimeException failure) {
             recordAll(snapshotId, files, "FAILED", "ANALYZER_UNAVAILABLE");
             throw failure;
@@ -90,7 +97,9 @@ public class TsParsingStep implements JobStep {
         // batches silently change their meaning; reject oversized projects before sending.
         TsAnalyzeDtos.Response response;
         try {
-            response = client.analyze(new TsAnalyzeDtos.Request(payloads));
+            response = JobCancellation.interruptibly(() -> client.analyze(new TsAnalyzeDtos.Request(payloads)));
+        } catch (JobCancelledException cancelled) {
+            throw cancelled;
         } catch (RuntimeException failure) {
             var submitted =
                     payloads.stream().map(TsAnalyzeDtos.FilePayload::path).collect(java.util.stream.Collectors.toSet());
@@ -150,6 +159,7 @@ public class TsParsingStep implements JobStep {
         List<TsAnalyzeDtos.FilePayload> payloads = new ArrayList<>();
         TsRequestBudget budget = new TsRequestBudget();
         for (InventoriedFile file : files) {
+            JobCancellation.checkpoint();
             if (file.size() > analysisProperties.maxFileSize()) {
                 recordOne(snapshotId, file, "UNMEASURED", "SOURCE_SIZE_LIMIT");
                 continue;

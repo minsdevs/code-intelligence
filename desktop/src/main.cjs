@@ -3,6 +3,8 @@ const {
   BrowserWindow,
   dialog,
   ipcMain,
+  Menu,
+  net: electronNet,
   safeStorage,
   shell
 } = require('electron');
@@ -40,6 +42,7 @@ const { RuntimeIntegrityError, integrityError, startupFailureCode,
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
 const { TEST_ONLY_MODE, adapterIsolationRuntimeMode, openAdapterIsolation } = require('./adapter-isolation.cjs');
 const { openAdapterControl } = require('./adapter-control.cjs');
+const { openUpdateStartup } = require('./update-startup.cjs');
 const packageMetadata = require('../package.json');
 
 // App documents and workers may run only bundled same-origin script and reach only the app origin.
@@ -59,6 +62,7 @@ let safetyLifecycle;
 let aiGateway;
 let aiPostgres;
 let backupRuntime;
+let updateStartup;
 let ownerLocks;
 let sourceVault;
 let sourceBroker;
@@ -1361,7 +1365,7 @@ async function startApplication() {
         noteStartup('GATEWAY');
         aiGateway = await openDesktopAiGateway({ installationId: secrets.localIdentity, runningBuild,
           temporaryRoot: runtime.ipcRoot, tokenEncryptionKey: secrets.tokenEncryptionKey, windowsBoundary,
-          openJournal, freshEnrollmentAllowed, adapter: aiPostgres, recoveryMode: gatewayRecoveryMode,
+          openJournal, freshEnrollmentAllowed, adapter: aiPostgres, recoveryMode: gatewayRecoveryMode, buildMetadata: packageMetadata,
           verifyMaintenanceSeal: maintenanceVerifier, verifyMaintenanceCompletion: maintenanceVerifier });
         return aiGateway;
       },
@@ -1398,8 +1402,17 @@ async function startApplication() {
     if (quitting) return;
     noteStartup('AUTHORIZED_ROOTS');
     runtime.authorizedRoots = await readAuthorizedRoots();
+    // G-UPDATE: checkpoint before the backend may migrate; an unfinished upgrade is recovery-only.
+    if (process.platform === 'darwin' && runtimeManifest.backupProtocol === 3) {
+      updateStartup = await openUpdateStartup({ electron: { app, dialog, shell, net: electronNet, Menu }, safety: safetyLifecycle,
+        userData, runningBuild, runtimeRoot: runtimeRoot(), execPath: process.execPath, resourcesPath: process.resourcesPath,
+        stopRuntime: () => withRuntimeOperation(() => stopRuntime()),
+        quit: () => app.quit() });
+      if (!await updateStartup.beforeRuntime()) { app.quit(); return; }
+    }
     registerIpc();
     await startRuntime();
+    await updateStartup?.afterHealthy();
     if (!quitting) { noteStartup('WINDOW'); createWindow(); noteStartup('READY'); }
   } catch (error) {
     // Requested quit cancels further startup; the serialized shutdown still latches and closes B.
@@ -1407,6 +1420,7 @@ async function startApplication() {
     runtime = runtime || { ready: false };
     runtime.error = error.message;
     runtime.recoveryRequired = true;
+    await updateStartup?.onStartupFailure().catch(() => {});
     const code = startupFailureCode(error);
     console.error('DESKTOP_STARTUP ' + startupPhase + ' FAILED ' + code);
     dialog.showErrorBox('Code Intelligence could not start', error.message);

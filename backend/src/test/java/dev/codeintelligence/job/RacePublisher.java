@@ -71,6 +71,20 @@ final class RacePublisher extends JobProgressPublisher {
         return install(job -> job.projectId() == projectId && job.status() == JobStatus.QUEUED);
     }
 
+    /**
+     * Parks the first progress publish of a RUNNING job of the project made from inside the body of
+     * {@code stepKey} (the step row already reports progress above the 0 set when it started).
+     */
+    Hold holdInStepBody(long projectId, String stepKey) {
+        return install(job -> job.projectId() == projectId
+                && job.status() == JobStatus.RUNNING
+                && repository.findSteps(job.id()).stream()
+                        .anyMatch(step -> step.stepKey().equals(stepKey)
+                                && step.status() == StepStatus.RUNNING
+                                && step.progressPct() != null
+                                && step.progressPct() > 0));
+    }
+
     private Hold install(Predicate<JobRecord> match) {
         Hold next = new Hold(match);
         hold = next;

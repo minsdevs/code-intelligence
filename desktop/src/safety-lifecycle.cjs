@@ -8,6 +8,7 @@ const path = require('node:path');
 const { initializePurposeKeyring, openPurposeKeyring } = require('./purpose-keyring.cjs');
 const { initializeSafetyJournal, openSafetyJournal } = require('./safety-journal.cjs');
 const { readStorageFile, writeStorageFile } = require('./windows-storage-files.cjs');
+const { isVerifiedManifest } = require('./update-manifest.cjs');
 
 const ENROLLMENT_FILE = '.safety-enrollment.json';
 const MAX_BUILD = 9223372036854775807n;
@@ -350,6 +351,12 @@ async function openSafetyLifecycle({ userData, safeStorage, installationId, runn
       } catch { recoveryOnly = true; }
       return Object.freeze({ aiOff: gateway ? gateway.diagnostics().aiOff : true, recoveryOnly: Boolean(recoveryOnly) });
     };
+    // G-UPDATE area-B state: the anti-rollback floor and the last consumed manifest serial.
+    const updateState = () => {
+      const state = journal.snapshot();
+      return Object.freeze({ highWaterBuild: state.minimumVersion, lastManifestSerial: state.lastManifestSerial,
+        journal: Object.freeze({ sequence: state.sequence, headHash: state.headHash }) });
+    };
     if (createBackupRuntime) {
       const keyProvider = Object.freeze({
         currentKeyId(purpose) {
@@ -371,6 +378,26 @@ async function openSafetyLifecycle({ userData, safeStorage, installationId, runn
         if (closing || failed || !['USER_OFF', 'RESTART_RECONCILIATION', 'RESTORE'].includes(reason)) fail();
         try { if (gateway) await gateway.latchOffline(reason); else await journal.latch(reason); return diagnostics(); }
         catch { failed = true; fail(); }
+      },
+      updateState,
+      // Called once by main after the backend of this build is healthy (schema migrated). A start
+      // that fails before that point leaves the previous floor, so the previous build can reopen.
+      async recordStartedBuild() {
+        if (closing || failed || recoveryMode) fail();
+        try { await journal.recordStartedBuild(); return updateState(); } catch { fail(); }
+      },
+      async recordAcceptedManifest(verified) {
+        if (closing || failed || !isVerifiedManifest(verified) || verified.manifest.kind !== 'update') fail();
+        try { await journal.recordManifest({ serial: verified.acceptedSerial }); return updateState(); } catch { fail(); }
+      },
+      // Sanctioned rollback: only a verified signed recovery manifest bound to a retained checkpoint.
+      async sanctionRecoveryRollback(verified) {
+        if (closing || failed || !isVerifiedManifest(verified) || verified.manifest.kind !== 'recovery') fail();
+        try {
+          await journal.sanctionRollback({ targetBuild: verified.manifest.buildSequence, serial: verified.acceptedSerial,
+            checkpointId: verified.manifest.recovery.checkpointId, manifestSha256: verified.bodySha256 });
+          return updateState();
+        } catch { fail(); }
       },
       denyAdmission() {
         const error = new SafetyLifecycleError('DESKTOP_AI_SAFETY_UNAVAILABLE');

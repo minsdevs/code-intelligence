@@ -1,5 +1,6 @@
 'use strict';
 
+const http = require('node:http');
 const https = require('node:https');
 const dns = require('node:dns');
 const net = require('node:net');
@@ -44,7 +45,38 @@ function restrictedLookup(resolve, hostname, options, callback) {
 }
 
 function unavailable() { return new Error('AI provider response unavailable'); }
+
+// Validation candidates only (PK-08): a build-time loopback origin for a local fake provider replaces the
+// fixed provider host. It is read from the packaged package.json (inside the integrity-checked app.asar), so
+// no environment variable, renderer, file or user setting can supply it, and any other build refuses it.
+const VALIDATION_PACKAGE_NAME = 'code-intelligence-validation';
+const VALIDATION_PROVIDER_KEY = 'validationAiProviderOrigin';
+function validationProviderTarget(metadata) {
+  if (!metadata || typeof metadata !== 'object' || !Object.hasOwn(metadata, VALIDATION_PROVIDER_KEY)) return null;
+  const value = metadata[VALIDATION_PROVIDER_KEY];
+  const match = metadata.name === VALIDATION_PACKAGE_NAME && typeof value === 'string'
+    && /^http:\/\/(127\.0\.0\.1|\[::1\]):([1-9][0-9]{3,4})$/.exec(value);
+  if (!match || Number(match[2]) > 65535) throw new Error('AI provider build variant refused');
+  return Object.freeze({ hostname: match[1] === '[::1]' ? '::1' : '127.0.0.1', family: match[1] === '[::1]' ? 6 : 4,
+    port: Number(match[2]) });
+}
+
+function createProviderTransport(metadata) {
+  const target = validationProviderTarget(metadata);
+  if (!target) return createHttpsTransport();
+  return createTransport((headers, onResponse) => http.request({ protocol: 'http:', hostname: target.hostname,
+    family: target.family, port: target.port, path: '/v1/chat/completions', method: 'POST', agent: false,
+    lookup: (hostname, options, callback) => callback(unavailable()), headers }, onResponse));
+}
+
 function createHttpsTransport(requestImpl = https.request, lookupImpl = dns.lookup) {
+  return createTransport((headers, onResponse) => requestImpl({ protocol: 'https:', hostname: 'api.openai.com', port: 443,
+    path: '/v1/chat/completions', method: 'POST', agent: false, rejectUnauthorized: true,
+    servername: 'api.openai.com', lookup: (hostname, options, callback) => restrictedLookup(lookupImpl, hostname, options, callback),
+    minVersion: 'TLSv1.2', headers }, onResponse));
+}
+
+function createTransport(open) {
   return function transport(request) {
     const headers = request?.headers;
     // Defense in depth: this transport has no caller-selected host, TLS settings, proxy, or redirects.
@@ -69,10 +101,7 @@ function createHttpsTransport(requestImpl = https.request, lookupImpl = dns.look
       // Total deadline includes DNS, TLS, upload, headers and body; socket idle timeout is insufficient.
       const timer = setTimeout(() => finish(unavailable()), request.timeoutMs);
       try {
-        client = requestImpl({ protocol: 'https:', hostname: 'api.openai.com', port: 443,
-          path: '/v1/chat/completions', method: 'POST', agent: false, rejectUnauthorized: true,
-          servername: 'api.openai.com', lookup: (hostname, options, callback) => restrictedLookup(lookupImpl, hostname, options, callback),
-          minVersion: 'TLSv1.2', headers: { ...headers, 'Content-Length': String(body.length), 'Accept-Encoding': 'identity' } }, incoming => {
+        client = open({ ...headers, 'Content-Length': String(body.length), 'Accept-Encoding': 'identity' }, incoming => {
           response = incoming;
           if (done) { incoming.destroy(); return; }
           const encoding = incoming.headers['content-encoding'];
@@ -104,4 +133,4 @@ function createHttpsTransport(requestImpl = https.request, lookupImpl = dns.look
     });
   };
 }
-module.exports = Object.freeze({ createHttpsTransport });
+module.exports = Object.freeze({ createHttpsTransport, createProviderTransport, validationProviderTarget });

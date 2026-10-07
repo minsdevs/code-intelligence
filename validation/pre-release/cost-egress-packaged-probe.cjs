@@ -1,8 +1,8 @@
 'use strict';
 
 // G-COST packaged-app probe on an unmodified retained candidate with a fresh isolated profile and mock
-// Keychain. The packaged provider transport is fixed to https://api.openai.com by design and cannot be
-// pointed at a fake provider, so this probe never activates AI. It shows that in the first-run state
+// Keychain. This probe never activates AI (the packaged ask through the validation-build-only loopback
+// fake provider, PK-08, is cost-egress-packaged-ask.cjs). It shows that in the first-run state
 // (AI OFF, budget 0) and after saving a synthetic key with budget 0 no provider request can be produced
 // through the renderer/IPC paths: no activation, no quote, no ledger hold, and no non-loopback socket
 // from the app's process tree. It also binds the packaged AI modules to the current sources by hash.
@@ -75,7 +75,7 @@ async function main(argv = process.argv.slice(2)) {
     buildSequence: manifest.buildSequence, appAsarSha256: hash(asarFile), manifestSha256: hash(manifestFile),
     probeSha256: hash(__filename), packagedModules: modules, mockKeychain: true, realAccount: false, providerActivated: false,
     profile: plan.paths.userData, checks: [], socketSamples: [], fakeProviderPossible: false,
-    fakeProviderReason: 'packaged transport is fixed to https://api.openai.com with public-DNS pinning; no base URL or transport override exists' };
+    fakeProviderReason: 'first-run probe; the PK-08 packaged ask runs separately (cost-egress-packaged-ask.cjs) on a validation candidate carrying the build-time loopback provider origin' };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   save(); console.log(JSON.stringify({ status: report.status, evidence }));
   const { _electron } = createRequire(path.join(repo, 'frontend/package.json'))('playwright');
