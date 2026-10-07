@@ -110,7 +110,8 @@ class ImportSecretsCorpusIntegrationTest {
     static final String SENTINEL = "C05SENTINEL";
     private static final int FILE_BYTES = 1024 * 1024; // Shipped app.analysis.max-file-size (below the 2 MiB ceiling).
     private static final long TOTAL_BYTES = 512L * 1024 * 1024;
-    private static final int ACCEPTED_FILES = 20_000; // Shipped app.analysis.max-files (below 50,000).
+    private static final int ACCEPTED_FILES =
+            50_000; // Shipped app.analysis.max-files (equal to the 50,000-entry ceiling).
     private static final int ENCOUNTERED_FILES = 50_000;
     private static final String CHANGED = "LOCAL_SOURCE_CHANGED";
     private static NodeBridge bridge;
@@ -793,7 +794,7 @@ class ImportSecretsCorpusIntegrationTest {
         cases.add(new Case(
                 "C05-45",
                 "count",
-                "20,000 eligible files are all accepted",
+                "50,000 eligible files are all accepted",
                 Kind.ACCEPT_LIGHT,
                 t -> eligible(t, ACCEPTED_FILES),
                 null,
@@ -803,13 +804,13 @@ class ImportSecretsCorpusIntegrationTest {
         cases.add(new Case(
                 "C05-46",
                 "count",
-                "20,001 eligible files: one FILE_LIMIT exclusion",
-                Kind.ACCEPT_LIGHT,
+                "50,001 eligible files fail: the shipped file limit equals the entry ceiling",
+                Kind.REJECT,
                 t -> eligible(t, ACCEPTED_FILES + 1),
                 null,
-                null,
-                ex("FILE_LIMIT", 1),
-                null));
+                List.of(),
+                Map.of(),
+                "Local source exceeds the file safety limit."));
         // Root selection policy.
         cases.add(new Case(
                 "C05-47",
