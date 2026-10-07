@@ -5,6 +5,8 @@
 // (desktop/build/update-keys.json); nothing in a manifest body is trusted before its signature.
 // See docs/release/update-acceptance-plan.md §2 for the verification order.
 const crypto = require('node:crypto');
+const fs = require('node:fs/promises');
+const { constants } = require('node:fs');
 
 const DOMAIN = 'CI-UPDATE-MANIFEST-1\0';
 const BODY_FIELDS = Object.freeze(['format', 'kind', 'product', 'bundleId', 'teamId', 'channel', 'serial', 'issuedAt', 'expiresAt',
@@ -13,6 +15,8 @@ const ARTIFACT_FIELDS = Object.freeze(['kind', 'url', 'size', 'sha256']);
 const SCHEMA_FIELDS = Object.freeze(['flyway', 'safetyJournalMajor', 'backupFormat']);
 const RECOVERY_FIELDS = Object.freeze(['checkpointId', 'checkpointSchemaFlyway', 'reason']);
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+// Results of verifyUpdateManifest only. Area B accepts a serial or a rollback from nothing else.
+const VERIFIED = new WeakSet();
 
 class UpdateManifestError extends Error {
   constructor(code) { super(code); this.name = 'UpdateManifestError'; this.code = code; }
@@ -102,14 +106,44 @@ function verifyUpdateManifest(envelope, context) {
   try { url = new URL(body.artifact.url); } catch { fail('UPDATE_ARTIFACT_URL'); }
   if (url.protocol !== 'https:' || url.username || url.password || url.port || !context.allowedHosts.includes(url.hostname)
       || url.hash) fail('UPDATE_ARTIFACT_URL');
-  return Object.freeze({ manifest: body, acceptedSerial: body.serial });
+  // A frozen copy of the verified bytes; later changes to the caller's envelope cannot reach it.
+  const encoded = canonical(body), manifest = deepFreeze(JSON.parse(encoded));
+  const result = Object.freeze({ manifest, acceptedSerial: body.serial,
+    bodySha256: crypto.createHash('sha256').update(encoded).digest('hex') });
+  VERIFIED.add(result);
+  return result;
 }
+function deepFreeze(value) {
+  if (value && typeof value === 'object') { Object.values(value).forEach(deepFreeze); Object.freeze(value); }
+  return value;
+}
+const isVerifiedManifest = value => VERIFIED.has(value);
 
 function verifyArtifactBytes(bytes, manifest) {
   if (!Buffer.isBuffer(bytes) || bytes.length !== manifest.artifact.size) fail('UPDATE_ARTIFACT_SIZE');
   const digest = crypto.createHash('sha256').update(bytes).digest();
   if (!crypto.timingSafeEqual(digest, Buffer.from(manifest.artifact.sha256, 'hex'))) fail('UPDATE_ARTIFACT_HASH');
   return true;
+}
+
+// Streaming form of verifyArtifactBytes for a downloaded file: same size and hash failures.
+async function verifyArtifactFile(file, manifest) {
+  const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.size !== manifest.artifact.size) fail('UPDATE_ARTIFACT_SIZE');
+    const hash = crypto.createHash('sha256'), buffer = Buffer.alloc(1024 * 1024);
+    let total = 0;
+    for (;;) {
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, total);
+      if (!bytesRead) break;
+      total += bytesRead; if (total > manifest.artifact.size) fail('UPDATE_ARTIFACT_SIZE');
+      hash.update(buffer.subarray(0, bytesRead));
+    }
+    if (total !== manifest.artifact.size) fail('UPDATE_ARTIFACT_SIZE');
+    if (!crypto.timingSafeEqual(hash.digest(), Buffer.from(manifest.artifact.sha256, 'hex'))) fail('UPDATE_ARTIFACT_HASH');
+    return true;
+  } finally { await handle.close(); }
 }
 
 // The installed app must match before it may run: identity from code signature, not from the manifest.
@@ -132,4 +166,4 @@ function mergeAfterRestore(live, restored) {
 }
 
 module.exports = { DOMAIN, BODY_FIELDS, UpdateManifestError, canonical, signManifest, verifyUpdateManifest, verifyArtifactBytes,
-  verifyInstalledIdentity, raiseHighWater, mergeAfterRestore, compareVersion };
+  verifyArtifactFile, verifyInstalledIdentity, raiseHighWater, mergeAfterRestore, compareVersion, isVerifiedManifest };
