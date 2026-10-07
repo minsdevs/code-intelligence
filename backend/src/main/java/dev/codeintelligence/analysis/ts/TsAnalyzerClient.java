@@ -14,10 +14,13 @@ public class TsAnalyzerClient {
 
     private final TsAnalyzerProperties properties;
     private final RestClient restClient;
+    private final TsAnalyzerControlClient controlClient;
 
     public TsAnalyzerClient(TsAnalyzerProperties properties, RestClient.Builder restClientBuilder) {
         this.properties = properties;
-        if (!properties.enabled()) {
+        // ADR-01: the packaged desktop reaches the analyzer only through main's control socket.
+        this.controlClient = properties.controlled() ? new TsAnalyzerControlClient(properties) : null;
+        if (!properties.enabled() || controlClient != null) {
             this.restClient = null;
             return;
         }
@@ -51,6 +54,9 @@ public class TsAnalyzerClient {
     }
 
     public TsAnalyzeDtos.Response analyze(TsAnalyzeDtos.Request request) {
+        if (controlClient != null) {
+            return controlClient.analyze(request);
+        }
         if (restClient == null) {
             return TsAnalyzeDtos.Response.EMPTY;
         }
@@ -80,6 +86,10 @@ public class TsAnalyzerClient {
     }
 
     public void health() {
+        if (controlClient != null) {
+            controlClient.health();
+            return;
+        }
         if (restClient == null) {
             return;
         }

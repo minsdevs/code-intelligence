@@ -85,6 +85,8 @@ app:
     timeout-seconds: ${TS_ANALYZER_TIMEOUT_SECONDS:30}
     tls-cert-sha256: ${TS_ANALYZER_TLS_CERT_SHA256:}
     auth-token: ${TS_ANALYZER_AUTH_TOKEN:}
+    control-socket: ${TS_ANALYZER_CONTROL_SOCKET:}
+    control-capability: ${TS_ANALYZER_CONTROL_CAPABILITY:}
   tree-analyzer:
     base-url: ${TREE_ANALYZER_BASE_URL:}
     timeout-seconds: ${TREE_ANALYZER_TIMEOUT_SECONDS:30}
