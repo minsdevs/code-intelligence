@@ -29,7 +29,8 @@ function loadMain() {
       webContents.send = () => {};
       webContents.setWindowOpenHandler = fn => { this.windowOpen = fn; };
       webContents.session = {
-        webRequest: { onBeforeSendHeaders: (filter, fn) => { this.headerFilter = filter; this.headers = fn; } },
+        webRequest: { onBeforeSendHeaders: (filter, fn) => { this.headerFilter = filter; this.headers = fn; },
+          onHeadersReceived: (filter, fn) => { this.responseFilter = filter; this.responseHeaders = fn; } },
         setCertificateVerifyProc: fn => { this.verifyCertificate = fn; },
         setPermissionCheckHandler: fn => { this.permissionCheck = fn; },
         setPermissionRequestHandler: fn => { this.permissionRequest = fn; },
@@ -199,6 +200,36 @@ test('the launch token header is injected only for app-origin requests of the pr
     { webContentsId: own, url: 'https://evil.example/api/projects', resourceType: 'xhr', requestHeaders: {} },
     { webContentsId: own, url: 'https://127.0.0.1:41001/api/projects', resourceType: 'xhr', requestHeaders: {} },
   ]) assert.equal(JSON.stringify(send(details)).includes(TOKEN), false, JSON.stringify(details));
+});
+
+// SEC-M-01: the renderer must not run injected inline script or eval, or reach other origins.
+// Monaco and elk workers are emitted as same-origin files (monacoSetup.ts), so no blob: worker.
+const APP_CSP = "default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; "
+  + "style-src 'self' 'unsafe-inline'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+
+test('every app-origin response in the product session carries the reviewed CSP, replacing any served policy', () => {
+  const h = loadMain();
+  h.run('createWindow();');
+  const window = h.browser[1];
+  assert.equal(typeof window.responseHeaders, 'function', 'no CSP is delivered for app documents');
+  assert.deepEqual(JSON.parse(JSON.stringify(window.responseFilter)), { urls: [`${ORIGIN}/*`] });
+  const receive = details => { let result; window.responseHeaders(details, value => { result = value; }); return result; };
+  for (const [resourceType, url, served] of [
+    ['mainFrame', `${ORIGIN}/`, { 'Content-Type': ['text/html'] }],
+    ['subFrame', `${ORIGIN}/projects`, { 'content-security-policy': ["script-src * 'unsafe-inline' 'unsafe-eval'"] }],
+    ['script', `${ORIGIN}/assets/editor.worker.js`, { 'CONTENT-SECURITY-POLICY': ['default-src *'], 'Content-Security-Policy': ['img-src *'] }],
+    ['xhr', `${ORIGIN}/api/projects`, undefined],
+  ]) {
+    const result = receive({ webContentsId: window.webContents.id, resourceType, url, responseHeaders: served });
+    assert.equal(result.cancel, undefined, url);
+    const names = Object.keys(result.responseHeaders).filter(name => name.toLowerCase() === 'content-security-policy');
+    assert.deepEqual(names, ['Content-Security-Policy'], url);
+    assert.deepEqual([...result.responseHeaders['Content-Security-Policy']], [APP_CSP], url);
+    if (served?.['Content-Type']) assert.deepEqual([...result.responseHeaders['Content-Type']], ['text/html']);
+  }
+  const directives = Object.fromEntries(APP_CSP.split('; ').map(entry => { const [name, ...values] = entry.split(' '); return [name, values]; }));
+  for (const name of ['script-src', 'connect-src', 'worker-src']) assert.deepEqual(directives[name], ["'self'"], name);
+  assert.equal(APP_CSP.includes('unsafe-eval'), false);
 });
 
 function loadPreload(config) {

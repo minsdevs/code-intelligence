@@ -83,7 +83,8 @@ async function harness(t, options = {}) {
       const webContents = new EventEmitter(); webContents.id = 7; webContents.mainFrame = { url: 'about:blank' };
       webContents.send = (channel, value) => outbound.push({ channel, value: clone(value) });
       webContents.setWindowOpenHandler = fn => { this.windowOpen = fn; };
-      webContents.session = { webRequest: { onBeforeSendHeaders: (_filter, fn) => { this.headers = fn; } },
+      webContents.session = { webRequest: { onBeforeSendHeaders: (_filter, fn) => { this.headers = fn; },
+        onHeadersReceived: (_filter, fn) => { this.responseHeaders = fn; } },
         setCertificateVerifyProc(fn) { this.verifyCertificate = fn; },
         async clearStorageData(value) { events.push('session.clearStorage'); controls.clearedStorage = value; await controls.clearStorage?.(); },
         async clearCache() { events.push('session.clearCache'); },

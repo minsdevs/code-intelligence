@@ -39,6 +39,14 @@ const { RuntimeIntegrityError, integrityError, startupFailureCode,
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
 const packageMetadata = require('../package.json');
 
+// App documents and workers may run only bundled same-origin script and reach only the app origin.
+// Monaco and elk workers are emitted as same-origin files, so workers need no blob: source.
+const APP_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'", "script-src 'self'", "connect-src 'self'", "img-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'", "worker-src 'self'", "object-src 'none'", "base-uri 'none'",
+  "frame-ancestors 'none'"
+].join('; ');
+
 const children = new Map();
 const childStops = new Map();
 let mainWindow;
@@ -1177,6 +1185,15 @@ function createWindow() {
       } finally {
         callback({ requestHeaders: details.requestHeaders });
       }
+    }
+  );
+  mainWindow.webContents.session.webRequest.onHeadersReceived(
+    { urls: [`${appOrigin}/*`] },
+    (details, callback) => {
+      const responseHeaders = Object.fromEntries(Object.entries(details.responseHeaders ?? {})
+        .filter(([name]) => name.toLowerCase() !== 'content-security-policy'));
+      responseHeaders['Content-Security-Policy'] = [APP_CONTENT_SECURITY_POLICY];
+      callback({ responseHeaders });
     }
   );
   const allowAppNavigation = event => {
