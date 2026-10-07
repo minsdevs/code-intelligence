@@ -1,0 +1,67 @@
+{
+ "mode": "none",
+ "policy": null,
+ "served": [
+  "/api/ai/status",
+  "/api/auth/github/connection",
+  "/api/projects",
+  "/api/projects/7",
+  "/api/projects/7/areas",
+  "/api/projects/7/file-content",
+  "/api/projects/7/files",
+  "/api/projects/7/graph/nodes",
+  "/api/projects/7/local-source-status",
+  "/api/projects/7/snapshots",
+  "/assets/CodeExplorerPage-DlSEFaiO.js",
+  "/assets/CodeViewer-BWRW9PHe.js",
+  "/assets/editor-jjEx9u7D.css",
+  "/assets/editor.api-cnds3Cwe.js",
+  "/assets/editor.worker-D9zwrD0f.js",
+  "/assets/index-BsIJU9Ld.css",
+  "/assets/index-Bz7lirCY.js",
+  "/assets/jsx-runtime-BpzPEenQ.js",
+  "/assets/monacoSetup--ixms01u.css",
+  "/assets/monacoSetup-CXKto7_5.js",
+  "/assets/relationConfidence-CPpTsQaL.js",
+  "/assets/rolldown-runtime-Dd_uD5pT.js",
+  "/assets/ts.worker-DkYoA6bF.js",
+  "/assets/tsMode-B6vLUswH.js",
+  "/assets/typescript-ty18IBh4.js",
+  "/assets/workers-YaEBoVoB.js",
+  "/projects/7/code"
+ ],
+ "foreign": [
+  "/fetch",
+  "/img"
+ ],
+ "console": [],
+ "editor": {
+  "lines": true,
+  "tokens": 41
+ },
+ "editorAfterWorkers": {
+  "spans": 41,
+  "classes": [
+   "mtk1",
+   "mtk6",
+   "mtk8",
+   "mtk9",
+   "mtk9 bracket-highlighting-0",
+   "mtk9 bracket-highlighting-1"
+  ],
+  "text": "export\u00a0const\u00a0answer:\u00a0number\u00a0=\u00a042;function\u00a0twice(x:\u00a0number)\u00a0{\u00a0return\u00a0x\u00a0*\u00a02;\u00a0}cons"
+ },
+ "attack": {
+  "evalAllowed": true,
+  "inlineRan": true,
+  "crossOriginFetch": "sent",
+  "blobWorker": "ran",
+  "violations": []
+ },
+ "workerScriptsServed": [
+  "/assets/workers-YaEBoVoB.js",
+  "/assets/ts.worker-DkYoA6bF.js",
+  "/assets/editor.worker-D9zwrD0f.js"
+ ],
+ "cspConsole": []
+}

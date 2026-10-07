@@ -223,6 +223,37 @@ function plaintextSecretScan(root, secrets, extraTexts) {
   return { scannedFiles, scannedBytes, skippedLarge, hits };
 }
 
+// SEC-M-01 expectations for the renderer record: a strict CSP is delivered and every renderer
+// attack (inline script, eval, cross-origin fetch/img to the probe listener) was blocked.
+function rendererCspFailures(renderer) {
+  if (!renderer) return ['RENDERER_NOT_PROBED'];
+  const failures = [];
+  const directives = new Map(String(renderer.documentCsp ?? '').split(';').map(entry => entry.trim().split(/\s+/))
+    .filter(([name]) => name).map(([name, ...values]) => [name.toLowerCase(), values]));
+  const only = (name, value) => { const values = directives.get(name) ?? directives.get('default-src'); return values?.length === 1 && values[0] === value; };
+  if (!renderer.documentCsp) failures.push('DOCUMENT_CSP_MISSING');
+  else {
+    if (!only('script-src', "'self'")) failures.push('SCRIPT_SRC_NOT_SELF_ONLY');
+    if (!only('connect-src', "'self'")) failures.push('CONNECT_SRC_NOT_SELF_ONLY');
+    if (!only('object-src', "'none'")) failures.push('OBJECT_SRC_NOT_NONE');
+  }
+  if (renderer.injectedInlineScriptRan !== false) failures.push('INLINE_SCRIPT_RAN');
+  if (renderer.evalAllowed !== false) failures.push('EVAL_ALLOWED');
+  if (renderer.crossOriginFetch !== 'blocked') failures.push('CROSS_ORIGIN_FETCH_SENT');
+  if ((renderer.listenerReceived ?? []).some(item => /^\/renderer-(fetch|image)/.test(item.path))) failures.push('RENDERER_REQUEST_REACHED_LISTENER');
+  return failures;
+}
+
+// SEC-M-04 expectations: the wire must equal what desktop/scripts/electron-fuses.cjs flips for a
+// validation build of this package metadata (validation keeps --inspect for Playwright only).
+function fuseFailures(state, metadata) {
+  if (!state) return ['FUSES_NOT_READ'];
+  const { fusesFor, VALIDATION_APP_ID } = require('../../desktop/scripts/electron-fuses.cjs');
+  return Object.entries(fusesFor(VALIDATION_APP_ID, metadata))
+    .map(([name, enabled]) => [name[0].toUpperCase() + name.slice(1), enabled ? 'ENABLE' : 'DISABLE'])
+    .filter(([name, expected]) => state[name] !== expected).map(([name]) => `FUSE_${name}_${state[name] ?? 'MISSING'}`);
+}
+
 async function main(argv = process.argv.slice(2)) {
   const options = argumentsFor(argv);
   assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64'); process.umask(0o077);
@@ -242,6 +273,11 @@ async function main(argv = process.argv.slice(2)) {
   try {
     report.checks.static = staticInspection(repo, app, runtime);
     report.checks.fuses = await readFuses(repo, app);
+    const appMetadata = JSON.parse(createRequire(path.join(repo, 'desktop/package.json'))('@electron/asar')
+      .extractFile(path.join(app, 'Contents/Resources/app.asar'), 'package.json'));
+    const failedFuses = fuseFailures(report.checks.fuses.state, appMetadata);
+    report.expectations = { fuses: { status: failedFuses.length ? 'FAIL' : 'PASS', failures: failedFuses,
+      adapterIsolation: appMetadata.adapterIsolation ?? 'legacy-http' } };
     report.checks.effectiveNodeModes = effectiveNodeModes(report.checks.static.executable, scratch);
     delete report.checks.static.executable; save();
   } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
@@ -329,6 +365,8 @@ async function main(argv = process.argv.slice(2)) {
     await new Promise(resolve => setTimeout(resolve, 500));
     report.checks.renderer.listenerReceived = exfil.map(item => ({ method: item.method, path: item.path,
       tokenHeaderPresent: item.tokenHeaderPresent, originHeader: item.originHeader }));
+    const cspFailures = rendererCspFailures(report.checks.renderer);
+    report.expectations = { ...report.expectations, rendererCsp: { status: cspFailures.length ? 'FAIL' : 'PASS', failures: cspFailures } };
     save();
 
     const ownerPid = owner.process().pid;
@@ -403,10 +441,10 @@ async function main(argv = process.argv.slice(2)) {
     report.status = report.failure || report.cleanupFailure || report.scanFailure ? 'INCOMPLETE' : 'COMPLETE';
     report.finishedAt = new Date().toISOString(); save();
   }
-  console.log(JSON.stringify({ status: report.status, evidence }));
+  console.log(JSON.stringify({ status: report.status, expectations: report.expectations ?? null, evidence }));
   if (report.status !== 'COMPLETE') process.exitCode = 1;
   return report;
 }
 
-module.exports = { argumentsFor, plistKeys, walkModes, plaintextSecretScan };
+module.exports = { argumentsFor, plistKeys, walkModes, plaintextSecretScan, rendererCspFailures, fuseFailures };
 if (require.main === module) main().catch(error => { console.error('SECURITY_PROBE_PREFLIGHT_FAILED', String(error?.message ?? '').slice(0, 160)); process.exitCode = 1; });

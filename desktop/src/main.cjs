@@ -37,7 +37,16 @@ const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
 const { RuntimeIntegrityError, integrityError, startupFailureCode,
   integrityDiagnostic, formatIntegrityDiagnostic } = require('./startup-diagnostics.cjs');
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
+const { adapterIsolationMode, openAdapterIsolation } = require('./adapter-isolation.cjs');
 const packageMetadata = require('../package.json');
+
+// App documents and workers may run only bundled same-origin script and reach only the app origin.
+// Monaco and elk workers are emitted as same-origin files, so workers need no blob: source.
+const APP_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'", "script-src 'self'", "connect-src 'self'", "img-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'", "worker-src 'self'", "object-src 'none'", "base-uri 'none'",
+  "frame-ancestors 'none'"
+].join('; ');
 
 const children = new Map();
 const childStops = new Map();
@@ -535,6 +544,21 @@ async function startRedis() {
 }
 
 async function spawnAnalyzer() {
+  const mode = adapterIsolationMode(packageMetadata);
+  if (mode !== 'legacy-http') {
+    // ADR-01: production analysis runs only behind the attested XPC supervisor. Without it the
+    // adapter is ADAPTER_ISOLATION_UNAVAILABLE; no ordinary child or HTTP sidecar is started.
+    try {
+      await openAdapterIsolation({ mode, runtimeRoot: runtimeRoot(), manifest: runtimeManifest });
+      runtime.adapterIsolation = { mode, isolated: true };
+    } catch (error) {
+      runtime.adapterIsolation = { mode, isolated: false, code: 'ADAPTER_ISOLATION_UNAVAILABLE',
+        reason: error?.code === 'ADAPTER_ISOLATION_UNAVAILABLE' ? error.reason : 'UNEXPECTED' };
+      console.error('DESKTOP_ADAPTER_ISOLATION ADAPTER_ISOLATION_UNAVAILABLE ' + runtime.adapterIsolation.reason);
+    }
+    return async () => {};
+  }
+  runtime.adapterIsolation = { mode, isolated: false };
   const main = binary('ts-analyzer', 'dist', 'main.js');
   await spawnManaged('ts-analyzer', process.execPath, [main], {
     cwd: path.dirname(main),
@@ -870,7 +894,8 @@ function assertExternalUrl(raw) {
   }
   const url = new URL(raw);
   const allowedOrigins = new Set(['https://github.com', 'https://docs.github.com']);
-  if (url.origin === 'null'
+  if (url.protocol !== 'https:'
+      || url.origin === 'null'
       || url.username
       || url.password
       || !allowedOrigins.has(url.origin)) {
@@ -1177,6 +1202,15 @@ function createWindow() {
       } finally {
         callback({ requestHeaders: details.requestHeaders });
       }
+    }
+  );
+  mainWindow.webContents.session.webRequest.onHeadersReceived(
+    { urls: [`${appOrigin}/*`] },
+    (details, callback) => {
+      const responseHeaders = Object.fromEntries(Object.entries(details.responseHeaders ?? {})
+        .filter(([name]) => name.toLowerCase() !== 'content-security-policy'));
+      responseHeaders['Content-Security-Policy'] = [APP_CONTENT_SECURITY_POLICY];
+      callback({ responseHeaders });
     }
   );
   const allowAppNavigation = event => {

@@ -35,6 +35,7 @@
     "productName": "Code Intelligence",
     "asar": true,
     "beforePack": "./scripts/desktop-build-gate.cjs",
+    "afterPack": "./scripts/electron-fuses.cjs",
     "files": [
       "src/**/*",
       "package.json"

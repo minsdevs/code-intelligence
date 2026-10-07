@@ -1,0 +1,10 @@
+# fuse-flip.cjs on an APFS clone of desktop/node_modules/electron/dist/Electron.app (2026-10-07, app id dev.codeintelligence.desktop)
+before: RunAsNode=ENABLE EnableCookieEncryption=DISABLE EnableNodeOptionsEnvironmentVariable=ENABLE EnableNodeCliInspectArguments=ENABLE EnableEmbeddedAsarIntegrityValidation=DISABLE OnlyLoadAppFromAsar=DISABLE LoadBrowserProcessSpecificV8Snapshot=DISABLE GrantFileProtocolExtraPrivileges=ENABLE
+after:  RunAsNode=ENABLE EnableCookieEncryption=ENABLE EnableNodeOptionsEnvironmentVariable=DISABLE EnableNodeCliInspectArguments=DISABLE EnableEmbeddedAsarIntegrityValidation=ENABLE OnlyLoadAppFromAsar=ENABLE LoadBrowserProcessSpecificV8Snapshot=DISABLE GrantFileProtocolExtraPrivileges=DISABLE
+codesign --verify --strict --deep Electron.app: ok (Signature=adhoc, reset by resetAdHocDarwinSignature)
+
+# fuse-runtime-check.sh (native lock held), ELECTRON_RUN_AS_NODE=1, NODE_OPTIONS=--require marker.cjs
+original: run=node-mode 24.21.0 NODE_OPTIONS_marker=ran    inspect: Debugger listening on ws://127.0.0.1:<port>/<id> inspector=listening
+flipped:  run=node-mode 24.21.0 NODE_OPTIONS_marker=absent inspect: Debugger listening on ws://127.0.0.1:<port>/<id> inspector=listening
+# Finding: in RunAsNode mode --inspect is honored even with EnableNodeCliInspectArguments disabled;
+# only turning RunAsNode off closes that path (SEC-R54 stays open while adapterIsolation=legacy-http).

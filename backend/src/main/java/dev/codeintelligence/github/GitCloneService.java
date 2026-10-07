@@ -2,25 +2,35 @@ package dev.codeintelligence.github;
 
 import dev.codeintelligence.common.AppProperties;
 import java.io.IOException;
+import java.net.Proxy;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ResetCommand;
+import org.eclipse.jgit.api.TransportConfigCallback;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.transport.CredentialsProvider;
+import org.eclipse.jgit.transport.TransportHttp;
+import org.eclipse.jgit.transport.URIish;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+import org.eclipse.jgit.transport.http.HttpConnection;
+import org.eclipse.jgit.transport.http.HttpConnectionFactory;
+import org.eclipse.jgit.transport.http.HttpConnectionFactory2;
 import org.springframework.stereotype.Service;
 import org.springframework.util.FileSystemUtils;
 
 /**
  * JGit clone/fetch into {@code ${app.data-dir}/repos/{projectId}} (§1-2). The cloned tree is only
  * ever read — never built or executed (§18). Tokens arrive already decrypted, are wrapped in a
- * per-call CredentialsProvider ({@code x-access-token} username), and are never logged.
+ * per-call CredentialsProvider ({@code x-access-token} username), and are never logged. HTTP
+ * connections are bound to the remote's origin, so a redirect never carries them elsewhere.
  */
 @Service
 public class GitCloneService {
@@ -47,6 +57,7 @@ public class GitCloneService {
                     .setURI(remoteUri)
                     .setDirectory(target.toFile())
                     .setCredentialsProvider(credentials)
+                    .setTransportConfigCallback(sameOriginOnly(remoteUri))
                     .setNoCheckout(true);
             if (branch != null) {
                 command.setBranch(Constants.R_HEADS + branch);
@@ -78,12 +89,79 @@ public class GitCloneService {
         return new UsernamePasswordCredentialsProvider("x-access-token", token);
     }
 
+    /**
+     * 05 §2 forbids forwarding credentials across origins. JGit follows the initial redirect and,
+     * once the origin has challenged, re-sends Basic credentials to the redirect target; the
+     * per-call provider also answers for any URI. Binding the HTTP connection factory to the
+     * remote's scheme, host and port means no connection to another origin is ever opened, so
+     * same-origin redirects keep working while a cross-origin one fails the clone or fetch.
+     */
+    static TransportConfigCallback sameOriginOnly(String remoteUri) {
+        URIish origin;
+        try {
+            origin = new URIish(remoteUri == null ? "" : remoteUri);
+        } catch (URISyntaxException e) {
+            throw new GitCloneException("invalid remote URI", e);
+        }
+        return transport -> {
+            if (transport instanceof TransportHttp http) {
+                http.setHttpConnectionFactory(
+                        new OriginBoundConnectionFactory(origin, http.getHttpConnectionFactory()));
+            }
+        };
+    }
+
+    record OriginBoundConnectionFactory(URIish origin, HttpConnectionFactory delegate)
+            implements HttpConnectionFactory2 {
+
+        @Override
+        public HttpConnection create(URL url) throws IOException {
+            return delegate.create(requireOrigin(url));
+        }
+
+        @Override
+        public HttpConnection create(URL url, Proxy proxy) throws IOException {
+            return delegate.create(requireOrigin(url), proxy);
+        }
+
+        @Override
+        public GitSession newSession() {
+            return delegate instanceof HttpConnectionFactory2 sessions
+                    ? sessions.newSession()
+                    : new GitSession() {
+                        @Override
+                        public HttpConnection configure(HttpConnection connection, boolean sslVerify) {
+                            return connection;
+                        }
+
+                        @Override
+                        public void close() {}
+                    };
+        }
+
+        private URL requireOrigin(URL url) throws IOException {
+            String scheme = origin.getScheme();
+            String host = origin.getHost();
+            int port = origin.getPort() > 0 ? origin.getPort() : url.getDefaultPort();
+            if (scheme == null
+                    || host == null
+                    || !scheme.equalsIgnoreCase(url.getProtocol())
+                    || !host.equalsIgnoreCase(url.getHost())
+                    || port != (url.getPort() > 0 ? url.getPort() : url.getDefaultPort())) {
+                throw new IOException("refusing a Git HTTP connection outside the remote origin");
+            }
+            return url;
+        }
+    }
+
     private CloneResult fetchExisting(Path target, CredentialsProvider credentials, String preferredBranch)
             throws GitAPIException, IOException {
         try (Git git = Git.open(target.toFile())) {
             disableFilterDrivers(git.getRepository());
             git.fetch()
                     .setCredentialsProvider(credentials)
+                    .setTransportConfigCallback(sameOriginOnly(
+                            git.getRepository().getConfig().getString("remote", Constants.DEFAULT_REMOTE_NAME, "url")))
                     .setRemoveDeletedRefs(true)
                     .call();
             String branch = preferredBranch != null
