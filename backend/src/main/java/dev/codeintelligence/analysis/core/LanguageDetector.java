@@ -2,6 +2,8 @@ package dev.codeintelligence.analysis.core;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 public final class LanguageDetector {
 
@@ -45,7 +47,20 @@ public final class LanguageDetector {
             Map.entry("cpp", "cpp"),
             Map.entry("hpp", "cpp"));
 
+    private static final Set<String> KNOWN = known();
+
     private LanguageDetector() {}
+
+    /** Every language name {@link #detect} can return. */
+    public static Set<String> knownLanguages() {
+        return KNOWN;
+    }
+
+    private static Set<String> known() {
+        TreeSet<String> names = new TreeSet<>(BY_EXTENSION.values());
+        names.add("dockerfile");
+        return Set.copyOf(names);
+    }
 
     public static String detect(String path) {
         if (path == null || path.isBlank()) {

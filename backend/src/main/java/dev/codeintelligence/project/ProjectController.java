@@ -29,7 +29,8 @@ public class ProjectController {
         }
     }
 
-    public record LocalPreviewRequest(String path, String name, String grant) {}
+    /** {@code scope} optionally narrows the selection to top-level directories and/or languages. */
+    public record LocalPreviewRequest(String path, String name, String grant, LocalImportScope scope) {}
 
     public record PreviewTokenRequest(String previewToken) {}
 
@@ -68,7 +69,8 @@ public class ProjectController {
     @PostMapping("/local/preview")
     public LocalSourcePreview previewLocal(
             @RequestBody LocalPreviewRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
-        return approvals.previewInitial(user.userId(), request.path(), request.name(), request.grant());
+        return approvals.previewInitial(
+                user.userId(), request.path(), request.name(), request.grant(), request.scope());
     }
 
     @PostMapping("/{projectId}/local-preview")

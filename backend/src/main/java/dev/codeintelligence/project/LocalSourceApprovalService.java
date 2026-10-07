@@ -30,19 +30,25 @@ public class LocalSourceApprovalService {
     private static final int MAX_UNEXPIRED_PREVIEWS = 16;
     private static final String BINDING_COLUMNS =
             "schema_version, canonical_root, root_platform, root_identity, root_owner, "
-                    + "policy_version, limits_sha256, manifest_sha256, selected_files, selected_bytes";
+                    + "policy_version, limits_sha256, manifest_sha256, selected_files, selected_bytes, scope";
     private static final String BINDING_VALUES =
-            ":schema, :root, :platform, :identity, :owner, :policy, :limits, :manifest, :files, :bytes";
+            ":schema, :root, :platform, :identity, :owner, :policy, :limits, :manifest, :files, :bytes, :scope";
     private final JdbcClient jdbc;
     private final LocalImportService imports;
     private final TransactionTemplate transactions;
+    private final LocalLanguageCapabilities capabilities;
     private final SecureRandom random = new SecureRandom();
     private final Semaphore inspections = new Semaphore(2);
 
-    public LocalSourceApprovalService(JdbcClient jdbc, LocalImportService imports, TransactionTemplate transactions) {
+    public LocalSourceApprovalService(
+            JdbcClient jdbc,
+            LocalImportService imports,
+            TransactionTemplate transactions,
+            LocalLanguageCapabilities capabilities) {
         this.jdbc = jdbc;
         this.imports = imports;
         this.transactions = transactions;
+        this.capabilities = capabilities;
     }
 
     record ProjectContext(long id, long userId, String sourceType, String path, Long snapshotId) {}
@@ -65,13 +71,20 @@ public class LocalSourceApprovalService {
 
     /** Server-root form (configured allowed roots); a desktop selection needs its grant. */
     public LocalSourcePreview previewInitial(long userId, String path, String name) {
-        return previewInitial(userId, path, name, null);
+        return previewInitial(userId, path, name, null, null);
     }
 
     public LocalSourcePreview previewInitial(long userId, String path, String name, String grant) {
+        return previewInitial(userId, path, name, grant, null);
+    }
+
+    /** {@code scope} narrows the selection; the issued token binds exactly the narrowed manifest. */
+    public LocalSourcePreview previewInitial(
+            long userId, String path, String name, String grant, LocalImportScope scope) {
+        LocalImportScope narrowed = LocalImportScope.of(scope);
         return boundedInspection(() -> {
             checkQuota(userId);
-            LocalSourceInspection inspection = imports.inspectGranted(sourcePath(path), grant);
+            LocalSourceInspection inspection = imports.inspectGranted(sourcePath(path), grant, narrowed);
             String projectName = projectName(name, inspection.binding());
             Changes changes = changes(inspection.gitFingerprints(), Map.of());
             return transactions.execute(tx -> {
@@ -89,7 +102,9 @@ public class LocalSourceApprovalService {
             requireLocal(before);
             requireIdle(projectId);
             checkQuota(userId);
-            LocalSourceInspection inspection = imports.inspect(sourcePath(before.path()));
+            // A refresh keeps the scope the project was last approved with.
+            LocalSourceInspection inspection =
+                    imports.inspect(sourcePath(before.path()), LocalImportScope.ofProject(jdbc, projectId));
             Changes changes = changes(inspection.gitFingerprints(), snapshotFingerprint(before));
             return transactions.execute(tx -> {
                 ProjectContext current = project(projectId, userId, true);
@@ -243,6 +258,13 @@ public class LocalSourceApprovalService {
                 .query((rs, row) ->
                         rs.getObject("expires_at", OffsetDateTime.class).toInstant())
                 .single();
+        Map<String, Integer> languages = new java.util.TreeMap<>();
+        Map<String, Integer> directories = new java.util.TreeMap<>();
+        for (String file : inspection.gitFingerprints().keySet()) {
+            languages.merge(LocalImportScope.language(file), 1, Integer::sum);
+            int slash = file.indexOf('/');
+            directories.merge(slash < 0 ? LocalImportScope.ROOT_FILES : file.substring(0, slash), 1, Integer::sum);
+        }
         return new LocalSourcePreview(
                 token,
                 expires,
@@ -251,7 +273,17 @@ public class LocalSourceApprovalService {
                 snapshotId,
                 changes.counts(),
                 changes.paths(),
-                inspection.summary());
+                inspection.summary(),
+                languages.entrySet().stream()
+                        .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
+                                .thenComparing(Map.Entry.comparingByKey()))
+                        .map(entry -> new LocalSourcePreview.LanguageCount(
+                                entry.getKey(), entry.getValue(), capabilities.expectedDepth(entry.getKey())))
+                        .toList(),
+                directories.entrySet().stream()
+                        .map(entry -> new LocalSourcePreview.DirectoryCount(entry.getKey(), entry.getValue()))
+                        .toList(),
+                LocalImportScope.parse(inspection.binding().scope()));
     }
 
     private PreparedApproval lockApproval(long userId, String token) {
@@ -485,7 +517,8 @@ public class LocalSourceApprovalService {
                 rs.getString("limits_sha256"),
                 rs.getString("manifest_sha256"),
                 rs.getInt("selected_files"),
-                rs.getLong("selected_bytes"));
+                rs.getLong("selected_bytes"),
+                rs.getString("scope"));
     }
 
     private static JdbcClient.StatementSpec bindingParams(
@@ -500,7 +533,8 @@ public class LocalSourceApprovalService {
                 .param("limits", binding.limitsSha256())
                 .param("manifest", binding.manifestSha256())
                 .param("files", binding.selectedFiles())
-                .param("bytes", binding.selectedBytes());
+                .param("bytes", binding.selectedBytes())
+                .param("scope", binding.scope());
     }
 
     private static void requireTransaction() {

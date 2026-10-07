@@ -293,22 +293,30 @@ public class LocalImportService {
 
     /** Computes exactly the selected source hashes used by local copy, without retaining source bytes. */
     public Map<String, String> fingerprint(Path localPath) {
-        return inspect(localPath).gitFingerprints();
+        return fingerprint(localPath, null);
+    }
+
+    public Map<String, String> fingerprint(Path localPath, LocalImportScope scope) {
+        return inspect(localPath, scope).gitFingerprints();
     }
 
     public LocalSourceInspection inspect(Path localPath) {
-        return inspectValidated(validateSource(localPath));
+        return inspect(localPath, null);
+    }
+
+    public LocalSourceInspection inspect(Path localPath, LocalImportScope scope) {
+        return inspectValidated(validateSource(localPath), scope);
     }
 
     /** Inspects a new selection under its native-dialog grant (see {@link #validateGranted}). */
-    public LocalSourceInspection inspectGranted(Path localPath, String grant) {
-        return inspectValidated(validateGranted(localPath, grant));
+    public LocalSourceInspection inspectGranted(Path localPath, String grant, LocalImportScope scope) {
+        return inspectValidated(validateGranted(localPath, grant), scope);
     }
 
-    private LocalSourceInspection inspectValidated(Path source) {
+    private LocalSourceInspection inspectValidated(Path source, LocalImportScope scope) {
         ensureDisjointSource(source);
         try (SourceAccess.Scope ignored = SourceAccess.open(source, "source")) {
-            LocalSourcePolicy.Selection selection = policy.select(source, (file, bytes) -> {});
+            LocalSourcePolicy.Selection selection = policy.select(source, scope, (file, bytes) -> {});
             Map<String, String> result = new TreeMap<>();
             selection.files().forEach((path, file) -> result.put(path, file.oid()));
             return new LocalSourceInspection(selection.binding(), result, selection.summary());
@@ -324,7 +332,8 @@ public class LocalImportService {
         Path git = staging.resolve(Constants.DOT_GIT);
         LocalSourcePolicy.Selection selection;
         try {
-            selection = policy.select(source, (file, bytes) -> {
+            LocalImportScope scope = expected == null ? null : LocalImportScope.parse(expected.scope());
+            selection = policy.select(source, scope, (file, bytes) -> {
                 Path destination = staging.resolve(file.path()).normalize();
                 if (!destination.startsWith(staging) || destination.startsWith(git)) {
                     throw LocalSourceApprovalException.sourceChanged();
@@ -455,6 +464,11 @@ public class LocalImportService {
             if (!root.isAbsolute() || !root.normalize().toString().equals(expected.canonicalRoot()))
                 throw LocalSourceApprovalException.sourceChanged();
         } catch (java.nio.file.InvalidPathException e) {
+            throw LocalSourceApprovalException.sourceChanged();
+        }
+        try {
+            LocalImportScope.parse(expected.scope());
+        } catch (LocalImportException e) {
             throw LocalSourceApprovalException.sourceChanged();
         }
     }
