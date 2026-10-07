@@ -20,6 +20,10 @@ const DRIVER = String.raw`
 const path = require('path');
 const [installDir, scratch] = process.argv.slice(-2);
 const violations = [];
+// TypeScript probes volume case sensitivity by stat-ing its own file name with swapped case. On the
+// default case-insensitive APFS volume that is the same install file, so it is listed separately
+// (still visible in the report) instead of counting as a read outside the install directory.
+const caseFoldedInstall = [];
 let armed = true;
 const inside = (file, root) => file === root || file.startsWith(root + path.sep);
 const describe = value => {
@@ -35,7 +39,10 @@ const trapPaths = (object, label) => {
     object[name] = function trapped(...args) {
       if (armed) {
         const target = describe(args[0]);
-        if (target && !inside(target, installDir)) violations.push({ kind: 'fs', call: label + name, target: inside(target, scratch) ? '<scratch>/' + path.relative(scratch, target) : target });
+        if (target && !inside(target, installDir)) {
+          if (inside(target.toLowerCase(), installDir.toLowerCase())) caseFoldedInstall.push({ call: label + name, target });
+          else violations.push({ kind: 'fs', call: label + name, target: inside(target, scratch) ? '<scratch>/' + path.relative(scratch, target) : target });
+        }
       }
       return original.apply(this, args);
     };
@@ -63,8 +70,8 @@ const secret = fs.readFileSync(path.join(scratch, 'outside-secret.ts'), 'utf8');
 armed = true;
 (async () => {
   const project = JSON.parse(fs.readFileSync(path.join(scratch, 'project.json'), 'utf8'));
-  violations.length = 0;
-  const result = { violations };
+  violations.length = 0; caseFoldedInstall.length = 0;
+  const result = { violations, caseFoldedInstall };
   try {
     const response = await service.analyze({ files: project.files });
     result.analysis = 'COMPLETED';

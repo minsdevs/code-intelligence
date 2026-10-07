@@ -16,7 +16,7 @@ const os = require('node:os');
 const path = require('node:path');
 const tls = require('node:tls');
 const { createRequire } = require('node:module');
-const { execFile, execFileSync } = require('node:child_process');
+const { execFile, execFileSync, spawnSync } = require('node:child_process');
 const { promisify } = require('node:util');
 const { ensureOutputParent } = require('./owned-output.cjs');
 const { prepareIsolatedRun } = require('../../desktop/src/isolated-run.cjs');
@@ -39,14 +39,11 @@ function argumentsFor(argv) {
   return { app: argv[1] };
 }
 
+// codesign -dv reports on stderr with exit 0, so stderr is kept on success as well.
 function run(command, args, options = {}) {
-  try {
-    const stdout = execFileSync(command, args, { encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C' }, ...options });
-    return { status: 0, stdout };
-  } catch (error) {
-    return { status: error.status ?? -1, stdout: String(error.stdout ?? ''), stderr: String(error.stderr ?? '') };
-  }
+  const result = spawnSync(command, args, { encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C' }, ...options });
+  return { status: result.status ?? -1, stdout: String(result.stdout ?? ''), stderr: String(result.stderr ?? '') };
 }
 
 function plistKeys(xml) {
