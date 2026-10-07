@@ -297,13 +297,16 @@ async function main(argv = process.argv.slice(2)) {
     });
   }
   const clearSentinel = () => page.evaluate(() => document.querySelectorAll('[data-ux-sentinel]').forEach(node => node.remove()));
-  async function tabTo(predicate, { max = 150, shift = false } = {}) {
+  async function tabTo(predicate, { max = 150, shift = false, label = 'target' } = {}) {
+    const visited = [];
     for (let presses = 1; presses <= max; presses++) {
       await page.keyboard.press(shift ? 'Shift+Tab' : 'Tab');
       const state = await page.evaluate(audit.activeElementState);
       if (!state.body && !state.sentinel && predicate(state)) return { presses, element: state };
+      visited.push(state.body ? '<body>' : state.sentinel ? '<sentinel>' : `${state.role || state.tag}:${String(state.name || '').slice(0, 40)}`);
     }
-    throw new Error('UX_KEYBOARD_TARGET_UNREACHED');
+    report.notes.push({ unreachedTarget: label, presses: max, focusSequence: visited });
+    throw new Error('UX_KEYBOARD_TARGET_UNREACHED ' + label);
   }
   const named = pattern => state => pattern.test(state.name || '');
   async function traverse(focusables) {
@@ -549,18 +552,21 @@ async function main(argv = process.argv.slice(2)) {
       await expect(page.getByRole('table', { name: '분석 결과 표', exact: true })).toBeVisible();
       const exploreStarted = performance.now();
       await resetFocus();
-      const symbols = await tabTo(named(/^심볼 · 함수 · 클래스$/));
+      const symbols = await tabTo(named(/^심볼 · 함수 · 클래스$/), { label: 'symbols-category' });
       await page.keyboard.press('Enter');
-      const search = await tabTo(state => state.tag === 'input' && /이름 또는 파일 경로|분석 결과 검색/.test(state.name), { max: 20 });
+      const search = await tabTo(state => state.tag === 'input' && /이름 또는 파일 경로|분석 결과 검색/.test(state.name), { max: 20, label: 'search-box' });
       await page.keyboard.type('cancel');
       await settle(800);
-      const relation = await tabTo(named(/^관계 · 함께 확인할 곳$/), { max: 40 });
+      const relation = await tabTo(named(/^관계 · 함께 확인할 곳$/), { max: 40, label: 'relation-button' });
       await page.keyboard.press('Enter');
       const region = page.getByRole('region', { name: '선택한 코드 주변 관계', exact: true });
       await expect(region).toBeVisible();
+      // The panel is lazy-loaded; wait for its first control as a person would see it appear.
+      await expect(region.getByRole('combobox', { name: '관계 방향', exact: true })).toBeVisible({ timeout: 30000 });
       await expect(region.getByText('관계를 불러오는 중…', { exact: true })).toHaveCount(0);
       const focusAfterSelect = await page.evaluate(audit.activeElementState);
-      const sourceLink = await tabTo(named(/^선택한 항목의 보관된 소스$/), { max: 60 });
+      u1Step('relation-selected', { focusAfterSelect });
+      const sourceLink = await tabTo(named(/^선택한 항목의 보관된 소스$/), { max: 60, label: 'selected-source-link' });
       await page.keyboard.press('Enter');
       await expect(page.getByTestId('source-context')).toContainText('Snapshot #' + ctx.snapshotId);
       await expect(page.getByTestId('code-viewer').locator('.view-lines')).toBeVisible();
