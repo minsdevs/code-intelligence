@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getGraphRelations, listGraphNodes } from '../../api/graph'
 import type { GraphNodeSummary, GraphRelation } from '../../api/types'
 import { useT } from '../../lib/i18n'
+import { isConfirmedRelation, relationConfidenceLabel } from '../../lib/relationConfidence'
 import { useUiStore } from '../../stores/uiStore'
 import { isFileSymbol, queryError, toFocusedNode } from './codeLocation'
 
@@ -188,8 +189,12 @@ function RelationList({
                 <span className="truncate font-mono text-[11px] text-ink-faint">
                   {node.filePath ?? node.naturalKey}
                   {node.lineStart != null ? `:${node.lineStart}` : ''}
-                  {relation.confidence === 'POSSIBLE' ? ' · possible' : ''}
                 </span>
+                {!isConfirmedRelation(relation.confidence) && (
+                  <span className="text-[11px] text-warn">
+                    {relationConfidenceLabel(t, relation.confidence)}
+                  </span>
+                )}
               </button>
             </li>
           )

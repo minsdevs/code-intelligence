@@ -174,7 +174,7 @@ export const en: Record<string, string> = {
   'code.noSymbols': 'No graph symbols in this file.',
   'code.symbolsLoading': 'Loading symbols…',
   'code.relationsLoading': 'Loading…',
-  'code.noRelations': 'No {title}',
+  'code.noRelations': 'No recorded {title}. This is not proof that none exist.',
 
   // ── features ────────────────────────────────────────────────────────────
   'features.desc': 'Explore the feature tree and linked UI, API, code, DB, and infrastructure.',
@@ -196,6 +196,7 @@ export const en: Record<string, string> = {
   'flows.select': 'Select a flow on the left.',
   'flows.stepsLabel': 'Flow steps',
   'flows.stepCount': '{count} steps',
+  'flows.stepConfidenceNote': 'Per-step confirmation (static target confirmed / inferred) is not shown here. Steps such as screen-to-API links can be inferred connections; check the verdict column in the relations view.',
 
   // ── history ─────────────────────────────────────────────────────────────
   'history.noProject': 'History is available for imported projects.',
@@ -294,7 +295,7 @@ export const en: Record<string, string> = {
   'analysis.nodeSearchPlaceholder': 'Name or path',
   'analysis.depth': 'Depth',
   'analysis.impactLoading': 'Loading impact…',
-  'analysis.noReverseDeps': 'No reverse dependencies.',
+  'analysis.noReverseDeps': 'No recorded static reverse dependency was found within this depth. This is not proof of no impact: dynamic calls, unsupported syntax and unanalyzed files are not covered.',
   'analysis.pickNode': 'Select a finding or search for a node.',
   'analysis.whatIf': 'What-if',
   'analysis.whatIfAiDisabled': 'AI is not configured; add a provider key in Settings to run What-if.',
@@ -511,6 +512,14 @@ export const en: Record<string, string> = {
 
   // ── evidence ────────────────────────────────────────────────────────────
   'evidence.none': 'No evidence.',
+
+  // ── relation verdicts and progress announcements (G-UX) ─────────────────
+  'relation.confidence.CONFIRMED': 'Static target confirmed (CONFIRMED)',
+  'relation.confidence.LIKELY': 'Inferred (LIKELY)',
+  'relation.confidence.POSSIBLE': 'Inferred, weak (POSSIBLE)',
+  'relation.confidence.unknown': 'Unresolved ({value})',
+  'progress.announceStep': 'Analysis step {index}/{total}: {step} {status}',
+  'progress.announceWaiting': 'Analysis queued',
 }
 
 export const ko: Record<string, string> = {
@@ -676,7 +685,7 @@ export const ko: Record<string, string> = {
   'code.noSymbols': '이 파일에 그래프 심볼이 없습니다.',
   'code.symbolsLoading': '심볼을 불러오는 중…',
   'code.relationsLoading': '불러오는 중…',
-  'code.noRelations': '{title} 없음',
+  'code.noRelations': '기록된 {title} 없음 · 관계가 없다는 증거는 아닙니다.',
 
   'features.desc': 'Feature 트리와 연결된 UI·API·코드·DB·Infra를 탐색합니다.',
   'features.loading': 'Feature를 불러오는 중…',
@@ -696,6 +705,7 @@ export const ko: Record<string, string> = {
   'flows.select': '왼쪽에서 Flow를 선택하세요.',
   'flows.stepsLabel': 'Flow steps',
   'flows.stepCount': '{count} 단계',
+  'flows.stepConfidenceNote': '단계별 확인 수준(정적 대상 확인 / 추정)은 이 화면에 표시되지 않습니다. 화면→API 연결 같은 단계는 추정 연결일 수 있으니 관계 화면의 판정 열에서 확인하세요.',
 
   'history.noProject': 'History는 import한 프로젝트에서 사용할 수 있습니다.',
   'history.branch': 'Branch',
@@ -788,7 +798,7 @@ export const ko: Record<string, string> = {
   'analysis.nodeSearchPlaceholder': '이름 또는 경로',
   'analysis.depth': 'Depth',
   'analysis.impactLoading': 'Impact를 불러오는 중…',
-  'analysis.noReverseDeps': '역방향 의존이 없습니다.',
+  'analysis.noReverseDeps': '이 깊이 안에서 기록된 정적 역방향 의존을 찾지 못했습니다. 영향이 없다는 증거가 아닙니다. 동적 호출·미지원 문법·분석되지 않은 파일은 포함되지 않습니다.',
   'analysis.pickNode': 'finding을 고르거나 노드를 검색하세요.',
   'analysis.whatIf': 'What-if',
   'analysis.whatIfAiDisabled': 'AI가 설정되지 않았습니다. What-if를 실행하려면 설정에서 provider 키를 추가하세요.',
@@ -1000,4 +1010,12 @@ export const ko: Record<string, string> = {
   'settings.recoveryPath': 'Recovery 백업',
 
   'evidence.none': 'evidence가 없습니다.',
+
+  // ── relation verdicts and progress announcements (G-UX) ─────────────────
+  'relation.confidence.CONFIRMED': '정적 대상 확인 (CONFIRMED)',
+  'relation.confidence.LIKELY': '추정 (LIKELY)',
+  'relation.confidence.POSSIBLE': '추정 · 약함 (POSSIBLE)',
+  'relation.confidence.unknown': '해석 불가 ({value})',
+  'progress.announceStep': '분석 단계 {index}/{total}: {step} {status}',
+  'progress.announceWaiting': '분석 대기 중',
 }

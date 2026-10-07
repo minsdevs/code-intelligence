@@ -5,6 +5,8 @@ import { Background, Controls, MarkerType, ReactFlow, type Edge, type Node } fro
 import '@xyflow/react/dist/style.css'
 import { getGraphRelations } from '../../api/graph'
 import type { GraphNodeSummary } from '../../api/types'
+import { useT } from '../../lib/i18n'
+import { relationConfidenceLabel } from '../../lib/relationConfidence'
 import { codeLocationSearch } from '../code/codeLocation'
 
 export default function RepositoryNeighborhood({
@@ -20,6 +22,7 @@ export default function RepositoryNeighborhood({
   onSelect: (node: GraphNodeSummary) => void
   edgeTypes: string[]
 }) {
+  const t = useT()
   const [direction, setDirection] = useState<'in' | 'out'>('in')
   const [edgeType, setEdgeType] = useState('')
   const query = useQuery({
@@ -53,17 +56,18 @@ export default function RepositoryNeighborhood({
         id: `${relation.sourceNodeId}:${relation.targetNodeId}:${relation.edgeType}:${index}`,
         source: String(relation.sourceNodeId),
         target: String(relation.targetNodeId),
-        label: `${relation.edgeType} · ${relation.confidence}`,
+        label: `${relation.edgeType} · ${relationConfidenceLabel(t, relation.confidence)}`,
         markerEnd: { type: MarkerType.ArrowClosed },
         labelStyle: { fontSize: 10, fill: 'var(--color-ink)' },
         labelBgStyle: { fill: 'var(--color-surface-1)' },
       }))
     return { nodes, edges, byId }
-  }, [selected, relations, direction])
+  }, [selected, relations, direction, t])
   return (
     <>
       <p className="mt-3 rounded border border-line p-3 text-xs text-ink-muted">
-        확인된 정적 관계에 따른 검토 후보입니다. 런타임 영향이나 전체 경로를 보장하지 않습니다. 동적
+        기록된 정적 관계에 따른 검토 후보입니다. 판정 열에서 정적 대상 확인과 추정(LIKELY ·
+        POSSIBLE)을 구분하세요. 런타임 영향이나 전체 경로를 보장하지 않습니다. 동적
         호출·reflection·미지원 문법·서비스 경계에서 추적이 끊길 수 있습니다.
       </p>
       <div className="my-3 flex flex-wrap gap-3 text-xs">
@@ -171,7 +175,7 @@ export default function RepositoryNeighborhood({
                             {relation.node.filePath ?? relation.node.naturalKey}
                           </span>
                         </td>
-                        <td className="p-2">{relation.confidence}</td>
+                        <td className="p-2">{relationConfidenceLabel(t, relation.confidence)}</td>
                         <td className="p-2">
                           {relation.node.filePath ? (
                             <Link
