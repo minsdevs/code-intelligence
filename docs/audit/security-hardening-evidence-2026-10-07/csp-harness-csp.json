@@ -1,0 +1,112 @@
+{
+ "mode": "csp",
+ "policy": "default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+ "served": [
+  "/api/ai/status",
+  "/api/auth/github/connection",
+  "/api/projects",
+  "/api/projects/7",
+  "/api/projects/7/areas",
+  "/api/projects/7/file-content",
+  "/api/projects/7/files",
+  "/api/projects/7/graph/nodes",
+  "/api/projects/7/local-source-status",
+  "/api/projects/7/snapshots",
+  "/assets/CodeExplorerPage-DlSEFaiO.js",
+  "/assets/CodeViewer-BWRW9PHe.js",
+  "/assets/editor-jjEx9u7D.css",
+  "/assets/editor.api-cnds3Cwe.js",
+  "/assets/editor.worker-D9zwrD0f.js",
+  "/assets/index-BsIJU9Ld.css",
+  "/assets/index-Bz7lirCY.js",
+  "/assets/jsx-runtime-BpzPEenQ.js",
+  "/assets/monacoSetup--ixms01u.css",
+  "/assets/monacoSetup-CXKto7_5.js",
+  "/assets/relationConfidence-CPpTsQaL.js",
+  "/assets/rolldown-runtime-Dd_uD5pT.js",
+  "/assets/ts.worker-DkYoA6bF.js",
+  "/assets/tsMode-B6vLUswH.js",
+  "/assets/typescript-ty18IBh4.js",
+  "/assets/workers-YaEBoVoB.js",
+  "/projects/7/code"
+ ],
+ "foreign": [],
+ "console": [
+  {
+   "level": 3,
+   "message": "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-3ESihh3MurRVVlneQHpXxx54JMAaWXY5YvlFn21oZjw='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked."
+  },
+  {
+   "level": 3,
+   "message": "Connecting to 'http://127.0.0.1:57695/fetch' violates the following Content Security Policy directive: \"connect-src 'self'\". The action has been blocked."
+  },
+  {
+   "level": 3,
+   "message": "Fetch API cannot load http://127.0.0.1:57695/fetch. Refused to connect because it violates the document's Content Security Policy."
+  },
+  {
+   "level": 3,
+   "message": "Loading the image 'http://127.0.0.1:57695/img' violates the following Content Security Policy directive: \"img-src 'self' data:\". The action has been blocked."
+  },
+  {
+   "level": 3,
+   "message": "Creating a worker from 'blob:http://127.0.0.1:57694/01fd943f-932a-42d5-885e-409759ca8329' violates the following Content Security Policy directive: \"worker-src 'self'\". The action has been blocked."
+  }
+ ],
+ "editor": {
+  "lines": true,
+  "tokens": 41
+ },
+ "editorAfterWorkers": {
+  "spans": 41,
+  "classes": [
+   "mtk1",
+   "mtk6",
+   "mtk8",
+   "mtk9",
+   "mtk9 bracket-highlighting-0",
+   "mtk9 bracket-highlighting-1"
+  ],
+  "text": "export\u00a0const\u00a0answer:\u00a0number\u00a0=\u00a042;function\u00a0twice(x:\u00a0number)\u00a0{\u00a0return\u00a0x\u00a0*\u00a02;\u00a0}cons"
+ },
+ "attack": {
+  "evalAllowed": false,
+  "inlineRan": false,
+  "crossOriginFetch": "blocked",
+  "blobWorker": "error",
+  "violations": [
+   "script-src",
+   "script-src-elem",
+   "connect-src",
+   "img-src",
+   "worker-src"
+  ]
+ },
+ "workerScriptsServed": [
+  "/assets/workers-YaEBoVoB.js",
+  "/assets/ts.worker-DkYoA6bF.js",
+  "/assets/editor.worker-D9zwrD0f.js"
+ ],
+ "cspConsole": [
+  {
+   "level": 3,
+   "message": "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-3ESihh3MurRVVlneQHpXxx54JMAaWXY5YvlFn21oZjw='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked."
+  },
+  {
+   "level": 3,
+   "message": "Connecting to 'http://127.0.0.1:57695/fetch' violates the following Content Security Policy directive: \"connect-src 'self'\". The action has been blocked."
+  },
+  {
+   "level": 3,
+   "message": "Fetch API cannot load http://127.0.0.1:57695/fetch. Refused to connect because it violates the document's Content Security Policy."
+  },
+  {
+   "level": 3,
+   "message": "Loading the image 'http://127.0.0.1:57695/img' violates the following Content Security Policy directive: \"img-src 'self' data:\". The action has been blocked."
+  },
+  {
+   "level": 3,
+   "message": "Creating a worker from 'blob:http://127.0.0.1:57694/01fd943f-932a-42d5-885e-409759ca8329' violates the following Content Security Policy directive: \"worker-src 'self'\". The action has been blocked."
+  }
+ ]
+}
