@@ -41,6 +41,9 @@ public class SourceStoreClient {
     private static final Set<String> SUCCESS_FIELDS = Set.of("version", "requestId", "ok", "result");
     private static final Set<String> FAILURE_FIELDS = Set.of("version", "requestId", "ok", "code");
     private static final Set<String> PUT_FIELDS = Set.of("sha256", "byteSize", "keyId");
+    private static final Set<String> STAGE_FIELDS = Set.of("sha256", "byteSize", "keyId", "session", "sequence");
+    private static final Set<String> BARRIER_FIELDS = Set.of("session", "sequence");
+    private static final String SESSION = "[0-9a-f]{32}";
     private static final Set<String> READ_FIELDS = Set.of("sha256", "byteSize", "bytes");
     private static final Set<String> BROKER_CODES = Set.of(
             "SOURCE_BROKER_UNAVAILABLE",
@@ -60,6 +63,13 @@ public class SourceStoreClient {
             .build();
 
     public record StoredBlob(String sha256, long byteSize, String keyId) {}
+
+    /** Written by one vault session; durable only after {@link #barrier} acknowledges its sequence. */
+    public record StagedBlob(String sha256, long byteSize, String keyId, String session, long sequence) {
+        public StoredBlob blob() {
+            return new StoredBlob(sha256, byteSize, keyId);
+        }
+    }
 
     private final SourceStoreProperties properties;
     private final JsonMapper json;
@@ -104,6 +114,47 @@ public class SourceStoreClient {
         if (!keyId.matches("[0-9a-f]{32}")) throw SourceStoreException.integrity();
         deadline.check();
         return new StoredBlob(sha256, owned.length, keyId);
+    }
+
+    public StagedBlob stage(long projectId, byte[] bytes) {
+        requireEnabled();
+        if (bytes == null) throw SourceStoreException.invalidRequest();
+        validateInput(projectId, bytes.length);
+        Deadline deadline = new Deadline();
+        byte[] owned = bytes.clone();
+        String sha256 = sha256(owned);
+        String requestId = UUID.randomUUID().toString();
+        Map<String, Object> request = request(requestId, "STAGE", projectId, sha256, owned.length);
+        request.put("bytes", Base64.getEncoder().encodeToString(owned));
+        JsonNode result = exchange(request, requestId, deadline);
+        exactFields(result, STAGE_FIELDS);
+        verifyAddress(result, sha256, owned.length);
+        String keyId = text(result.get("keyId"));
+        String session = text(result.get("session"));
+        long sequence = sequence(result.get("sequence"));
+        if (!keyId.matches("[0-9a-f]{32}") || !session.matches(SESSION)) throw SourceStoreException.integrity();
+        deadline.check();
+        return new StagedBlob(sha256, owned.length, keyId, session, sequence);
+    }
+
+    /** Returns only after every blob staged in {@code session} up to {@code sequence} is durable. */
+    public void barrier(String session, long sequence) {
+        requireEnabled();
+        if (session == null || !session.matches(SESSION) || sequence < 1) throw SourceStoreException.invalidRequest();
+        Deadline deadline = new Deadline();
+        String requestId = UUID.randomUUID().toString();
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("version", 1);
+        request.put("requestId", requestId);
+        request.put("auth", properties.brokerToken());
+        request.put("operation", "BARRIER");
+        request.put("session", session);
+        request.put("sequence", sequence);
+        JsonNode result = exchange(request, requestId, deadline);
+        exactFields(result, BARRIER_FIELDS);
+        if (!session.equals(text(result.get("session"))) || sequence(result.get("sequence")) != sequence)
+            throw SourceStoreException.integrity();
+        deadline.check();
     }
 
     public byte[] read(long projectId, String sha256, long byteSize) {
@@ -249,6 +300,12 @@ public class SourceStoreClient {
     private static String text(JsonNode value) {
         if (value == null || !value.isTextual()) throw SourceStoreException.integrity();
         return value.stringValue();
+    }
+
+    private static long sequence(JsonNode value) {
+        if (value == null || !value.isIntegralNumber() || !value.canConvertToLong() || value.longValue() < 1)
+            throw SourceStoreException.integrity();
+        return value.longValue();
     }
 
     private static void verifyAddress(JsonNode result, String sha256, long size) {
