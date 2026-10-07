@@ -48,6 +48,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
   const active = useRef(true)
   const locked = useRef(false)
   const outcomeToken = useRef<string | null>(null)
+  const previewHeading = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
     active.current = true
@@ -57,6 +58,10 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
   }, [])
 
   const busy = phase === 'submitting' || phase === 'checking' || phase === 'uncertain'
+  // The request button disappears when the preview renders; keep keyboard focus on its heading.
+  useEffect(() => {
+    if (preview) previewHeading.current?.focus()
+  }, [preview])
   useEffect(() => {
     onBusyChange?.(busy)
   }, [busy, onBusyChange])
@@ -194,7 +199,7 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
           aria-label={t('preview.region')}
           className="space-y-2 rounded-md border border-line bg-surface-2 p-3"
         >
-          <h3 className="font-semibold text-ink">
+          <h3 ref={previewHeading} tabIndex={-1} className="font-semibold text-ink">
             {t('preview.title').replace('{name}', preview.sourceName)}
           </h3>
           <p className="text-ink-muted">
@@ -280,17 +285,20 @@ function ApprovalFlow({ source, disabled = false, onStarted, onBusyChange }: Pro
           )}
         </button>
       )}
-      {(phase === 'submitting' || phase === 'checking' || phase === 'started') && (
-        <p role="status" className="text-ink-muted">
-          {t(
-            phase === 'submitting'
-              ? 'preview.submitting'
-              : phase === 'checking'
-                ? 'preview.checking'
-                : 'preview.started',
-          )}
-        </p>
-      )}
+      {/* Kept mounted so the ready announcement is read; ready text is for screen readers only. */}
+      <p role="status" className={phase === 'ready' ? 'sr-only' : 'text-ink-muted empty:hidden'}>
+        {phase === 'ready' && preview
+          ? t('preview.ready').replace('{count}', preview.localImport.acceptedFiles.toLocaleString())
+          : phase === 'submitting' || phase === 'checking' || phase === 'started'
+            ? t(
+                phase === 'submitting'
+                  ? 'preview.submitting'
+                  : phase === 'checking'
+                    ? 'preview.checking'
+                    : 'preview.started',
+              )
+            : ''}
+      </p>
       {message && (
         <p role="alert" className="text-danger">
           {t(message)}

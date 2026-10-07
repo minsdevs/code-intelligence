@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { getMe } from '../../api/auth'
@@ -88,7 +88,8 @@ function ImportWizard({ initialPath }: { initialPath: string | null }) {
   const handleProgressDone = useCallback(() => {
     if (projectId != null) {
       void queryClient.invalidateQueries({ queryKey: ['projects'] })
-      navigate(`/projects/${projectId}/overview`)
+      // The workspace moves focus to its heading and announces the finished analysis.
+      navigate(`/projects/${projectId}/overview`, { state: { analysisFinished: true } })
     }
   }, [navigate, projectId, queryClient])
 
@@ -175,10 +176,17 @@ function LocalImportConfirm({
 }) {
   const t = useT()
   const [busy, setBusy] = useState(false)
+  const heading = useRef<HTMLHeadingElement>(null)
+  // A chosen folder replaces the source picker; focus would otherwise fall to <body>.
+  useEffect(() => {
+    heading.current?.focus()
+  }, [])
   return (
     <div className="flex max-w-lg flex-col gap-4">
       <div>
-        <h2 className="text-[15px] font-semibold text-ink">{t('import.localConfirmTitle')}</h2>
+        <h2 ref={heading} tabIndex={-1} className="text-[15px] font-semibold text-ink">
+          {t('import.localConfirmTitle')}
+        </h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
           {t('import.localConfirmDesc')}
         </p>

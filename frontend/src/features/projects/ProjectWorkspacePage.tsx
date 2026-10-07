@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Outlet, useLocation, useParams } from 'react-router-dom'
 import { getProject } from '../../api/projects'
@@ -22,6 +22,17 @@ export default function ProjectWorkspacePage() {
     enabled: projectId != null,
   })
   const projectName = projectQuery.data?.name ?? rawId ?? ''
+  // Arriving from a finished analysis: focus the project heading once and announce it.
+  const analysisFinished =
+    (location.state as { analysisFinished?: boolean } | null)?.analysisFinished === true
+  const heading = useRef<HTMLHeadingElement>(null)
+  const focusedKey = useRef<string | null>(null)
+  const projectLoaded = projectQuery.data != null
+  useEffect(() => {
+    if (!analysisFinished || !projectLoaded || focusedKey.current === location.key) return
+    focusedKey.current = location.key
+    heading.current?.focus()
+  }, [analysisFinished, projectLoaded, location.key])
   const workspaceBasePath = projectId != null ? `/projects/${projectId}` : null
   const requestedSnapshot = new URLSearchParams(location.search).get('snapshotId')
   const snapshotId = requestedSnapshot && /^[1-9]\d*$/.test(requestedSnapshot)
@@ -37,8 +48,13 @@ export default function ProjectWorkspacePage() {
       <header className="sticky top-0 z-10 shrink-0 border-b border-line bg-surface-0/95 px-5 pt-4 backdrop-blur">
         <div className="flex min-w-0 items-baseline gap-1.5 pb-3">
           <span className="shrink-0 text-[12px] text-ink-faint">Projects /</span>
-          <h1 title={projectName} className="min-w-0 truncate font-mono text-[15px] font-semibold text-ink">{projectName}</h1>
+          <h1 ref={heading} tabIndex={-1} title={projectName} className="min-w-0 truncate font-mono text-[15px] font-semibold text-ink">{projectName}</h1>
         </div>
+        {analysisFinished && (
+          <p role="status" className="sr-only">
+            {projectLoaded ? t('workspace.analysisFinished') : ''}
+          </p>
+        )}
         <nav aria-label="Workspace tabs" className="flex items-start gap-0.5">
           <div role="group" aria-label="Primary questions" className="flex min-w-0 flex-1 overflow-x-auto">
             {workspaceTabs.filter((tab) => !tab.secondary).map((tab) => (

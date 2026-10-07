@@ -829,6 +829,8 @@ export const en: Record<string, string> = {
   'connect.oauthUnavailable': 'GitHub OAuth is not configured in this app, so sign-in is unavailable. Local folder analysis works without sign-in.',
   'import.localConfirmTitle': 'Confirm local import',
   'import.localConfirmDesc': 'Check the folder and request a preview. Analysis starts only after you review the files to import and approve them separately.',
+  'preview.ready': 'Preview ready. Review the {count} files selected for import, then approve.',
+  'workspace.analysisFinished': 'Analysis finished. The repository overview is open. Check the analysis coverage report for what was not analyzed.',
 }
 
 export const ko: Record<string, string> = {
@@ -1636,4 +1638,6 @@ export const ko: Record<string, string> = {
   'connect.oauthUnavailable': 'GitHub OAuth가 이 앱에 설정되지 않아 로그인할 수 없습니다. 로컬 폴더 분석은 로그인 없이 사용할 수 있습니다.',
   'import.localConfirmTitle': '로컬 가져오기 확인',
   'import.localConfirmDesc': '폴더를 확인하고 미리보기를 요청하세요. 가져올 파일을 검토한 뒤 별도로 승인하면 분석을 시작합니다.',
+  'preview.ready': '미리보기가 준비되었습니다. 가져올 파일 {count}개를 검토한 뒤 승인하세요.',
+  'workspace.analysisFinished': '분석이 끝났습니다. 레포 개요를 열었습니다. 분석하지 못한 범위는 분석 범위 보고서에서 확인하세요.',
 }
