@@ -212,7 +212,7 @@ async function main(argv = process.argv.slice(2)) {
       }
       if (node.lineStart == null) { result.fileLevelVerified++; continue; }
       const end = node.lineEnd ?? node.lineStart;
-      if (node.lineStart < 1 || end < node.lineStart || end > s.lines.length) { fail('span bounds ' + node.naturalKey); continue; }
+      if (node.lineStart < 1 || end < node.lineStart || end > s.lines.length) { fail('span bounds ' + node.naturalKey + ' ' + node.lineStart + '-' + end + ' of ' + s.lines.length); continue; }
       const span = s.lines.slice(node.lineStart - 1, end).join('\n');
       let ok;
       if (node.nodeType === 'FILE') ok = node.lineStart === 1 && end === s.lines.length && path.basename(node.filePath) === node.name;
@@ -301,11 +301,13 @@ async function main(argv = process.argv.slice(2)) {
       assert.ok(!r.text.includes(SENTINEL)); report.aiPreview.push({ focus, status: r.status });
     }
     report.checks.push('snapshot-equals-approved-set', 'retained-source-export-ai-preview-sentinel-free');
+    // A published-fact failure is recorded and judged after the independent sentinel, script,
+    // original-folder and shutdown checks have run, so one bad span does not hide those results.
     step('published-facts-first');
     const firstFacts = await verifyFacts(projectId, first, approved);
     report.factsFirst = firstFacts; save();
-    assert.deepEqual(firstFacts.failures, []); assert.ok(firstFacts.nodeSpanVerified > 0);
-    report.checks.push('published-facts-hash-span-namespace-100pct-first-snapshot');
+    assert.ok(firstFacts.nodeSpanVerified > 0);
+    if (!firstFacts.failures.length) report.checks.push('published-facts-hash-span-namespace-100pct-first-snapshot');
     step('reanalysis');
     const changed = { ...approved };
     fs.appendFileSync(path.join(project, 'src/util.ts'), 'export function c(): number { return 3; }\n');
@@ -333,8 +335,8 @@ async function main(argv = process.argv.slice(2)) {
     step('published-facts-both');
     report.factsFirstAfterReanalysis = await verifyFacts(projectId, first, approved);
     report.factsSecond = await verifyFacts(projectId, second, changed); save();
-    assert.deepEqual(report.factsFirstAfterReanalysis.failures, []); assert.deepEqual(report.factsSecond.failures, []);
-    report.checks.push('old-snapshot-facts-and-bytes-unchanged-after-reanalysis', 'new-snapshot-facts-100pct');
+    if (!report.factsFirstAfterReanalysis.failures.length) report.checks.push('old-snapshot-facts-and-bytes-unchanged-after-reanalysis');
+    if (!report.factsSecond.failures.length) report.checks.push('new-snapshot-facts-100pct');
     step('profile-sweep');
     report.profileSweep = sweepProfile(plan.record?.root ?? path.dirname(plan.paths.userData), SENTINEL, forbidden);
     assert.deepEqual(report.profileSweep.hits, []); assert.deepEqual(report.profileSweep.forbiddenAddresses, []);
@@ -344,6 +346,8 @@ async function main(argv = process.argv.slice(2)) {
       Object.fromEntries(Object.entries(after).filter(([k]) => k !== 'src/util.ts' && k !== 'src')));
     report.checks.push('profile-db-logs-vault-addresses-sentinel-free', 'no-script-execution', 'original-folder-unchanged');
     await close(); report.checks.push('clean-shutdown-complete');
+    step('published-facts-verdict');
+    for (const key of ['factsFirst', 'factsFirstAfterReanalysis', 'factsSecond']) assert.deepEqual(report[key].failures, [], key);
     report.status = 'PASS';
   } catch (error) {
     report.status = 'FAIL';
