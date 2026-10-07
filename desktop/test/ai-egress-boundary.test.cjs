@@ -47,15 +47,24 @@ test('only reviewed desktop modules load network-capable builtins', () => {
   assert.deepEqual(observed, Object.fromEntries(Object.entries(NETWORK_INVENTORY).map(([name, value]) => [name, value.modules])));
 });
 
+// Reviewed exception (G-UPDATE NU-01): main hands Electron net to the user-initiated updater, which
+// has exactly one GET call site to its pinned HTTPS manifest/artifact host, with redirects refused.
+const ELECTRON_NET = Object.freeze({ 'main.cjs': 'import', 'update-service.cjs': 'request' });
+
 test('desktop code has no fetch, WebSocket, Electron net or command-line HTTP client', () => {
   for (const name of desktopFiles) {
     const text = read(path.join(desktopSource, name));
     assert.doesNotMatch(text, /\bfetch\s*\(/, `${name} must not call fetch`);
     assert.doesNotMatch(text, /new\s+WebSocket\b|EventSource\s*\(/, `${name} must not open a WebSocket/EventSource`);
-    assert.doesNotMatch(text, /\bnet\.request\s*\(|session\.fetch|ClientRequest/, `${name} must not use Electron net`);
+    if (ELECTRON_NET[name] === 'request') {
+      assert.equal([...text.matchAll(/\bnet\.request\s*\(/g)].length, 1, `${name} has one reviewed Electron net call site`);
+      assert.match(text, /net\.request\(\{ method: 'GET', url, redirect: 'error', credentials: 'omit', useSessionCookies: false/);
+      assert.doesNotMatch(text, /session\.fetch|ClientRequest/, `${name} must not use another Electron net path`);
+    } else assert.doesNotMatch(text, /\bnet\.request\s*\(|session\.fetch|ClientRequest/, `${name} must not use Electron net`);
     assert.doesNotMatch(text, /['"`](?:\/usr\/bin\/)?(?:curl|wget)['"`]/, `${name} must not spawn curl/wget`);
     const electron = /const\s*\{([^}]*)\}\s*=\s*require\(['"]electron['"]\)/.exec(text);
-    if (electron) assert.equal(electron[1].split(',').map(s => s.trim()).includes('net'), false, `${name} must not import Electron net`);
+    if (electron) assert.equal(electron[1].split(',').map(s => s.trim().split(':')[0].trim()).includes('net'), ELECTRON_NET[name] === 'import',
+      `${name} must not import Electron net`);
   }
 });
 

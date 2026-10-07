@@ -14,6 +14,7 @@ const path = require('node:path');
 const lifecycle = require('../src/safety-lifecycle.cjs');
 const keyrings = require('../src/purpose-keyring.cjs');
 const journals = require('../src/safety-journal.cjs');
+const manifests = require('../src/update-manifest.cjs');
 
 const darwin = { skip: process.platform !== 'darwin' };
 const INSTALLATION = 'synthetic-update-installation';
@@ -40,6 +41,11 @@ async function profile(t) {
     async start(runningBuild) {
       const handle = await lifecycle.openSafetyLifecycle({ userData: root, safeStorage, installationId: INSTALLATION, runningBuild });
       opened.push(handle); return handle;
+    },
+    // A successful normal start: main records the build only after its backend is healthy.
+    async run(runningBuild) {
+      const handle = await this.start(runningBuild);
+      try { return await handle.recordStartedBuild(); } finally { await handle.close(); }
     },
     async journal(runningBuild, action) {
       const options = { safetyRoot: path.join(root, 'safety'), restoreRoots: [path.join(root, 'data')], installationId: INSTALLATION,
@@ -83,14 +89,81 @@ test('a corrupted safety journal fails closed to recovery-only instead of trusti
   await assert.rejects(p.start('200'), { code: 'SAFETY_RECOVERY_REQUIRED' }, 'tampering cannot be used to drop the floor');
 });
 
-// NU-03 (missing updater): ADR-02 keeps "updater minimumVersion" in area B. Today only backup/
-// restore maintenance raises it, so a plain first start of a newer build leaves the floor at its
-// previous value and a manually reinstalled older build still opens the migrated profile.
-// This is the executable acceptance criterion for the updater's first-start high-water record.
-test('after a newer build has started on a profile, an older build is refused without a signed recovery manifest', {
-  ...darwin, todo: 'NU-03: no updater/first-start high-water record exists; downgrade is refused only after a backup or restore',
-}, async t => {
+// NU-03: ADR-02 keeps "updater minimumVersion" in area B. A successful normal start of a newer
+// build raises the floor, so a manually reinstalled older build cannot open the migrated profile.
+test('after a newer build has started on a profile, an older build is refused without a signed recovery manifest', darwin, async t => {
   const p = await profile(t);
-  await (await p.start('200')).close();
+  const started = await p.run('200');
+  assert.deepEqual([started.highWaterBuild, started.lastManifestSerial], ['200', 0]);
+  assert(Number.isSafeInteger(started.journal.sequence) && /^[0-9a-f]{64}$/.test(started.journal.headHash), 'journal pointer for the update checkpoint');
   await assert.rejects(p.start('199'), { code: 'SAFETY_RECOVERY_REQUIRED' });
+  await assert.rejects(p.start('20'), { code: 'SAFETY_RECOVERY_REQUIRED' }, 'numeric, not lexical, comparison');
+  // A newer build whose start fails before its backend is healthy (for example a failed schema
+  // migration) never raises the floor, so the previous build can still reopen its data.
+  await (await p.start('300')).close();
+  const previous = await p.start('200'); assert.equal(previous.diagnostics().recoveryOnly, false);
+  assert.equal(previous.updateState().highWaterBuild, '200'); await previous.close();
+  assert.equal((await p.run('200')).highWaterBuild, '200', 'restarting the same build is idempotent');
+});
+
+const release = crypto.generateKeyPairSync('ed25519'), attacker = crypto.generateKeyPairSync('ed25519');
+const CHECKPOINT = '5b1f0a7e-1c2d-4e3f-8a9b-0c1d2e3f4a5b';
+function recoveryEnvelope(changes = {}, privateKey = release.privateKey) {
+  const now = Date.now();
+  return manifests.signManifest({ format: 1, kind: 'recovery', product: 'code-intelligence', bundleId: 'dev.codeintelligence.desktop',
+    teamId: 'ABCDE12345', channel: 'stable', serial: 7, issuedAt: now - 60000, expiresAt: now + 86400000, version: '0.1.9',
+    buildSequence: '199', platform: 'darwin', arch: 'arm64', minimumSystemVersion: '13.0', compatibleFromBuild: '1',
+    schema: { flyway: 27, safetyJournalMajor: 1, backupFormat: 3 },
+    artifact: { kind: 'dmg', url: 'https://updates.example.invalid/code-intelligence/0.1.9/app.dmg', size: 1, sha256: 'a'.repeat(64) },
+    recovery: { checkpointId: CHECKPOINT, checkpointSchemaFlyway: 27, reason: 'rollback after failed migration' }, ...changes },
+  { keyId: 'release-fixture', privateKey });
+}
+function verify(envelope, handle, runningBuild = '200') {
+  return manifests.verifyUpdateManifest(envelope, { pinnedKeys: { 'release-fixture': release.publicKey },
+    allowedHosts: ['updates.example.invalid'], now: Date.now(), state: handle.updateState(),
+    checkpoint: { id: CHECKPOINT, schemaFlyway: 27, createdByBuild: '199' },
+    running: { product: 'code-intelligence', bundleId: 'dev.codeintelligence.desktop', teamId: 'ABCDE12345', platform: 'darwin',
+      arch: 'arm64', osVersion: '14.0', buildSequence: runningBuild, schemaFlyway: 27, safetyJournalMajor: 1 } });
+}
+
+test('the floor has one sanctioned exception: a verified signed recovery manifest bound to a retained checkpoint, used once', darwin, async t => {
+  const p = await profile(t);
+  await p.run('200');
+  await assert.rejects(p.start('199'), { code: 'SAFETY_RECOVERY_REQUIRED' });
+  const newer = await p.start('200');
+  assert.throws(() => verify(recoveryEnvelope({}, attacker.privateKey), newer), { code: 'UPDATE_SIGNATURE_INVALID' });
+  const verified = verify(recoveryEnvelope(), newer);
+  // Only the verifier's own frozen result is accepted; a look-alike object or an update manifest is not.
+  await assert.rejects(newer.sanctionRecoveryRollback({ ...verified }), { code: 'SAFETY_RECOVERY_REQUIRED' });
+  await assert.rejects(newer.recordAcceptedManifest(verified), { code: 'SAFETY_RECOVERY_REQUIRED' });
+  const sanctioned = await newer.sanctionRecoveryRollback(verified);
+  assert.deepEqual([sanctioned.highWaterBuild, sanctioned.lastManifestSerial], ['199', 7]);
+  await assert.rejects(newer.sanctionRecoveryRollback(verified), { code: 'SAFETY_RECOVERY_REQUIRED' }, 'a serial is consumed once');
+  assert.throws(() => verify(recoveryEnvelope(), newer), { code: 'UPDATE_MANIFEST_REPLAYED' });
+  await newer.close();
+  const older = await p.start('199');
+  assert.equal(older.diagnostics().recoveryOnly, false);
+  await older.close();
+  assert.equal(await p.journal('199', async journal => journal.snapshot().rollback.checkpointId), CHECKPOINT, 'the exception stays auditable in B');
+  // Running the newer build again restores the floor; the consumed manifest cannot lower it twice.
+  await p.run('200');
+  await assert.rejects(p.start('199'), { code: 'SAFETY_RECOVERY_REQUIRED' });
+  const again = await p.start('200');
+  assert.throws(() => verify(recoveryEnvelope(), again), { code: 'UPDATE_MANIFEST_REPLAYED' });
+  await again.close();
+});
+
+test('restore merges never lower the started-build floor or the consumed manifest serial', darwin, async t => {
+  const p = await profile(t);
+  await p.run('200');
+  const handle = await p.start('200');
+  const accepted = manifests.verifyUpdateManifest(manifests.signManifest({ ...JSON.parse(manifests.canonical(recoveryEnvelope().body)),
+    kind: 'update', buildSequence: '201', serial: 9, recovery: null }, { keyId: 'release-fixture', privateKey: release.privateKey }),
+  { pinnedKeys: { 'release-fixture': release.publicKey }, allowedHosts: ['updates.example.invalid'], now: Date.now(), state: handle.updateState(),
+    running: { product: 'code-intelligence', bundleId: 'dev.codeintelligence.desktop', teamId: 'ABCDE12345', platform: 'darwin',
+      arch: 'arm64', osVersion: '14.0', buildSequence: '200', schemaFlyway: 27, safetyJournalMajor: 1 } });
+  assert.equal((await handle.recordAcceptedManifest(accepted)).lastManifestSerial, 9);
+  await handle.close();
+  const snapshot = await p.journal('200', async journal => { await restore(journal, '100'); return journal.snapshot(); });
+  assert.equal(snapshot.minimumVersion, '200'); assert.equal(snapshot.lastManifestSerial, 9);
 });

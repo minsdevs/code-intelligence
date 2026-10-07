@@ -121,7 +121,7 @@ test('fresh enrollment is OFF, isolated from restore/source vault, and exposes n
   assert.equal(f.controls.pgCalls, 0);
   for (const file of [f.log, f.lock, f.latch]) assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
   assert.equal((await fs.stat(path.dirname(f.log))).mode & 0o777, 0o700);
-  assert.deepEqual(Object.keys(f.journal).sort(), ['activate', 'close', 'completeMaintenance', 'consumePermit', 'holdUnknown', 'latch', 'mergeRestore', 'reserveAndPermit', 'sealMaintenance', 'settle', 'snapshot'].sort());
+  assert.deepEqual(Object.keys(f.journal).sort(), ['activate', 'close', 'completeMaintenance', 'consumePermit', 'holdUnknown', 'latch', 'mergeRestore', 'recordManifest', 'recordStartedBuild', 'reserveAndPermit', 'sanctionRollback', 'sealMaintenance', 'settle', 'snapshot'].sort());
   const before = f.journal.snapshot(); before.requests.push({ prompt: 'source sentinel' });
   assert.equal(f.journal.snapshot().requests.length, 0);
   assert.equal(f.keys.get('safety-1').equals(Buffer.alloc(32, 71)), true);

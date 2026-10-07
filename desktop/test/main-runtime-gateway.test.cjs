@@ -1367,3 +1367,67 @@ for (const mode of ['missing', 'json', 'platform', 'build', 'protocol', 'layout'
     assert.doesNotMatch(JSON.stringify(h.dialogs) + JSON.stringify(logs), /private-sentinel|private\/secrets/);
   });
 }
+
+// G-UPDATE startup wiring (update-startup.cjs) with the real checkpoint module and real area B.
+async function seedProfile(h) {
+  const secrets = await h.realLifecycle.loadDesktopSecrets({ userData: h.paths.userData, safeStorage: h.safeStorage });
+  const existing = await h.realLifecycle.openSafetyLifecycle({ userData: h.paths.userData, safeStorage: h.safeStorage,
+    installationId: secrets.localIdentity, runningBuild: '100' });
+  await existing.close();
+  await fsp.mkdir(path.join(h.paths.userData, 'postgres'), { mode: 0o700 });
+  await fsp.writeFile(path.join(h.paths.userData, 'postgres', 'PG_VERSION'), '16', { mode: 0o600 });
+  return secrets;
+}
+
+test('G-UPDATE: a healthy start commits the schema record and raises the started-build floor in area B', async t => {
+  const { TARGET_FLYWAY } = require('../src/update-startup.cjs');
+  const h = await harness(t, { backupProtocol: 3 }); await h.start();
+  assert.equal(h.run('runtime.ready'), true);
+  const schema = JSON.parse(await fsp.readFile(path.join(h.paths.userData, 'update-checkpoints', 'schema.json'), 'utf8'));
+  assert.deepEqual([schema.build, schema.flyway], ['100', TARGET_FLYWAY]);
+  await h.shutdown();
+  // The authenticated B record (canonical JSON) carries the floor; safety-lifecycle refuses older builds by it.
+  assert.equal((await fsp.readFile(path.join(h.paths.userData, 'safety', 'ai-journal', 'events.log')))
+    .includes('"event":{"build":"100","type":"BUILD_STARTED"}'), true);
+});
+
+test('G-UPDATE: a start that fails before the backend is healthy keeps the floor and leaves the checkpoint recovery-only', async t => {
+  const h = await harness(t, { backupProtocol: 3 });
+  await seedProfile(h);
+  // The backend (the Flyway migration) fails to start after PostgreSQL is already up.
+  h.controls.guardianSpawn = async (_child, value) => { if (path.basename(value.command) === 'java') throw new Error('synthetic migration failure'); };
+  await h.start(); await h.shutdown();
+  assert.equal(h.events.includes('spawn.postgres') || h.guardians.some(item => path.basename(item.command) === 'postgres'), true);
+  assert.equal(h.events.includes('window.create'), false);
+  const root = path.join(h.paths.userData, 'update-checkpoints');
+  const [id] = (await fsp.readdir(root)).filter(name => name !== 'schema.json');
+  const record = JSON.parse(await fsp.readFile(path.join(root, id, 'record.json'), 'utf8'));
+  assert.equal(record.state, 'FAILED'); assert.equal(record.targetBuild, '100');
+  assert.equal(await fsp.readFile(path.join(root, id, 'postgres', 'PG_VERSION'), 'utf8'), '16');
+  // B stays owned after this failure (by design); its log shows that the floor was never raised.
+  assert.equal((await fsp.readFile(path.join(h.paths.userData, 'safety', 'ai-journal', 'events.log'))).includes('BUILD_STARTED'), false);
+});
+
+test('G-UPDATE: an unfinished upgrade blocks startup before PostgreSQL; restore returns the checkpoint database', async t => {
+  const { openUpdateCheckpoints } = require('../src/update-checkpoint.cjs');
+  const h = await harness(t, { backupProtocol: 3 });
+  await seedProfile(h);
+  const checkpoints = await openUpdateCheckpoints({ userData: h.paths.userData, runningBuild: '100', targetFlyway: 27, bundle: null });
+  const { id } = await checkpoints.beforeMigration({ journal: { sequence: 1, headHash: 'a'.repeat(64) } });
+  await fsp.writeFile(path.join(h.paths.userData, 'postgres', 'PG_VERSION'), 'half migrated');
+  await checkpoints.markFailed();
+  h.controls.confirmation = 2;
+  await h.start();
+  assert.equal(h.events.some(event => event.startsWith('spawn.')), false, 'no service starts while the upgrade is unfinished');
+  assert.equal(h.quitCount > 0, true);
+  const prompt = h.dialogs.find(item => item.kind === 'confirm')?.values[0];
+  assert.deepEqual(prompt.buttons, ['Restore previous data', 'Try the upgrade again', 'Quit']);
+  await h.shutdown();
+  const again = await harness(t, { backupProtocol: 3 });
+  await fsp.rm(again.paths.userData, { recursive: true }); await fsp.cp(h.paths.userData, again.paths.userData, { recursive: true });
+  again.controls.confirmation = 0;
+  await again.start();
+  assert.equal(again.events.some(event => event.startsWith('spawn.')), false);
+  assert.equal(await fsp.readFile(path.join(again.paths.userData, 'postgres', 'PG_VERSION'), 'utf8'), '16');
+  assert.equal(JSON.parse(await fsp.readFile(path.join(again.paths.userData, 'update-checkpoints', id, 'record.json'), 'utf8')).state, 'RESTORED');
+});
