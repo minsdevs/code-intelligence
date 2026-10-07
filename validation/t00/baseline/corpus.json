@@ -1,0 +1,19 @@
+{
+  "contractVersion": "1.0.0",
+  "corpusId": "accuracy-development-baseline",
+  "purpose": "DEVELOPMENT_BASELINE",
+  "fixtures": [
+    {
+      "path": "fixtures/dev-t00-java-calls/fixture.json",
+      "sha256": "9d21282e67e97cfa384ab097bcb6e99461e94d09836a80f94e724e3c91cc7e90"
+    },
+    {
+      "path": "fixtures/dev-t00-typescript-calls/fixture.json",
+      "sha256": "ae58884b720b6954265b8edc4dd37ec7b61085b683f511cd4533494a3e3f6fe8"
+    },
+    {
+      "path": "fixtures/dev-todo-fullstack-mini/fixture.json",
+      "sha256": "c4f3c13a9980ef3e393ffa680b3fa1e09342bf39e76433ef54788629838daebe"
+    }
+  ]
+}

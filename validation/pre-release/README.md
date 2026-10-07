@@ -343,3 +343,26 @@ Since `d9d74cd` replay verifies each key id before its first use and again after
 the last record, so the runner expects history-independent counts: six MAC-key
 fetches, eight wrapper availability checks and sixteen keyring lease CHECKs per
 open. Earlier reports retain their `N+4`/`N+6`/`2(N+6)` counts and runner hashes.
+
+## Release-gate unit runners (2026-10-07)
+
+Each runner below belongs to one gate unit; its audit in `docs/audit/*-2026-10-07.md`
+states the exact scope, the requirement matrix and the commands that produced each
+row. Every runner that launches Electron or the packaged app must be serialized with
+the other native runs on the machine (the coordination lock script used on
+2026-10-07 lives under the ignored `validation/local/`), runs with the clean child
+environment shown above, and needs the candidate directly under the repository root.
+A passing runner is row-level evidence only, never a gate PASS.
+
+| Gate | Runner | What it checks |
+| --- | --- | --- |
+| G-COST | `cost-egress-packaged-probe.cjs --app <candidate>` | Packaged first run with AI OFF and budget 0, plus a synthetic key save with mock Keychain: budget/activation refusal, no non-loopback socket from the app's processes, packaged AI modules byte-identical to the sources. It never activates AI; the shipped transport has no fake-provider seam. |
+| G-IMPORT, G-EVIDENCE | `import-evidence-backend.cjs --socket <docker socket>`; `import-evidence-native.cjs --app <candidate>` | C05/C06/legacy-migration and project/evidence/history suites in the isolated Docker environment; packaged picker → preview → snapshot, secret sentinels and every published fact against retained source. Only the folder dialog's return value is controlled. |
+| G-RECOVERY | `../backup-compatibility/native-recovery-matrix.cjs --app <candidate> --points <list> --cost` or `--faults <list>` | Real Electron SIGKILL at the named C16 restore boundaries with a nonzero cost ledger, recovery in the same profile and one more normal restart; journal faults and old-archive refusals. SIGKILL is not power loss; mock Keychain and a loopback provider are used. |
+| G-JOB | `job-race-backend.cjs --socket <docker socket> [--with-analyzer] --tests <allowed test>`; `job-race-product.cjs --app <candidate>` | Docker-isolated job pipeline / analyzer-worker race tests from a fixed allow-list; packaged cancel/delete/retry/kill races in an isolated profile that only signals processes the app itself started. |
+| G-PERF | `run-workload-benchmark.cjs --app <candidate> --class small\|medium\|large --smoke-1\|--smoke-2\|--series-20` | Generated synthetic fixture imported through the real UI; each run is a fresh launch that previews, analyzes, explores, refreshes after a 1% change, cancels a second import and deletes its projects. Smoke modes are functional observations; only `--series-20` on a quiet machine is an SLO measurement. |
+| G-SEC | `security-analyzer-execution.cjs --app <candidate>`; `security-packaged-probe.cjs --app <candidate>` | The packaged analyzer (Electron in Node mode) analyses a hostile project under a trap that records reads outside its install directory and every process, socket, DNS, HTTP, worker or native-addon call; nothing may execute or read outside the request. The packaged probe records signing/entitlements/fuses, effective webPreferences, delivered CSP and renderer attack outcomes, listening sockets, child argv/env secret exposure and profile file modes. Neither is the independent review or OS-level C15 evidence. |
+| G-ACCURACY | `accuracy-export.cjs --corpus … --capabilities … --socket <docker socket>`; `accuracy-packaged-export.cjs --app <candidate> …`; `accuracy-baseline.cjs` | Backend-pipeline and packaged-app T00 observations with a local unsigned execution attestation, scored by `validation/t00/runner.cjs --mode gate`; case-level failure listing. The development baseline is not evaluation evidence. |
+| G-UX | `ux-accessibility-pilot.cjs --app <candidate> [--stages …]` | Scripted U1–U6 pilot and accessibility audit (keyboard passes, contrast, landmarks, live regions) on the packaged app. Not a usability study or VoiceOver speech result. |
+| G-NATIVE | `native-signing-readiness.cjs --app <candidate> [--expect-team-id <id>]`; `native-loader-probe.cjs --app <candidate> --packaged-app` | Read-only signing/notarization readiness (inside-out plan, minimum OS, external references); single-Mac loader approximation with developer-tool folders blocked. Neither is a Developer ID, notarization or fresh-machine result. |
+| Stage 7 | `sbom-candidate.cjs --offline --app <candidate> --resolved-maven … --gradle-cache … --electron-zip … --otool-cross-check`; `licence-notices.cjs --sbom-run <run>` | Offline, read-only CycloneDX 1.5 SBOM of the exact bundle (`completeSbom` means zero unattributed files) and generated third-party notices. The licence policy is an engineering checklist, not legal advice; regenerate notices whenever dependencies change. |

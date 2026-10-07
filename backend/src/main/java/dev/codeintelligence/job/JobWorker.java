@@ -4,7 +4,10 @@ import dev.codeintelligence.common.AppProperties;
 import dev.codeintelligence.maintenance.MaintenanceGate;
 import jakarta.annotation.PreDestroy;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +33,9 @@ public class JobWorker {
     private final JobWorkspaceProvider workspaces;
     private final MaintenanceGate maintenance;
     private final SimpleAsyncTaskExecutor executor;
+    // Run claims and final transitions of a job are serialized against each other (B4 fencing).
+    private final ReentrantLock runOwnership = new ReentrantLock();
+    private final Map<Long, Object> currentRuns = new ConcurrentHashMap<>();
 
     public JobWorker(
             JobRepository repository,
@@ -78,8 +84,15 @@ public class JobWorker {
     }
 
     void runJob(long jobId) {
-        if (!repository.markJobRunning(jobId)) {
-            return;
+        Object run = new Object();
+        runOwnership.lock();
+        try {
+            if (!repository.markJobRunning(jobId)) {
+                return;
+            }
+            currentRuns.put(jobId, run);
+        } finally {
+            runOwnership.unlock();
         }
         try {
             publisher.publish(jobId);
@@ -103,12 +116,31 @@ public class JobWorker {
             }
         } catch (RuntimeException ex) {
             log.error("Job {} aborted by an unexpected framework error", jobId, ex);
-            repository.markJobFailed(jobId, "internal error");
+            runOwnership.lock();
+            try {
+                if (currentRuns.get(jobId) == run) repository.markJobFailed(jobId, "internal error");
+            } finally {
+                runOwnership.unlock();
+            }
             publisher.publish(jobId);
         } finally {
-            if (repository.finishCancellation(jobId)) {
+            if (releaseRun(jobId, run)) {
                 publisher.publish(jobId);
             }
+        }
+    }
+
+    /**
+     * A worker that already recorded FAILED can still be in this cleanup after a retry started a
+     * new run of the same job. Only the worker owning the current run may complete its
+     * cancellation, otherwise CANCELLING would release the project while the new writer runs.
+     */
+    private boolean releaseRun(long jobId, Object run) {
+        runOwnership.lock();
+        try {
+            return currentRuns.remove(jobId, run) && repository.finishCancellation(jobId);
+        } finally {
+            runOwnership.unlock();
         }
     }
 

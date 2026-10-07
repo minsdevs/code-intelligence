@@ -1,0 +1,532 @@
+{
+  "format": 1,
+  "date": "2026-10-07",
+  "integrationBranch": "worktree/calm-meadow-7229",
+  "base": "bcd8081",
+  "candidate": {
+    "id": "LA8ZS9",
+    "sourceCommit": "19300fadf3b5e875dce0c38958d5208ff01b0e7f",
+    "buildSequence": "1791352154748",
+    "baseline": "tZgvV7",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+    "manifestSha256": "4c304e1f4801c0e52cc426acac5149bafc031d1cc98192755f6602ba2d031597",
+    "sourceWorkingTreeDirty": false,
+    "formalSigning": false,
+    "notarized": false,
+    "released": false,
+    "evidence": "validation/local/pre-release-candidate/build-tOuqNl"
+  },
+  "units": [
+    {
+      "gate": "G-COST",
+      "branch": "worktree-agent-af7be1bbb66cbe34a",
+      "head": "db2e9fa",
+      "audit": "docs/audit/cost-egress-matrix-2026-10-07.md",
+      "rows": {
+        "total": 75,
+        "PASS": 69,
+        "FAIL": 2,
+        "NOT_RUN": 2,
+        "BLOCKED": 2
+      },
+      "productPaths": [
+        "backend/src/main/java/dev/codeintelligence/evidence/SecretMask.java"
+      ]
+    },
+    {
+      "gate": "G-IMPORT",
+      "branch": "worktree-agent-ac4a347c91fe92645",
+      "head": "86968de",
+      "audit": "docs/audit/import-safety-matrix-2026-10-07.md",
+      "rows": {
+        "total": 30,
+        "PASS": 20,
+        "FAIL": 4,
+        "NOT_RUN": 4,
+        "BLOCKED": 2
+      },
+      "productPaths": []
+    },
+    {
+      "gate": "G-EVIDENCE",
+      "branch": "worktree-agent-ac4a347c91fe92645",
+      "head": "86968de",
+      "audit": "docs/audit/evidence-integrity-matrix-2026-10-07.md",
+      "rows": {
+        "total": 17,
+        "PASS": 11,
+        "FAIL": 4,
+        "NOT_RUN": 2,
+        "BLOCKED": 0
+      },
+      "productPaths": []
+    },
+    {
+      "gate": "G-RECOVERY",
+      "branch": "worktree-agent-a4870b86d97d6bfbb",
+      "head": "670e063",
+      "audit": "docs/audit/recovery-crash-matrix-2026-10-07.md",
+      "rows": {
+        "total": 45,
+        "PASS": 40,
+        "FAIL": 0,
+        "NOT_RUN": 2,
+        "BLOCKED": 3
+      },
+      "productPaths": []
+    },
+    {
+      "gate": "G-JOB",
+      "branch": "worktree-agent-ac262e7b572d9d21c",
+      "head": "bf5764a",
+      "audit": "docs/audit/job-race-matrix-2026-10-07.md",
+      "rows": {
+        "total": 27,
+        "PASS": 19,
+        "FAIL": 2,
+        "NOT_RUN": 2,
+        "BLOCKED": 2,
+        "N/A": 2
+      },
+      "productPaths": [
+        "backend/src/main/java/dev/codeintelligence/job/JobWorker.java"
+      ]
+    },
+    {
+      "gate": "G-PERF",
+      "branch": "worktree-agent-acf685d9a67d5f214",
+      "head": "b1b3fba",
+      "audit": "docs/audit/workload-performance-2026-10-07.md",
+      "rows": {
+        "total": 18,
+        "PASS": 5,
+        "FAIL": 1,
+        "NOT_RUN": 8,
+        "BLOCKED": 4
+      },
+      "productPaths": [
+        "backend/src/main/java/dev/codeintelligence/project/LocalStagingVerifier.java"
+      ]
+    },
+    {
+      "gate": "Stage 7",
+      "branch": "worktree-agent-a172227f398842000",
+      "head": "38ddd76",
+      "audit": "docs/audit/supply-chain-sbom-2026-10-07.md",
+      "rows": {
+        "total": 33,
+        "PASS": 18,
+        "FAIL": 3,
+        "NOT_RUN": 9,
+        "BLOCKED": 3
+      },
+      "productPaths": [
+        "desktop/package.json",
+        "desktop/build/third-party-notices/THIRD-PARTY-NOTICES.txt",
+        "desktop/build/third-party-notices/third-party-notices.json"
+      ]
+    },
+    {
+      "gate": "G-SEC",
+      "branch": "worktree-agent-adc5afddf7b377171",
+      "head": "e5114a1",
+      "audit": "docs/audit/security-internal-review-2026-10-07.md",
+      "rows": {
+        "total": 51,
+        "PASS": 26,
+        "FAIL": 10,
+        "NOT_RUN": 13,
+        "BLOCKED": 2
+      },
+      "productPaths": [
+        "backend/src/main/java/dev/codeintelligence/github/GitCloneService.java"
+      ]
+    },
+    {
+      "gate": "G-ACCURACY",
+      "branch": "worktree-agent-aa6d56354c50ce366",
+      "head": "cce09c1",
+      "audit": "docs/audit/accuracy-baseline-2026-10-07.md",
+      "rows": {
+        "total": 22,
+        "PASS": 11,
+        "FAIL": 2,
+        "NOT_RUN": 0,
+        "BLOCKED": 9
+      },
+      "productPaths": []
+    },
+    {
+      "gate": "G-UX",
+      "branch": "worktree-agent-a2ab4860a0424970f",
+      "head": "9b33628",
+      "audit": "docs/audit/ux-accessibility-2026-10-07.md",
+      "rows": {
+        "total": 54,
+        "PASS": 23,
+        "FAIL": 21,
+        "NOT_RUN": 4,
+        "BLOCKED": 6
+      },
+      "productPaths": [
+        "frontend/src/lib/relationConfidence.ts",
+        "frontend/src/features/projects/RepositoryNeighborhood.tsx",
+        "frontend/src/features/code/SymbolPanel.tsx",
+        "frontend/src/features/projects/RepositoryOverviewPage.tsx",
+        "frontend/src/features/flows/FlowsPage.tsx",
+        "frontend/src/lib/translations.ts",
+        "frontend/src/features/import/ProgressStep.tsx"
+      ]
+    },
+    {
+      "gate": "G-NATIVE/G-UPDATE",
+      "branch": "worktree-agent-a288b6b80aae4da1f",
+      "head": "1d1e70b",
+      "audit": "docs/audit/native-update-readiness-2026-10-07.md",
+      "rows": {
+        "total": 33,
+        "PASS": 11,
+        "FAIL": 13,
+        "NOT_RUN": 1,
+        "BLOCKED": 8
+      },
+      "productPaths": []
+    }
+  ],
+  "integrationCommits": [
+    {
+      "commit": "6f4bc76",
+      "change": "G-SEC sink scan reads product sources through import.meta.glob ?raw; frontend tsc -b passes"
+    },
+    {
+      "commit": "640b038",
+      "change": "Spotless formatting of four G-SEC backend tests"
+    },
+    {
+      "commit": "19300fa",
+      "change": "validation/pre-release/README.md runner section"
+    }
+  ],
+  "coordinatorReruns": [
+    {
+      "unit": "G-RECOVERY",
+      "cwd": "agent-a4870b86d97d6bfbb/desktop",
+      "command": "env -i ... node --test test/backup-runtime.test.cjs test/backup-recovery-matrix.test.cjs",
+      "result": "145/145"
+    },
+    {
+      "unit": "G-COST",
+      "cwd": "agent-af7be1bbb66cbe34a/backend",
+      "command": "DOCKER_HOST=unix://$HOME/.docker/run/docker.sock ./gradlew --offline cleanTest test --tests 'dev.codeintelligence.evidence.SecretMaskTest' --tests 'dev.codeintelligence.ai.AiProviderEgressArchitectureTest' --tests 'dev.codeintelligence.ai.AiCostEgress*'",
+      "result": "43/43 in 9 suites"
+    },
+    {
+      "unit": "G-COST",
+      "cwd": "agent-af7be1bbb66cbe34a/desktop",
+      "command": "node --test test/ai-egress-boundary.test.cjs",
+      "result": "7/7"
+    },
+    {
+      "unit": "G-IMPORT/G-EVIDENCE",
+      "cwd": "agent-ac4a347c91fe92645/backend",
+      "command": "env -i ... CI_DOCKER_TEST_* ./gradlew --offline --no-daemon --max-workers=2 -I ../validation/pre-release/docker-integration.init.gradle cleanTest test --tests '*ImportSecretsCorpusIntegrationTest' --tests '*EvidenceHistoryIntegrationTest' --tests '*LegacyMigrationWalkTest'",
+      "result": "88 tests, 87 pass, 1 skip"
+    },
+    {
+      "unit": "G-IMPORT/G-EVIDENCE",
+      "cwd": "agent-ac4a347c91fe92645/desktop",
+      "command": "env -i ... node --test test/source-vault.test.cjs test/source-broker.test.cjs",
+      "result": "74/74"
+    },
+    {
+      "unit": "G-JOB",
+      "cwd": "agent-ac262e7b572d9d21c",
+      "command": "node validation/pre-release/job-race-backend.cjs --socket unix://$HOME/.docker/run/docker.sock --tests 'dev.codeintelligence.job.JobPipelineRaceIntegrationTest.aFailedWorker*'",
+      "result": "2/2 (backend-tX90BO)"
+    },
+    {
+      "unit": "G-JOB",
+      "cwd": "agent-ac262e7b572d9d21c",
+      "command": "node validation/pre-release/job-race-backend.cjs --socket unix://$HOME/.docker/run/docker.sock --with-analyzer --tests dev.codeintelligence.job.JobPipelineRaceIntegrationTest --tests dev.codeintelligence.job.JobAnalyzerWorkerRaceIntegrationTest",
+      "result": "60/60 (backend-f7J5xC)"
+    },
+    {
+      "unit": "G-JOB",
+      "cwd": "agent-ac262e7b572d9d21c",
+      "command": "node --test validation/pre-release/test/job-race.test.cjs",
+      "result": "3/3"
+    },
+    {
+      "unit": "Stage 7",
+      "cwd": "agent-a172227f398842000",
+      "command": "env -i ... node --test validation/pre-release/test/{sbom-candidate,licence-obligations,licence-packaging,inventory-candidate,advisory-scan,build-candidate,control-source-members}.test.cjs",
+      "result": "82/82"
+    },
+    {
+      "unit": "Stage 7",
+      "cwd": "agent-a172227f398842000",
+      "command": "env -i ... node validation/pre-release/sbom-candidate.cjs --offline --app <1lvULq> --resolved-maven runtime-resolved-1lvULq-20261007.json --gradle-cache ... --electron-zip ... --otool-cross-check",
+      "result": "350 components, 0 unattributed (run-agTOi7)"
+    },
+    {
+      "unit": "G-PERF",
+      "cwd": "agent-acf685d9a67d5f214",
+      "command": "node --test validation/pre-release/test/workload-fixture.test.cjs validation/pre-release/test/workload-metrics.test.cjs; (backend) ./gradlew --offline cleanTest test --tests 'dev.codeintelligence.project.LocalSourceBindingTest'",
+      "result": "24/24; 39/39"
+    },
+    {
+      "unit": "G-SEC",
+      "cwd": "agent-adc5afddf7b377171/backend",
+      "command": "./gradlew --offline test --tests 'dev.codeintelligence.common.SecuritySourceExecutionTest' --tests 'dev.codeintelligence.common.config.SecurityLocalApiBoundaryTest' --tests 'dev.codeintelligence.common.config.DesktopSecurityConfigurationTest' --tests 'dev.codeintelligence.github.*' --tests 'dev.codeintelligence.auth.*' --rerun",
+      "result": "279 tests, 0 failures, 7 skipped"
+    },
+    {
+      "unit": "G-SEC",
+      "cwd": "agent-adc5afddf7b377171/backend",
+      "command": "git show bcd8081:<GitCloneService.java> over the file; ./gradlew --offline test --tests 'dev.codeintelligence.github.SecurityGitImportExecutionTest' --rerun; restore; rerun",
+      "result": "red: userConfiguredSmudgeDriverSelectedByHostileAttributesNeverRunsOnCloneFetchOrReset FAILED; green: BUILD SUCCESSFUL"
+    },
+    {
+      "unit": "G-SEC",
+      "cwd": "agent-adc5afddf7b377171",
+      "command": "(desktop) node --test test/security-renderer-boundary.test.cjs; (frontend) npx vitest run src/features/security-rendering.test.tsx",
+      "result": "10 (8 pass, 2 todo); 3/3"
+    },
+    {
+      "unit": "G-ACCURACY",
+      "cwd": "agent-aa6d56354c50ce366",
+      "command": "node --test validation/t00/test/*.test.cjs validation/pre-release/test/accuracy-observations.test.cjs; (backend) ./gradlew --offline --no-daemon spotlessJavaCheck; env -i ... node validation/pre-release/accuracy-export.cjs --corpus validation/t00/baseline/corpus.json --capabilities validation/t00/capability-manifest.json --socket unix://$HOME/.docker/run/docker.sock --label coordinator-verify",
+      "result": "125/125; pass; EVALUATED_FAIL with 69 facts (coordinator-verify-HI6okl), same as baseline-2nwqUR"
+    },
+    {
+      "unit": "G-NATIVE/G-UPDATE",
+      "cwd": "agent-a288b6b80aae4da1f",
+      "command": "(desktop) node --test test/signing-readiness.test.cjs test/signing-loader-probe.test.cjs test/update-anti-rollback.test.cjs test/update-manifest-reference.test.cjs test/macos-signing.test.cjs test/runtime-stage.test.cjs test/runtime-stage-containment.test.cjs test/native-runtime-staging.test.cjs; env -i ... node validation/pre-release/native-signing-readiness.cjs --app <1lvULq>",
+      "result": "119 (118 pass, 1 todo); READY_FOR_DEVELOPER_ID_SIGNING_PASS (signing-ORBtUG)"
+    },
+    {
+      "unit": "G-UX",
+      "cwd": "agent-a2ab4860a0424970f",
+      "command": "node frontend/node_modules/vitest/vitest.mjs run --config validation/pre-release/frontend-regression.config.mjs src/features/ux src/features/import src/features/flows src/features/projects src/features/code src/features/analysis src/lib; node --test validation/pre-release/test/ux-accessibility.test.cjs; (frontend) tsc -p tsconfig.app.json --noEmit",
+      "result": "188/188; 7/7; exit 0; with the six bcd8081 product files: 7 failed / 181 passed"
+    }
+  ],
+  "postMergeRegression": [
+    {
+      "suite": "frontend vitest",
+      "command": "(frontend) node node_modules/vitest/vitest.mjs run",
+      "result": "449/449"
+    },
+    {
+      "suite": "frontend tsc -b / eslint",
+      "result": "exit 2 before 6f4bc76 (node:fs in security-rendering.test.tsx); exit 0 after; eslint exit 0"
+    },
+    {
+      "suite": "validation runner tests",
+      "command": "env -i ... node --test validation/pre-release/test/*.test.cjs validation/t00/test/*.test.cjs",
+      "result": "368/368"
+    },
+    {
+      "suite": "desktop",
+      "command": "(desktop) env -i ... node --test test/*.test.cjs",
+      "result": "3197 tests: 3150 pass, 2 fail, 42 skipped, 3 todo",
+      "failures": [
+        {
+          "test": "backup-product-state: commit receipt guard: timeout during final post-close validation remains failure",
+          "classification": "timing under full-suite load; 124/124 in 3 standalone runs"
+        },
+        {
+          "test": "dependency-downloader: upstream HTTP failures retain the stable builder server-error retry behavior",
+          "classification": "pre-existing; same assertion (3 !== 2) fails on unchanged main bcd8081 (2/2 runs)"
+        }
+      ]
+    },
+    {
+      "suite": "backend isolated Docker",
+      "command": "env -i ... node validation/pre-release/run-docker-integration.cjs --suite backend --socket unix://$HOME/.docker/run/docker.sock",
+      "result": "backend-ZVMYtp FAIL at spotlessCheck (fixed by 640b038); backend-Y5G30G 1886 tests: 1852 pass, 1 fail, 33 skipped",
+      "failures": [
+        {
+          "test": "LocalIngestPolicyTest.specialFilesAreRejectedAndTheOldRepositorySurvives",
+          "classification": "SocketException: Unix domain path too long under the worktree path; 67/67 with the default temporary directory"
+        }
+      ]
+    },
+    {
+      "suite": "backend events",
+      "result": "19/19 (events-zHI2gu)"
+    }
+  ],
+  "native": [
+    {
+      "check": "product sequence",
+      "command": "env -i ... node validation/pre-release/run-product-candidate.cjs --app <LA8ZS9>",
+      "cwd": "integration worktree",
+      "result": "PASS 36 checks, omittedSuites []",
+      "evidence": "pre-release-final/product-VrW0p3"
+    },
+    {
+      "check": "owner crash AFTER_SOURCE_RENAME",
+      "command": "env -i ... node validation/backup-compatibility/native-interruption.cjs --app <LA8ZS9> --point AFTER_SOURCE_RENAME --owner-crash",
+      "cwd": "~/Dev/ci-gate (19300fa)",
+      "result": "PASS 6 checks",
+      "evidence": "electron-crash/native-6iKBDr"
+    },
+    {
+      "check": "owner crash BEFORE_COMPLETED_CLEANUP",
+      "cwd": "~/Dev/ci-gate (19300fa)",
+      "result": "PASS 6 checks",
+      "evidence": "electron-crash/native-nLTJxs"
+    },
+    {
+      "check": "owner crash from integration worktree",
+      "result": "ISOLATED_RUN_INVALID before launch (both points); no evidence directory"
+    },
+    {
+      "check": "warm startup 20",
+      "command": "env -i ... node validation/pre-release/run-startup-benchmark.cjs --app <LA8ZS9> --warm-startup-20",
+      "cwd": "~/Dev/ci-gate",
+      "startLoad": "3.67 5.83 9.96",
+      "result": "PASS 20/20, p95 8734ms, p95 idle 1512752KiB, max 1513568KiB, ready 8536-8768ms, AC at boundaries, unchanged",
+      "evidence": "startup-performance/run-S5I7cy"
+    },
+    {
+      "check": "G-JOB packaged races",
+      "command": "env -i ... node validation/pre-release/job-race-product.cjs --app <LA8ZS9>",
+      "result": "PASS 8 checks",
+      "evidence": "job-race/product-CpsTpL"
+    },
+    {
+      "check": "G-COST packaged probe",
+      "command": "env -i ... node validation/pre-release/cost-egress-packaged-probe.cjs --app <LA8ZS9>",
+      "result": "PASS, failures []",
+      "evidence": "cost-egress-packaged/probe-BTcHgg"
+    },
+    {
+      "check": "G-UX pilot",
+      "command": "env -i ... node validation/pre-release/ux-accessibility-pilot.cjs --app <LA8ZS9>",
+      "result": "COMPLETED, 190 states, 0 errors; F1/F4 strings absent, '기록된 정적 흐름' present, U1 progress-announcements observed (1lvULq: [])",
+      "evidence": "pre-release-ux/ux-6PUoj4"
+    },
+    {
+      "check": "offline SBOM",
+      "command": "env -i ... node validation/pre-release/sbom-candidate.cjs --offline --app <LA8ZS9> --resolved-maven runtime-resolved-1lvULq-20261007.json --gradle-cache ... --electron-zip ... --otool-cross-check",
+      "result": "350 components, 0 unattributed, thirdPartyNoticesIndex PRESENT, MISSING_LICENCE_TEXT 15 (1lvULq: 96, ABSENT)",
+      "evidence": "sbom/run-Ekjp6L"
+    }
+  ],
+  "space": {
+    "archive": "final-candidate/archival-3VboGQ (original checkout)",
+    "archived": [
+      "jXdOYk",
+      "wXqDvU",
+      "yGBKOK",
+      "5MOKBa",
+      "Imupzt"
+    ],
+    "freeBytesBefore": 7322972160,
+    "freeBytesAfter": 8596762624,
+    "profilesRemovedAfterLogCopy": [
+      "product-VrW0p3",
+      "job-race product-CpsTpL",
+      "pre-release-ux ux-6PUoj4"
+    ]
+  },
+  "resultSha256": {
+    "pre-release-candidate/build-tOuqNl/result.json": "d1e35436c0869292e6e165ba690a4bf537a81ed473c6d8e7921f214a0eb4139f",
+    "pre-release-final/product-VrW0p3/result.json": "05dac926977c61683efc777220073a9ade0925ab1304f76cbfc6be31504d6fe6",
+    "electron-crash/native-6iKBDr/result.json": "6969280aee91bb89d5b59c1a1c3747b456f119ec1b376477d0ce2c4a5a49a4cf",
+    "electron-crash/native-nLTJxs/result.json": "c46f145fe41b760aa4c9545380ade094260a3ffc1804b368b6fbdb6e84871127",
+    "startup-performance/run-S5I7cy/result.json": "da582ed9f5184966b65021863df2a072779d86b3831dbb9e5b5e6abb81b16736",
+    "job-race/product-CpsTpL/result.json": "d1bd2c9286b12b21ec37dec845c8e09c40df07a340c2d01cd5a5197d58d6aa4a",
+    "cost-egress-packaged/probe-BTcHgg/result.json": "e49ddf183fcca3de542c24b77d6c514628fb645a02c0e0b18a3389f286b8b32d",
+    "pre-release-ux/ux-6PUoj4/result.json": "4f98b9bc35eda8c8596c445a26328ed75ae511a4aaa9c8a5a9ef27af8da1441a",
+    "sbom/run-Ekjp6L/summary.json": "04e32d831bfaae220aabce96c87d8c7a5032c4cd8c1bf9a40886c4f4489bb3db",
+    "docker-integration/backend-Y5G30G/result.json": "5250693b78d21f73ad1295e1c8b650b41849ac46bac609e4990fed4fd7781bd2",
+    "docker-integration/backend-ZVMYtp/result.json": "49c967ace453420312283f2e6c3ca99ccf0d77c6ad206302a5c97120b6316dee",
+    "docker-integration/events-zHI2gu/result.json": "34a6ccaff2a4abd18e0fdb4d3a83f409b2c7cd64411d5fb19c4b64d39b1f7bc7",
+    "final-candidate/archival-3VboGQ/result.json (original checkout)": "c5d9d193e34f18962eb2acc9f8e651fc70e96cb23513d060cbe68e5e73d191cd"
+  },
+  "releaseVerdict": "NO_GO",
+  "performanceSeries": {
+    "status": "FAIL",
+    "measurementStatus": "INCOMPLETE",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-LA8ZS9/Code Intelligence Validation.app\" --class small --series-20",
+    "cwd": "~/Dev/ci-gate (detached 19300fa, short-path worktree)",
+    "nativeLock": "coordinator, acquired 2026-10-07T06:33:30Z",
+    "evidence": "validation/local/workload-performance/run-vSLN0r",
+    "resultSha256": "fdb202ce055a3f36cf3a9814c94e9851c22ca6564ac73f4e4843bf84f87c06d5",
+    "resourceSamplesSha256": "87d7f389f8e56b4ae8015a05b50a087c569795aeda1439dc32ee8d7b23dd4cab",
+    "fixtureTreeSha256": "88140e38aad65eb0c15290a41a17fa68bb7c664193d84587b03023dff6fb254e",
+    "requestedRuns": 20,
+    "executedRuns": 12,
+    "passRuns": 11,
+    "failedRuns": 1,
+    "unexecutedRuns": 8,
+    "interruption": {
+      "run": 12,
+      "failure": "STARTUP_PROCESS_EXITED",
+      "exitSignal": "SIGKILL",
+      "phase": "INCREMENTAL",
+      "at": "2026-10-07T09:10:20Z",
+      "cause": "[INFERENCE] external: the launching session ended; not sent by the runner"
+    },
+    "runnerAssessmentFailures": [
+      "ANALYSISMS_P95_EXCEEDED",
+      "CLEANUP_UNCONFIRMED",
+      "RSS_CEILING_EXCEEDED",
+      "RUN_FAILED",
+      "RUN_NOT_EXECUTED",
+      "SAMPLING_INCOMPLETE"
+    ],
+    "quietMachine": false,
+    "loadAverage1mAtRunStart": {
+      "min": 4.54,
+      "max": 33.32,
+      "seriesStart": 4.01
+    },
+    "observations": {
+      "analysisMs": {
+        "n": 12,
+        "min": 55120,
+        "median": 58022.5,
+        "max": 60570,
+        "limitP95": 30000
+      },
+      "analysisPeakRssKiB": {
+        "n": 12,
+        "min": 3179104,
+        "max": 3424448,
+        "overCeiling": 12,
+        "ceiling": 3145728
+      },
+      "refreshMs": {
+        "n": 11,
+        "min": 678689,
+        "max": 701680,
+        "crossDomainStepMs": {
+          "min": 643834,
+          "max": 662990
+        },
+        "countsEqualToFull": 11
+      },
+      "cancelReleaseMs": {
+        "n": 11,
+        "min": 23171,
+        "max": 27398,
+        "limitMax": 10000
+      },
+      "cancelUiAckMs": {
+        "n": 11,
+        "min": 0,
+        "max": 1
+      },
+      "readyMs": {
+        "min": 9004,
+        "max": 10321
+      }
+    },
+    "profileLogs": "run-vSLN0r/profile-logs (warm-up desktop-run-g1FlaX, run 12 desktop-run-hZUm0Z); synthetic profiles and fixture clone removed after copying",
+    "decision": "user (2026-10-07): record as interrupted; run the next twenty-run series on the next candidate with the cancel/performance fixes, on a quiet machine"
+  }
+}

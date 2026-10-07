@@ -1,0 +1,142 @@
+{
+  "format": 1,
+  "gate": "G-IMPORT",
+  "date": "2026-10-07",
+  "report": "docs/audit/import-safety-matrix-2026-10-07.md",
+  "branch": "worktree-agent-ac4a347c91fe92645",
+  "worktree": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-ac4a347c91fe92645",
+  "base": "bcd8081",
+  "commits": [
+    "8be58ee [skip ci] Add the C05 import-secrets corpus on the real filesystem and PostgreSQL",
+    "ecd2908 [skip ci] Verify C06 evidence history against retained snapshot bytes",
+    "6b89d38 [skip ci] Walk every Flyway step with preserved legacy sentinels",
+    "8a0b9b9 [skip ci] Add import/evidence backend and packaged-app runners",
+    "b6fbbd2 [skip ci] Judge packaged published-fact failures after the independent checks"
+  ],
+  "productCodeChanged": false,
+  "candidate": {
+    "name": "1lvULq",
+    "builtFrom": "9211e88",
+    "bundle": ".native-product-1lvULq/Code Intelligence Validation.app",
+    "buildSequence": "1791292686000",
+    "runtimeManifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+    "unchangedAfterRuns": true
+  },
+  "drivers": {
+    "validation/pre-release/import-evidence-native.cjs@8a0b9b9": "6dc54e017d869e757634435d4931a5b4a7a82d377283b816d9887105f7c32f11",
+    "validation/pre-release/import-evidence-native.cjs@b6fbbd2": "d3ea6ce3dd0d2de80abea6e855f53d12746a070202fdefef3e373ccdbaad7c66",
+    "validation/pre-release/import-evidence-backend.cjs": "68e9745dcc2f9c770ae6d932b9adcd66b46ffc9220d81a1c7b259ea83d8c01d8",
+    "validation/pre-release/docker-integration.init.gradle": "2858b3c1ad856bb943f0a3ae7640fbee54385c4c62090c6e6f746378f7654d85"
+  },
+  "commands": [
+    {
+      "id": "backend-runner",
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/import-evidence-backend.cjs --socket unix://$HOME/.docker/run/docker.sock",
+      "evidence": "validation/local/import-evidence/backend-bsZZx6",
+      "result": "FAIL: 519 tests, 517 pass, 1 fail (LocalIngestPolicyTest.specialFilesAreRejectedAndTheOldRepositorySurvives, 'Unix domain path too long' under the long worktree temporary path), 1 skipped (C06-15 R2)"
+    },
+    {
+      "id": "local-ingest-rerun-default-tmp",
+      "cwd": "<worktree>/backend",
+      "command": "./gradlew --offline test --tests '*LocalIngestPolicyTest' with the default temporary directory (run by the earlier session; its exact environment was not recorded, the log and JUnit XML were read)",
+      "evidence": "validation/local/import-evidence/rerun-LocalIngestPolicyTest-default-tmp.log; backend/build/test-results/test/TEST-dev.codeintelligence.project.LocalIngestPolicyTest.xml",
+      "result": "PASS: 67 tests, 0 failures, 0 errors, 0 skipped (BUILD SUCCESSFUL)"
+    },
+    {
+      "id": "targeted-classes",
+      "cwd": "<worktree>/backend",
+      "setup": "ROOT=<worktree>/validation/local/import-evidence/targeted-XXXXXX with 0700 subdirectories home,tmp,docker,data and docker/config.json '{}'; TMPROOT=<worktree>/.citd-XXXXXX (removed afterwards)",
+      "command": "env -i HOME=\"$HOME\" PATH=/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C DOCKER_HOST=unix://$HOME/.docker/run/docker.sock DOCKER_CONFIG=$ROOT/docker CI_DOCKER_TEST_ROOT=$ROOT CI_DOCKER_TEST_TMP=$TMPROOT CI_DOCKER_TEST_SUITE=backend TESTCONTAINERS_REUSE_ENABLE=false TESTCONTAINERS_RYUK_DISABLED=false TESTCONTAINERS_CHECKS_DISABLE=false ./gradlew --offline --no-daemon --console=plain --max-workers=2 -I ../validation/pre-release/docker-integration.init.gradle test --tests '*ImportSecretsCorpusIntegrationTest' --tests '*EvidenceHistoryIntegrationTest' --tests '*LegacyMigrationWalkTest'",
+      "evidence": "validation/local/import-evidence/targeted-sJi3wp",
+      "result": "PASS with explicit skip: gradle exit 0; 88 tests, 87 pass, 0 fail, 1 skipped (C06-15 R2)"
+    },
+    {
+      "id": "vault-broker",
+      "cwd": "<worktree>/desktop",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node --test --test-reporter=tap test/source-vault.test.cjs test/source-broker.test.cjs",
+      "evidence": "validation/local/import-evidence/desktop-vault-broker.tap, validation/local/import-evidence/desktop-vault-broker-2.tap",
+      "result": "PASS: 74/74 in both runs"
+    },
+    {
+      "id": "packaged",
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C /Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-import-evidence node validation/pre-release/import-evidence-native.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\"",
+      "runs": [
+        {"log": "validation/local/import-evidence/native-run-1.log", "evidence": null, "result": "terminated by the stopped session right after lock acquisition; no evidence directory"},
+        {"log": "validation/local/import-evidence/native-run-2.log", "evidence": "validation/local/import-evidence/native-n9Svxt", "driver": "8a0b9b9", "result": "FAIL at published-facts-first: 'span bounds config:package.json'; 7 checks passed before; clean shutdown; candidate unchanged"},
+        {"log": "validation/local/import-evidence/native-run-3.log", "evidence": "validation/local/import-evidence/native-bJn2bY", "driver": "b6fbbd2", "result": "FAIL at published-facts-verdict: 'span bounds config:package.json 1-2 of 1' in each of the three fact rounds; all 11 other checks PASS; clean shutdown; candidate unchanged"}
+      ]
+    }
+  ],
+  "reportSha256": {
+    "validation/local/import-evidence/backend-bsZZx6/report.json": "a30c5b42c8932ffebdd745cd76e65b4a5f4865e3fba290e10f629fa982d4b449",
+    "validation/local/import-evidence/backend-bsZZx6/test-totals.json": "f001cacd3ab269613b175f3e342ee7d2055352224e8f99bf3de45782c2ffda1b",
+    "validation/local/import-evidence/backend-bsZZx6/c05-import-secrets-corpus.json": "343fc99c786ed604b5d9f5fd11608f3d0ba28f657d684ce65724b109abbeace5",
+    "validation/local/import-evidence/targeted-sJi3wp/test-totals.json": "e5555d7db65ec7ba3a0190a414022bfab4706868aa3509f54a5043fddfdb6646",
+    "validation/local/import-evidence/targeted-sJi3wp/c05-import-secrets-corpus.json": "bb13eeabd7eb072aa0bc64340820e171d01d12592149547a96718a0947362f14",
+    "validation/local/import-evidence/targeted-sJi3wp/gradle.log": "ccbbe1d15d14c79090dd119b901424abcf4f9db056e0458e39a39bc29235d61a",
+    "validation/local/import-evidence/native-n9Svxt/result.json": "0d7e0ec4df36152e3b3bdfd16d49251c6eef4bdfbdd776089c0152188f108983",
+    "validation/local/import-evidence/native-bJn2bY/result.json": "d4f820c4a4363c19d278dcb7a4c276253f563768a8446bec53083938a02d8f02",
+    "validation/local/import-evidence/desktop-vault-broker.tap": "576b3792e60e1c9171892356073d86da783d3c97df5fe828ca37258fa7efe116",
+    "validation/local/import-evidence/desktop-vault-broker-2.tap": "b3f0a5e9832cd18e12622dc5888188ec84713f87fc22f6307e1382ba1b41e2d6"
+  },
+  "c05": {
+    "cases": 71,
+    "casePass": 70,
+    "caseFailSpecDeviation": ["C05-18"],
+    "sweep": "PASS",
+    "testsPass": 72,
+    "testsTotal": 72
+  },
+  "packagedObservations": {
+    "evidence": "native-bJn2bY",
+    "checks": ["renderer-path-authorization-refused-403", "ungranted-preview-refused-400", "forged-path-token-refused-403", "controlled-native-dialog-grant-preview-exact-exclusions", "sibling-of-granted-root-refused-400", "snapshot-equals-approved-set", "retained-source-export-ai-preview-sentinel-free", "profile-db-logs-vault-addresses-sentinel-free", "no-script-execution", "original-folder-unchanged", "clean-shutdown-complete"],
+    "preview": {"acceptedFiles": 8, "bytesRead": 1006, "excludedEntriesByReason": {"SECRET_PATH": 4, "SECRET_CONTENT": 2, "HARD_LINK": 2, "GENERATED_DIRECTORY": 2, "SYMLINK": 1, "IGNORED": 1, "BINARY": 1, "OVERSIZED": 1}},
+    "profileSweep": {"files": 1728, "bytes": 59508685, "hits": 0, "forbiddenAddresses": 0},
+    "reanalysisPath": "ui-preview-approval",
+    "mockKeychain": true,
+    "realAccount": false,
+    "nativePickerInteraction": false
+  },
+  "matrix": [
+    {"id": "I-01", "status": "PASS", "requirement": "Path grant only from main after the dialog; renderer/general bearer refused"},
+    {"id": "I-02", "status": "FAIL", "requirement": "Capability = canonical root + identity + expiry + nonce", "reason": "F-1: grant is a descendant-covering canonical path set without expiry/nonce/identity"},
+    {"id": "I-03", "status": "PASS", "requirement": "Home, volume root, system root refused"},
+    {"id": "I-04", "status": "PASS", "requirement": "Nested credential directories and files excluded"},
+    {"id": "I-05a", "status": "PASS", "requirement": "Links/races excluded or refused (behaviour)"},
+    {"id": "I-05b", "status": "FAIL", "requirement": "lstat + no-follow open + descriptor fstat identity", "reason": "F-3: pathname-based re-checks, no descriptor fstat confinement"},
+    {"id": "I-06a", "status": "PASS", "requirement": "symlink/socket/FIFO/nlink>1 excluded"},
+    {"id": "I-06b", "status": "BLOCKED", "requirement": "Device node excluded", "reason": "creating a device node needs root; no privileged harness"},
+    {"id": "I-07", "status": "PASS", "requirement": "No traversal across mounts"},
+    {"id": "I-08", "status": "PASS", "requirement": "Manifest digest and 10-minute server token"},
+    {"id": "I-09", "status": "PASS", "requirement": "Any change after preview refused even with equal counts"},
+    {"id": "I-10", "status": "PASS", "requirement": "File/aggregate/count limits on actual bytes, preview and copy"},
+    {"id": "I-11", "status": "PASS", "requirement": "No archive expansion"},
+    {"id": "I-12a", "status": "PASS", "requirement": "One exclusion policy for preview/copy/inventory/cache/export/AI"},
+    {"id": "I-12b", "status": "NOT RUN", "requirement": "Same policy for the backup archive", "reason": "encrypted archive not produced and decrypted in this unit"},
+    {"id": "I-13", "status": "PASS", "requirement": ".env*, PEM/key/token patterns, content scan"},
+    {"id": "I-14a", "status": "PASS", "requirement": "No script/build execution (file marker)"},
+    {"id": "I-14b", "status": "NOT RUN", "requirement": "No script/build execution (network sentinel)", "reason": "needs OS-isolation/egress harness (G-SEC/C15)"},
+    {"id": "I-15a", "status": "PASS", "requirement": "Case-fold collisions and unsafe names fail explicitly"},
+    {"id": "I-15b", "status": "BLOCKED", "requirement": "NFC/NFD twin fails explicitly", "reason": "APFS and exFAT on macOS cannot hold both names"},
+    {"id": "I-16", "status": "PASS", "requirement": "Default exclusions"},
+    {"id": "I-17", "status": "FAIL", "requirement": "Submodule excluded by default", "reason": "F-2: only the gitlink file is excluded; working tree copied (C05-18)"},
+    {"id": "I-18", "status": "PASS", "requirement": "User's project folder never modified"},
+    {"id": "I-19", "status": "PASS", "requirement": "Old pointer kept on failure"},
+    {"id": "I-20", "status": "PASS", "requirement": "Secret sentinel 0"},
+    {"id": "I-21a", "status": "PASS", "requirement": "Source-store quota/entry budget"},
+    {"id": "I-21b", "status": "NOT RUN", "requirement": "Installation free-space budget", "reason": "integration not exercised"},
+    {"id": "I-22a", "status": "PASS", "requirement": "Picker -> preview -> snapshot in the packaged app (controlled dialog result)"},
+    {"id": "I-22b", "status": "NOT RUN", "requirement": "Same with a person clicking the real macOS dialog", "reason": "human step"},
+    {"id": "I-23", "status": "FAIL", "requirement": "C05 >=40 attack cases", "reason": "70/71 PASS; C05-18 FAIL_SPEC_DEVIATION (F-2)"}
+  ],
+  "counts": {"PASS": 20, "FAIL": 4, "NOT RUN": 4, "BLOCKED": 2},
+  "findings": [
+    {"id": "F-1", "severity": "Medium", "status": "open", "summary": "desktop path grant without expiry, nonce or root identity; covers descendants"},
+    {"id": "F-2", "severity": "Medium", "status": "open", "summary": "submodule working tree not excluded by local import"},
+    {"id": "F-3", "severity": "Low", "status": "open (known limit)", "summary": "race defences pathname-based, no descriptor fstat confinement"}
+  ],
+  "gateVerdict": "not declared; recommendation: keep G-IMPORT open until F-1 and F-2 are fixed or accepted and C05 plus the packaged run pass on a rebuilt candidate"
+}

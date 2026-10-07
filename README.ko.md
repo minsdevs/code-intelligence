@@ -4,8 +4,8 @@
 
 2026-10-05 제품 개편: 레포 개요·분석 시점별 검색 표·선택 주변 관계·보관 소스 탐색을 구현했습니다. 학습 관리는 제거하고 기존 데이터는 보존했습니다. [현재 구현과 실제 앱 검증 범위](docs/multilanguage-plan-2026-10-02/11-first-implementation.md)에 최초 native FAIL/후속 PASS, 계정 연결 관리, 검토된 V26→V27 백업 호환성을 구분했습니다. Developer ID 서명·공증·정식 배포는 아직 완료하지 않았습니다. 아래 날짜별 감사 기록은 과거 범위를 유지합니다.
 
-최신 패키징 후보는 [1lvULq 리뷰 후속](docs/audit/review-follow-up-1lvulq-2026-10-06.md)과 그 앞의
-[xb6Kxe 시작·유휴 메모리 수용](docs/audit/startup-acceptance-xb6kxe-2026-10-06.md)을 따릅니다. device-origin 인증 갱신의 영속 claim/CAS와 GitHub 소비자의 자격증명 revision 검증을
+최신 패키징 후보는 [출시 게이트 단위와 LA8ZS9](docs/audit/release-gate-units-la8zs9-2026-10-07.md)와 그 앞의
+[1lvULq 리뷰 후속](docs/audit/review-follow-up-1lvulq-2026-10-06.md)을 따릅니다. device-origin 인증 갱신의 영속 claim/CAS와 GitHub 소비자의 자격증명 revision 검증을
 구현했습니다. 합성 시험은 실계정 refresh·철회·SSO나 새 기기 설치를 인증하지 않습니다.
 후보는 로컬 ad-hoc Validation 앱이며 공개 릴리스가 아닙니다. 아래 과거 앱 경로가 아니라
 최신 보고서의 정확한 후보·격리 claim 및 증거를 사용하십시오.
@@ -15,8 +15,15 @@
 복구와 추가 정상 재시작을 확인했습니다. 각6개 점검과 합성 회귀79개가 통과했습니다.
 전체 중단·전원손실 시험과 기존 사용자 DB 적용 검증은 별도로 남아 있습니다.
 
-최신 개발 후보 **1lvULq**(`9211e88`)는 xb6Kxe에 리뷰 후속 수정을 반영했고, 전체 기능36개·강제종료
-두 경계·20회 성능 게이트(p95 **8,466ms**, 유휴 RSS 최대 **1,519,408KiB**)를 다시 통과했습니다.
+최신 개발 후보 **LA8ZS9**(`19300fa`)는 출시 게이트 단위 10개(G-IMPORT·G-EVIDENCE·G-JOB·G-ACCURACY·
+G-PERF·G-SEC·G-COST·G-RECOVERY·G-UX·G-NATIVE/G-UPDATE·7단계의 행 단위 검증표)를 병합했습니다. High 결함
+4건(연결 URI 비밀번호 노출, 이전 작업 worker의 상태 덮어쓰기, 보관 소스 쓰기의 검사 시간 산입, Git filter
+driver 실행)과 확정처럼 보이던 관계 문구·분석 진행 알림을 고쳤고, Electron/Chromium 라이선스와 제3자 고지를
+앱에 포함했습니다. 전체 기능36개·강제종료 두 경계·20회 성능 게이트(p95 **8,734ms**, 유휴 RSS 최대
+**1,513,568KiB**)를 통과했습니다. 분석기 격리·업데이터·흐름/영향 판정 등 High 항목이 남아 있어 완료된 게이트는 없습니다.
+
+이전 후보 **1lvULq**(`9211e88`)는 xb6Kxe에 리뷰 후속 수정을 반영했고, 전체 기능36개·강제종료
+두 경계·20회 성능 게이트(p95 **8,466ms**, 유휴 RSS 최대 **1,519,408KiB**)를 통과했습니다.
 
 후보 **xb6Kxe**는 변경 없는 작업트리의 `ecf6344`에서 제작했습니다. 측정으로 확인한
 시작 작업을 줄였습니다. 런타임 파일 내용 검증·TLS 발급 병렬화, 준비 확인 50ms 간격,

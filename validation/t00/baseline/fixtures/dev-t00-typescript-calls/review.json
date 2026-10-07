@@ -1,0 +1,14 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-t00-typescript-calls",
+  "author": {
+    "id": "gate-accuracy-transcriber",
+    "kind": "AGENT",
+    "method": "SOURCE_AUTHORED"
+  },
+  "status": "AUTHOR_PROVISIONAL",
+  "goldSha256": "e3519052b99059b125d8f0bd0003e166260007ef84f0bcab7011c129c8842666",
+  "negativesSha256": "6df5e10d90465682d8541926c30ce9c8bce82ed23b3b77c9e0f3ce139d2449d1",
+  "reviews": [],
+  "adjudicator": null
+}

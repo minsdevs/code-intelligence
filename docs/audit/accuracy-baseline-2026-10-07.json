@@ -1,0 +1,2819 @@
+{
+  "format": "release-gate-ledger/1",
+  "gate": "G-ACCURACY",
+  "unit": "gate-accuracy",
+  "date": "2026-10-07",
+  "branch": "worktree-agent-aa6d56354c50ce366",
+  "worktree": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-aa6d56354c50ce366",
+  "base": "bcd8081",
+  "commits": [
+    "238d58d [skip ci] Apply Spotless formatting to the T00 observation exporter test",
+    "4065db1 [skip ci] Document T00 annotation procedure, development baseline and execution attestation",
+    "b6cd7e2 [skip ci] Test T00 annotation tooling and the accuracy observation adapter",
+    "4311350 [skip ci] Add packaged-app accuracy export, case-level findings and exporter binding fixes",
+    "e53d567 [skip ci] Protect only re-hashed attestation components and test T00 attestation binding",
+    "ce4fc99 [skip ci] Add backend pipeline T00 observation exporter for G-ACCURACY",
+    "f6cfc86 [skip ci] Add T00 annotation tooling and development-baseline transcription corpus",
+    "a934538 [skip ci] Add local execution attestation and development-baseline scope to T00 runner"
+  ],
+  "gateVerdict": "BLOCKED (not PASS; independent evaluation corpus and blind review absent; evidence span/namespace rows FAIL)",
+  "commands": [
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-aa6d56354c50ce366",
+      "command": "node --test validation/t00/test/*.test.cjs validation/pre-release/test/accuracy-observations.test.cjs",
+      "result": {
+        "tests": 125,
+        "pass": 125,
+        "fail": 0
+      }
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-aa6d56354c50ce366/backend",
+      "command": "./gradlew --offline --no-daemon --console=plain spotlessJavaCheck",
+      "result": "first run FAILED (3 violations in new test), fixed in 238d58d, rerun BUILD SUCCESSFUL"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-aa6d56354c50ce366",
+      "command": "node validation/t00/runner.cjs --mode contract --offline --corpus validation/t00/baseline/corpus.json --capabilities validation/t00/capability-manifest.json --output <new dir>",
+      "result": "PASS exit 0"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-aa6d56354c50ce366",
+      "command": "node validation/t00/annotate.cjs validate --capabilities validation/t00/capability-manifest.json --corpus validation/t00/baseline/corpus.json --corpus validation/t00/corpus.json --allow-unrecorded",
+      "result": "PASS, 5 fixtures, 0 errors"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-aa6d56354c50ce366",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/accuracy-export.cjs --corpus validation/t00/baseline/corpus.json --capabilities validation/t00/capability-manifest.json --socket \"unix://$HOME/.docker/run/docker.sock\" --label baseline",
+      "result": "baseline-2nwqUR EVALUATED_FAIL (accuracyTest 1/1 pass; T00 contract PASS, artifactVerification VERIFIED, HARNESS_ATTESTED_UNSIGNED; observationEvaluation FAIL exit 1)"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-aa6d56354c50ce366",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C /Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-accuracy node validation/pre-release/accuracy-packaged-export.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\" --corpus validation/t00/baseline/corpus-packaged.json --capabilities validation/t00/capability-manifest.json --backend-dumps validation/local/accuracy-export/baseline-2nwqUR/dumps --candidate-revision 9211e88d85de0c7f7fa08bd1082bc2e9e5dab941",
+      "result": "packaged-Dvy5Vw EVALUATED_FAIL (contract PASS, VERIFIED, HARNESS_ATTESTED_UNSIGNED; observationsEqual true; dumpsEqual false: application.yml SECRET_CONTENT ingest exclusion)"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-aa6d56354c50ce366",
+      "command": "node validation/pre-release/accuracy-baseline.cjs --corpus <corpus> --capabilities validation/t00/capability-manifest.json --observations <run>/bundle/observations.json --execution-attestation <run>/bundle/attestation.json --output <run>/findings.json",
+      "result": {
+        "backend": {
+          "cases": 81,
+          "failingCases": 25,
+          "unmatchedFacts": 11,
+          "falseResolved": 0
+        },
+        "packaged": {
+          "cases": 71,
+          "failingCases": 17,
+          "unmatchedFacts": 9,
+          "falseResolved": 0,
+          "sameFailingCasesAsBackendFullstack": true
+        }
+      }
+    }
+  ],
+  "evidence": {
+    "root": "validation/local/accuracy-export",
+    "final": {
+      "backend": "baseline-2nwqUR",
+      "packaged": "packaged-Dvy5Vw"
+    },
+    "superseded": {
+      "baseline-Bv7Eby": "runner DUPLICATE_ID (observation ids per fixture) - harness fixed",
+      "baseline-A0jj4r": "runner OUTPUT_OVERLAPS_INPUT (artifact root protected wholesale) - fixed",
+      "baseline-SvlfCP": "ARTIFACT_DIGEST_MISMATCH (FILE component framing) - fixed",
+      "baseline-MX0PX0": "GRADLE_EXPORT_FAILED: Gradle connection preamble timeout under load (environmental); rerun passed",
+      "baseline-SIwZlL": "EVALUATED_FAIL with old PROJECT_SYNTAX_REJECTED projection",
+      "baseline-2xCyT7": "EVALUATED_FAIL, harness before Spotless formatting",
+      "packaged-qco3eD": "PRODUCT_API_REQUEST_FAILED (file-content for non-ingested file) - fixed",
+      "packaged-Oi9po1": "driver dropped app handle before close (product shutdown COMPLETE) - fixed",
+      "packaged-p6iqkf": "runner SCHEMA_VIOLATION validationIdentity object - fixed",
+      "packaged-TPsjuG": "same as p6iqkf (stale driver)",
+      "packaged-bz1xyM": "EVALUATED_FAIL, compared against baseline-2xCyT7",
+      "probe-fYx4ek": "previous session probe (incomplete)",
+      "probe-wYCBod": "previous session probe (incomplete)"
+    },
+    "sha256": {
+      "baseline-2nwqUR/t00-gate/report.json": "9f6ede88d1926d69823764f23593fdce2387f3f3948f3ba945f5cb8a99a7e72e",
+      "baseline-2nwqUR/findings.json": "0f900697e57fefb4e8cc075d9861ff323bd163011c375e97fef9431eeaac99ab",
+      "baseline-2nwqUR/bundle/observations.json": "a031ca0bd42de5270eaeef78ee015859313dd7290d9f38615384902711d5884e",
+      "baseline-2nwqUR/bundle/attestation.json": "7340d91ac64ae114efaf7e273176cc5edf881d950ef24f4ef595234d95ee05ef",
+      "baseline-2nwqUR/bundle/evidence-audit.json": "94b6cb7def57bfe95e4ad8fde7297fc02a11d32b60376fa949a9ce7fb26d054e",
+      "baseline-2nwqUR/result.json": "015fa36aa6d557f9e66851e560f2cdf269a03227f4212be69e5271edd784c202",
+      "baseline-2nwqUR/t00-gate/coverage-partition.json": "c60955a1b91d36806c1f8053c277fe18f6ba7e77638ab458879c3dea2b069860",
+      "baseline-2nwqUR/t00-gate/evidence-check.json": "ed735b868be94b073fcc6a2e44157d351db451df04e199f6bc67e0fc06a45068",
+      "packaged-Dvy5Vw/t00-gate/report.json": "8847aec94347c0003ed42db7e920fe9b09830684b7c3f442875528223c1c3477",
+      "packaged-Dvy5Vw/findings.json": "0a1d400c2ddc506163acb06b97a24205b7ccd4949adbcdc15be2a648c7b668e6",
+      "packaged-Dvy5Vw/bundle/observations.json": "856ac1ad06395feadab89bc56a09de5c96eaa1641d65b5c6fdf04b8821505c06",
+      "packaged-Dvy5Vw/bundle/attestation.json": "51e0233ec605c7e6314da1c2be9e1064a8e42a42ccb423a29344e4a73f2eeba2",
+      "packaged-Dvy5Vw/bundle/evidence-audit.json": "01e5add595552f5a3cc75c7887857c40cbced00ca4f4272ebd6173bae6267d71",
+      "packaged-Dvy5Vw/result.json": "35f2a5313449e2bd499b4b4044094f630aa23f66088d76f1adedd06804eecb5e",
+      "packaged-Dvy5Vw/dumps/dev-todo-fullstack-mini.dump.json": "92eb60aa31621fa10ad879643e12749223324790e3018371729ce52a9f8b2234"
+    },
+    "bindings": {
+      "backend": {
+        "revision": "238d58dd10d0f0c5273af8a0fcd9b5cec31c8e12",
+        "dirtyProductPaths": 0,
+        "productBuildSha256": "9f1c22c5b8242bd00cb4acaa4d44b30b95a41c066884158e01ef47a12187ff46",
+        "driverSha256": "00b1fec55bb4217cbdc26574dc57e38a151958fdca40e44240022571f834abed",
+        "converterSha256": "5827e3717b7ea8fd34f61c2f5ebe296d648e58890e8985d7f422c4e360e25319",
+        "harnessSha256": "667e82a7510def50fc72a9a5688895b00a0f593f4c5cc4f15c09a775d06ae927"
+      },
+      "packaged": {
+        "candidate": ".native-product-1lvULq",
+        "candidateRevision": "9211e88d85de0c7f7fa08bd1082bc2e9e5dab941",
+        "changedProductPathsToHead": 0,
+        "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+        "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+        "buildSequence": "1791292686000",
+        "productBuildSha256": "053434c0ba30365d906a97a1c22fb65d27a7f768f2ce34ea9431740e1a0e8ffb",
+        "driverSha256": "a6fd4f5524e3f5e48228fb37748c84f11ead4a4190789dd5e641461eccba163c"
+      }
+    }
+  },
+  "baseline": {
+    "scope": "DEVELOPMENT_BASELINE (implementation-side transcription; not evaluation evidence)",
+    "backendCells": [
+      {
+        "cellId": "J-P",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 9,
+          "negativeCases": 1,
+          "tp": 9,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 9,
+          "validSucceeded": 9,
+          "invalidFiles": 1,
+          "invalidDiagnosed": 1,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.7008472464490406,
+          "wilsonN": 9,
+          "validFileSuccess": 1,
+          "invalidDiagnosticRecall": 1,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 9,
+          "authoredNegative": 1,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "J-S",
+        "result": "FAIL",
+        "failureCodes": [
+          "PRECISION_BELOW_THRESHOLD"
+        ],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 30,
+          "negativeCases": 0,
+          "tp": 29,
+          "fp": 1,
+          "fn": 1,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 0.9666666666666667,
+          "recall": 0.9666666666666667,
+          "supportedPatternRecall": 0.9666666666666667,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.8332924860304112,
+          "wilsonN": 30,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 30,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "J-C",
+        "result": "FAIL",
+        "failureCodes": [
+          "ABSTENTION_MISSING",
+          "ANNOTATION_REVIEW_REQUIRED",
+          "CANDIDATE_EXACT_SET_BELOW_THRESHOLD",
+          "CANDIDATE_RECALL_BELOW_THRESHOLD",
+          "RECALL_BELOW_THRESHOLD"
+        ],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": {
+          "positiveCases": 7,
+          "negativeCases": 6,
+          "tp": 0,
+          "fp": 0,
+          "fn": 6,
+          "duplicates": 0,
+          "unmatched": 10,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 5,
+          "candidateCases": 4,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": null,
+          "recall": 0,
+          "supportedPatternRecall": 0,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": null,
+          "wilsonN": 0,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": 0,
+          "candidateExactSetAccuracy": 0,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": 0
+        },
+        "samples": {
+          "authoredPositive": 7,
+          "authoredNegative": 6,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "J-F",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": {
+          "positiveCases": 5,
+          "negativeCases": 0,
+          "tp": 5,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.565508505247919,
+          "wilsonN": 5,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 5,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "J-D",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": {
+          "positiveCases": 1,
+          "negativeCases": 0,
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.20654329147389294,
+          "wilsonN": 1,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 1,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "T-P",
+        "result": "FAIL",
+        "failureCodes": [
+          "INVALID_DIAGNOSTIC_MISSING",
+          "OBSERVED_EXECUTION_FAILED",
+          "PARSE_SUCCESS_BELOW_THRESHOLD"
+        ],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 7,
+          "negativeCases": 1,
+          "tp": 6,
+          "fp": 0,
+          "fn": 1,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 7,
+          "validSucceeded": 6,
+          "invalidFiles": 1,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 0.8571428571428571,
+          "supportedPatternRecall": 0.8571428571428571,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.6096569663469354,
+          "wilsonN": 6,
+          "validFileSuccess": 0.8571428571428571,
+          "invalidDiagnosticRecall": 0,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 7,
+          "authoredNegative": 1,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "T-S",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 4,
+          "negativeCases": 0,
+          "tp": 4,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.5100999795960008,
+          "wilsonN": 4,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 4,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "T-C",
+        "result": "FAIL",
+        "failureCodes": [
+          "ABSTENTION_MISSING",
+          "CANDIDATE_EXACT_SET_BELOW_THRESHOLD",
+          "CANDIDATE_RECALL_BELOW_THRESHOLD",
+          "OBSERVED_EXECUTION_FAILED",
+          "RECALL_BELOW_THRESHOLD"
+        ],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": {
+          "positiveCases": 2,
+          "negativeCases": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 2,
+          "candidateCases": 1,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": null,
+          "recall": 0,
+          "supportedPatternRecall": 0,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": null,
+          "wilsonN": 0,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": 0,
+          "candidateExactSetAccuracy": 0,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": 0
+        },
+        "samples": {
+          "authoredPositive": 2,
+          "authoredNegative": 1,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "T-F",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "T-UI",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "JS-P",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "JS-S",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "JS-C",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "JS-UI",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "SQL-P",
+        "result": "FAIL",
+        "failureCodes": [
+          "PARSE_SUCCESS_BELOW_THRESHOLD"
+        ],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 1,
+          "negativeCases": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 1,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": null,
+          "recall": 0,
+          "supportedPatternRecall": 0,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": null,
+          "wilsonN": 0,
+          "validFileSuccess": 0,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 1,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "SQL-S",
+        "result": "FAIL",
+        "failureCodes": [
+          "ANNOTATION_REVIEW_REQUIRED",
+          "RECALL_BELOW_THRESHOLD"
+        ],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 4,
+          "negativeCases": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4,
+          "duplicates": 0,
+          "unmatched": 1,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": null,
+          "recall": 0,
+          "supportedPatternRecall": 0,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": null,
+          "wilsonN": 0,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 4,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "X-HTTP",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "HTTP_STRATUM_SAMPLE_MISSING",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "X-DATA",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": {
+          "positiveCases": 1,
+          "negativeCases": 1,
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 1,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 1,
+          "exactCandidateCases": 1
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.20654329147389294,
+          "wilsonN": 1,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": 1,
+          "candidateRecallAt5": 1,
+          "candidateExactSetAccuracy": 1,
+          "candidateMacroPrecision": 1,
+          "candidateMacroRecall": 1
+        },
+        "samples": {
+          "authoredPositive": 1,
+          "authoredNegative": 1,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      }
+    ],
+    "packagedCells": [
+      {
+        "cellId": "J-P",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 8,
+          "negativeCases": 0,
+          "tp": 8,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 8,
+          "validSucceeded": 8,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.6755843804891231,
+          "wilsonN": 8,
+          "validFileSuccess": 1,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 8,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "J-S",
+        "result": "FAIL",
+        "failureCodes": [
+          "PRECISION_BELOW_THRESHOLD"
+        ],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 30,
+          "negativeCases": 0,
+          "tp": 29,
+          "fp": 1,
+          "fn": 1,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 0.9666666666666667,
+          "recall": 0.9666666666666667,
+          "supportedPatternRecall": 0.9666666666666667,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.8332924860304112,
+          "wilsonN": 30,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 30,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "J-C",
+        "result": "FAIL",
+        "failureCodes": [
+          "ABSTENTION_MISSING",
+          "ANNOTATION_REVIEW_REQUIRED",
+          "CANDIDATE_EXACT_SET_BELOW_THRESHOLD",
+          "CANDIDATE_RECALL_BELOW_THRESHOLD",
+          "RECALL_BELOW_THRESHOLD"
+        ],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": {
+          "positiveCases": 5,
+          "negativeCases": 5,
+          "tp": 0,
+          "fp": 0,
+          "fn": 5,
+          "duplicates": 0,
+          "unmatched": 8,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 3,
+          "candidateCases": 3,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": null,
+          "recall": 0,
+          "supportedPatternRecall": 0,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": null,
+          "wilsonN": 0,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": 0,
+          "candidateExactSetAccuracy": 0,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": 0
+        },
+        "samples": {
+          "authoredPositive": 5,
+          "authoredNegative": 5,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "J-F",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": {
+          "positiveCases": 5,
+          "negativeCases": 0,
+          "tp": 5,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.565508505247919,
+          "wilsonN": 5,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 5,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "J-D",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": {
+          "positiveCases": 1,
+          "negativeCases": 0,
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.20654329147389294,
+          "wilsonN": 1,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 1,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "T-P",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 6,
+          "negativeCases": 0,
+          "tp": 6,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 6,
+          "validSucceeded": 6,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.6096569663469354,
+          "wilsonN": 6,
+          "validFileSuccess": 1,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 6,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "T-S",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 4,
+          "negativeCases": 0,
+          "tp": 4,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.5100999795960008,
+          "wilsonN": 4,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 4,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "T-C",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "T-F",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "T-UI",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "JS-P",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "JS-S",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "JS-C",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "JS-UI",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "SQL-P",
+        "result": "FAIL",
+        "failureCodes": [
+          "PARSE_SUCCESS_BELOW_THRESHOLD"
+        ],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 1,
+          "negativeCases": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 1,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": null,
+          "recall": 0,
+          "supportedPatternRecall": 0,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": null,
+          "wilsonN": 0,
+          "validFileSuccess": 0,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 1,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "SQL-S",
+        "result": "FAIL",
+        "failureCodes": [
+          "ANNOTATION_REVIEW_REQUIRED",
+          "RECALL_BELOW_THRESHOLD"
+        ],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED"
+        ],
+        "counts": {
+          "positiveCases": 4,
+          "negativeCases": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4,
+          "duplicates": 0,
+          "unmatched": 1,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 0,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 0,
+          "exactCandidateCases": 0
+        },
+        "metrics": {
+          "precision": null,
+          "recall": 0,
+          "supportedPatternRecall": 0,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": null,
+          "wilsonN": 0,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": null,
+          "candidateRecallAt5": null,
+          "candidateExactSetAccuracy": null,
+          "candidateMacroPrecision": null,
+          "candidateMacroRecall": null
+        },
+        "samples": {
+          "authoredPositive": 4,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "X-HTTP",
+        "result": "NOT_RUN",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "HTTP_STRATUM_SAMPLE_MISSING",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": null,
+        "metrics": null,
+        "samples": {
+          "authoredPositive": 0,
+          "authoredNegative": 0,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      },
+      {
+        "cellId": "X-DATA",
+        "result": "BLOCKED",
+        "failureCodes": [],
+        "blockerCodes": [
+          "DEVELOPMENT_MATERIAL_ONLY",
+          "EXECUTION_ATTESTATION_LOCAL_UNSIGNED",
+          "INDEPENDENT_ORACLE_REVIEW_MISSING",
+          "INSUFFICIENT_EVALUATION_CORPUS",
+          "PATTERN_ALLOCATION_UNREVIEWED",
+          "WILSON_SAMPLE_MISSING"
+        ],
+        "counts": {
+          "positiveCases": 1,
+          "negativeCases": 1,
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "duplicates": 0,
+          "unmatched": 0,
+          "falseResolved": 0,
+          "validFiles": 0,
+          "validSucceeded": 0,
+          "invalidFiles": 0,
+          "invalidDiagnosed": 0,
+          "candidateTp": 1,
+          "candidateFp": 0,
+          "candidateFn": 0,
+          "candidateCases": 1,
+          "exactCandidateCases": 1
+        },
+        "metrics": {
+          "precision": 1,
+          "recall": 1,
+          "supportedPatternRecall": 1,
+          "overallGoldRecall": null,
+          "overallGoldRecallStatus": "NOT_MEASURED",
+          "precisionWilson95Lower": 0.20654329147389294,
+          "wilsonN": 1,
+          "validFileSuccess": null,
+          "invalidDiagnosticRecall": null,
+          "candidatePrecision": 1,
+          "candidateRecallAt5": 1,
+          "candidateExactSetAccuracy": 1,
+          "candidateMacroPrecision": 1,
+          "candidateMacroRecall": 1
+        },
+        "samples": {
+          "authoredPositive": 1,
+          "authoredNegative": 1,
+          "evaluationPositive": 0,
+          "evaluationNegative": 0,
+          "holdoutPositive": 0,
+          "holdoutNegative": 0,
+          "independentPublicProjects": 0,
+          "scenarios": 0,
+          "parserFiles": 0,
+          "independentlyReviewedCases": 0
+        }
+      }
+    ],
+    "evidence": {
+      "backend": {
+        "fileHashValid": "29/29",
+        "factsWithValidSpan": "69/72",
+        "incompleteLineRange": 1,
+        "namespacePublished": 0,
+        "coveragePartition": "PASS"
+      },
+      "packaged": {
+        "fileHashValid": "24/24",
+        "factsWithValidSpan": "65/68",
+        "incompleteLineRange": 1,
+        "namespacePublished": 0,
+        "coveragePartition": "PASS",
+        "notInventoried": [
+          "source/backend/src/main/resources/application.yml (SECRET_CONTENT)"
+        ]
+      }
+    },
+    "guardedCases": 12,
+    "falseResolved": 0,
+    "failingCases": [
+      {
+        "fixtureId": "dev-t00-java-calls",
+        "caseId": "dev-java-calls.direct",
+        "cellId": "J-C",
+        "polarity": "POSITIVE",
+        "path": "source/Calls.java",
+        "line": 7,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "java:demo.Calls#twice(int)"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-t00-java-calls",
+        "caseId": "dev-java-calls.candidates",
+        "cellId": "J-C",
+        "polarity": "POSITIVE",
+        "path": "source/Calls.java",
+        "line": 8,
+        "expected": {
+          "resolution": "INFERRED",
+          "targets": [
+            "java:demo.FirstAction#run()",
+            "java:demo.SecondAction#run()"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "CANDIDATE_MISSING"
+        ]
+      },
+      {
+        "fixtureId": "dev-t00-java-calls",
+        "caseId": "dev-java-calls.dynamic",
+        "cellId": "J-C",
+        "polarity": "NEGATIVE",
+        "path": "source/Calls.java",
+        "line": 9,
+        "expected": {
+          "resolution": "UNRESOLVED",
+          "targets": [],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": "EXTERNAL_TARGET"
+        },
+        "outcomes": [
+          "ABSTENTION_MISSING"
+        ]
+      },
+      {
+        "fixtureId": "dev-t00-typescript-calls",
+        "caseId": "dev-typescript-calls.valid",
+        "cellId": "T-P",
+        "polarity": "POSITIVE",
+        "path": "source/calls.ts",
+        "line": 1,
+        "expected": {
+          "resolution": "NOT_APPLICABLE",
+          "targets": [],
+          "valid": true,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-t00-typescript-calls",
+        "caseId": "dev-typescript-calls.direct",
+        "cellId": "T-C",
+        "polarity": "POSITIVE",
+        "path": "source/calls.ts",
+        "line": 6,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "ts:source/calls.ts#twice"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-t00-typescript-calls",
+        "caseId": "dev-typescript-calls.candidates",
+        "cellId": "T-C",
+        "polarity": "POSITIVE",
+        "path": "source/calls.ts",
+        "line": 7,
+        "expected": {
+          "resolution": "INFERRED",
+          "targets": [
+            "ts:source/calls.ts#first.run",
+            "ts:source/calls.ts#second.run"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "CANDIDATE_MISSING"
+        ]
+      },
+      {
+        "fixtureId": "dev-t00-typescript-calls",
+        "caseId": "dev-typescript-calls.invalid",
+        "cellId": "T-P",
+        "polarity": "NEGATIVE",
+        "path": "source/invalid.ts",
+        "line": 1,
+        "expected": {
+          "resolution": "NOT_APPLICABLE",
+          "targets": [],
+          "valid": false,
+          "diagnostics": [
+            "SYNTAX_ERROR"
+          ],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "INVALID_DIAGNOSTIC_MISSING"
+        ]
+      },
+      {
+        "fixtureId": "dev-t00-typescript-calls",
+        "caseId": "dev-typescript-calls.dynamic",
+        "cellId": "T-C",
+        "polarity": "NEGATIVE",
+        "path": "source/calls.ts",
+        "line": 9,
+        "expected": {
+          "resolution": "UNRESOLVED",
+          "targets": [],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": "DYNAMIC_TARGET"
+        },
+        "outcomes": [
+          "ABSTENTION_MISSING"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.js.type.TodoRepository",
+        "cellId": "J-S",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+        "line": 6,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "java:com.example.todo.repository.TodoRepository"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "TP",
+          "FP"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.js.extends.TodoRepository",
+        "cellId": "J-S",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+        "line": 6,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "extends java:org.springframework.data.jpa.repository.JpaRepository"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.jc.AuthController.login",
+        "cellId": "J-C",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+        "line": 20,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "java:com.example.todo.service.AuthService#login()"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.jc.AuthController.logout",
+        "cellId": "J-C",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+        "line": 25,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "java:com.example.todo.service.AuthService#logout()"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.jc.TodoController.list",
+        "cellId": "J-C",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+        "line": 25,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "java:com.example.todo.service.TodoService#findAll()"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.jc.TodoController.get",
+        "cellId": "J-C",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+        "line": 30,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "java:com.example.todo.service.TodoService#findById(java.lang.Long)"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.jc.TodoController.create",
+        "cellId": "J-C",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+        "line": 35,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "java:com.example.todo.service.TodoService#create(com.example.todo.domain.Todo)"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.sqlp.V1",
+        "cellId": "SQL-P",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "line": 1,
+        "expected": {
+          "resolution": "NOT_APPLICABLE",
+          "targets": [],
+          "valid": true,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.sqls.table",
+        "cellId": "SQL-S",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "line": 1,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "sql:todos"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.sqls.column.id",
+        "cellId": "SQL-S",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "line": 2,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "sql:todos#id"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.sqls.column.title",
+        "cellId": "SQL-S",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "line": 3,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "sql:todos#title"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.sqls.column.done",
+        "cellId": "SQL-S",
+        "polarity": "POSITIVE",
+        "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "line": 4,
+        "expected": {
+          "resolution": "STATIC_RESOLVED",
+          "targets": [
+            "sql:todos#done"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "FN"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.jc.TodoService.findAll",
+        "cellId": "J-C",
+        "polarity": "AMBIGUOUS",
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "line": 18,
+        "expected": {
+          "resolution": "INFERRED",
+          "targets": [
+            "java:com.example.todo.repository.TodoRepository#findAll()"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "CANDIDATE_MISSING"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.jc.TodoService.findById",
+        "cellId": "J-C",
+        "polarity": "AMBIGUOUS",
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "line": 22,
+        "expected": {
+          "resolution": "INFERRED",
+          "targets": [
+            "java:com.example.todo.repository.TodoRepository#findById(java.lang.Long)"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "CANDIDATE_MISSING"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.jc.TodoService.create",
+        "cellId": "J-C",
+        "polarity": "AMBIGUOUS",
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "line": 26,
+        "expected": {
+          "resolution": "INFERRED",
+          "targets": [
+            "java:com.example.todo.repository.TodoRepository#save(com.example.todo.domain.Todo)"
+          ],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": null
+        },
+        "outcomes": [
+          "CANDIDATE_MISSING"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.jc.TodoApplication.main.run",
+        "cellId": "J-C",
+        "polarity": "NEGATIVE",
+        "path": "source/backend/src/main/java/com/example/todo/TodoApplication.java",
+        "line": 10,
+        "expected": {
+          "resolution": "UNRESOLVED",
+          "targets": [],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": "EXTERNAL_TARGET"
+        },
+        "outcomes": [
+          "ABSTENTION_MISSING"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "caseId": "dev-todo.jc.TodoService.findById.orElseThrow",
+        "cellId": "J-C",
+        "polarity": "NEGATIVE",
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "line": 22,
+        "expected": {
+          "resolution": "UNRESOLVED",
+          "targets": [],
+          "valid": null,
+          "diagnostics": [],
+          "reasonCode": "EXTERNAL_TARGET"
+        },
+        "outcomes": [
+          "ABSTENTION_MISSING"
+        ]
+      }
+    ],
+    "unmatchedFacts": [
+      {
+        "fixtureId": "dev-t00-java-calls",
+        "observationId": "f0.p00003",
+        "cellId": "J-C",
+        "path": "source/Calls.java",
+        "line": 7,
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:demo.Calls#twice(int)"
+        ],
+        "overlappingCases": [
+          "dev-java-calls.direct"
+        ]
+      },
+      {
+        "fixtureId": "dev-t00-java-calls",
+        "observationId": "f0.p00004",
+        "cellId": "J-C",
+        "path": "source/Calls.java",
+        "line": 8,
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:demo.Action#run()"
+        ],
+        "overlappingCases": [
+          "dev-java-calls.candidates"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "observationId": "f2.p00044",
+        "cellId": "SQL-S",
+        "path": "source/backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "line": 1,
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "sql:todos"
+        ],
+        "overlappingCases": [
+          "dev-todo.sqls.table"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "observationId": "f2.p00050",
+        "cellId": "J-C",
+        "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+        "line": 18,
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.AuthService#login()"
+        ],
+        "overlappingCases": [
+          "dev-todo.jc.AuthController.login"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "observationId": "f2.p00051",
+        "cellId": "J-C",
+        "path": "source/backend/src/main/java/com/example/todo/api/AuthController.java",
+        "line": 23,
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.AuthService#logout()"
+        ],
+        "overlappingCases": [
+          "dev-todo.jc.AuthController.logout"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "observationId": "f2.p00052",
+        "cellId": "J-C",
+        "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+        "line": 33,
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService#create(com.example.todo.domain.Todo)"
+        ],
+        "overlappingCases": [
+          "dev-todo.jc.TodoController.create"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "observationId": "f2.p00053",
+        "cellId": "J-C",
+        "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+        "line": 28,
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService#findById(java.lang.Long)"
+        ],
+        "overlappingCases": [
+          "dev-todo.jc.TodoController.get"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "observationId": "f2.p00054",
+        "cellId": "J-C",
+        "path": "source/backend/src/main/java/com/example/todo/api/TodoController.java",
+        "line": 23,
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService#findAll()"
+        ],
+        "overlappingCases": [
+          "dev-todo.jc.TodoController.list"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "observationId": "f2.p00057",
+        "cellId": "J-C",
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "line": 25,
+        "resolution": "INFERRED",
+        "targets": [
+          "java:com.example.todo.repository.TodoRepository#save(com.example.todo.domain.Todo)"
+        ],
+        "overlappingCases": [
+          "dev-todo.jc.TodoService.create"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "observationId": "f2.p00058",
+        "cellId": "J-C",
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "line": 17,
+        "resolution": "INFERRED",
+        "targets": [
+          "java:com.example.todo.repository.TodoRepository#findAll()"
+        ],
+        "overlappingCases": [
+          "dev-todo.jc.TodoService.findAll"
+        ]
+      },
+      {
+        "fixtureId": "dev-todo-fullstack-mini",
+        "observationId": "f2.p00059",
+        "cellId": "J-C",
+        "path": "source/backend/src/main/java/com/example/todo/service/TodoService.java",
+        "line": 21,
+        "resolution": "INFERRED",
+        "targets": [
+          "java:com.example.todo.repository.TodoRepository#findById(java.lang.Long)"
+        ],
+        "overlappingCases": [
+          "dev-todo.jc.TodoService.findById",
+          "dev-todo.jc.TodoService.findById.orElseThrow"
+        ]
+      }
+    ]
+  },
+  "inventory": {
+    "independentEvaluationAnnotationsPerCell": 0,
+    "independentPublicProjects": 0,
+    "sources": [
+      {
+        "source": "validation/t00/fixtures/{java-calls,typescript-calls} (= baseline dev-t00-*)",
+        "author": "AGENT t00-agent-author AUTHOR_PROVISIONAL",
+        "cells": {
+          "J-P": [
+            1,
+            1
+          ],
+          "J-C": [
+            2,
+            1
+          ],
+          "T-P": [
+            1,
+            1
+          ],
+          "T-C": [
+            2,
+            1
+          ]
+        },
+        "projects": 1,
+        "scenarios": 1
+      },
+      {
+        "source": "FixtureAccuracyOracle fullstack-mini -> baseline dev-todo-fullstack-mini",
+        "author": "implementation-side oracle; transcription by AGENT gate-accuracy-transcriber",
+        "cells": {
+          "J-P": [
+            8,
+            0
+          ],
+          "J-S": [
+            30,
+            0
+          ],
+          "J-C": [
+            5,
+            5
+          ],
+          "J-F": [
+            5,
+            0
+          ],
+          "J-D": [
+            1,
+            0
+          ],
+          "SQL-P": [
+            1,
+            0
+          ],
+          "SQL-S": [
+            4,
+            0
+          ],
+          "T-P": [
+            6,
+            0
+          ],
+          "T-S": [
+            4,
+            0
+          ],
+          "X-DATA": [
+            1,
+            1
+          ]
+        },
+        "projects": 1,
+        "scenarios": 1,
+        "outOfVersion": "React18/Router6 T-UI and X-HTTP facts not counted"
+      },
+      {
+        "source": "spring-mini, react-mini",
+        "cells": {},
+        "note": "byte-identical to fullstack-mini halves; same generator; 0 additional"
+      },
+      {
+        "source": "golden tests (FixtureGoldenTest 6, ConfigAnalyzersGoldenTest 5, SpringMiniGraphGoldenTest 3, SpringMiniEndpointsFeaturesGoldenTest 3, ReactMiniTsParsingGoldenTest 2, FullstackCrossDomainGoldenTest 1, FixtureAccuracyTest 3)",
+        "cells": {},
+        "note": "same mini fixtures; 0 additional"
+      },
+      {
+        "source": "ReactRouteBindingIntegrationTest (5 tests)",
+        "cells": {},
+        "note": "inline snippets, no pinned React/Router version, no span gold; not countable"
+      },
+      {
+        "source": "analyzer unit tests (ts-analyzer 114, tree-analyzer 8, backend analysis/java 16, analysis/ts 46)",
+        "cells": {},
+        "note": "implementation unit expectations; not countable"
+      }
+    ]
+  },
+  "gap": {
+    "requiredPerCell": {
+      "positive": 200,
+      "negativeOrAmbiguous": 100,
+      "holdout": "50/25",
+      "independentProjects": 3,
+      "scenarios": 10,
+      "parserFilesForP": 50
+    },
+    "availableIndependentPerCell": 0,
+    "totalEvaluationAnnotations": 5400,
+    "independentReviewDecisions": 10800
+  },
+  "defects": [
+    {
+      "id": "D1",
+      "severity": "High (candidate)",
+      "status": "open",
+      "summary": "Interface-receiver call action.run() (Calls.java:8) published CONFIRMED to declared interface method demo.Action#run(); provisional gold expects INFERRED implementation candidates; masked from FALSE_RESOLVED by D2",
+      "needs": "semantic adjudication / support-table decision"
+    },
+    {
+      "id": "D2",
+      "severity": "Medium",
+      "status": "open",
+      "summary": "Java CALLS edges carry no call-site evidence; all Java call facts land on caller declaration span"
+    },
+    {
+      "id": "D3",
+      "severity": "Medium",
+      "status": "open",
+      "summary": "Java publishes no unresolved-call abstentions (ABSTENTION_MISSING x3)"
+    },
+    {
+      "id": "D4",
+      "severity": "Medium",
+      "status": "open",
+      "summary": "One TS syntax error rejects the whole TS project (TsParsingStep.java:101 PROJECT_SYNTAX_REJECTED), job FAILED, invalid file not identified"
+    },
+    {
+      "id": "D5",
+      "severity": "Medium",
+      "status": "open",
+      "summary": "No SQL parse verdict (UNMEASURED/PARSER_NOT_MEASURED)"
+    },
+    {
+      "id": "D6",
+      "severity": "Medium",
+      "status": "open",
+      "summary": "DB_TABLE lineEnd null; columns without spans"
+    },
+    {
+      "id": "D7",
+      "severity": "Low",
+      "status": "open",
+      "summary": "EXTENDS/IMPLEMENTS edges without clause span"
+    },
+    {
+      "id": "D8",
+      "severity": "Medium",
+      "status": "open",
+      "summary": "3 inherited Spring Data METHOD placeholders published against TodoRepository.java with null lines (facts without span)"
+    },
+    {
+      "id": "D9",
+      "severity": "Info",
+      "status": "open",
+      "summary": "No per-fact namespace published"
+    }
+  ],
+  "productPathsChanged": [],
+  "filesOutsideAssignedAreas": [
+    "validation/pre-release/test/accuracy-observations.test.cjs (accuracy- prefix, but in the pre-release test/ subdirectory)"
+  ],
+  "requirementMatrix": [
+    {
+      "row": 1,
+      "requirement": "Backend exporter: real pipeline + Testcontainers PG + real TS sidecar, bound to build digest",
+      "status": "PASS",
+      "evidence": "baseline-2nwqUR artifactVerification VERIFIED"
+    },
+    {
+      "row": 2,
+      "requirement": "Packaged-app API exporter for >=1 fixture bound to manifest/app.asar",
+      "status": "PASS",
+      "evidence": "packaged-Dvy5Vw"
+    },
+    {
+      "row": 3,
+      "requirement": "Both paths agree",
+      "status": "PASS",
+      "evidence": "65=65 facts, outcomes equal; dump differs by ingest-policy-refused application.yml"
+    },
+    {
+      "row": 4,
+      "requirement": "Runner verified-execution attestation with tests",
+      "status": "PASS",
+      "evidence": "11 attestation + 4 adapter tests"
+    },
+    {
+      "row": 5,
+      "requirement": "Signed / third-party-witnessed execution proof",
+      "status": "BLOCKED",
+      "evidence": "signing material and independent witness required"
+    },
+    {
+      "row": 6,
+      "requirement": "Inventory of existing oracle cases per cell, generator-deduplicated",
+      "status": "PASS",
+      "evidence": "audit inventory section"
+    },
+    {
+      "row": 7,
+      "requirement": "Per-cell baseline with 06 metric definitions",
+      "status": "PASS",
+      "evidence": "measured; values FAIL"
+    },
+    {
+      "row": 8,
+      "requirement": "Every FP/FN/false-resolved case listed with location",
+      "status": "PASS",
+      "evidence": "findings.json"
+    },
+    {
+      "row": 9,
+      "requirement": "Annotation tooling + ANNOTATING.md",
+      "status": "PASS",
+      "evidence": "6 annotation tests"
+    },
+    {
+      "row": 10,
+      "requirement": "Gap table and remaining work",
+      "status": "PASS",
+      "evidence": "audit gap section"
+    },
+    {
+      "row": 11,
+      "requirement": "06 cell thresholds per R1 cell on evaluation corpus",
+      "status": "BLOCKED",
+      "evidence": "0 evaluation annotations in all 18 cells"
+    },
+    {
+      "row": 12,
+      "requirement": "Negative/ambiguous false-resolved = 0 on evaluation corpus",
+      "status": "BLOCKED",
+      "evidence": "no evaluation negatives; development 0/12 guarded, D1 masked by D2"
+    },
+    {
+      "row": 13,
+      "requirement": "Evidence hash validity 100%",
+      "status": "PASS",
+      "evidence": "development material only: 29/29, 24/24"
+    },
+    {
+      "row": 14,
+      "requirement": "Evidence span validity 100% over published facts",
+      "status": "FAIL",
+      "evidence": "69/72 (D8), 1 incomplete range (D6)"
+    },
+    {
+      "row": 15,
+      "requirement": "Evidence namespace validity 100%",
+      "status": "FAIL",
+      "evidence": "product publishes no namespace (D9)"
+    },
+    {
+      "row": 16,
+      "requirement": "Coverage partition 100%",
+      "status": "PASS",
+      "evidence": "development material only; coverage-partition PASS both paths"
+    },
+    {
+      "row": 17,
+      "requirement": "Wilson lower bound >=0.95 with n>=200 (C/F/X)",
+      "status": "BLOCKED",
+      "evidence": "largest n=5"
+    },
+    {
+      "row": 18,
+      "requirement": "Per cell 200+100 independent annotations, >=3 projects, >=10 scenarios, holdout, P files",
+      "status": "BLOCKED",
+      "evidence": "independent human annotators, licensed pinned repositories"
+    },
+    {
+      "row": 19,
+      "requirement": "X-HTTP 4 strata 50/25 each",
+      "status": "BLOCKED",
+      "evidence": "no R1-version X-HTTP material"
+    },
+    {
+      "row": 20,
+      "requirement": "Two-annotator review + adjudication of evaluation gold",
+      "status": "BLOCKED",
+      "evidence": "people required"
+    },
+    {
+      "row": 21,
+      "requirement": "300-annotation pilot",
+      "status": "BLOCKED",
+      "evidence": "people required"
+    },
+    {
+      "row": 22,
+      "requirement": "Blind real-repository review",
+      "status": "BLOCKED",
+      "evidence": "reviewers and real-repository corpus required"
+    }
+  ],
+  "matrixCounts": {
+    "PASS": 11,
+    "FAIL": 2,
+    "NOT RUN": 0,
+    "BLOCKED": 9
+  },
+  "limits": [
+    "development material only, n<=30 per cell",
+    "backend path bypasses local-ingest policy (IMPORT replaced)",
+    "packaged API exposes no edge metadata/AMBIGUOUS nodes/entity source/route component key",
+    "attestation local and unsigned",
+    "no timing or memory figures"
+  ]
+}

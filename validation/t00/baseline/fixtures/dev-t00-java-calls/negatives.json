@@ -1,0 +1,58 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-t00-java-calls",
+  "cases": [
+    {
+      "caseId": "dev-java-calls.invalid",
+      "cellId": "J-P",
+      "patternId": "invalid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "NEGATIVE",
+      "source": {
+        "path": "source/Invalid.java",
+        "sha256": "64c7b144c720916de595df0e2837ca78049f2f33e52965fe1daa4e51deabdf04",
+        "namespace": "synthetic-java-calls",
+        "start": 0,
+        "end": 28
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": false,
+        "diagnostics": [
+          "SYNTAX_ERROR"
+        ],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed java-calls.invalid: the parameter list is unterminated."
+    },
+    {
+      "caseId": "dev-java-calls.dynamic",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "NEGATIVE",
+      "source": {
+        "path": "source/Calls.java",
+        "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+        "namespace": "synthetic-java-calls",
+        "start": 389,
+        "end": 408
+      },
+      "expected": {
+        "resolution": "UNRESOLVED",
+        "targets": [],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": "EXTERNAL_TARGET"
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed java-calls.dynamic (EXTERNAL_CONTEXT_MISSING mapped to the guide's EXTERNAL_TARGET): the JDK method is not in the analysed sources."
+    }
+  ]
+}

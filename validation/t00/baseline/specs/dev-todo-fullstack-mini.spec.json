@@ -1,0 +1,1833 @@
+{
+  "format": "t00-annotation-spec/1",
+  "annotator": {
+    "id": "gate-accuracy-transcriber",
+    "kind": "AGENT",
+    "method": "SOURCE_AUTHORED"
+  },
+  "provenanceNote": "Transcription of the hand-authored exact-set FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) for fullstack-mini into T00 cases. Spans selected from source text with ANNOTATING.md conventions; no product output was read. React 18 / Router 6 facts (T-UI, X-HTTP) are not transcribed because the fixture is outside the R1 cell versions. Development material only.",
+  "fixture": {
+    "fixtureId": "dev-todo-fullstack-mini",
+    "fixtureVersion": "1.0.0",
+    "corpusId": "accuracy-development-baseline",
+    "license": {
+      "spdx": "MIT",
+      "status": "AUTHOR_DECLARED"
+    },
+    "origin": {
+      "kind": "SYNTHETIC",
+      "projectId": "todo-mini",
+      "uri": "urn:code-intelligence:backend-test-fixtures:fullstack-mini",
+      "commit": null
+    },
+    "scenarioFamilyId": "todo-crud-fullstack",
+    "generatorFamilyId": "todo-mini-hand-authored",
+    "split": "DEVELOPMENT",
+    "versions": [
+      {
+        "name": "java",
+        "version": "21"
+      },
+      {
+        "name": "spring-boot",
+        "version": "3.4.0"
+      },
+      {
+        "name": "spring-mvc",
+        "version": "6.2.0"
+      },
+      {
+        "name": "jakarta-persistence",
+        "version": "3.1.0"
+      },
+      {
+        "name": "postgresql",
+        "version": "16"
+      },
+      {
+        "name": "typescript",
+        "version": "5.9.3"
+      }
+    ],
+    "capabilities": [
+      "J-P",
+      "J-S",
+      "J-C",
+      "J-F",
+      "J-D",
+      "SQL-P",
+      "SQL-S",
+      "X-DATA",
+      "T-P",
+      "T-S"
+    ],
+    "sourceRoot": "../../../../backend/src/test/resources/fixtures/fullstack-mini",
+    "sourceMode": "ANCHOR",
+    "sourcePrefix": "source",
+    "namespaces": [
+      {
+        "prefix": "",
+        "namespace": "todo-repo"
+      },
+      {
+        "prefix": "backend/",
+        "namespace": "todo-backend"
+      },
+      {
+        "prefix": "frontend/",
+        "namespace": "todo-frontend"
+      }
+    ],
+    "eligibility": {
+      "overrides": [
+        {
+          "path": "backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+          "cellId": "SQL-P",
+          "eligible": false,
+          "exclusionReason": "OUTSIDE_R1_SQL_SUBSET"
+        },
+        {
+          "path": "backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+          "cellId": "SQL-S",
+          "eligible": false,
+          "exclusionReason": "OUTSIDE_R1_SQL_SUBSET"
+        },
+        {
+          "path": "backend/src/main/resources/db/migration/V2__add_todos_done_index.sql",
+          "cellId": "X-DATA",
+          "eligible": false,
+          "exclusionReason": "OUTSIDE_R1_SQL_SUBSET"
+        },
+        {
+          "path": "frontend/vite.config.ts",
+          "cellId": "T-P",
+          "eligible": false,
+          "exclusionReason": "NO_EXISTING_ORACLE"
+        }
+      ]
+    }
+  },
+  "cases": [
+    {
+      "caseId": "dev-todo.jp.TodoApplication",
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/TodoApplication.java",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): declarations are extracted from this file, so it is valid Java 21 syntax. Not separately reviewed."
+    },
+    {
+      "caseId": "dev-todo.jp.AuthController",
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/AuthController.java",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): declarations are extracted from this file, so it is valid Java 21 syntax. Not separately reviewed."
+    },
+    {
+      "caseId": "dev-todo.jp.TodoController",
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): declarations are extracted from this file, so it is valid Java 21 syntax. Not separately reviewed."
+    },
+    {
+      "caseId": "dev-todo.jp.Todo",
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/domain/Todo.java",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): declarations are extracted from this file, so it is valid Java 21 syntax. Not separately reviewed."
+    },
+    {
+      "caseId": "dev-todo.jp.TodoRepository",
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): declarations are extracted from this file, so it is valid Java 21 syntax. Not separately reviewed."
+    },
+    {
+      "caseId": "dev-todo.jp.AuthService",
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/AuthService.java",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): declarations are extracted from this file, so it is valid Java 21 syntax. Not separately reviewed."
+    },
+    {
+      "caseId": "dev-todo.jp.TodoService",
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/TodoService.java",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): declarations are extracted from this file, so it is valid Java 21 syntax. Not separately reviewed."
+    },
+    {
+      "caseId": "dev-todo.jp.TodoServiceTest",
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/test/java/com/example/todo/TodoServiceTest.java",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): declarations are extracted from this file, so it is valid Java 21 syntax. Not separately reviewed."
+    },
+    {
+      "caseId": "dev-todo.js.type.TodoApplication",
+      "cellId": "J-S",
+      "patternId": "type-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/TodoApplication.java",
+        "from": "@SpringBootApplication",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.TodoApplication"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) node java:com.example.todo.TodoApplication; span per ANNOTATING.md declaration convention (annotations included, closing brace included)."
+    },
+    {
+      "caseId": "dev-todo.js.type.AuthController",
+      "cellId": "J-S",
+      "patternId": "type-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/AuthController.java",
+        "from": "@RestController",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.api.AuthController"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) node java:com.example.todo.api.AuthController; span per ANNOTATING.md declaration convention (annotations included, closing brace included)."
+    },
+    {
+      "caseId": "dev-todo.js.type.TodoController",
+      "cellId": "J-S",
+      "patternId": "type-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "from": "@RestController",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.api.TodoController"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) node java:com.example.todo.api.TodoController; span per ANNOTATING.md declaration convention (annotations included, closing brace included)."
+    },
+    {
+      "caseId": "dev-todo.js.type.Todo",
+      "cellId": "J-S",
+      "patternId": "type-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/domain/Todo.java",
+        "from": "@Entity",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.domain.Todo"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) node java:com.example.todo.domain.Todo; span per ANNOTATING.md declaration convention (annotations included, closing brace included)."
+    },
+    {
+      "caseId": "dev-todo.js.type.TodoRepository",
+      "cellId": "J-S",
+      "patternId": "type-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+        "text": "public interface TodoRepository extends JpaRepository<Todo, Long> {}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.repository.TodoRepository"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) node java:com.example.todo.repository.TodoRepository; span per ANNOTATING.md declaration convention (annotations included, closing brace included)."
+    },
+    {
+      "caseId": "dev-todo.js.type.AuthService",
+      "cellId": "J-S",
+      "patternId": "type-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/AuthService.java",
+        "from": "@Service",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.AuthService"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) node java:com.example.todo.service.AuthService; span per ANNOTATING.md declaration convention (annotations included, closing brace included)."
+    },
+    {
+      "caseId": "dev-todo.js.type.TodoService",
+      "cellId": "J-S",
+      "patternId": "type-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/TodoService.java",
+        "from": "@Service",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) node java:com.example.todo.service.TodoService; span per ANNOTATING.md declaration convention (annotations included, closing brace included)."
+    },
+    {
+      "caseId": "dev-todo.js.type.TodoServiceTest",
+      "cellId": "J-S",
+      "patternId": "type-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/test/java/com/example/todo/TodoServiceTest.java",
+        "from": "class TodoServiceTest",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.TodoServiceTest"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) node java:com.example.todo.TodoServiceTest; span per ANNOTATING.md declaration convention (annotations included, closing brace included)."
+    },
+    {
+      "caseId": "dev-todo.js.method.main",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/TodoApplication.java",
+        "from": "public static void main",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.TodoApplication#main(java.lang.String[])"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.TodoApplication#main(java.lang.String[]); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.AuthController.ctor",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/AuthController.java",
+        "from": "public AuthController(AuthService authService)",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.api.AuthController#AuthController(com.example.todo.service.AuthService)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.api.AuthController#AuthController(com.example.todo.service.AuthService); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.AuthController.login",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/AuthController.java",
+        "from": "@PostMapping(\"/login\")",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.api.AuthController#login()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.api.AuthController#login(); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.AuthController.logout",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/AuthController.java",
+        "from": "@PostMapping(\"/logout\")",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.api.AuthController#logout()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.api.AuthController#logout(); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoController.ctor",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "from": "public TodoController(TodoService todoService)",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.api.TodoController#TodoController(com.example.todo.service.TodoService)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.api.TodoController#TodoController(com.example.todo.service.TodoService); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoController.list",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "from": "@GetMapping\n    public List<Todo> list()",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.api.TodoController#list()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.api.TodoController#list(); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoController.get",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "from": "@GetMapping(\"/{id}\")",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.api.TodoController#get(java.lang.Long)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.api.TodoController#get(java.lang.Long); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoController.create",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "from": "@PostMapping\n    public Todo create",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.api.TodoController#create(com.example.todo.domain.Todo)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.api.TodoController#create(com.example.todo.domain.Todo); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.getId",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/domain/Todo.java",
+        "from": "public Long getId()",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.domain.Todo#getId()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.domain.Todo#getId(); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.setId",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/domain/Todo.java",
+        "from": "public void setId(Long id)",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.domain.Todo#setId(java.lang.Long)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.domain.Todo#setId(java.lang.Long); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.getTitle",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/domain/Todo.java",
+        "from": "public String getTitle()",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.domain.Todo#getTitle()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.domain.Todo#getTitle(); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.setTitle",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/domain/Todo.java",
+        "from": "public void setTitle(String title)",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.domain.Todo#setTitle(java.lang.String)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.domain.Todo#setTitle(java.lang.String); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.isDone",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/domain/Todo.java",
+        "from": "public boolean isDone()",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.domain.Todo#isDone()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.domain.Todo#isDone(); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.Todo.setDone",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/domain/Todo.java",
+        "from": "public void setDone(boolean done)",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.domain.Todo#setDone(boolean)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.domain.Todo#setDone(boolean); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.AuthService.login",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/AuthService.java",
+        "text": "public void login() {}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.AuthService#login()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.service.AuthService#login(); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.AuthService.logout",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/AuthService.java",
+        "text": "public void logout() {}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.AuthService#logout()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.service.AuthService#logout(); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoService.ctor",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/TodoService.java",
+        "from": "public TodoService(TodoRepository todoRepository)",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService#TodoService(com.example.todo.repository.TodoRepository)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.service.TodoService#TodoService(com.example.todo.repository.TodoRepository); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoService.findAll",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/TodoService.java",
+        "from": "public List<Todo> findAll()",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService#findAll()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.service.TodoService#findAll(); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoService.findById",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/TodoService.java",
+        "from": "public Todo findById(Long id)",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService#findById(java.lang.Long)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.service.TodoService#findById(java.lang.Long); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoService.create",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/TodoService.java",
+        "from": "public Todo create(Todo todo)",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService#create(com.example.todo.domain.Todo)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.service.TodoService#create(com.example.todo.domain.Todo); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.method.TodoServiceTest.placeholder",
+      "cellId": "J-S",
+      "patternId": "method-declaration",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/test/java/com/example/todo/TodoServiceTest.java",
+        "from": "@Test",
+        "to": "void placeholder() {}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.TodoServiceTest#placeholder()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) method node java:com.example.todo.TodoServiceTest#placeholder(); span from first annotation/modifier to the closing brace."
+    },
+    {
+      "caseId": "dev-todo.js.extends.TodoRepository",
+      "cellId": "J-S",
+      "patternId": "inheritance-span",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+        "text": "extends JpaRepository<Todo, Long>"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "extends java:org.springframework.data.jpa.repository.JpaRepository"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) edge EXTENDS TodoRepository -> JpaRepository; inheritance span is the extends clause."
+    },
+    {
+      "caseId": "dev-todo.jc.AuthController.login",
+      "cellId": "J-C",
+      "patternId": "direct-source-call",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/AuthController.java",
+        "text": "authService.login()"
+      },
+      "expectText": "authService.login()",
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.AuthService#login()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) CONFIRMED CALLS edge; field of declared type AuthService."
+    },
+    {
+      "caseId": "dev-todo.jc.AuthController.logout",
+      "cellId": "J-C",
+      "patternId": "direct-source-call",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/AuthController.java",
+        "text": "authService.logout()"
+      },
+      "expectText": "authService.logout()",
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.AuthService#logout()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) CONFIRMED CALLS edge; field of declared type AuthService."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoController.list",
+      "cellId": "J-C",
+      "patternId": "direct-source-call",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "text": "todoService.findAll()"
+      },
+      "expectText": "todoService.findAll()",
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService#findAll()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) CONFIRMED CALLS edge; field of declared type TodoService."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoController.get",
+      "cellId": "J-C",
+      "patternId": "direct-source-call",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "text": "todoService.findById(id)"
+      },
+      "expectText": "todoService.findById(id)",
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService#findById(java.lang.Long)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) CONFIRMED CALLS edge; Long argument selects findById(Long)."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoController.create",
+      "cellId": "J-C",
+      "patternId": "direct-source-call",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "text": "todoService.create(todo)"
+      },
+      "expectText": "todoService.create(todo)",
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:com.example.todo.service.TodoService#create(com.example.todo.domain.Todo)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) CONFIRMED CALLS edge; Todo argument selects create(Todo)."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.findAll",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "CALLS",
+      "polarity": "AMBIGUOUS",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/TodoService.java",
+        "text": "todoRepository.findAll()"
+      },
+      "expectText": "todoRepository.findAll()",
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "java:com.example.todo.repository.TodoRepository#findAll()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) POSSIBLE CALLS edge to an inherited JpaRepository method stub; must never be STATIC_RESOLVED. OPEN ADJUDICATION: ANNOTATING.md section 4 would annotate this as UNRESOLVED EXTERNAL_TARGET."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.findById",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "CALLS",
+      "polarity": "AMBIGUOUS",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/TodoService.java",
+        "text": "todoRepository.findById(id)"
+      },
+      "expectText": "todoRepository.findById(id)",
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "java:com.example.todo.repository.TodoRepository#findById(java.lang.Long)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) POSSIBLE CALLS edge to an inherited JpaRepository method stub; must never be STATIC_RESOLVED. OPEN ADJUDICATION: ANNOTATING.md section 4 would annotate this as UNRESOLVED EXTERNAL_TARGET."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.create",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "CALLS",
+      "polarity": "AMBIGUOUS",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/TodoService.java",
+        "text": "todoRepository.save(todo)"
+      },
+      "expectText": "todoRepository.save(todo)",
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "java:com.example.todo.repository.TodoRepository#save(com.example.todo.domain.Todo)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) POSSIBLE CALLS edge to an inherited JpaRepository method stub; must never be STATIC_RESOLVED. OPEN ADJUDICATION: ANNOTATING.md section 4 would annotate this as UNRESOLVED EXTERNAL_TARGET."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoApplication.main.run",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "NEGATIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/TodoApplication.java",
+        "text": "SpringApplication.run(TodoApplication.class, args)"
+      },
+      "expectText": "SpringApplication.run(TodoApplication.class, args)",
+      "expected": {
+        "resolution": "UNRESOLVED",
+        "targets": [],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": "EXTERNAL_TARGET"
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Implicit negative of the exact-set FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): no CALLS edge is listed for this library call, so no resolved edge may be published."
+    },
+    {
+      "caseId": "dev-todo.jc.TodoService.findById.orElseThrow",
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "NEGATIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/service/TodoService.java",
+        "text": "todoRepository.findById(id).orElseThrow()"
+      },
+      "expectText": "todoRepository.findById(id).orElseThrow()",
+      "expected": {
+        "resolution": "UNRESOLVED",
+        "targets": [],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": "EXTERNAL_TARGET"
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Implicit negative of the exact-set FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): no CALLS edge is listed for this library call, so no resolved edge may be published."
+    },
+    {
+      "caseId": "dev-todo.jf.login",
+      "cellId": "J-F",
+      "patternId": "literal-route",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "FRAMEWORK",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/AuthController.java",
+        "from": "@PostMapping(\"/login\")",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "route:POST /auth/login"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) endpoint POST /auth/login (class @RequestMapping prefix + method mapping); span is the handler declaration."
+    },
+    {
+      "caseId": "dev-todo.jf.logout",
+      "cellId": "J-F",
+      "patternId": "literal-route",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "FRAMEWORK",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/AuthController.java",
+        "from": "@PostMapping(\"/logout\")",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "route:POST /auth/logout"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) endpoint POST /auth/logout (class @RequestMapping prefix + method mapping); span is the handler declaration."
+    },
+    {
+      "caseId": "dev-todo.jf.list",
+      "cellId": "J-F",
+      "patternId": "literal-route",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "FRAMEWORK",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "from": "@GetMapping\n    public List<Todo> list()",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "route:GET /todos"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) endpoint GET /todos (class @RequestMapping prefix + method mapping); span is the handler declaration."
+    },
+    {
+      "caseId": "dev-todo.jf.get",
+      "cellId": "J-F",
+      "patternId": "literal-route",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "FRAMEWORK",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "from": "@GetMapping(\"/{id}\")",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "route:GET /todos/{id}"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) endpoint GET /todos/{id} (class @RequestMapping prefix + method mapping); span is the handler declaration."
+    },
+    {
+      "caseId": "dev-todo.jf.create",
+      "cellId": "J-F",
+      "patternId": "literal-route",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "FRAMEWORK",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/api/TodoController.java",
+        "from": "@PostMapping\n    public Todo create",
+        "to": "\n    }"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "route:POST /todos"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) endpoint POST /todos (class @RequestMapping prefix + method mapping); span is the handler declaration."
+    },
+    {
+      "caseId": "dev-todo.jd.Todo",
+      "cellId": "J-D",
+      "patternId": "schema-table",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "FRAMEWORK",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/domain/Todo.java",
+        "from": "@Entity",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "jpa:com.example.todo.domain.Todo -> sql:todos"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) entity Todo | todos | JPA: explicit @Entity and @Table(name = \"todos\")."
+    },
+    {
+      "caseId": "dev-todo.sqlp.V1",
+      "cellId": "SQL-P",
+      "patternId": "create-table",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): table todos and its columns are extracted from this PostgreSQL 16 CREATE TABLE."
+    },
+    {
+      "caseId": "dev-todo.sqls.table",
+      "cellId": "SQL-S",
+      "patternId": "schema-table",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "from": "CREATE TABLE todos (",
+        "to": ");"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "sql:todos"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) node table:todos; unqualified in the DDL, so the key is unqualified."
+    },
+    {
+      "caseId": "dev-todo.sqls.column.id",
+      "cellId": "SQL-S",
+      "patternId": "column-span",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "text": "id bigserial PRIMARY KEY"
+      },
+      "expectText": "id bigserial PRIMARY KEY",
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "sql:todos#id"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) column table:todos#id; span is the column definition without the separating comma."
+    },
+    {
+      "caseId": "dev-todo.sqls.column.title",
+      "cellId": "SQL-S",
+      "patternId": "column-span",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "text": "title text NOT NULL"
+      },
+      "expectText": "title text NOT NULL",
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "sql:todos#title"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) column table:todos#title; span is the column definition without the separating comma."
+    },
+    {
+      "caseId": "dev-todo.sqls.column.done",
+      "cellId": "SQL-S",
+      "patternId": "column-span",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/resources/db/migration/V1__create_todos.sql",
+        "text": "done boolean NOT NULL DEFAULT false"
+      },
+      "expectText": "done boolean NOT NULL DEFAULT false",
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "sql:todos#done"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) column table:todos#done; span is the column definition without the separating comma."
+    },
+    {
+      "caseId": "dev-todo.xdata.Todo",
+      "cellId": "X-DATA",
+      "patternId": "datasource-schema-table",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "DATA_CONTRACT",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/domain/Todo.java",
+        "from": "@Entity",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "todo-backend:sql:todos"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) CONFIRMED MAPS_TO entity Todo -> table todos (explicit @Table name equals the CREATE TABLE name, single datasource)."
+    },
+    {
+      "caseId": "dev-todo.xdata.TodoRepository",
+      "cellId": "X-DATA",
+      "patternId": "name-only",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "DATA_CONTRACT",
+      "polarity": "AMBIGUOUS",
+      "select": {
+        "file": "backend/src/main/java/com/example/todo/repository/TodoRepository.java",
+        "text": "public interface TodoRepository extends JpaRepository<Todo, Long> {}"
+      },
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "todo-backend:sql:todos"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) LIKELY READS_WRITES repository -> table todos: derived from the entity type argument, never a resolved data contract."
+    },
+    {
+      "caseId": "dev-todo.tp.App-tsx",
+      "cellId": "T-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "frontend/src/App.tsx",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): components/imports are extracted from this file, so it is valid TSX syntax for TypeScript 5.9."
+    },
+    {
+      "caseId": "dev-todo.tp.main-tsx",
+      "cellId": "T-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "frontend/src/main.tsx",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): components/imports are extracted from this file, so it is valid TSX syntax for TypeScript 5.9."
+    },
+    {
+      "caseId": "dev-todo.tp.pages-HomePage-tsx",
+      "cellId": "T-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "frontend/src/pages/HomePage.tsx",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): components/imports are extracted from this file, so it is valid TSX syntax for TypeScript 5.9."
+    },
+    {
+      "caseId": "dev-todo.tp.pages-TodosPage-tsx",
+      "cellId": "T-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "frontend/src/pages/TodosPage.tsx",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): components/imports are extracted from this file, so it is valid TSX syntax for TypeScript 5.9."
+    },
+    {
+      "caseId": "dev-todo.tp.components-TodoItem-tsx",
+      "cellId": "T-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "frontend/src/components/TodoItem.tsx",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): components/imports are extracted from this file, so it is valid TSX syntax for TypeScript 5.9."
+    },
+    {
+      "caseId": "dev-todo.tp.components-TodoItem-test-tsx",
+      "cellId": "T-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "frontend/src/components/TodoItem.test.tsx",
+        "wholeFile": true
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Implied by FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java): components/imports are extracted from this file, so it is valid TSX syntax for TypeScript 5.9."
+    },
+    {
+      "caseId": "dev-todo.ts.App",
+      "cellId": "T-S",
+      "patternId": "component-span",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "frontend/src/App.tsx",
+        "from": "export function App()",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "ts:source/frontend/src/App.tsx#App"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) COMPONENT App as its exported function declaration (export modifier included)."
+    },
+    {
+      "caseId": "dev-todo.ts.HomePage",
+      "cellId": "T-S",
+      "patternId": "component-span",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "frontend/src/pages/HomePage.tsx",
+        "from": "export function HomePage()",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "ts:source/frontend/src/pages/HomePage.tsx#HomePage"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) COMPONENT HomePage as its exported function declaration (export modifier included)."
+    },
+    {
+      "caseId": "dev-todo.ts.TodosPage",
+      "cellId": "T-S",
+      "patternId": "component-span",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "frontend/src/pages/TodosPage.tsx",
+        "from": "export function TodosPage()",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "ts:source/frontend/src/pages/TodosPage.tsx#TodosPage"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) COMPONENT TodosPage as its exported function declaration (export modifier included)."
+    },
+    {
+      "caseId": "dev-todo.ts.TodoItem",
+      "cellId": "T-S",
+      "patternId": "component-span",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "SYMBOL",
+      "polarity": "POSITIVE",
+      "select": {
+        "file": "frontend/src/components/TodoItem.tsx",
+        "from": "export function TodoItem(",
+        "to": "\n}"
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "ts:source/frontend/src/components/TodoItem.tsx#TodoItem"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed FixtureAccuracyOracle (backend/src/test/java/dev/codeintelligence/analysis/accuracy/FixtureAccuracyOracle.java) COMPONENT TodoItem as its exported function declaration (export modifier included)."
+    }
+  ]
+}

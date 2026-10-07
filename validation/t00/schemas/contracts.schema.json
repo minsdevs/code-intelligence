@@ -206,7 +206,8 @@
         "purpose": {
           "enum": [
             "SYNTHETIC_SELF_TEST",
-            "PRODUCT_EVALUATION"
+            "PRODUCT_EVALUATION",
+            "DEVELOPMENT_BASELINE"
           ]
         },
         "fixtures": {
@@ -925,7 +926,10 @@
               "maxLength": 64
             },
             "captureAttestation": {
-              "const": "UNVERIFIED"
+              "enum": [
+                "UNVERIFIED",
+                "EXTERNAL_ATTESTATION"
+              ]
             },
             "productBuildSha256": {
               "type": "string",
@@ -1231,6 +1235,283 @@
           },
           "minItems": 18,
           "maxItems": 18
+        }
+      }
+    },
+    "buildComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "path",
+        "kind",
+        "files",
+        "sha256"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "kind": {
+          "enum": [
+            "FILE",
+            "DIRECTORY_TREE"
+          ]
+        },
+        "files": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200000
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "attestationId",
+        "kind",
+        "productBuildSha256",
+        "build",
+        "observationsSha256",
+        "corpusSha256",
+        "capabilityManifestSha256",
+        "runs",
+        "execution"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "attestationId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "kind": {
+          "enum": [
+            "BACKEND_PIPELINE_HARNESS",
+            "PACKAGED_APP_API"
+          ]
+        },
+        "productBuildSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "build": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "revision",
+            "dirtyProductPaths",
+            "components"
+          ],
+          "properties": {
+            "path": {
+              "enum": [
+                "BACKEND_PIPELINE_HARNESS",
+                "PACKAGED_APP_API"
+              ]
+            },
+            "revision": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            "dirtyProductPaths": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "javaVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "appVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "buildSequence": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "components": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/buildComponent"
+              },
+              "minItems": 1,
+              "maxItems": 32
+            }
+          }
+        },
+        "observationsSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "corpusSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "capabilityManifestSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "runs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "fixtureId",
+              "sourceDigest",
+              "consumedSources",
+              "executionState"
+            ],
+            "properties": {
+              "fixtureId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+              },
+              "sourceDigest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "consumedSources": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 512,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "sha256",
+                    "bytes"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                }
+              },
+              "executionState": {
+                "enum": [
+                  "COMPLETED",
+                  "FAILED"
+                ]
+              }
+            }
+          }
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "nonce",
+            "startedAt",
+            "finishedAt",
+            "driverSha256",
+            "converterSha256",
+            "adapterVersion"
+          ],
+          "properties": {
+            "path": {
+              "enum": [
+                "BACKEND_PIPELINE_HARNESS",
+                "PACKAGED_APP_API"
+              ]
+            },
+            "nonce": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            },
+            "startedAt": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "finishedAt": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "driverSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "converterSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "harnessSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "adapterVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "revision": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            "electronVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "packagedLaunch": {
+              "type": "boolean"
+            },
+            "validationIdentity": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "productRunnerSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
         }
       }
     }

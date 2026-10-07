@@ -1,0 +1,112 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-t00-java-calls",
+  "fixtureVersion": "1.0.0",
+  "corpusId": "accuracy-development-baseline",
+  "license": {
+    "spdx": "MIT",
+    "status": "AUTHOR_DECLARED"
+  },
+  "origin": {
+    "kind": "SYNTHETIC",
+    "projectId": "t00-synthetic-project",
+    "uri": "urn:code-intelligence:t00:synthetic-contract-selftest",
+    "commit": null
+  },
+  "scenarioFamilyId": "t00-call-abstention-family",
+  "generatorFamilyId": "t00-hand-authored-family",
+  "split": "DEVELOPMENT",
+  "versions": [
+    {
+      "name": "java",
+      "version": "21"
+    }
+  ],
+  "capabilities": [
+    "J-P",
+    "J-C"
+  ],
+  "patterns": [
+    {
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null
+    },
+    {
+      "cellId": "J-P",
+      "patternId": "invalid-syntax",
+      "stratum": null
+    },
+    {
+      "cellId": "J-C",
+      "patternId": "direct-source-call",
+      "stratum": null
+    },
+    {
+      "cellId": "J-C",
+      "patternId": "dynamic-unresolved",
+      "stratum": null
+    },
+    {
+      "cellId": "J-C",
+      "patternId": "external-unresolved",
+      "stratum": null
+    }
+  ],
+  "source": [
+    {
+      "path": "source/Calls.java",
+      "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+      "bytes": 414,
+      "namespace": "synthetic-java-calls"
+    },
+    {
+      "path": "source/Invalid.java",
+      "sha256": "64c7b144c720916de595df0e2837ca78049f2f33e52965fe1daa4e51deabdf04",
+      "bytes": 28,
+      "namespace": "synthetic-java-calls"
+    }
+  ],
+  "eligibility": [
+    {
+      "path": "source/Calls.java",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/Calls.java",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/Invalid.java",
+      "cellId": "J-P",
+      "owner": "fixture-declared",
+      "eligible": true,
+      "exclusionReason": null
+    },
+    {
+      "path": "source/Invalid.java",
+      "cellId": "J-C",
+      "owner": "fixture-declared",
+      "eligible": false,
+      "exclusionReason": "INVALID_SYNTAX"
+    }
+  ],
+  "gold": {
+    "path": "gold.json",
+    "sha256": "579d70dfde071cc948e2606c104309279cef43e90d6bcc8bc49d38dda36a6f16"
+  },
+  "negatives": {
+    "path": "negatives.json",
+    "sha256": "3f20ab53760c2cee82d0f32662e37e01756aa4b22a2489b4d1b1e9be95763828"
+  },
+  "review": {
+    "path": "review.json",
+    "sha256": "9d0278087541c0ce8eed0be9eeb461ae3b493e44bd6076816981517941350352"
+  }
+}

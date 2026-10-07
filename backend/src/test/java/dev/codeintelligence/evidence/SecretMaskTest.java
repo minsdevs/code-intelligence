@@ -26,6 +26,20 @@ class SecretMaskTest {
     }
 
     @Test
+    void redactsPasswordsInConnectionUriUserinfo() {
+        assertThat(SecretMask.redact("db = \"postgresql://ci_user:fixture-db-password@db.example.invalid:5432/app\";"))
+                .isEqualTo("db = \"postgresql://ci_user:[REDACTED]@db.example.invalid:5432/app\";");
+        assertThat(SecretMask.redact("redis://:fixture-redis-password@cache.example.invalid:6379/0"))
+                .isEqualTo("redis://:[REDACTED]@cache.example.invalid:6379/0");
+        assertThat(SecretMask.redact("mongodb+srv://app:fixture%40pw@cluster.example.invalid/db"))
+                .isEqualTo("mongodb+srv://app:[REDACTED]@cluster.example.invalid/db");
+        // Ports, user-only userinfo and ordinary URLs stay readable.
+        assertThat(SecretMask.redact("http://localhost:8080/path?q=1")).isEqualTo("http://localhost:8080/path?q=1");
+        assertThat(SecretMask.redact("ssh://git@github.com/org/repo.git"))
+                .isEqualTo("ssh://git@github.com/org/repo.git");
+    }
+
+    @Test
     void redactsGithubPatsAndAssignmentValues() {
         assertThat(SecretMask.redact("token=ghp_abcdefghijklmnopqrstuvwxyz012345"))
                 .contains("[REDACTED]")

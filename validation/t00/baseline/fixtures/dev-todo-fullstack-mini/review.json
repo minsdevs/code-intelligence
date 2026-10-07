@@ -1,0 +1,14 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-todo-fullstack-mini",
+  "author": {
+    "id": "gate-accuracy-transcriber",
+    "kind": "AGENT",
+    "method": "SOURCE_AUTHORED"
+  },
+  "status": "AUTHOR_PROVISIONAL",
+  "goldSha256": "3e2cbb0df43dc527dc3d96738f1dfe47a23d849a19cfbec285eae93f95d1b4b9",
+  "negativesSha256": "8af07e86ff9d467638b4a89c78aff315d0b3ed5abe6da8feb624fc2e6198153d",
+  "reviews": [],
+  "adjudicator": null
+}

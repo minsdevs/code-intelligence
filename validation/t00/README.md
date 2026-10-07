@@ -125,6 +125,14 @@ The capability manifest records required versions (including Java 21, TypeScript
 
 `supportedPatternRecall` uses the evaluated, declared oracle denominator. `overallGoldRecall` is `null`, with status `NOT_MEASURED` and reason `UNSUPPORTED_POSITIVE_ORACLE_MISSING`: this framework has no separate annotated unsupported-positive population. It does not reuse supported recall as an overall score or measure unannotated repositories. Unobserved cells report `NOT_RUN` with null metrics. All product gate cells remain unavailable for public support.
 
+## Development baseline and execution attestation
+
+`purpose: DEVELOPMENT_BASELINE` scores `DEVELOPMENT` fixtures only (a `VALIDATION`/`HOLDOUT` fixture there is `BASELINE_SCOPE_MISMATCH`) and adds the blocker `DEVELOPMENT_MATERIAL_ONLY` to the report and every cell. It measures a product against implementation-side material; it is never evaluation evidence. `baseline/corpus.json` holds three transcribed development fixtures built with `annotate.cjs` from `baseline/specs/` (sources: this directory's `fixtures/` and `backend/src/test/resources/fixtures/fullstack-mini`; see each spec's `provenanceNote`); `baseline/corpus-packaged.json` holds the fullstack fixture alone for the packaged-app path.
+
+A `PRODUCT_CAPTURE` bundle may declare `captureAttestation: EXTERNAL_ATTESTATION`; it is then valid only with `--execution-attestation <attestation.json>` (and that option is refused for any other bundle). The runner checks that the attestation binds the exact observation bytes, corpus and capability-manifest hashes, every run's source digest, the full roster of bytes the harness fed to the product, and each run's execution state; that the build digest equals `sha256(stableJson(build))` over the listed components; and, with `--product-artifact-root <dir>`, re-hashes each component (`FILE`: `sha256(name\tsha256\n)`, `DIRECTORY_TREE`: sorted `relative\tsha256\n` lines). The result is `productExecutionVerification: HARNESS_ATTESTED_UNSIGNED` (with `artifactVerification: VERIFIED` only after the re-hash) and the blocker `EXECUTION_ATTESTATION_LOCAL_UNSIGNED`: an unsigned local attestation proves a consistent binding to existing artifacts, not a third-party-witnessed execution. The producers are `validation/pre-release/accuracy-export.cjs` (backend pipeline) and `accuracy-packaged-export.cjs` (packaged app API).
+
+Gold for new fixtures is authored with `annotate.cjs`; see [ANNOTATING.md](ANNOTATING.md).
+
 ## Artifacts and safety limits
 
 A run that acquires a safe new output directory writes six artifacts (ordinary successful filesystem writes are required):
@@ -135,7 +143,7 @@ A run that acquires a safe new output directory writes six artifacts (ordinary s
 | `junit.xml` | One explicitly scoped contract/gate result; blocked gates are skipped with exit 2 |
 | `coverage-partition.json` | Claimed file-status partitions, with measurement provenance and hashed fixture references |
 | `resource-samples.csv` | `NOT_RUN`, with empty duration/RSS/sample fields |
-| `evidence-check.json` | Count of validated observation source bindings; product consumption stays `NOT_VERIFIED` |
+| `evidence-check.json` | Count of validated observation source bindings; product consumption stays `NOT_VERIFIED` unless a local execution attestation was verified (`HARNESS_ATTESTED_UNSIGNED`) |
 | `artifact-manifest.json` | Input hashes/sizes, hashes/sizes of the other five outputs, actual Node/platform/architecture, runner digest and limits |
 
 The runner digest covers the actual implementation/schema bytes, including uncommitted changes. The manifest excludes its own hash to avoid a self-reference. It omits input paths and source text. Case references are SHA-256 of `fixtureId + '/' + caseId`; review-queue references use `fixtureId + '/' + observationId`. These can be correlated privately with the inputs. No raw target keys, rationale, source text, user paths, or reviewer identifiers are copied into artifacts.
@@ -146,4 +154,4 @@ Canonical fixture paths reject absolute paths, traversal, backslashes, repeated 
 
 This is safety for static synthetic development trees. Node's path-based ancestor checking does not confine hostile concurrent ancestor replacement, and file metadata does not establish a production sandbox. T01/T03 must supply and test descriptor-relative confinement. The read budget does not claim measured process-tree RSS or a product performance result.
 
-T00b remains blocked on licensed pinned public repositories, blind split access control, independently authored/reviewed oracles, qualified independent reviewers, measured annotation/review time, reviewed pattern allocations, and an adapter that captures a real immutable product build's outputs. This small framework supplies none of the planned 300 independently reviewed pilot annotations or the 5,400 annotations for all 18 public cells.
+T00b remains blocked on licensed pinned public repositories, blind split access control, independently authored/reviewed oracles, qualified independent reviewers, measured annotation/review time, and reviewed pattern allocations. Product output can now be captured and bound to a build digest by a local, unsigned attestation (above); that is not a signed or independently witnessed execution. This small framework supplies none of the planned 300 independently reviewed pilot annotations or the 5,400 annotations for all 18 public cells.

@@ -1,0 +1,159 @@
+{
+  "format": 1,
+  "unit": "gate-supply",
+  "stage": "7 (release artefact and operations readiness)",
+  "date": "2026-10-07",
+  "branch": "worktree-agent-a172227f398842000",
+  "baseCommit": "bcd8081",
+  "verdict": "NO_GO (formal); stage 7 not passed",
+  "candidate": {
+    "app": ".native-product-1lvULq/Code Intelligence Validation.app",
+    "builtFrom": "9211e88",
+    "buildSequence": "1791292686000",
+    "bundleTreeDigest": "f00875023a63c5c4e0da4941e5b655078ea70cd3a087200e0e4247b60bd4d7d9",
+    "runtimeManifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+    "product": { "name": "Code Intelligence Validation", "version": "0.1.0", "bundleId": "dev.codeintelligence.desktop.validation", "minimumSystemVersion": "13.0" },
+    "access": "READ_ONLY; no extraction-and-execution, no launch, no native lock needed"
+  },
+  "commands": [
+    {
+      "id": "unit-tests",
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node --test validation/pre-release/test/sbom-candidate.test.cjs validation/pre-release/test/licence-obligations.test.cjs validation/pre-release/test/licence-packaging.test.cjs validation/pre-release/test/inventory-candidate.test.cjs validation/pre-release/test/advisory-scan.test.cjs validation/pre-release/test/build-candidate.test.cjs validation/pre-release/test/control-source-members.test.cjs",
+      "result": { "tests": 82, "pass": 82, "fail": 0, "skipped": 0 },
+      "log": "validation/local/sbom-tests/targeted-suites-final.log",
+      "logSha256": "b0b6e07cc291a4f94bf67612dddbabe26dac360aa1fcb1e135b28381c1b38ef0"
+    },
+    {
+      "id": "packaging-regression-red",
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node --test validation/pre-release/test/licence-packaging.test.cjs",
+      "state": "before the packaging fix (commit 663c0c3 tree plus the new test)",
+      "result": { "tests": 3, "pass": 1, "fail": 2 },
+      "log": "validation/local/sbom-tests/licence-packaging-red.log",
+      "logSha256": "15d6bfe2d88d99237775b72747066d6f7a5804ba900e37803503e5e8fb861c74"
+    },
+    {
+      "id": "packaging-regression-green",
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node --test validation/pre-release/test/licence-packaging.test.cjs",
+      "result": { "tests": 3, "pass": 3, "fail": 0 },
+      "log": "validation/local/sbom-tests/licence-packaging-green.log",
+      "note": "also included in unit-tests above at final HEAD"
+    },
+    {
+      "id": "sbom-final",
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/sbom-candidate.cjs --offline --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\" --resolved-maven runtime-resolved-1lvULq-20261007.json --gradle-cache \"$HOME/.gradle/caches/modules-2/files-2.1\" --electron-zip \"$HOME/Library/Caches/electron/bfa62fe1b54e5e709b522b5f731c7644136b8ab3a8123f8d2facc4ecf2b925fe/electron-v44.4.5-darwin-arm64.zip\" --otool-cross-check",
+      "result": { "status": "SBOM_WRITTEN", "exit": 0, "unattributed": 0, "components": 350, "completeSbom": true },
+      "runDirectory": "validation/local/sbom/run-RfY8JR",
+      "toolSha256": "8d1a5c86ea7c8f4e76d6ec3cc1e1ca3280e6e0cdbaf7ce7a836f5af8adf8c0ae",
+      "log": "validation/local/sbom-tests/sbom-final-run-3.log"
+    },
+    {
+      "id": "notices",
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/licence-notices.cjs --sbom-run run-RfY8JR",
+      "result": { "status": "NOTICES_WRITTEN", "counts": { "INCLUDED": 311, "BUNDLED_ELSEWHERE": 13, "NO_NOTICE_REQUIRED": 5, "TEXT_MISSING": 15 }, "texts": 179 },
+      "output": "desktop/build/third-party-notices/",
+      "log": "validation/local/sbom-tests/notices-run-3.log"
+    },
+    {
+      "id": "advisory-rerun",
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/scan-candidate-advisories.cjs --online-public-packages --inventory inventory-1lvULq-20261007.json --output advisory-1lvULq-20261007-rerun.json --resolved-maven runtime-resolved-1lvULq-20261007.json",
+      "network": "existing script only: anonymous npm registry, Maven Central, OSV querybatch; names/versions only; sourceSent=false, credentialsSent=false",
+      "result": { "status": "NO_MATCHES_IN_QUERIED_COORDINATES", "coordinates": 276, "npm": 124, "maven": 152, "advisoryCount": 0, "omitted": 1, "observedAt": "2026-10-07T04:51:52.064Z" },
+      "output": "validation/local/pre-release-final/advisory-1lvULq-20261007-rerun.json",
+      "log": "validation/local/sbom-tests/advisory-rerun.log"
+    }
+  ],
+  "retainedEarlierResults": [
+    { "file": "validation/local/pre-release-final/advisory-1lvULq-20261007.json", "status": "NO_MATCHES_IN_QUERIED_COORDINATES", "observedAt": "2026-10-06T16:09:14.031Z", "coordinates": 276, "advisoryCount": 0, "note": "produced earlier in this unit before the resume; kept unchanged" },
+    { "file": "validation/local/pre-release-final/inventory-1lvULq-20261007.json", "note": "static inventory input of both scans" },
+    { "file": "validation/local/pre-release-final/runtime-resolved-1lvULq-20261007.json", "note": "Gradle offline runtime resolution used by SBOM and scan" },
+    { "directories": ["validation/local/sbom/run-Qq64if", "run-PX1cm4", "run-kyiY0K", "run-99YEmB", "run-ozgVww", "run-ZAzmWP", "run-4vduA6"], "note": "intermediate generator runs during development (run-Qq64if had 6 unattributed PostgreSQL files before the attribution rules were completed; run-PX1cm4 had 3 OTOOL_FAILED before the alias fix); superseded by run-RfY8JR, kept" }
+  ],
+  "sha256": {
+    "validation/local/sbom/run-RfY8JR/sbom.cdx.json": "bc83316692245523253226da500540a0cf3be13da6eccc815db9136e56bdc0f6",
+    "validation/local/sbom/run-RfY8JR/summary.json": "7d5003f179cc2d6b7d272de4ba1a34fc81349da86e4fc0b061919588dec1395f",
+    "validation/local/sbom/run-RfY8JR/attribution.json": "33668afa9c26393b0d6c638513d6f0510a7e7e7f051c14f61bd75d4030864af0",
+    "validation/local/sbom/run-RfY8JR/macho.json": "ba16e18bbf23b53fb231a8281c7556b2a00f91760adbd2c8a48115fa28d10665",
+    "validation/local/sbom/run-RfY8JR/licence-obligations.json": "b0fb5a0c21419fef93e029786bcf0ae9333ca6ed4ec9da73f3968decb97fce22",
+    "validation/local/sbom/run-RfY8JR/licence-texts.json": "f1b73f2551abfb941e33e0cecec862170ff37cc1a8507c3b975aaab30caf418f",
+    "validation/local/pre-release-final/advisory-1lvULq-20261007-rerun.json": "4c21a9acc6fd474cbb8f21935416bd126706364dffc183b07f77b6206dc87ac3",
+    "validation/local/pre-release-final/advisory-1lvULq-20261007.json": "38cd8ae31c1fd1fbf99c1b600799ac99653c0ef9fa0abc3536d1f7f794a10fce",
+    "validation/local/pre-release-final/inventory-1lvULq-20261007.json": "7a6e0ba24c22e0bfcfb09b76345953413d396e34d04ae99cdc0a5f1e484da55e",
+    "validation/local/pre-release-final/runtime-resolved-1lvULq-20261007.json": "e320ec0f93abe15fdfb2f46459197ed053c6593d7a602caa76500be6eec8f458",
+    "desktop/build/third-party-notices/THIRD-PARTY-NOTICES.txt": "5630b3a89b1b2aa50d9481a63658ee522877d331bd46027e2955521db2a83bd3",
+    "desktop/build/third-party-notices/third-party-notices.json": "fb43be5eebd65f5e2d1a1aedfbfabe7662bbc133ab205e42f407e2031d76e97b",
+    "desktop/node_modules/electron/dist/LICENSE": "5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d",
+    "desktop/node_modules/electron/dist/LICENSES.chromium.html": "a62dabd1c6ef1327365b2a3fdffb806222684a746dcb8f4afd1c1f690eba5535",
+    "electron-v44.4.5-darwin-arm64.zip": "a212eee63ba2f45fd83bd28f77a3e3313a336ad17a4c25adf617942eef5e0e2c"
+  },
+  "counts": {
+    "bundleFiles": 5397, "symlinks": 14, "symlinksOutsideBundle": 0, "attributedRows": 8372, "unattributed": 0,
+    "components": 350,
+    "componentsByKind": { "first-party": 6, "electron": 1, "electron-part": 9, "jre": 1, "native-runtime": 5, "native-embedded": 8, "maven": 154, "npm": 127, "npm-bundled": 39 },
+    "controlJar": { "members": 1222, "firstParty": 6, "dependency": 1206, "relocatedLicences": 9, "manifest": 1, "unattributed": 0 },
+    "mavenCoordinateSource": { "RESOLVED_GRADLE_SHA256": 152, "SPRING_BOOT_LOADER_TOOLS_EMBEDDED_RESOURCE_SHA256": 1 },
+    "springBootLoaderMembers": { "compared": 100, "matched": 100 },
+    "npmLock": { "CURRENT_CHECKOUT_DESKTOP_LOCK_NOT_BUILD_ATTESTATION:MATCH": 21, "SHIPPED_ANALYZER_LOCK:MATCH": 106 },
+    "electronArchive": { "identical": 237, "codeIdenticalSignatureDiffers": 13, "plistModifiedByPackager": 4, "differs": 0, "absentUpstream": 0 },
+    "macho": { "files": 100, "parseErrors": 0, "nonArm64Slices": 0, "references": { "SYSTEM": 336, "BUNDLE": 93, "BUNDLE_VIA_EXECUTABLE_RPATH": 5 }, "external": 0, "externalRpaths": 0, "unresolved": 0, "otherFindings": 0, "otool": { "MATCH": 100 }, "minos": { "13.0": 66, "11.0": 34 }, "maximumMinos": "13.0", "declaredMinimum": "13.0", "swiftRuntimeReferences": 0 },
+    "licenceClasses": { "PERMISSIVE": 334, "WEAK_COPYLEFT": 7, "STRONG_COPYLEFT": 3, "UNKNOWN": 0 },
+    "licenceFindings": { "MISSING_LICENCE_TEXT": 96, "MISSING_SOURCE_STATEMENT": 6, "STRONG_COPYLEFT_SOURCE_OBLIGATION": 3, "NETWORK_COPYLEFT": 1, "LEGAL_REVIEW": 3, "LICENCE_ELECTION": 15 },
+    "componentsWithBlockingFindings": 102
+  },
+  "versions": {
+    "electron": "44.4.5", "chromium": "152.0.7977.130", "v8": "15.2.124.28", "node": "24.21.0 (embedded; analyzer uses ELECTRON_RUN_AS_NODE)",
+    "jre": "Eclipse Temurin 21.0.12+8-LTS (jlink, 18 modules, 78 legal files)",
+    "postgresql": "16.15 (extensions plpgsql, pg_trgm, vector)", "pgvector": "0.8.7", "openssl": "3.5.8", "redis": "8.10.2",
+    "treeSitterGrammars": "none shipped", "nativeNodeAddons": "none shipped"
+  },
+  "requirements": [
+    { "id": "S7-01", "requirement": "Standard SBOM (CycloneDX 1.5 JSON) with component hashes from a committed, tested, offline script", "status": "PASS", "evidence": "run-RfY8JR/sbom.cdx.json; validateCycloneDx structural check; sbom-candidate.test.cjs 12/12" },
+    { "id": "S7-02", "requirement": "Every bundle file attributed or listed as unattributed; unattributed count reported", "status": "PASS", "evidence": "5,397 files, 8,372 rows, 0 unattributed; composition complete", "limit": "frontend bundle lock-declared, not byte-bound; nested JAR members inherit their JAR" },
+    { "id": "S7-03", "requirement": "npm packages in app.asar and analyzer production tree with name, version, declared licence, integrity", "status": "PASS", "evidence": "21 + 106 components; 127/127 lock versions match; lock integrity recorded" },
+    { "id": "S7-04", "requirement": "Maven artefacts in BOOT-INF/lib and control JAR including shaded members (hash-bound)", "status": "PASS", "evidence": "153 nested JARs SHA-256 identified; control JAR 1,222/1,222 members attributed by exact bytes; loader 100/100" },
+    { "id": "S7-05", "requirement": "Bundled JRE: vendor, exact version, release file, module list, legal directory", "status": "PASS", "evidence": "Temurin 21.0.12+8-LTS, vendor witness Eclipse Adoptium, 18 modules, 78 legal files" },
+    { "id": "S7-06", "requirement": "Electron with Chromium/Node versions and licence files", "status": "PASS", "evidence": "44.4.5 / Chromium 152.0.7977.130 / V8 15.2.124.28 / Node 24.21.0; licence-file absence recorded under S7-12/S7-15" },
+    { "id": "S7-07", "requirement": "PostgreSQL, pgvector and other PostgreSQL extensions", "status": "PASS", "evidence": "16.15; plpgsql, pg_trgm, vector 0.8.7" },
+    { "id": "S7-08", "requirement": "Redis exact version and its licence text as shipped", "status": "PASS", "evidence": "8.10.2 (REDIS_VERSION witness = lock); redis-8.10.2-LICENSE.txt tri-licence, 1,399 lines" },
+    { "id": "S7-09", "requirement": "Node runtime used for analyzers", "status": "PASS", "evidence": "Electron-embedded Node 24.21.0 via ELECTRON_RUN_AS_NODE (desktop/src/main.cjs); no separate node binary" },
+    { "id": "S7-10", "requirement": "Tree-sitter grammars and native .node addons; every other Mach-O", "status": "PASS", "evidence": "0 grammars/.wasm/.node in bundle; all 100 Mach-O attributed" },
+    { "id": "S7-11", "requirement": "otool over every Mach-O: zero external references, rpaths and LC_BUILD_VERSION reported, compared with macOS 13 claim", "status": "PASS", "evidence": "100 files, 0 external, 0 unresolved, otool MATCH 100, max minos 13.0 = LSMinimumSystemVersion 13.0, no Swift runtime" },
+    { "id": "S7-12", "requirement": "Licence obligations satisfied by the current bundle", "status": "FAIL", "evidence": "102 components with blocking findings (96 missing licence text, 6 missing source statement, 3 strong-copyleft source duties)" },
+    { "id": "S7-13", "requirement": "Redis licence treatment", "status": "BLOCKED", "blockingInput": "counsel decision on RSALv2/SSPLv1/AGPLv3 election (or runtime change without silent substitution)" },
+    { "id": "S7-14", "requirement": "JRE licence treatment (GPL-2.0 WITH Classpath-exception source availability)", "status": "BLOCKED", "blockingInput": "counsel-approved source offer or exact Temurin source link to ship" },
+    { "id": "S7-15", "requirement": "Chromium/FFmpeg licence treatment", "status": "FAIL", "evidence": "LICENSES.chromium.html absent from 1lvULq; packaging fix committed (S7-25); LGPL source/relink and proprietary codecs need counsel" },
+    { "id": "S7-16", "requirement": "PostgreSQL/pgvector licence treatment", "status": "PASS", "evidence": "postgres-16.15-COPYRIGHT, pgvector-0.8.7-LICENSE shipped; embedded Snowball/Spencer texts open under D5" },
+    { "id": "S7-17", "requirement": "Unknown licences and conflicts listed with blocking reasoning", "status": "PASS", "evidence": "0 unknown; conflicts: Redis (restricted/network copyleft), JRE and jmh-core (GPL-2.0+CPE), FFmpeg (LGPL), 6 EPL-2.0 listed in audit" },
+    { "id": "S7-18", "requirement": "Provenance of PostgreSQL, pgvector, OpenSSL, Redis (record and bytes)", "status": "PASS", "evidence": "shipped source-lock equals repository lock; binary version witnesses match", "limit": "not reproducible-build bound; pgvector digest observed, not maintainer-signed" },
+    { "id": "S7-19", "requirement": "Provenance of Electron", "status": "PASS", "evidence": "archive SHA-256 equals checksums.json; 237 identical, 13 code-identical modulo ad-hoc signature, 4 packager plists, 0 differing" },
+    { "id": "S7-20", "requirement": "Provenance of Maven artefacts", "status": "PASS", "evidence": "153/153 SHA-256 bound to Gradle resolution", "limit": "no Gradle verification metadata in repository" },
+    { "id": "S7-21", "requirement": "Provenance of npm packages at byte level (tarball integrity)", "status": "NOT RUN", "reason": "lock versions match 127/127; tarball integrity not re-verified" },
+    { "id": "S7-22", "requirement": "Provenance of the JRE", "status": "FAIL", "evidence": "no URL/digest record in repository (D4)" },
+    { "id": "S7-23", "requirement": "Advisory scan via documented reviewed flow", "status": "PASS", "evidence": "rerun 2026-10-07T04:51Z: 276 coordinates, 0 advisories, 1 omission; earlier 2026-10-06T16:09Z identical result kept", "limit": "no-match is not proof of safety" },
+    { "id": "S7-24", "requirement": "Manual version-based advisory notes for JRE, Electron/Chromium, Node, PostgreSQL, Redis, pgvector, OpenSSL", "status": "NOT RUN", "reason": "unverified-offline: exact versions listed; offline knowledge does not cover these releases; human must check vendor advisories" },
+    { "id": "S7-25", "requirement": "Packaging change for missing notices implemented with test", "status": "PASS", "evidence": "desktop/package.json build.mac.extraResources + desktop/build/third-party-notices; licence-packaging.test.cjs red (1 pass, 2 fail) -> green (3 pass)" },
+    { "id": "S7-26", "requirement": "Packaging change verified in a built candidate", "status": "NOT RUN", "reason": "no candidate built in this unit; coordinator builds next candidate and reruns sbom-candidate.cjs" },
+    { "id": "S7-27", "requirement": "Actual distribution file hashes match support declaration, results and docs", "status": "BLOCKED", "blockingInput": "signed/notarized release artefact (no signing credentials in this phase)" },
+    { "id": "S7-28", "requirement": "Minimum macOS 13 confirmed on real macOS 13", "status": "NOT RUN", "reason": "no macOS 13 hardware; load-command evidence only (S7-11)" },
+    { "id": "S7-29", "requirement": "Support scope and limits statement", "status": "NOT RUN", "owner": "coordinator" },
+    { "id": "S7-30", "requirement": "Install and recovery guide", "status": "NOT RUN", "owner": "coordinator" },
+    { "id": "S7-31", "requirement": "Privacy and external-transmission statement", "status": "NOT RUN", "owner": "coordinator" },
+    { "id": "S7-32", "requirement": "Version and release notes", "status": "NOT RUN", "owner": "coordinator" },
+    { "id": "S7-33", "requirement": "Development GitHub App public-distribution install scope and operating ownership", "status": "NOT RUN", "owner": "coordinator" }
+  ],
+  "matrixCounts": { "PASS": 18, "FAIL": 3, "NOT RUN": 9, "BLOCKED": 3 },
+  "defects": [
+    { "id": "D1", "severity": "High", "summary": "No Electron LICENSE/LICENSES.chromium.html and no third-party notices in the macOS bundle", "status": "FIXED_IN_PACKAGING_INPUTS_PENDING_CANDIDATE", "productPaths": ["desktop/package.json", "desktop/build/third-party-notices/THIRD-PARTY-NOTICES.txt", "desktop/build/third-party-notices/third-party-notices.json"], "regressionTest": "validation/pre-release/test/licence-packaging.test.cjs" },
+    { "id": "D2", "severity": "Medium", "summary": "jsqlparser 5.3 pulls jmh-core 1.37 (GPL-2.0 WITH CPE), jopt-simple, commons-math3 into the production backend JAR; 0/527 jsqlparser classes reference JMH", "status": "OPEN", "proposedFix": "exclude(group = \"org.openjdk.jmh\") on the jsqlparser dependency in backend/build.gradle.kts; run backend suites and rebuild" },
+    { "id": "D3", "severity": "Low", "summary": "redis-server embeds the build host name in its build ID", "status": "OPEN", "proposedFix": "fixed build ID in native provisioning (e.g. overwrite generated release.h before compile)" },
+    { "id": "D4", "severity": "Medium", "summary": "JRE has no recorded upstream URL/digest", "status": "OPEN", "proposedFix": "add Temurin JDK archive record (URL, SHA-256, checksum source) verified by runtime staging" },
+    { "id": "D5", "severity": "Medium", "summary": "15 components without an offline licence text", "status": "OPEN", "components": ["Mantle", "ReactiveObjC", "antlr4-runtime 4.13.2", "asm 9.7.1", "istack-commons-runtime 4.1.2", "jopt-simple 5.0.4", "org.eclipse.jgit 7.3.0.202506031305-r", "redis-authx-core 0.1.1-beta2", "webjars-locator-lite 1.1.3", "@tokenizer/token 0.3.0", "Lua 5.1 (Redis)", "hiredis (Redis)", "xxHash (Redis)", "Snowball (PostgreSQL)", "Henry Spencer regex (PostgreSQL)"] }
+  ],
+  "filesOutsideAssignedAreas": ["desktop/package.json (build.mac.extraResources, packaging input under the defect rule)", "desktop/build/third-party-notices/ (generated packaging input)"],
+  "evidenceHandOff": ["validation/local/sbom/run-RfY8JR", "validation/local/sbom-tests", "validation/local/pre-release-final/advisory-1lvULq-20261007-rerun.json", "validation/local/pre-release-final/advisory-1lvULq-20261007.json", "validation/local/pre-release-final/inventory-1lvULq-20261007.json", "validation/local/pre-release-final/runtime-resolved-1lvULq-20261007.json"]
+}

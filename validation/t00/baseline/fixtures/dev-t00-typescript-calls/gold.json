@@ -1,0 +1,86 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-t00-typescript-calls",
+  "cases": [
+    {
+      "caseId": "dev-typescript-calls.valid",
+      "cellId": "T-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "source": {
+        "path": "source/calls.ts",
+        "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+        "namespace": "synthetic-typescript-calls",
+        "start": 0,
+        "end": 418
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed typescript-calls.valid: hand-authored valid TypeScript 5.9 syntax with CRLF and non-ASCII bytes."
+    },
+    {
+      "caseId": "dev-typescript-calls.direct",
+      "cellId": "T-C",
+      "patternId": "direct-source-call",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "source": {
+        "path": "source/calls.ts",
+        "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+        "namespace": "synthetic-typescript-calls",
+        "start": 254,
+        "end": 262
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "ts:source/calls.ts#twice"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed typescript-calls.direct: the identifier resolves to the module-level function twice."
+    },
+    {
+      "caseId": "dev-typescript-calls.candidates",
+      "cellId": "T-C",
+      "patternId": "dynamic-unresolved",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "source": {
+        "path": "source/calls.ts",
+        "sha256": "834e76f9924485f50350de06d53155a845026499fab04b1752ec4d2726676322",
+        "namespace": "synthetic-typescript-calls",
+        "start": 310,
+        "end": 322
+      },
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "ts:source/calls.ts#first.run",
+          "ts:source/calls.ts#second.run"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed typescript-calls.candidates: two object-literal implementations of Action.run are candidates only. OPEN ADJUDICATION: the target grammar for object-literal members is provisional."
+    }
+  ]
+}

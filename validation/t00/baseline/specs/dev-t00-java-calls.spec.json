@@ -1,0 +1,46 @@
+{
+  "format": "t00-annotation-spec/1",
+  "annotator": { "id": "gate-accuracy-transcriber", "kind": "AGENT", "method": "SOURCE_AUTHORED" },
+  "provenanceNote": "Transcription of validation/t00/fixtures/java-calls gold/negatives (AGENT, AUTHOR_PROVISIONAL) into the ANNOTATING.md semantic-key and reason vocabulary. Spans re-selected from source text; no product output was read. Development material only.",
+  "fixture": {
+    "fixtureId": "dev-t00-java-calls",
+    "fixtureVersion": "1.0.0",
+    "corpusId": "accuracy-development-baseline",
+    "license": { "spdx": "MIT", "status": "AUTHOR_DECLARED" },
+    "origin": { "kind": "SYNTHETIC", "projectId": "t00-synthetic-project", "uri": "urn:code-intelligence:t00:synthetic-contract-selftest", "commit": null },
+    "scenarioFamilyId": "t00-call-abstention-family",
+    "generatorFamilyId": "t00-hand-authored-family",
+    "split": "DEVELOPMENT",
+    "versions": [{ "name": "java", "version": "21" }],
+    "capabilities": ["J-P", "J-C"],
+    "sourceRoot": "../../fixtures/java-calls/source",
+    "sourceMode": "ANCHOR",
+    "sourcePrefix": "source",
+    "namespaces": [{ "prefix": "", "namespace": "synthetic-java-calls" }],
+    "eligibility": { "overrides": [
+      { "path": "Invalid.java", "cellId": "J-C", "eligible": false, "exclusionReason": "INVALID_SYNTAX" }
+    ] }
+  },
+  "cases": [
+    { "caseId": "dev-java-calls.valid", "cellId": "J-P", "patternId": "valid-syntax", "stratum": null, "kind": "PARSER", "relationKind": "PARSE",
+      "polarity": "POSITIVE", "select": { "file": "Calls.java", "wholeFile": true },
+      "expected": { "resolution": "NOT_APPLICABLE", "targets": [], "valid": true, "diagnostics": [], "reasonCode": null },
+      "mustNotEmitResolved": false, "rationale": "Transcribed java-calls.valid: hand-authored valid Java 21 syntax." },
+    { "caseId": "dev-java-calls.invalid", "cellId": "J-P", "patternId": "invalid-syntax", "stratum": null, "kind": "PARSER", "relationKind": "PARSE",
+      "polarity": "NEGATIVE", "select": { "file": "Invalid.java", "wholeFile": true },
+      "expected": { "resolution": "NOT_APPLICABLE", "targets": [], "valid": false, "diagnostics": ["SYNTAX_ERROR"], "reasonCode": null },
+      "mustNotEmitResolved": true, "rationale": "Transcribed java-calls.invalid: the parameter list is unterminated." },
+    { "caseId": "dev-java-calls.direct", "cellId": "J-C", "patternId": "direct-source-call", "stratum": null, "kind": "FACT", "relationKind": "CALLS",
+      "polarity": "POSITIVE", "select": { "file": "Calls.java", "text": "twice(2)" }, "expectText": "twice(2)",
+      "expected": { "resolution": "STATIC_RESOLVED", "targets": ["java:demo.Calls#twice(int)"], "valid": null, "diagnostics": [], "reasonCode": null },
+      "mustNotEmitResolved": false, "rationale": "Transcribed java-calls.direct: unqualified call to the only static twice(int) in the enclosing class." },
+    { "caseId": "dev-java-calls.candidates", "cellId": "J-C", "patternId": "dynamic-unresolved", "stratum": null, "kind": "CANDIDATES", "relationKind": "CALLS",
+      "polarity": "POSITIVE", "select": { "file": "Calls.java", "text": "action.run()" }, "expectText": "action.run()",
+      "expected": { "resolution": "INFERRED", "targets": ["java:demo.FirstAction#run()", "java:demo.SecondAction#run()"], "valid": null, "diagnostics": [], "reasonCode": null },
+      "mustNotEmitResolved": true, "rationale": "Transcribed java-calls.candidates: the provisional oracle models runtime dispatch over the two implementations. OPEN ADJUDICATION: ANNOTATING.md section 4 defines the C-cell target as the compile-time declaration (demo.Action#run()); this provisional case predates that rule and must be re-annotated by independent annotators." },
+    { "caseId": "dev-java-calls.dynamic", "cellId": "J-C", "patternId": "external-unresolved", "stratum": null, "kind": "FACT", "relationKind": "CALLS",
+      "polarity": "NEGATIVE", "select": { "file": "Calls.java", "text": "Class.forName(name)" }, "expectText": "Class.forName(name)",
+      "expected": { "resolution": "UNRESOLVED", "targets": [], "valid": null, "diagnostics": [], "reasonCode": "EXTERNAL_TARGET" },
+      "mustNotEmitResolved": true, "rationale": "Transcribed java-calls.dynamic (EXTERNAL_CONTEXT_MISSING mapped to the guide's EXTERNAL_TARGET): the JDK method is not in the analysed sources." }
+  ]
+}

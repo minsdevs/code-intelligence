@@ -1,0 +1,706 @@
+{
+  "format": 1,
+  "gate": "G-COST",
+  "unit": "gate-cost",
+  "date": "2026-10-07",
+  "base": "bcd8081",
+  "branch": "worktree-agent-af7be1bbb66cbe34a",
+  "worktree": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-af7be1bbb66cbe34a",
+  "candidate": {
+    "id": "1lvULq",
+    "builtFrom": "9211e88",
+    "buildSequence": "1791292686000",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+    "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+    "predatesProductFix": "3c9ec31"
+  },
+  "verdict": "NOT PASS (row facts only; release NO_GO)",
+  "productChanges": [
+    {
+      "path": "backend/src/main/java/dev/codeintelligence/evidence/SecretMask.java",
+      "commit": "3c9ec31",
+      "reason": "D1 High: connection-URI password reached provider body and preview; reproduced red by AiCostEgressPrivacyIntegrationTest and SecretMaskTest"
+    }
+  ],
+  "commands": [
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-af7be1bbb66cbe34a/backend",
+      "command": "DOCKER_HOST=unix://$HOME/.docker/run/docker.sock ./gradlew --offline test --tests 'dev.codeintelligence.evidence.SecretMaskTest' --tests 'dev.codeintelligence.ai.AiProviderEgressArchitectureTest' --tests 'dev.codeintelligence.ai.AiCostEgress*'",
+      "result": {
+        "tests": 43,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suites": 9
+      },
+      "log": "validation/local/cost-egress/final-targeted-20261007.log",
+      "commit": "5c47f3b"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-af7be1bbb66cbe34a/desktop",
+      "command": "node --test test/ai-egress-boundary.test.cjs",
+      "result": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0
+      },
+      "log": "validation/local/cost-egress/final-boundary-20261007.log"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-af7be1bbb66cbe34a",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-cost env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/cost-egress-packaged-probe.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\"",
+      "runs": [
+        {
+          "run": 1,
+          "result": "OWNED_OUTPUT_REFUSED before launch (earlier probe revision)"
+        },
+        {
+          "run": 2,
+          "result": "never acquired lock (session stopped)"
+        },
+        {
+          "run": 3,
+          "result": "ISOLATED_RUN_INVALID before launch (socket budget from worktree path); evidence dir probe-AfmQDq empty"
+        },
+        {
+          "run": 4,
+          "result": "PASS, 0 failures, cleanupConfirmed, bundleUnchanged",
+          "evidence": "validation/local/cost-egress-packaged/probe-SdlUNk",
+          "probeSha256": "e502f9e725b2fc44ff7f00246182685ab4619de544dd58a16eb594e92b5b48c9"
+        }
+      ]
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-af7be1bbb66cbe34a/backend",
+      "command": "Gradle --offline spotlessCheck + test filtered to ai.*, evidence.*, export.*, note.*, task.*, backup.*, ArchitectureTest (exact command line not preserved in the log; previous session)",
+      "result": {
+        "tests": 528,
+        "failures": 0,
+        "skipped": 0,
+        "suites": 38
+      },
+      "log": "validation/local/cost-egress/backend-affected.log",
+      "note": "earlier in this unit (previous session), before 4cb2788"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-af7be1bbb66cbe34a/desktop",
+      "command": "node --test over desktop/test ai-*.test.cjs, safety-journal, safety-lifecycle, main-runtime-gateway, backup-cost-* (exact command line not preserved; previous session)",
+      "result": {
+        "tests": 915,
+        "pass": 913,
+        "fail": 0,
+        "skipped": 2
+      },
+      "log": "validation/local/cost-egress/desktop-affected.xml",
+      "note": "earlier in this unit; skips are opt-in real-PG cases covered by VERIFY-PG"
+    },
+    {
+      "cwd": "/Users/minseokchae/Dev/code-intelligence/.claude/worktrees/agent-af7be1bbb66cbe34a",
+      "command": "docs/audit/verify-ai-egress-postgres.cjs (disposable Docker PG; exact invocation not preserved; previous session)",
+      "runs": [
+        {
+          "result": "44/45 FAIL (no TLS)",
+          "evidence": "ci-c13-egress-pg-20261007.xml"
+        },
+        {
+          "result": "59/59 PASS after 4cb2788",
+          "evidence": "ci-c13-egress-pg-tls-20261007.xml"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "PASS": 69,
+    "FAIL": 2,
+    "BLOCKED": 2,
+    "NOT RUN": 2
+  },
+  "matrix": [
+    {
+      "id": "C13-01",
+      "requirement": "Settle once after durable intent; replay refused",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-02",
+      "requirement": "Two concurrent asks, budget fits one",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-03",
+      "requirement": "Timeout before send",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-04",
+      "requirement": "Timeout after send",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-05",
+      "requirement": "HTTP 500",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-06",
+      "requirement": "HTTP 429",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-07",
+      "requirement": "Usage missing",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-08",
+      "requirement": "Cached detail missing",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-09",
+      "requirement": "Reasoning tokens (unbounded dimension)",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-10",
+      "requirement": "Total mismatch",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-11",
+      "requirement": "Malformed body",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-12",
+      "requirement": "Wrong model",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-13",
+      "requirement": "User retry after unknown outcome",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-14",
+      "requirement": "Reconciliation x2 with outstanding hold",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-15",
+      "requirement": "DB failure before reserve",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-16",
+      "requirement": "DB failure publishing DISPATCHED after intent",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-17",
+      "requirement": "DB failure writing usage evidence",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-18",
+      "requirement": "PG clock high-water ahead of wall clock",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-19",
+      "requirement": "Main wall clock regresses after reserve",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-20",
+      "requirement": "Catalog older than 30 days",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-21",
+      "requirement": "Catalog stale between approval and send",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-22",
+      "requirement": "Price changed between approval and send",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-23",
+      "requirement": "Unknown model",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-24",
+      "requirement": "EMBEDDING contract",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-25",
+      "requirement": "Unpriced body field",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-26",
+      "requirement": "Caller endpoint field",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-27",
+      "requirement": "No output cap",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-28",
+      "requirement": "Second APPROVE/EXECUTE/QUOTE for settled UUID",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-29",
+      "requirement": "EXECUTE without approval / approved without PG reservation",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-30",
+      "requirement": "Provider over-bills",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-31",
+      "requirement": "Journal DISPATCH_INTENT fsync fault",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-32",
+      "requirement": "Journal SETTLED append fault after response",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-33",
+      "requirement": "PG SETTLED projection fails after journal settlement",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-34",
+      "requirement": "First run: AI OFF, budget 0, all AI routes",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-35",
+      "requirement": "Key saved, budget 0",
+      "status": "PASS",
+      "level": "full-stack (Spring+Testcontainers PG+real Node main+fake provider), HEAD modules",
+      "evidence": "final-targeted-xml/ (AiCostEgress* classes), 43/43 on 5c47f3b"
+    },
+    {
+      "id": "C13-36",
+      "requirement": "Third concurrent request busy",
+      "status": "PASS",
+      "level": "full-stack existing AiDesktopCostFlowIntegrationTest",
+      "evidence": "baseline-desktop-cost-flow.log 12/12; backend-affected 528/528"
+    },
+    {
+      "id": "C13-37",
+      "requirement": "Same approval twice",
+      "status": "PASS",
+      "level": "full-stack existing AiDesktopCostFlowIntegrationTest",
+      "evidence": "baseline-desktop-cost-flow.log 12/12; backend-affected 528/528"
+    },
+    {
+      "id": "C13-38",
+      "requirement": "OFF during flight",
+      "status": "PASS",
+      "level": "full-stack existing AiDesktopCostFlowIntegrationTest",
+      "evidence": "baseline-desktop-cost-flow.log 12/12; backend-affected 528/528"
+    },
+    {
+      "id": "C13-39",
+      "requirement": "Policy change",
+      "status": "PASS",
+      "level": "full-stack existing AiDesktopCostFlowIntegrationTest",
+      "evidence": "baseline-desktop-cost-flow.log 12/12; backend-affected 528/528"
+    },
+    {
+      "id": "C13-40",
+      "requirement": "Exhausted budget",
+      "status": "PASS",
+      "level": "full-stack existing AiDesktopCostFlowIntegrationTest",
+      "evidence": "baseline-desktop-cost-flow.log 12/12; backend-affected 528/528"
+    },
+    {
+      "id": "C13-41",
+      "requirement": "Answer persistence failure",
+      "status": "PASS",
+      "level": "full-stack existing AiDesktopCostFlowIntegrationTest",
+      "evidence": "baseline-desktop-cost-flow.log 12/12; backend-affected 528/528"
+    },
+    {
+      "id": "C13-42",
+      "requirement": "Auth/CSRF",
+      "status": "PASS",
+      "level": "full-stack existing AiDesktopCostFlowIntegrationTest",
+      "evidence": "baseline-desktop-cost-flow.log 12/12; backend-affected 528/528"
+    },
+    {
+      "id": "C13-43",
+      "requirement": "One-use activation",
+      "status": "PASS",
+      "level": "full-stack existing AiDesktopCostFlowIntegrationTest",
+      "evidence": "baseline-desktop-cost-flow.log 12/12; backend-affected 528/528"
+    },
+    {
+      "id": "C13-44",
+      "requirement": "Outstanding hold across UTC day/month reset",
+      "status": "PASS",
+      "level": "ledger (real PG) / desktop module",
+      "evidence": "backend-affected 528/528; desktop-affected 913/0/2"
+    },
+    {
+      "id": "C13-45",
+      "requirement": "Clock regression grants no budget / old-day approval",
+      "status": "PASS",
+      "level": "ledger (real PG) / desktop module",
+      "evidence": "backend-affected 528/528; desktop-affected 913/0/2"
+    },
+    {
+      "id": "C13-46",
+      "requirement": "Embedding reservation/settlement arithmetic",
+      "status": "PASS",
+      "level": "ledger (real PG) / desktop module",
+      "evidence": "backend-affected 528/528; desktop-affected 913/0/2"
+    },
+    {
+      "id": "C13-47",
+      "requirement": "1.10 factor single ceil; settlement without factor",
+      "status": "PASS",
+      "level": "ledger (real PG) / desktop module",
+      "evidence": "backend-affected 528/528; desktop-affected 913/0/2"
+    },
+    {
+      "id": "C13-48",
+      "requirement": "30-day catalog boundary",
+      "status": "PASS",
+      "level": "ledger (real PG) / desktop module",
+      "evidence": "backend-affected 528/528; desktop-affected 913/0/2"
+    },
+    {
+      "id": "C13-49",
+      "requirement": "Restart never re-sends",
+      "status": "PASS",
+      "level": "ledger (real PG) / desktop module",
+      "evidence": "backend-affected 528/528; desktop-affected 913/0/2"
+    },
+    {
+      "id": "C13-50",
+      "requirement": "Restore budget union / larger liability on collision",
+      "status": "PASS",
+      "level": "ledger (real PG) / desktop module",
+      "evidence": "backend-affected 528/528; desktop-affected 913/0/2"
+    },
+    {
+      "id": "C13-51",
+      "requirement": "Hold released only with proof",
+      "status": "PASS",
+      "level": "ledger (real PG) / desktop module",
+      "evidence": "backend-affected 528/528; desktop-affected 913/0/2"
+    },
+    {
+      "id": "C13-52",
+      "requirement": "Row-locked reserve, max 2",
+      "status": "PASS",
+      "level": "ledger (real PG) / desktop module",
+      "evidence": "backend-affected 528/528; desktop-affected 913/0/2"
+    },
+    {
+      "id": "P-01",
+      "requirement": "Auth header, PEM, sk- key, token= absent from provider body and preview",
+      "status": "PASS",
+      "evidence": "AiCostEgressPrivacyIntegrationTest"
+    },
+    {
+      "id": "P-02",
+      "requirement": "DB URI password redacted before provider and preview",
+      "status": "FAIL",
+      "note": "FAIL on candidate 1lvULq source (red: privacy-run1.log, red-db-uri-2026-10-07/); fixed 3c9ec31, PASS on HEAD; candidate not rebuilt"
+    },
+    {
+      "id": "P-03",
+      "requirement": "No forbidden sentinel in persisted text/json columns",
+      "status": "PASS",
+      "evidence": "AiCostEgressPrivacyIntegrationTest"
+    },
+    {
+      "id": "P-04",
+      "requirement": "No forbidden sentinel in backend output / main stderr",
+      "status": "PASS",
+      "evidence": "AiCostEgressPrivacyIntegrationTest"
+    },
+    {
+      "id": "P-05",
+      "requirement": "Prompt-injection lure to unselected/outside file not sent",
+      "status": "PASS",
+      "evidence": "AiCostEgressPrivacyIntegrationTest"
+    },
+    {
+      "id": "P-06",
+      "requirement": "Injection text inside approved span sent as data only",
+      "status": "PASS",
+      "evidence": "AiCostEgressPrivacyIntegrationTest (observed, expected)"
+    },
+    {
+      "id": "P-07",
+      "requirement": "Dummy personal data inside approved span",
+      "status": "FAIL",
+      "note": "sent unredacted (shown in preview); not persisted/logged; product decision D4"
+    },
+    {
+      "id": "E-01",
+      "requirement": "Every provider invocation fixed origin/path, POST, 0 redirects, 0 retries",
+      "status": "PASS",
+      "evidence": "all matrix calls"
+    },
+    {
+      "id": "E-02",
+      "requirement": "Redirect/userinfo/HTTP/alt hosts/private DNS/proxy env refused",
+      "status": "PASS",
+      "evidence": "ai-https-transport.test.cjs (desktop-affected)"
+    },
+    {
+      "id": "E-03",
+      "requirement": "No alternative base URL in desktop",
+      "status": "PASS",
+      "evidence": "AiProviderEgressArchitectureTest 4/4"
+    },
+    {
+      "id": "ENTRY",
+      "requirement": "Every AI entry point gated by gateway/ledger or provider-free (07 \u00a73: disabled evidence for every entry point)",
+      "status": "PASS",
+      "evidence": "entry-point inventory; AiProviderEgressArchitectureTest 4/4; ai-egress-boundary.test.cjs 7/7",
+      "note": "independent review open (G-SEC row)"
+    },
+    {
+      "id": "VERIFY-PG",
+      "requirement": "Real psql adapter on disposable TLS PostgreSQL",
+      "status": "PASS",
+      "evidence": "ci-c13-egress-pg-tls-20261007.xml 59/59; earlier ci-c13-egress-pg-20261007.xml 44/45 FAIL kept"
+    },
+    {
+      "id": "PK-01",
+      "requirement": "Packaged AI/main/preload/journal/lifecycle modules byte-identical to branch sources (10/10)",
+      "status": "PASS",
+      "level": "packaged app 1lvULq, mock keychain, isolated profile",
+      "evidence": "validation/local/cost-egress-packaged/probe-SdlUNk/result.json"
+    },
+    {
+      "id": "PK-02",
+      "requirement": "First run ready, aiOff=true",
+      "status": "PASS",
+      "level": "packaged app 1lvULq, mock keychain, isolated profile",
+      "evidence": "validation/local/cost-egress-packaged/probe-SdlUNk/result.json"
+    },
+    {
+      "id": "PK-03",
+      "requirement": "Renderer bridge 11 fixed members, none AI",
+      "status": "PASS",
+      "level": "packaged app 1lvULq, mock keychain, isolated profile",
+      "evidence": "validation/local/cost-egress-packaged/probe-SdlUNk/result.json"
+    },
+    {
+      "id": "PK-04",
+      "requirement": "First-run budget 0/0, held 0, no activation token",
+      "status": "PASS",
+      "level": "packaged app 1lvULq, mock keychain, isolated profile",
+      "evidence": "validation/local/cost-egress-packaged/probe-SdlUNk/result.json"
+    },
+    {
+      "id": "PK-05",
+      "requirement": "Fabricated activation refused (503 first run, 409 after key save)",
+      "status": "PASS",
+      "level": "packaged app 1lvULq, mock keychain, isolated profile",
+      "evidence": "validation/local/cost-egress-packaged/probe-SdlUNk/result.json"
+    },
+    {
+      "id": "PK-06",
+      "requirement": "Synthetic key save 200 ENABLED, never echoed, budget still 0, main aiOff; clear -> OFF",
+      "status": "PASS",
+      "level": "packaged app 1lvULq, mock keychain, isolated profile",
+      "evidence": "validation/local/cost-egress-packaged/probe-SdlUNk/result.json"
+    },
+    {
+      "id": "PK-07",
+      "requirement": "No non-loopback inet socket in app tree at 4 samples",
+      "status": "PASS",
+      "level": "packaged app 1lvULq, mock keychain, isolated profile",
+      "evidence": "validation/local/cost-egress-packaged/probe-SdlUNk/result.json"
+    },
+    {
+      "id": "PK-08",
+      "requirement": "Packaged ask through a fake provider (C13 on the app)",
+      "status": "BLOCKED",
+      "blockingInput": "fake-provider seam in a shipped build (transport fixed to https://api.openai.com with public-DNS pinning) or an accepted validation-build variant"
+    },
+    {
+      "id": "REBUILD",
+      "requirement": "Rerun packaged probe and P-02 on a candidate containing 3c9ec31",
+      "status": "BLOCKED",
+      "blockingInput": "new candidate build (not permitted this phase)"
+    },
+    {
+      "id": "C16",
+      "requirement": "C16 native crash/restore states for the cost ledger/journal",
+      "status": "NOT RUN",
+      "note": "owned by gate-recovery; module/native restore-budget evidence cited in C13-50"
+    },
+    {
+      "id": "G-SEC-REVIEW",
+      "requirement": "Independent review of entry-point inventory and egress guards",
+      "status": "NOT RUN",
+      "note": "needs an independent reviewer"
+    }
+  ],
+  "defects": [
+    {
+      "id": "D1",
+      "severity": "High",
+      "status": "fixed 3c9ec31",
+      "summary": "SecretMask missed connection-URI passwords"
+    },
+    {
+      "id": "D2",
+      "severity": "Low",
+      "status": "open",
+      "summary": "DB failure in reserve transaction returns generic 500",
+      "proposal": "map non-ledger reserve failures to AiSafetyUnavailableException"
+    },
+    {
+      "id": "D3",
+      "severity": "Low (UX)",
+      "status": "open",
+      "summary": "fresh install budget state RECOVERY_REQUIRED (API, C13-34, PK-04); UI text not observed in packaged probe",
+      "proposal": "report OFF when no obligations and never configured"
+    },
+    {
+      "id": "D4",
+      "severity": "Medium (spec)",
+      "status": "open",
+      "summary": "no personal-data redaction in approved span",
+      "proposal": "product decision: redaction vs explicit consented scope"
+    },
+    {
+      "id": "D5",
+      "severity": "Low (harness)",
+      "status": "fixed 4cb2788",
+      "summary": "PG verifier lacked TLS"
+    },
+    {
+      "id": "H1",
+      "severity": "harness",
+      "status": "fixed 5c47f3b",
+      "summary": "packaged probe from worktree exceeded private-socket budget"
+    }
+  ],
+  "evidenceDirectories": [
+    "validation/local/cost-egress",
+    "validation/local/cost-egress-packaged/probe-SdlUNk",
+    "validation/local/cost-egress-packaged/probe-AfmQDq"
+  ],
+  "sha256": {
+    "validation/local/cost-egress-packaged/probe-SdlUNk/result.json": "1ee3842edc2d959af84912bad98102f2750e61eef7671c8b9be489dddd1cef14",
+    "validation/local/cost-egress/packaged-probe-run1.log": "864792eae3562d832971eb96e115c7fe27717b942fbcaa32aabfe4e61b5018f4",
+    "validation/local/cost-egress/packaged-probe-run2.log": "5e2486dbef0793d3f023c6a9fa5b68a9f5aa082da69cda206cee8dd28ea30917",
+    "validation/local/cost-egress/packaged-probe-run3.log": "384d95a23f415d4e8e66d2d148c5ff1a21b362273c5553c48edb1a9157a0431a",
+    "validation/local/cost-egress/packaged-probe-run4.log": "ee008ea3cddd2de28f7f5a83403c3fac1a20afdb92a56f6c2ec8c7557215d780",
+    "validation/local/cost-egress/final-targeted-20261007.log": "b4d9a963e9aa8cd5e140ab756507472ccaa2a756330217a7ef1aada16bfffbe5",
+    "validation/local/cost-egress/final-boundary-20261007.log": "5f32d92ef35b28c5b6d179131b1df85235da7a06640282114aae556a3911f3e6",
+    "validation/local/cost-egress/backend-affected.log": "5bb9e8b77613f6345897c3b4bc77bae42a277a0090d18a33e6126efb2a0c3b04",
+    "validation/local/cost-egress/desktop-affected.xml": "bfa33d2350b1eee086fbc2e910f975ef17472cc8e3821e4c6ae22179d515719e",
+    "validation/local/cost-egress/ci-c13-egress-pg-20261007.xml": "7514621aca7bb54cd7061f9e7a9bd1866b8563c052904cf373edbb652a6ed154",
+    "validation/local/cost-egress/ci-c13-egress-pg-tls-20261007.xml": "8634e250f3ad2109d8e20d418f7d9d353dd8f8e542e2507ad20b2e7934b03b12",
+    "validation/local/cost-egress/privacy-run1.log": "6c6b1574900dc3cf8dbb00dc9a5a7442d947cf4d51ff16142973e4b8b84f9864",
+    "validation/local/cost-egress/baseline-desktop-cost-flow.log": "7a9689df8c3932f769b5aab2b1c860f935e0a380d4dd0f4c0e7717ec5b116fe2",
+    "validation/local/cost-egress/final-targeted-xml/TEST-dev.codeintelligence.ai.AiCostEgressFirstRunIntegrationTest.xml": "1134d546557b4a977b51a58cc41532ba1766401d0cf92025a289c35543cb7851",
+    "validation/local/cost-egress/final-targeted-xml/TEST-dev.codeintelligence.ai.AiCostEgressJournalIntentFailureIntegrationTest.xml": "086e0763c9cff6ab5e1eca79cf04f0716971c7b44deb63571a988bec4acdf079",
+    "validation/local/cost-egress/final-targeted-xml/TEST-dev.codeintelligence.ai.AiCostEgressJournalSettlementFailureIntegrationTest.xml": "cf21f0d9cbf0c561584a8638efe86aae7a0c653693966a5d112696c984fa632d",
+    "validation/local/cost-egress/final-targeted-xml/TEST-dev.codeintelligence.ai.AiCostEgressMatrixIntegrationTest.xml": "2175759feff95a85a2f25411d8ff997822b244e3a9bc4e5300b249bb737cdc72",
+    "validation/local/cost-egress/final-targeted-xml/TEST-dev.codeintelligence.ai.AiCostEgressOverbillIntegrationTest.xml": "025653cf807927fffb055a41eecc9a9cf9bb4103965cbc5ac590cbc27a202396",
+    "validation/local/cost-egress/final-targeted-xml/TEST-dev.codeintelligence.ai.AiCostEgressPrivacyIntegrationTest.xml": "ea0a100a8db9749c292834ac2dfe2d1be7e1beabfc48d658311f9097c4ae8714",
+    "validation/local/cost-egress/final-targeted-xml/TEST-dev.codeintelligence.ai.AiCostEgressSettlementProjectionFailureIntegrationTest.xml": "12ac3c3b2b904d6635837f38811cfab211ff72cbb877a4fff759d93871229cc2",
+    "validation/local/cost-egress/final-targeted-xml/TEST-dev.codeintelligence.ai.AiProviderEgressArchitectureTest.xml": "fddf15d724122f8ef51fdf4e3d5f1b2dd7b2c02ae11eac6f687ea33fc9600d10",
+    "validation/local/cost-egress/final-targeted-xml/TEST-dev.codeintelligence.evidence.SecretMaskTest.xml": "332f5f4c50ce39ae6e368e62b789cfcfc5453e411c28b323f73562b45c6f1d0d"
+  },
+  "limits": [
+    "packaged transport cannot target a fake provider",
+    "socket evidence is 4 lsof samples",
+    "journal faults injected at append stages",
+    "timing not acceptance data"
+  ]
+}

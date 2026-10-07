@@ -1,0 +1,742 @@
+{
+  "format": 1,
+  "unit": "gate-ux",
+  "gate": "G-UX",
+  "date": "2026-10-07",
+  "status": "G_UX_NOT_PASSED_HUMAN_STUDY_BLOCKED_OPEN_HIGH_DEFECTS",
+  "releaseVerdict": "NO_GO",
+  "branch": "worktree-agent-a2ab4860a0424970f",
+  "baseCommit": "bcd8081",
+  "commits": [
+    "9ac44e63ca224fbbea7893c08d1c0f41272d0855 [skip ci] Name unreached keyboard targets and wait for the lazy relation panel in the UX pilot",
+    "4261f273630d27f5c413683b4a5a10b22c0b2a3c [skip ci] Add the G-UX usability test kit and VoiceOver check sheet",
+    "449064da0ac5388366dd0de6c1b470c1dce2ad6f [skip ci] Add the G-UX accessibility pilot runner, page audit and fixtures",
+    "a41b4be99c6664abcf60e7c7e254eefc2e648df7 [skip ci] Announce running analysis steps through a polite status region",
+    "38290e30039e702eaafc8a291dd17281210c76f9 [skip ci] Label inferred relations and empty results in text, not as confirmed"
+  ],
+  "candidate": {
+    "appBundle": ".native-product-1lvULq/Code Intelligence Validation.app",
+    "buildSequence": "1791292686000",
+    "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc"
+  },
+  "candidateUnchangedDuringRun": true,
+  "productPathsChanged": [
+    {
+      "path": "frontend/src/lib/relationConfidence.ts",
+      "commit": "38290e3",
+      "reason": "new shared text verdict helper"
+    },
+    {
+      "path": "frontend/src/features/projects/RepositoryNeighborhood.tsx",
+      "commit": "38290e3",
+      "reason": "inferred relations called confirmed; raw enum verdicts",
+      "severity": "High"
+    },
+    {
+      "path": "frontend/src/features/code/SymbolPanel.tsx",
+      "commit": "38290e3",
+      "reason": "LIKELY callers unlabeled",
+      "severity": "High"
+    },
+    {
+      "path": "frontend/src/features/projects/RepositoryOverviewPage.tsx",
+      "commit": "38290e3",
+      "reason": "'확인된 흐름' wording",
+      "severity": "High"
+    },
+    {
+      "path": "frontend/src/features/flows/FlowsPage.tsx",
+      "commit": "38290e3",
+      "reason": "no notice that flow steps may be inferred",
+      "severity": "High (partial mitigation)"
+    },
+    {
+      "path": "frontend/src/lib/translations.ts",
+      "commit": "38290e3,a41b4be",
+      "reason": "empty results read as absence; new verdict/announcement keys",
+      "severity": "High"
+    },
+    {
+      "path": "frontend/src/features/import/ProgressStep.tsx",
+      "commit": "a41b4be",
+      "reason": "no live region for running analysis",
+      "severity": "High (screen-reader U1)"
+    }
+  ],
+  "redCheck": {
+    "method": "write `git show bcd8081:<path>` into the file, run vitest src/features/ux, restore",
+    "failingTestsAgainstHead": {
+      "SymbolPanel.tsx": 1,
+      "FlowsPage.tsx": 1,
+      "ProgressStep.tsx": 1,
+      "RepositoryNeighborhood.tsx": 1,
+      "RepositoryOverviewPage.tsx": 1,
+      "translations.ts": 6
+    },
+    "relationConfidence.ts": "new file; exercised through the RepositoryNeighborhood and SymbolPanel red checks"
+  },
+  "commands": [
+    {
+      "cwd": "<worktree>",
+      "command": "node frontend/node_modules/vitest/vitest.mjs run --config validation/pre-release/frontend-regression.config.mjs src/features/ux src/features/import src/features/flows src/features/projects src/features/code src/features/analysis src/lib",
+      "result": "22 files, 188 tests passed",
+      "log": "validation/local/pre-release-ux/frontend-ux-20261007/targeted-vitest-final.log"
+    },
+    {
+      "cwd": "<worktree>",
+      "command": "(same, before the ProgressStep correction)",
+      "result": "1 failed (githubRecovery: two role=status) | 187 passed",
+      "log": "validation/local/pre-release-ux/frontend-ux-20261007/targeted-vitest.log"
+    },
+    {
+      "cwd": "<worktree>/frontend",
+      "command": "node node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit",
+      "result": "exit 0",
+      "log": "validation/local/pre-release-ux/frontend-ux-20261007/tsc-app-noemit.log"
+    },
+    {
+      "cwd": "<worktree>",
+      "command": "node --test validation/pre-release/test/ux-accessibility.test.cjs",
+      "result": "7 pass, 0 fail",
+      "log": "validation/local/pre-release-ux/frontend-ux-20261007/node-test-ux-accessibility.log"
+    },
+    {
+      "cwd": "<worktree>",
+      "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C /Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-ux node validation/pre-release/ux-accessibility-pilot.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\"",
+      "result": "ux-X7CBXO COMPLETED, 0 step errors, 190 states, 55 full keyboard traversals",
+      "log": "validation/local/pre-release-ux/frontend-ux-20261007/ux-run-6.log"
+    },
+    {
+      "cwd": "<worktree>",
+      "command": "(same) --stages u1",
+      "result": "ux-rKSIO6, ux-22Thfl COMPLETED_WITH_STEP_FAILURES (runner diagnostics); ux-Ii3eNI COMPLETED after runner fix 9ac44e6"
+    },
+    {
+      "cwd": "<worktree>",
+      "command": "(full run before the runner fix)",
+      "result": "ux-JpYJjy COMPLETED_WITH_STEP_FAILURES (u1-keyboard-explore: UX_KEYBOARD_TARGET_UNREACHED, runner timing)"
+    }
+  ],
+  "measurements": {
+    "states": 190,
+    "fullAudits": 55,
+    "languages": [
+      "ko",
+      "en"
+    ],
+    "viewports": [
+      "980x700",
+      "1280x800",
+      "1440x900",
+      "640x400@200%"
+    ],
+    "unreachedFocusables": 0,
+    "keyboardTraps": 0,
+    "unnamedInteractive": 0,
+    "contrastFailingElements": 2400,
+    "statesWithContrastFailures": 190,
+    "graphFocusablesWithoutName": "react-flow nodes/edges on 5 screen ids",
+    "edgesWithoutFocusIndicator": "4 screen ids",
+    "htmlLangKoOnEnglishStates": "91/91",
+    "reducedMotionMovingElements": 0,
+    "themes": 1
+  },
+  "pilot": {
+    "U1": {
+      "keyboardImportCompleted": true,
+      "keyboardExploreCompleted": true,
+      "progressAnnouncementsOnCandidate": 0
+    },
+    "U2": {
+      "acceptedFiles": 19,
+      "bytesRead": 7330,
+      "exclusionReasons": {
+        "GENERATED_DIRECTORY": 1,
+        "SECRET_PATH": 1
+      },
+      "showsAcceptedCount": true,
+      "showsBytes": true,
+      "showsExclusionReasons": true,
+      "showsLanguageOrExpectedDepth": false,
+      "inPreviewScopeReduction": false,
+      "previewResponseKeys": [
+        "changedPaths",
+        "changes",
+        "expiresAt",
+        "localImport",
+        "operation",
+        "previewToken",
+        "snapshotId",
+        "sourceName"
+      ]
+    },
+    "U3": {
+      "reachesEndpoint": true,
+      "reachesDataNode": false,
+      "nonConfirmedHops": 5,
+      "flowShowsStepVerdict": false
+    },
+    "U4": {
+      "riskLevel": "HIGH",
+      "riskScore": 41,
+      "dependents": 36,
+      "uniqueDependentNodes": 12,
+      "duplicateRows": 24,
+      "carriesConfidence": false
+    },
+    "U5": [
+      {
+        "case": "initial import of library-loans cancelled with the wizard Cancel analysis button (keyboard)",
+        "cancelButtonVisible": true,
+        "jobStatus": "CANCELLED",
+        "cancelAnnouncedAsStatus": true,
+        "secondProjectCurrentSnapshot": null,
+        "lastCompleteSnapshotKept": null
+      },
+      {
+        "case": "workspace re-analysis; the workspace offers no cancel control, so the job is cancelled through the same job-cancel API the wizard uses",
+        "jobId": 3,
+        "workspaceCancelControl": 0,
+        "jobStatus": "CANCELLED",
+        "lastCompleteSnapshotKept": true
+      },
+      {
+        "case": "app closed normally while re-analysis runs",
+        "jobId": 4,
+        "workspaceCancelControl": 0,
+        "jobBeforeTermination": "RUNNING",
+        "closedNormally": true,
+        "jobAfterRelaunch": {
+          "status": "FAILED",
+          "failureCode": null
+        },
+        "lastCompleteSnapshotKept": true
+      },
+      {
+        "case": "Electron owner process SIGKILL while re-analysis runs",
+        "jobId": 5,
+        "workspaceCancelControl": 0,
+        "jobBeforeTermination": "RUNNING",
+        "ownedTreeSize": 24,
+        "ownedProcessesRemainingAfter90s": 0,
+        "jobAfterRelaunch": {
+          "status": "FAILED",
+          "failureCode": null
+        },
+        "lastCompleteSnapshotKept": true
+      }
+    ],
+    "U6": {
+      "U1": true,
+      "U3Recorded": true,
+      "U4Recorded": true,
+      "aiSubmitAppRequests": 0
+    },
+    "egress": {
+      "rendererOrigins": {
+        "app-origin": 636
+      },
+      "sessionOrigins": {
+        "app-origin": 634
+      },
+      "externalSamples": 50,
+      "externalRemoteHosts": [
+        "::127.0.0.1"
+      ],
+      "listenAllInterfaces": {
+        "listen-all-interfaces:TCP:java": 1,
+        "listen-all-interfaces:UDP:java": 1045
+      },
+      "lsofSamples": 377,
+      "sampleFailures": 0
+    }
+  },
+  "matrixCounts": {
+    "BLOCKED": 6,
+    "PASS": 23,
+    "FAIL": 21,
+    "NOT RUN": 4
+  },
+  "matrix": [
+    {
+      "id": "G1",
+      "area": "Gate",
+      "requirement": "8 participants (≥2 per level, mixed Java/web/Python); ≥7/8 complete U1–U4 unaided",
+      "status": "BLOCKED",
+      "evidence": "docs/release/usability-test-kit/",
+      "note": "Needs 8 recruited human participants and a moderator; kit delivered."
+    },
+    {
+      "id": "G2",
+      "area": "Gate",
+      "requirement": "Zero participants with a serious 'inference taken as confirmed fact' error",
+      "status": "BLOCKED",
+      "evidence": "usability-test-kit/02 probes Q1–Q7",
+      "note": "Needs human sessions."
+    },
+    {
+      "id": "G3",
+      "area": "Gate",
+      "requirement": "Zero serious data/permission errors",
+      "status": "BLOCKED",
+      "evidence": "usability-test-kit/03",
+      "note": "Needs human sessions."
+    },
+    {
+      "id": "G4",
+      "area": "Gate",
+      "requirement": "≤15 min per task (excl. first analysis); median screen→evidence ≤60 s",
+      "status": "BLOCKED",
+      "evidence": "usability-test-kit/03 timing fields",
+      "note": "Needs human sessions; pilot timings are indicative only and not acceptance numbers."
+    },
+    {
+      "id": "G5",
+      "area": "Gate",
+      "requirement": "On failure fix and retest with new tasks",
+      "status": "BLOCKED",
+      "evidence": "usability-test-kit/03 retest rule; library-loans fixture",
+      "note": "Depends on G1."
+    },
+    {
+      "id": "G6",
+      "area": "Gate",
+      "requirement": "Forbidden substitute (headless API mock) not used for UX evidence",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO",
+      "note": "Pilot and a11y measurements ran on the unchanged packaged candidate 1lvULq."
+    },
+    {
+      "id": "A1",
+      "area": "A11y",
+      "requirement": "Every interactive control reachable by Tab (55 full traversals, 190 states, ko/en, 980×700/1280×800/1440×900, 200% zoom)",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO screens[].keyboard",
+      "note": "unreachedCount 0 on every traversed state."
+    },
+    {
+      "id": "A2",
+      "area": "A11y",
+      "requirement": "No keyboard trap",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO",
+      "note": "trap null on all 55 traversals."
+    },
+    {
+      "id": "A3",
+      "area": "A11y",
+      "requirement": "U1 import → overview → search → relation → snapshot source operable keyboard-only",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO, ux-Ii3eNI pilot.U1",
+      "note": "OS folder picker result supplied by a controlled single-use stub of dialog.showOpenDialog; picker UI itself not driven."
+    },
+    {
+      "id": "A4",
+      "area": "A11y",
+      "requirement": "Graph navigation: nodes/edges named and focus visible",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO focusableWithoutRole/noVisibleIndicator",
+      "note": "React Flow nodes are focusable unnamed 'group's; edges are named 'Edge from 79 to 22' (database ids) and have no visible focus indicator (overview-neighborhood, neighborhood-*, architecture, ai-panel). Medium: a keyboard table alternative exists (A5)."
+    },
+    {
+      "id": "A5",
+      "area": "A11y",
+      "requirement": "Table/list alternative to the relation graph",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO overview-neighborhood; falseCertainty.test.tsx",
+      "note": "'선택 주변 관계 표' reachable and operable by keyboard."
+    },
+    {
+      "id": "A6",
+      "area": "A11y",
+      "requirement": "Visible focus indicator with ≥3:1 ring contrast on all other controls",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO lowContrastRing 0",
+      "note": "Only React Flow edges lack an indicator (counted in A4)."
+    },
+    {
+      "id": "A7",
+      "area": "A11y",
+      "requirement": "Dialog focus trap and focus return",
+      "status": "NOT RUN",
+      "evidence": "source review",
+      "note": "The renderer has no modal dialogs (confirmations are inline); native macOS dialogs (recovery prompt, folder picker) are outside Chromium measurement. VoiceOver sheet V15."
+    },
+    {
+      "id": "A8",
+      "area": "A11y",
+      "requirement": "Accessible names/roles/states of interactive controls (AX tree)",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO ax.unnamedInteractive",
+      "note": "0 unnamed interactive controls; graph-node groups counted in A4."
+    },
+    {
+      "id": "A9",
+      "area": "A11y",
+      "requirement": "Landmarks and headings",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO ax",
+      "note": "Exactly one main everywhere (PASS); no h1 on 'projects'; skipped heading levels on analysis, analysis-impact-cancel, import-connect, import-preview. Low."
+    },
+    {
+      "id": "A10",
+      "area": "A11y",
+      "requirement": "Text contrast WCAG 2.1 AA from computed colours",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO dom.contrast",
+      "note": "2,400 failing text elements across 190/190 states. Main pair --color-ink-faint #64646e on surfaces 2.40–3.09:1; also #6a7282 (3.73), #4a5565 (2.39), #e06c75 on #2b2b33 (4.39), Monaco #cc6666 (4.49). Medium, open."
+    },
+    {
+      "id": "A11",
+      "area": "A11y",
+      "requirement": "Long-running analysis progress perceivable via live region",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO pilot.U1 progress-announcements=[]; progressAnnouncements.test.tsx",
+      "note": "Candidate exposes no progress announcement. Fixed in source a41b4be (unit-tested red/green); not in any packaged candidate yet."
+    },
+    {
+      "id": "A12",
+      "area": "A11y",
+      "requirement": "Focus placement after folder pick, preview and analysis completion",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO pilot.U1 focusAfter",
+      "note": "Focus falls to <body> after folder selection, after the preview renders (no announcement) and on the overview after completion. Medium, open."
+    },
+    {
+      "id": "A13",
+      "area": "A11y",
+      "requirement": "Cancellation announced as status",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO pilot.U5 cases[0].cancelAnnouncedAsStatus",
+      "note": "Packaged."
+    },
+    {
+      "id": "A14",
+      "area": "A11y",
+      "requirement": "Errors announced as alerts",
+      "status": "NOT RUN",
+      "evidence": "existing unit tests syntaxFailure/progressResponses (role=alert)",
+      "note": "No failing analysis was provoked on the packaged app in this unit."
+    },
+    {
+      "id": "A15",
+      "area": "A11y",
+      "requirement": "Step and file states carried by text, not colour alone",
+      "status": "PASS",
+      "evidence": "progressAnnouncements.test.tsx; falseCertainty.test.tsx; ux-X7CBXO import-progress text",
+      "note": "Pipeline states '완료/진행 중/대기/실패' and file outcomes in text."
+    },
+    {
+      "id": "A16",
+      "area": "A11y",
+      "requirement": "200% zoom without horizontal page scroll / clipping",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO 640×400@2",
+      "note": "No horizontal page scroll on 44 zoomed states (PASS part); clipped h2 'Impact' (analysis) and 'Files' (playground), clipped graph labels. Low."
+    },
+    {
+      "id": "A17",
+      "area": "A11y",
+      "requirement": "prefers-reduced-motion respected",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO pilot.motion",
+      "note": "0 moving elements under reduce on 4 screens."
+    },
+    {
+      "id": "A18",
+      "area": "A11y",
+      "requirement": "Document language matches UI language",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO dom.lang",
+      "note": "<html lang> stays 'ko' on 91/91 English states; English mode still contains Hangul text on 91/91 states (hard-coded Korean). Medium for English screen-reader users, open."
+    },
+    {
+      "id": "A19",
+      "area": "A11y",
+      "requirement": "Light and dark themes",
+      "status": "NOT RUN",
+      "evidence": "ux-X7CBXO pilot.motion.lightSchemeRequest",
+      "note": "Not applicable: one dark palette only; a light-scheme request keeps the dark palette."
+    },
+    {
+      "id": "A20",
+      "area": "A11y",
+      "requirement": "Real VoiceOver speech",
+      "status": "BLOCKED",
+      "evidence": "usability-test-kit/04-voiceover-manual-check.md",
+      "note": "Needs a human listener (30-minute sheet)."
+    },
+    {
+      "id": "A21",
+      "area": "A11y",
+      "requirement": "No pointer-only controls",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO dom.pointerOnly",
+      "note": "0."
+    },
+    {
+      "id": "F1",
+      "area": "False certainty",
+      "requirement": "Selected-code neighbourhood must not call inferred relations confirmed",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO pilot.U3/U4 neighborhood text; falseCertainty.test.tsx",
+      "note": "Candidate says '확인된 정적 관계에 따른 검토 후보' while all FE hops are LIKELY and verdicts show raw enums. High. Fixed in source 38290e3 (text verdicts, wording); needs a new candidate."
+    },
+    {
+      "id": "F2",
+      "area": "False certainty",
+      "requirement": "Code explorer callers/callees label inferred relations",
+      "status": "FAIL",
+      "evidence": "falseCertainty.test.tsx (red on HEAD)",
+      "note": "HEAD labels only POSSIBLE ('· possible'); LIKELY looked confirmed. High. Fixed in source 38290e3."
+    },
+    {
+      "id": "F3",
+      "area": "False certainty",
+      "requirement": "Empty relation/impact results never read as absence",
+      "status": "FAIL",
+      "evidence": "falseCertainty.test.tsx (red on HEAD)",
+      "note": "'No reverse dependencies.' / '역방향 의존이 없습니다.' / 'No {title}'. High. Fixed in source 38290e3."
+    },
+    {
+      "id": "F4",
+      "area": "False certainty",
+      "requirement": "Overview link does not call static flows confirmed",
+      "status": "FAIL",
+      "evidence": "falseCertainty.test.tsx (red on HEAD)",
+      "note": "'확인된 흐름 따라가기 →' → '기록된 정적 흐름 따라가기 →'. Fixed in source 38290e3."
+    },
+    {
+      "id": "F5",
+      "area": "False certainty",
+      "requirement": "Flow path shows per-step verdict and an 'inferred included' badge",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO pilot.U3.ui.flow",
+      "note": "Flow steps carry no confidence in the API; candidate shows none (showsInferredBadge false) although FE→API hops are LIKELY. Source 38290e3 adds a visible note only; per-step verdict needs a backend+UI change. High, open."
+    },
+    {
+      "id": "F6",
+      "area": "False certainty",
+      "requirement": "Impact separates confirmed reverse dependency / candidate impact / outside analysis; no duplicates; no cumulative score",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO pilot.U4",
+      "note": "OrderService.cancel: 36 rows for 12 unique nodes (24 duplicate rows), riskScore 41 'HIGH' accumulated over duplicate paths, dependents carry no confidence, no out-of-analysis area. High, open (backend ImpactService + AnalysisPage)."
+    },
+    {
+      "id": "F7",
+      "area": "False certainty",
+      "requirement": "Truncated neighbourhood visibly incomplete",
+      "status": "PASS",
+      "evidence": "falseCertainty.test.tsx",
+      "note": "Status '관계 조회 한도에 도달했습니다'."
+    },
+    {
+      "id": "F8",
+      "area": "False certainty",
+      "requirement": "Legacy/unmeasured coverage never shown as a completeness percentage",
+      "status": "PASS",
+      "evidence": "falseCertainty.test.tsx; coverageHonesty.test.tsx",
+      "note": ""
+    },
+    {
+      "id": "F9",
+      "area": "False certainty",
+      "requirement": "File outcomes (success/partial/unsupported/legacy unmeasured) in text",
+      "status": "PASS",
+      "evidence": "falseCertainty.test.tsx",
+      "note": ""
+    },
+    {
+      "id": "F10",
+      "area": "False certainty",
+      "requirement": "README/run commands presented as documentary claims",
+      "status": "PASS",
+      "evidence": "falseCertainty.test.tsx",
+      "note": ""
+    },
+    {
+      "id": "F11",
+      "area": "False certainty",
+      "requirement": "Import preview does not read as analysis success",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO pilot.U2 previewTextSample",
+      "note": "'가져오기 선택 결과이며 분석 성공·완료를 뜻하지 않습니다'."
+    },
+    {
+      "id": "F12",
+      "area": "False certainty",
+      "requirement": "Snapshot status 'Completed/분석 완료' on partial results",
+      "status": "FAIL",
+      "evidence": "translations projects.statusReady, analysis.status.DONE",
+      "note": "Shown for a snapshot with PARTIAL/UNSUPPORTED files. Medium, open; proposed '분석 종료 · 범위 확인 필요' / 'Analysis finished · check coverage'."
+    },
+    {
+      "id": "F13",
+      "area": "False certainty",
+      "requirement": "Area detection confidence not shown as a probability",
+      "status": "FAIL",
+      "evidence": "AreasStep.tsx progressbar aria-valuenow pct",
+      "note": "Area confidence rendered as a 0–100% progressbar ('… confidence'). Medium, open (GitHub import path)."
+    },
+    {
+      "id": "F14",
+      "area": "False certainty",
+      "requirement": "AI claim confidence not colour-coded as confirmed",
+      "status": "FAIL",
+      "evidence": "PlaygroundPage.tsx text-ok for every claim",
+      "note": "Every claim confidence in green regardless of value; text enum present. Low, open (AI off by default)."
+    },
+    {
+      "id": "F15",
+      "area": "False certainty",
+      "requirement": "Empty feature/flow link lists worded as not found",
+      "status": "FAIL",
+      "evidence": "translations features.noLinks/features.empty/flows.empty",
+      "note": "'연결된 노드가 없습니다' etc. Low, open."
+    },
+    {
+      "id": "P1",
+      "area": "Pilot",
+      "requirement": "U1 local import and exploration without network or login",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO pilot.U1",
+      "note": "Keyboard-only; first analysis DONE."
+    },
+    {
+      "id": "P2",
+      "area": "Pilot",
+      "requirement": "U1 egress: no outbound request during local import/explore",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO egress",
+      "note": "Renderer and Electron-session requests only to the app origin (451/452 in U1). Sockets of the owned tree: loopback only; 48+2 java TCP samples to '::127.0.0.1' (loopback in IPv4-compatible form, conservatively classified external by the runner, state CLOSED). Observed java UDP and one TCP listening on all interfaces (hand to G-SEC). Not observed: DNS, processes outside the owned tree, kernel-level egress."
+    },
+    {
+      "id": "P3",
+      "area": "Pilot",
+      "requirement": "U2 preview shows included/excluded with reasons and bytes",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO pilot.U2",
+      "note": "19 files, 7,330 bytes, SECRET_PATH 1, GENERATED_DIRECTORY 1 shown in text."
+    },
+    {
+      "id": "P4",
+      "area": "Pilot",
+      "requirement": "U2 per-language expected depth and scope reduction from the preview",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO pilot.U2",
+      "note": "Neither shown nor offered in the preview. Medium product gap, open."
+    },
+    {
+      "id": "P5",
+      "area": "Pilot",
+      "requirement": "U3 screen → HTTP call → handler → service → entity/table with evidence",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO pilot.U3",
+      "note": "Endpoint, handler, service and repository reached in the flow with keyboard-openable sources; entity/table not reached by the relation walk; verdicts per step missing (F5)."
+    },
+    {
+      "id": "P6",
+      "area": "Pilot",
+      "requirement": "U4 confirmed vs candidate vs outside-analysis impact",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO pilot.U4",
+      "note": "See F6."
+    },
+    {
+      "id": "P7",
+      "area": "Pilot",
+      "requirement": "U5 cancel during initial import (wizard, keyboard)",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO pilot.U5 cases[0]",
+      "note": "Job CANCELLED; announced as status."
+    },
+    {
+      "id": "P8",
+      "area": "Pilot",
+      "requirement": "U5 cancel during re-analysis from the workspace",
+      "status": "FAIL",
+      "evidence": "ux-X7CBXO pilot.U5 cases[1]",
+      "note": "Workspace offers no cancel control (cancelled via the job API instead); last snapshot, note and task retained. Medium, open."
+    },
+    {
+      "id": "P9",
+      "area": "Pilot",
+      "requirement": "U5 graceful quit and Electron-owner SIGKILL during re-analysis keep last snapshot, notes, tasks",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO pilot.U5 cases[2,3]",
+      "note": "Job FAILED after relaunch, snapshot #1 current, note/task visible; 0 owned processes left after SIGKILL."
+    },
+    {
+      "id": "P10",
+      "area": "Pilot",
+      "requirement": "U5 update failure recovery",
+      "status": "NOT RUN",
+      "evidence": "—",
+      "note": "No update package/feed in this environment; out of this unit's reach."
+    },
+    {
+      "id": "P11",
+      "area": "Pilot",
+      "requirement": "U6 without GitHub and without an AI key",
+      "status": "PASS",
+      "evidence": "ux-X7CBXO pilot.U6",
+      "note": "Settings show not connected and AI off; AI submit sent 0 app requests; U1 completed, U3/U4 recorded."
+    },
+    {
+      "id": "K1",
+      "area": "Kit",
+      "requirement": "Usability test kit (Korean) with English summary and VoiceOver sheet",
+      "status": "PASS",
+      "evidence": "docs/release/usability-test-kit/",
+      "note": "Recruitment, screener, consent/data handling, fixtures, script, probes, observation sheet, severity, workbook, retest rule, VoiceOver sheet."
+    }
+  ],
+  "evidence": {
+    "root": "validation/local/pre-release-ux/",
+    "directories": [
+      "ux-X7CBXO",
+      "ux-Ii3eNI",
+      "ux-JpYJjy",
+      "ux-rKSIO6",
+      "ux-22Thfl",
+      "frontend-ux-20261007"
+    ],
+    "sha256": {
+      "validation/local/pre-release-ux/ux-X7CBXO/result.json": "7361190a54cf8c59160c08ce99a4b84f95d48ff9dbc9ac8e32b18b82a64994c5",
+      "validation/local/pre-release-ux/ux-Ii3eNI/result.json": "82ad6cc915f82e7b177c391d0cb5ce7e6ac3e487ac20085d5edb25845b574d2a",
+      "validation/local/pre-release-ux/ux-JpYJjy/result.json": "afa7a98d5a1fb91be2bc22b41cc5d9902e1df0eff0da4c08532c620875e6e2b3",
+      "validation/local/pre-release-ux/ux-rKSIO6/result.json": "da19360a534660a7b3a2307173a6729440e2ef810e35b6a12c8c33cd33d67fcb",
+      "validation/local/pre-release-ux/ux-22Thfl/result.json": "048d7cdf0c894eafe77b2a2703561fe97f595306eee2ecbb825ed8c8564f4000",
+      "validation/local/pre-release-ux/frontend-ux-20261007/node-test-ux-accessibility.log": "ae4ff8c53968df4a20f6e4ede59d765745d9ce6a927930a464fc10c15a2edec4",
+      "validation/local/pre-release-ux/frontend-ux-20261007/red-FlowsPage.tsx.log": "48d4c2f9bdec7528db65e70d63393bb573872c96bf39735dc39d0c2c8686962e",
+      "validation/local/pre-release-ux/frontend-ux-20261007/red-ProgressStep-2.log": "ddc9079bb6e014e30d7d1cda981a9dcc542820d9d17c4e71226417ab34449b80",
+      "validation/local/pre-release-ux/frontend-ux-20261007/red-ProgressStep.tsx.log": "d89189412041f793b3c3e21ef2dfd794be12e5eb0cbf271ec714892e5bb796e7",
+      "validation/local/pre-release-ux/frontend-ux-20261007/red-RepositoryNeighborhood.tsx.log": "425f2507f454c5bb1fff26ad4fe3fdb5446d64d00a61f3079422c5f541aaa1c6",
+      "validation/local/pre-release-ux/frontend-ux-20261007/red-RepositoryOverviewPage.tsx.log": "eabcb5bdd09464320f5806c9649e7f5803f74d81268da4b032f686f769134f58",
+      "validation/local/pre-release-ux/frontend-ux-20261007/red-SymbolPanel.tsx.log": "586749768e499e105fc29d062b87854c19492fe041af957cf6a34e2376e7f279",
+      "validation/local/pre-release-ux/frontend-ux-20261007/red-translations.ts.log": "86a4d72e0ef3394ed74d50d7542c581117c9b9cce9c0a8df9fd262c95090e72d",
+      "validation/local/pre-release-ux/frontend-ux-20261007/targeted-vitest-2.log": "239560e831384ffc5e414e625a1725c21b3179881e1a19bd798d12ab90ee2dd1",
+      "validation/local/pre-release-ux/frontend-ux-20261007/targeted-vitest-final.log": "c1c0903dae07f5b16b1dfcfd3b12b3b896a42bc722d0672ce48e0e60fb6761ec",
+      "validation/local/pre-release-ux/frontend-ux-20261007/targeted-vitest.log": "4d04bd4f289e04d712fb9df63f91cbdf73fac698633f208144d26b8767e7d484",
+      "validation/local/pre-release-ux/frontend-ux-20261007/tsc-app-noemit.log": "a6ce7f41eaf235b981cdbfe9a3d6a5d9a3502b6bd605ffc2acf78679a4ee9a2f",
+      "validation/local/pre-release-ux/frontend-ux-20261007/ux-frontend-baseline.log": "728bc3e60d3abec2781e1732d54ff1168a3ad60e69593a03dde0bab7a4d1fc00",
+      "validation/local/pre-release-ux/frontend-ux-20261007/ux-run-1.log": "bf79774603d93c4e20b8f530a4bd612991b5346efd78beda475b687a4c9e716d",
+      "validation/local/pre-release-ux/frontend-ux-20261007/ux-run-2.log": "8d00d25944d41255ef5d964e95c177f5e5d00ac6218f5f9a27b75ddf9dc4781f",
+      "validation/local/pre-release-ux/frontend-ux-20261007/ux-run-3.log": "7248f098bd2addda97592e724dce7eb5dfcfad889ffb5d269d0db55bcb53d4d7",
+      "validation/local/pre-release-ux/frontend-ux-20261007/ux-run-4.log": "2a6a6b8146eacd106832f83eeeea918ee71a377bfdf2db89e7277562284d5e55",
+      "validation/local/pre-release-ux/frontend-ux-20261007/ux-run-5.log": "d4ae79cf4955d573728f98d28a336d008a92bac163dd20d1e011d24e97e3aa48",
+      "validation/local/pre-release-ux/frontend-ux-20261007/ux-run-6.log": "1b5931dbba5aaf4d71158ed149a9b8852f3a27781beec7ccf5658a37d1e41fa4"
+    }
+  },
+  "humanInputsNeeded": [
+    "8 recruited participants per docs/release/usability-test-kit/01 and a moderator",
+    "a VoiceOver tester for 04-voiceover-manual-check.md",
+    "a new packaged candidate containing 38290e3 and a41b4be"
+  ],
+  "fixtures": {
+    "order-desk": "8a11841371cc3642dd8089b8bb7d7dfbc1d35bc8d5c81b9e31cf256ddd6f9044",
+    "library-loans": "047f6ba3c5bd2d3fb55c9c4429e908796aaed02698f18785643e257a55d47b96",
+    "version": 1
+  }
+}

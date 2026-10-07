@@ -1,0 +1,370 @@
+{
+  "format": 1,
+  "observedAt": "2026-10-07T05:04:18.281Z",
+  "releaseVerdict": "NO_GO",
+  "gate": "G-PERF",
+  "scope": "synthetic-workload-import-through-packaged-ui; smoke observations only, not acceptance",
+  "branch": "worktree-agent-acf685d9a67d5f214",
+  "commits": {
+    "5e88565": "Add synthetic workload fixtures and the G-PERF workload runner",
+    "635b48b": "Keep retained-source writes out of the local inspection time limit",
+    "9dceedd": "Measure preview-only, cancel-during-import and lock release in the workload runner"
+  },
+  "candidate": {
+    "path": ".native-product-1lvULq/Code Intelligence Validation.app",
+    "buildSequence": "1791292686000",
+    "appAsarSha256": "fe08c45710ad60801227df80a7d3f8dd351d83e8d2ba8fe9884739b7ef380acc",
+    "manifestSha256": "023a8c659678b3532767a5a5441cadaaa46740061ae515262bec3eb44d89c85d",
+    "contains635b48b": false
+  },
+  "changedProductSourceFiles": {
+    "backend/src/main/java/dev/codeintelligence/project/LocalStagingVerifier.java": "dcd0dcbd045d14c7e9796ccb87a0f6e6a0a1183053634131b04c9bd541209eec"
+  },
+  "sources": {
+    "validation/pre-release/run-workload-benchmark.cjs": "7d0d31db5d550bfda85fe5564a0d482bd70f1ea242a57f3a11a829198aaa8903",
+    "validation/pre-release/workload-metrics.cjs": "836825f4b5734de0e9b53c0f66d48f3087562e6685d5c749ca37bb63a3944788",
+    "validation/pre-release/workload-fixture.cjs": "f604121c8d78b035b8a4809b3c3e388ae25cb37660579c0993a9c2eb48bfbba9",
+    "validation/pre-release/test/workload-fixture.test.cjs": "58113fdb8c6fd06ccec106dd2f326e9923a5754bb8db92e3ae15315682aeb39a",
+    "validation/pre-release/test/workload-metrics.test.cjs": "4d4c7762029aa4092490fef14c98b7a0ce07c7a2b91ed29511c396bc3a054b71"
+  },
+  "validation": [
+    {
+      "name": "runner unit tests",
+      "cwd": ".",
+      "command": "node --test validation/pre-release/test/workload-fixture.test.cjs validation/pre-release/test/workload-metrics.test.cjs",
+      "tests": 24,
+      "pass": 24,
+      "fail": 0
+    },
+    {
+      "name": "D1 regression",
+      "cwd": "backend",
+      "command": "./gradlew --offline test --tests 'dev.codeintelligence.project.LocalSourceBindingTest'",
+      "tests": 39,
+      "failures": 0,
+      "errors": 0,
+      "result": "BUILD SUCCESSFUL"
+    },
+    {
+      "name": "small smoke-2 (this session)",
+      "cwd": ".",
+      "command": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-perf env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-1lvULq/Code Intelligence Validation.app\" --class small --smoke-2",
+      "evidence": "validation/local/workload-performance/run-IdkmiX",
+      "status": "SMOKE_ONLY",
+      "measurementStatus": "INCOMPLETE",
+      "runs": [
+        {
+          "sequence": 1,
+          "status": "FAIL",
+          "failure": "OVERVIEW_NOT_SHOWN"
+        },
+        {
+          "sequence": 2,
+          "status": "PASS"
+        }
+      ],
+      "log": "validation/local/workload-performance/smoke-small-e.log"
+    }
+  ],
+  "smokeRuns": {
+    "run-AxkHyG": {
+      "resultSha256": "b1f7630173fae222841bb43498a71c71fc5a4efc0b984684afa05cdee8cfc339",
+      "resourceSamplesSha256": "dc04154e1dc1a187d8f8e405c8a9e6e4cdef3fe2d4ff8863ec97f0d2e37bdc40",
+      "runnerSourceCommit": "bcd8081abe786b8559ea93a2797b94c4731cd218",
+      "fixtureTreeSha256": "0e10ea02c19522d5adcbd7b9afa9ce668ad36bb637c3a1f5bbf62c96024d7796",
+      "fixtureCalibrated": false,
+      "loadAverageAtStart": 5.05,
+      "analysisMs": 100794,
+      "analysisPeakRssKiB": 2992784,
+      "runPeakRssKiB": 4003872,
+      "refreshMs": 64046,
+      "resultEqualsFull": true,
+      "failure": "PROJECT_DELETE_FAILED"
+    },
+    "run-fkMoaB": {
+      "resultSha256": "72da2b3bab73c5916e6d5078df0aa3563421e479c3c6f9495cfa6bf5a5685de2",
+      "resourceSamplesSha256": "87fb7051b7af8a320db04c67c06f6478db0ea47668243b538fb1f5437ae95053",
+      "runnerSourceCommit": "5e8856544d29944cb0d8af314e13f6b9e2312af1",
+      "fixtureTreeSha256": "88140e38aad65eb0c15290a41a17fa68bb7c664193d84587b03023dff6fb254e",
+      "loadAverageAtStart": [
+        34.01,
+        34.75
+      ],
+      "runs": [
+        {
+          "failure": "ANALYSIS_FAILED",
+          "jobFailureCode": "LOCAL_PREVIEW_REQUIRED",
+          "importMs": 31759
+        },
+        {
+          "failure": "ANALYSIS_FAILED",
+          "jobFailureCode": "LOCAL_PREVIEW_REQUIRED",
+          "importMs": 31501
+        }
+      ]
+    },
+    "run-IdkmiX": {
+      "resultSha256": "26e92c746d2f1c33d417684633a7a148ecc093ec05ecefdd851eaedbef5dc3c6",
+      "resourceSamplesSha256": "c7978b62ef204c107c8fd47b12b8970caf7799b993253f44e31f016692019dc3",
+      "runnerSourceCommit": "9dceedd4a7da28d6f121e615689ffc800b979421",
+      "fixtureTreeSha256": "88140e38aad65eb0c15290a41a17fa68bb7c664193d84587b03023dff6fb254e",
+      "runs": [
+        {
+          "sequence": 1,
+          "loadAverageAtStart": 6.36,
+          "failure": "OVERVIEW_NOT_SHOWN",
+          "jobStatus": "DONE",
+          "jobRunMs": 57663,
+          "importMs": 26823,
+          "analysisPeakRssKiB": 3357344,
+          "cancelUiAckMs": 1,
+          "cancelReleaseMs": 25904,
+          "lockReleaseProof": "REFRESH_PREVIEW_ACCEPTED"
+        },
+        {
+          "sequence": 2,
+          "loadAverageAtStart": 6.71,
+          "status": "PASS",
+          "analysisMs": 61881,
+          "importMs": 29278,
+          "analysisPeakRssKiB": 3435440,
+          "runPeakRssKiB": 4015024,
+          "searchApiMs": [
+            42,
+            31,
+            32,
+            32,
+            35
+          ],
+          "nodePageApiMs": [
+            213,
+            216,
+            231,
+            217,
+            216
+          ],
+          "relationsApiMs": [
+            16,
+            12,
+            9,
+            10,
+            13
+          ],
+          "firstPageRenderMs": 8,
+          "refreshMs": 698199,
+          "refreshCrossDomainMs": 660504,
+          "resultEqualsFull": true,
+          "cancelUiAckMs": 1,
+          "cancelReleaseMs": 24788,
+          "lockReleaseProof": "REFRESH_PREVIEW_ACCEPTED"
+        }
+      ]
+    },
+    "logs": {
+      "smoke-small-a.log": "8f3d21363e2eae37d16c7bcb56cac3a61c12e893b4ded2547d30ff17894290c9",
+      "smoke-small-b.log": "9535c95042d26c4e6ddcb1352131db187c4ab0fe891f17d30c633548d2abffc0",
+      "smoke-small-c.log": "031b3d7d2b70f1cb1d83b7982541089f9371076fd797ac3bd3bda483d015414b",
+      "smoke-small-d-cancelled-before-lock.log": "e786aa18f2b9618e4b7fbececa8901b43bc01005fb59ab41673995039726bb89",
+      "smoke-small-e.log": "3bb0a2c836e9bf4cdf892a4180ebfbda4a0a424c1146db69cb054f99e801f806"
+    }
+  },
+  "fixturePlan": {
+    "method": "planWorkload in memory, seed g-perf-1",
+    "medium": {
+      "files": 10000,
+      "tsJsFiles": 5499,
+      "tsJsContentBytes": 26271054
+    },
+    "large": {
+      "files": 50000,
+      "tsJsFiles": 27499,
+      "tsJsContentBytes": 105158175
+    },
+    "tsRequestBudget": {
+      "files": 20000,
+      "jsonBytes": 10485760
+    },
+    "backendMaxFiles": 20000
+  },
+  "defects": [
+    {
+      "id": "D1",
+      "severity": "High",
+      "status": "fixed in source (635b48b), not in candidate",
+      "summary": "local import inspection time limit includes retained-source writes; small import fails at 31.5-31.8 s under load"
+    },
+    {
+      "id": "D2",
+      "severity": "High (gate)",
+      "status": "open, product decision",
+      "summary": "medium/large fixtures exceed TS request budget and backend max-files"
+    },
+    {
+      "id": "D3",
+      "severity": "provisional",
+      "status": "open, needs quiet series",
+      "summary": "small analysis time 61.9-100.8 s vs 30 s; RSS 3.20/3.28 GiB vs 3 GiB in 2 of 3"
+    },
+    {
+      "id": "D4",
+      "severity": "Medium",
+      "status": "open",
+      "summary": "cancel during IMPORT observed only after the step: release 24.8-25.9 s vs max 10 s"
+    },
+    {
+      "id": "D5",
+      "severity": "provisional High",
+      "status": "open, unreproduced",
+      "summary": "refresh CROSS_DOMAIN 660.5 s (35-42 ms elsewhere)"
+    },
+    {
+      "id": "D6",
+      "severity": "unclassified",
+      "status": "open",
+      "summary": "OVERVIEW_NOT_SHOWN within 60 s after job DONE in run-IdkmiX run 1"
+    },
+    {
+      "id": "D7",
+      "severity": "Medium",
+      "status": "open",
+      "summary": "project delete > 60 s; graph FKs lack leading-column indexes"
+    }
+  ],
+  "requirementMatrix": [
+    {
+      "id": "R1",
+      "requirement": "preview 10k/50 MiB p95<=10 s, first response<=500 ms (20 runs)",
+      "status": "NOT RUN",
+      "reason": "medium series not run; preview row alone can run with --class medium --rows preview"
+    },
+    {
+      "id": "R2",
+      "requirement": "preview hard limit 50k files / 512 MiB",
+      "status": "NOT RUN",
+      "reason": "no over-limit case; backend admits 20,000 files"
+    },
+    {
+      "id": "R3",
+      "requirement": "small analysis p95<=30 s (20 runs)",
+      "status": "NOT RUN",
+      "reason": "series reserved for coordinator; smoke 100.8 s and 61.9 s exceed"
+    },
+    {
+      "id": "R4",
+      "requirement": "small analysis full process-tree RSS<=3 GiB every run",
+      "status": "NOT RUN",
+      "reason": "series not run; smoke 2.85, 3.20, 3.28 GiB"
+    },
+    {
+      "id": "R5",
+      "requirement": "medium analysis p95<=180 s, RSS<=4 GiB",
+      "status": "BLOCKED",
+      "reason": "TS request budget 20,000 files/10 MiB vs 26,271,054 TS/JS bytes; product decision required"
+    },
+    {
+      "id": "R6",
+      "requirement": "large p95<=600 s, RSS<=6 GiB, 15 min hard timeout",
+      "status": "BLOCKED",
+      "reason": "app.analysis.max-files 20000 and TS budget"
+    },
+    {
+      "id": "R7",
+      "requirement": "1% change on medium p95<=30 s, result equal to full",
+      "status": "BLOCKED",
+      "reason": "depends on R5"
+    },
+    {
+      "id": "R8",
+      "requirement": "cancel UI ack<=500 ms; release p95<=5 s / max 10 s (20 runs)",
+      "status": "NOT RUN",
+      "reason": "series not run; small smoke release 25.9 s and 24.8 s exceed max"
+    },
+    {
+      "id": "R9",
+      "requirement": "graph API p95<=500 ms, first 100 nodes<=2 s (medium)",
+      "status": "BLOCKED",
+      "reason": "depends on R5; small smoke within limits"
+    },
+    {
+      "id": "R10",
+      "requirement": "6 GiB memory watchdog",
+      "status": "NOT RUN",
+      "reason": "no case in this unit"
+    },
+    {
+      "id": "R11",
+      "requirement": "quota: workspace 10 GiB, parser temp 2 GiB, cache 2 GiB, import free-space pre-check",
+      "status": "NOT RUN",
+      "reason": "no quota-enforcement case"
+    },
+    {
+      "id": "R12",
+      "requirement": "20-run series per supported size class, quiet machine, new candidate",
+      "status": "NOT RUN",
+      "reason": "reserved for coordinator; see series20"
+    },
+    {
+      "id": "R13",
+      "requirement": "full owner process-tree RSS, not backend single process",
+      "status": "PASS",
+      "reason": "sampler + unit tests; run-IdkmiX run 2 samplingComplete true, max gap 170 ms"
+    },
+    {
+      "id": "R14",
+      "requirement": "runner and fixture correctness",
+      "status": "PASS",
+      "reason": "node tests 24/24"
+    },
+    {
+      "id": "R15",
+      "requirement": "regression test for D1",
+      "status": "PASS",
+      "reason": "LocalSourceBindingTest 39 tests, 0 failures"
+    },
+    {
+      "id": "R16",
+      "requirement": "refresh result equals full analysis (small, functional)",
+      "status": "PASS",
+      "reason": "resultEqualsFull true in run-AxkHyG and run-IdkmiX run 2"
+    },
+    {
+      "id": "R17",
+      "requirement": "execution environment and evidence disclosed",
+      "status": "PASS",
+      "reason": "environment/identities in each result.json; this ledger"
+    },
+    {
+      "id": "R18",
+      "requirement": "project deletion completes (diagnostic, no SLO)",
+      "status": "FAIL",
+      "reason": "run-AxkHyG > 60 s"
+    }
+  ],
+  "counts": {
+    "NOT RUN": 8,
+    "BLOCKED": 4,
+    "PASS": 5,
+    "FAIL": 1
+  },
+  "series20": {
+    "note": "NOT RUN. Coordinator runs on a quiet machine (AC, no concurrent agents) with a new candidate that includes 635b48b; cwd = worktree root; replace the candidate directory name.",
+    "small": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-perf env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-<NEW_CANDIDATE_WITH_635b48b>/Code Intelligence Validation.app\" --class small --series-20",
+    "medium": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-perf env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-<NEW_CANDIDATE_WITH_635b48b>/Code Intelligence Validation.app\" --class medium --series-20  # expected to fail at TS_PARSING until D2 is decided",
+    "largePreviewOnly": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/coordination/with-native-lock.sh gate-perf env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-<NEW_CANDIDATE_WITH_635b48b>/Code Intelligence Validation.app\" --class large --series-20 --rows preview  # analysis blocked by D2"
+  },
+  "evidenceHandOff": {
+    "target": "/Users/minseokchae/.herdr/worktrees/code-intelligence/worktree-calm-meadow-7229/validation/local/workload-performance",
+    "directories": [
+      "run-AxkHyG",
+      "run-fkMoaB",
+      "run-IdkmiX"
+    ],
+    "method": "/bin/cp -cRp, no overwrite"
+  },
+  "limitations": [
+    "shared non-quiet machine; no timing or memory number is an acceptance result",
+    "cold OS cache not measured",
+    "candidate predates 635b48b",
+    "D2, D4 cause and D7 cause from source inspection; D5 and D6 single observations"
+  ]
+}

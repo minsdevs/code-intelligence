@@ -1,0 +1,86 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureId": "dev-t00-java-calls",
+  "cases": [
+    {
+      "caseId": "dev-java-calls.valid",
+      "cellId": "J-P",
+      "patternId": "valid-syntax",
+      "stratum": null,
+      "kind": "PARSER",
+      "relationKind": "PARSE",
+      "polarity": "POSITIVE",
+      "source": {
+        "path": "source/Calls.java",
+        "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+        "namespace": "synthetic-java-calls",
+        "start": 0,
+        "end": 414
+      },
+      "expected": {
+        "resolution": "NOT_APPLICABLE",
+        "targets": [],
+        "valid": true,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed java-calls.valid: hand-authored valid Java 21 syntax."
+    },
+    {
+      "caseId": "dev-java-calls.direct",
+      "cellId": "J-C",
+      "patternId": "direct-source-call",
+      "stratum": null,
+      "kind": "FACT",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "source": {
+        "path": "source/Calls.java",
+        "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+        "namespace": "synthetic-java-calls",
+        "start": 267,
+        "end": 275
+      },
+      "expected": {
+        "resolution": "STATIC_RESOLVED",
+        "targets": [
+          "java:demo.Calls#twice(int)"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": false,
+      "rationale": "Transcribed java-calls.direct: unqualified call to the only static twice(int) in the enclosing class."
+    },
+    {
+      "caseId": "dev-java-calls.candidates",
+      "cellId": "J-C",
+      "patternId": "dynamic-unresolved",
+      "stratum": null,
+      "kind": "CANDIDATES",
+      "relationKind": "CALLS",
+      "polarity": "POSITIVE",
+      "source": {
+        "path": "source/Calls.java",
+        "sha256": "8b4fb9c8559f94f81139d63d2b9ef2bbb173e9f44eae002892b92aff8e3af9f3",
+        "namespace": "synthetic-java-calls",
+        "start": 319,
+        "end": 331
+      },
+      "expected": {
+        "resolution": "INFERRED",
+        "targets": [
+          "java:demo.FirstAction#run()",
+          "java:demo.SecondAction#run()"
+        ],
+        "valid": null,
+        "diagnostics": [],
+        "reasonCode": null
+      },
+      "mustNotEmitResolved": true,
+      "rationale": "Transcribed java-calls.candidates: the provisional oracle models runtime dispatch over the two implementations. OPEN ADJUDICATION: ANNOTATING.md section 4 defines the C-cell target as the compile-time declaration (demo.Action#run()); this provisional case predates that rule and must be re-annotated by independent annotators."
+    }
+  ]
+}
