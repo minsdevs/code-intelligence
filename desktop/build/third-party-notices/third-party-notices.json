@@ -1,0 +1,4839 @@
+{
+  "format": 1,
+  "generatedFrom": {
+    "candidateBundleDigest": "f00875023a63c5c4e0da4941e5b655078ea70cd3a087200e0e4247b60bd4d7d9"
+  },
+  "policy": "ENGINEERING_REVIEW_NOT_LEGAL_ADVICE",
+  "counts": {
+    "BUNDLED_ELSEWHERE": 13,
+    "TEXT_MISSING": 16,
+    "INCLUDED": 310,
+    "NO_NOTICE_REQUIRED": 5
+  },
+  "texts": 179,
+  "components": [
+    {
+      "name": "chromium",
+      "version": "152.0.7977.130",
+      "kind": "electron-part",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/legal/electron/LICENSES.chromium.html"
+    },
+    {
+      "name": "crashpad",
+      "version": null,
+      "kind": "electron-part",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/legal/electron/LICENSES.chromium.html"
+    },
+    {
+      "name": "ffmpeg (Chromium build)",
+      "version": null,
+      "kind": "electron-part",
+      "expression": "LGPL-2.1-or-later",
+      "elected": [
+        "LGPL-2.1-or-later"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/legal/electron/LICENSES.chromium.html"
+    },
+    {
+      "name": "Mantle",
+      "version": null,
+      "kind": "electron-part",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "node.js (embedded in Electron)",
+      "version": "24.21.0",
+      "kind": "electron-part",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/legal/electron/LICENSES.chromium.html"
+    },
+    {
+      "name": "ReactiveObjC",
+      "version": null,
+      "kind": "electron-part",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "Squirrel.Mac",
+      "version": null,
+      "kind": "electron-part",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/legal/electron/LICENSES.chromium.html"
+    },
+    {
+      "name": "swiftshader",
+      "version": null,
+      "kind": "electron-part",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/legal/electron/LICENSES.chromium.html"
+    },
+    {
+      "name": "v8",
+      "version": "15.2.124.28",
+      "kind": "electron-part",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/legal/electron/LICENSES.chromium.html"
+    },
+    {
+      "name": "electron",
+      "version": "44.4.5",
+      "kind": "electron",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/legal/electron/LICENSE"
+    },
+    {
+      "name": "eclipse-temurin-jre (jlink image)",
+      "version": "21.0.12+8-LTS",
+      "kind": "jre",
+      "expression": "GPL-2.0-only WITH Classpath-exception-2.0",
+      "elected": [
+        "GPL-2.0-only WITH Classpath-exception-2.0"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/runtime/jre/legal/"
+    },
+    {
+      "name": "accessors-smart",
+      "version": "2.6.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "angus-activation",
+      "version": "2.0.3",
+      "kind": "maven",
+      "expression": "EDL-1.0",
+      "elected": [
+        "EDL-1.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "87eba02f8a415f1a25de6ca3ac6b5c77eb33f33f00ae5a5f9d6ee963147f7956",
+        "203414df1bdc467ff3d2c53e44ed7a7b9bcba90067bd2f3442b1d509a308b21e"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "antlr4-runtime",
+      "version": "4.13.2",
+      "kind": "maven",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "asm",
+      "version": "9.7.1",
+      "kind": "maven",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "aspectjweaver",
+      "version": "1.9.25.1",
+      "kind": "maven",
+      "expression": "EPL-2.0",
+      "elected": [
+        "EPL-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "4e2c7d9f5cc62bfe8ca3461be6fd659f744f508af1207bf5d633fd5f4270bb98"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "byte-buddy",
+      "version": "1.18.10",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfb119f8db2decb24e756fddec0e089029eaa73a7be594b2dd9676433d95d6e5",
+        "9e422635aa93a87c67da762099d1978d000e83b6d708c159c7d5d37f31080ea0"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "checker-qual",
+      "version": "3.55.1",
+      "kind": "maven",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e90eaa08dea089df10f2bf7f9dba63a5f6237c01562c4741e2e86773e78582d5"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "classmate",
+      "version": "1.7.3",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7d8d549eb31995fe67822c860acc7ac3dd958a03a5a71aef4069033e7df72d94",
+        "1a8c67aaade274bc7bf06a7044571ab280d59fe3686941b6499b2176a072ea6d"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "commons-codec",
+      "version": "1.21.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "b1d2870f1a00e4d7f56576e5f0870cba109e041f8af66866cf5b499478e654e7",
+        "d82503df1b65173afe535a2f753d27c25377f7f6e9d0b19b4665af617df14750"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "commons-lang3",
+      "version": "3.20.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "b1d2870f1a00e4d7f56576e5f0870cba109e041f8af66866cf5b499478e654e7",
+        "64bc8696af3f6c770521412b85d3a733fa44b2ef5b0f4bd739e0c4d02eca492a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "commons-logging",
+      "version": "1.3.6",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "b1d2870f1a00e4d7f56576e5f0870cba109e041f8af66866cf5b499478e654e7",
+        "d649e220dd0497197a266b7d7304a009d06bcefce3141fa6ff4f2ceddb438237"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "commons-math3",
+      "version": "3.6.1",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "64f23963615950bad9ddd31569a7f09afbbe11b81d94873ffd9b1cac6081a11d",
+        "5495442a32bfc2b93b4a8f2c34c5c218d16cca434aa5684fb953d9419120e3fa"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "content-type",
+      "version": "2.3",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "error_prone_annotations",
+      "version": "2.47.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "failureaccess",
+      "version": "1.0.3",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "flyway-core",
+      "version": "12.4.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "6707b7b3ba3220ab64a81a5ab869ffecc3a6a023e9488ea08b897471b069c078"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "flyway-database-postgresql",
+      "version": "12.4.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "guava",
+      "version": "33.6.0-jre",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "HdrHistogram",
+      "version": "2.2.2",
+      "kind": "maven",
+      "expression": "CC0-1.0 OR BSD-2-Clause",
+      "elected": [
+        "CC0-1.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "ba550515c77c9e6f8b6a400381eacd3c47569297f8f27884801a95dff5309483"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "hibernate-core",
+      "version": "7.4.1.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "hibernate-models",
+      "version": "1.1.1",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "hibernate-validator",
+      "version": "9.1.0.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "HikariCP",
+      "version": "7.0.2",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "istack-commons-runtime",
+      "version": "4.1.2",
+      "kind": "maven",
+      "expression": "EDL-1.0",
+      "elected": [
+        "EDL-1.0"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "j2objc-annotations",
+      "version": "3.1",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "jackson-annotations",
+      "version": "2.21",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "612b14bc77c944ce229cbba0d14919162cfea8ed802cbf06a8e865e032d03201"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jackson-core",
+      "version": "2.21.7",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "e6aef1c0f4cf5b0f802c16b31fce309b3c3737450b93c40d6291bf6540aae3d1"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jackson-core",
+      "version": "3.1.7",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "a8eb9ab6d21e719ba217c6367621a7ab5baa3d38df896ef258a9754a6b97527d"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jackson-databind",
+      "version": "2.21.7",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "612b14bc77c944ce229cbba0d14919162cfea8ed802cbf06a8e865e032d03201"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jackson-databind",
+      "version": "3.1.7",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "d3fa47349b4ba4a3763bf635b930f8877073aa3915a3f3e45fe4b1842fc60302"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jackson-dataformat-yaml",
+      "version": "2.21.7",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "9e255394eb9f8cfdcdf599dd150d9ca3e922ab4d31cb5e83519479a91e1d3072",
+        "5828ffe74ea0ee4bf896654026f05fed1ead1d22acd577cc1eec9be0bc0de1ed"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jackson-datatype-jsr310",
+      "version": "2.21.7",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "66ea9c8987b1674aababbcc24f61c83ab4fb7baf3af1d701caf0a3aaea97fa92",
+        "7347397a0665f6898b32894a1869a514251abef7da7620902b0e57c5026cf1ed"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jakarta.activation-api",
+      "version": "2.1.4",
+      "kind": "maven",
+      "expression": "EDL-1.0",
+      "elected": [
+        "EDL-1.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "87eba02f8a415f1a25de6ca3ac6b5c77eb33f33f00ae5a5f9d6ee963147f7956",
+        "9d80664e28e61982d66ea3f65474597088d71b76b4259f139bb44a7a184c26f2"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jakarta.annotation-api",
+      "version": "3.0.0",
+      "kind": "maven",
+      "expression": "EPL-2.0 OR (GPL-2.0-only WITH Classpath-exception-2.0)",
+      "elected": [
+        "EPL-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "6e1f002892b81cbe0647019b150c8a056efc1add565671a4f8af629b6cd2cc7b",
+        "20bf986a153cc3095639379c99ef0a5a3bf99ac4895429920d380414a3eecf08"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jakarta.inject-api",
+      "version": "2.0.1",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "992ed62dd3ee17d73ce6a4a5e02dd0fed9eb326bf386aa5304e6a512214df540"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jakarta.persistence-api",
+      "version": "3.2.0",
+      "kind": "maven",
+      "expression": "EPL-2.0 OR EDL-1.0",
+      "elected": [
+        "EDL-1.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "d269e92b25f0d30192f5a6937e1c20c0c30bd3130e084143fd5758e591544369",
+        "52234fcd0411fc5a3b0a90d61a203d70715b4f07bc2b76064750b2d4fe843065"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jakarta.transaction-api",
+      "version": "2.0.1",
+      "kind": "maven",
+      "expression": "EPL-2.0 OR (GPL-2.0-only WITH Classpath-exception-2.0)",
+      "elected": [
+        "EPL-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "d2168df0a3797b5eb7bd8975e4568824d67a1e3efcd3054875b4d9d312805396",
+        "4a6e9bab2092f9df1d6fc0eca9b24a74f32b24ef8391da6564c20a3486392e69"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jakarta.validation-api",
+      "version": "3.1.1",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "jakarta.xml.bind-api",
+      "version": "4.0.5",
+      "kind": "maven",
+      "expression": "EDL-1.0",
+      "elected": [
+        "EDL-1.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "dcbbdbb512a272b5f1e01e82225a23eba92406ec28f7b36e490057478d8d1570",
+        "b8dab89e51c7aa1d7f355c1bebcdef97a8d4b4e4deb9d7307b9257c58aa0d7a0"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "JavaEWAH",
+      "version": "1.2.3",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "javaparser-core",
+      "version": "3.28.2",
+      "kind": "maven",
+      "expression": "LGPL-3.0-or-later OR Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "javaparser-symbol-solver-core",
+      "version": "3.28.2",
+      "kind": "maven",
+      "expression": "LGPL-3.0-or-later OR Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "javassist",
+      "version": "3.31.0-GA",
+      "kind": "maven",
+      "expression": "MPL-1.1 OR LGPL-2.1-or-later OR Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "jaxb-core",
+      "version": "4.0.9",
+      "kind": "maven",
+      "expression": "EDL-1.0",
+      "elected": [
+        "EDL-1.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c56e52168c596cb8ca8dca3a648886f19924461928eb8102f5eb31710aee9e31",
+        "757d97415f437b8e48ee96694425bbcf25330a2b355348272494fdf57950391a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jaxb-runtime",
+      "version": "4.0.9",
+      "kind": "maven",
+      "expression": "EDL-1.0",
+      "elected": [
+        "EDL-1.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c56e52168c596cb8ca8dca3a648886f19924461928eb8102f5eb31710aee9e31",
+        "757d97415f437b8e48ee96694425bbcf25330a2b355348272494fdf57950391a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jboss-logging",
+      "version": "3.6.3.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "jcip-annotations",
+      "version": "1.0-1",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "jmh-core",
+      "version": "1.37",
+      "kind": "maven",
+      "expression": "GPL-2.0-only WITH Classpath-exception-2.0",
+      "elected": [
+        "GPL-2.0-only WITH Classpath-exception-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "4b9abebc4338048a7c2dc184e9f800deb349366bdf28eb23c2677a77b4c87726"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jopt-simple",
+      "version": "5.0.4",
+      "kind": "maven",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "json-smart",
+      "version": "2.6.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "jspecify",
+      "version": "1.0.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "jsqlparser",
+      "version": "5.3",
+      "kind": "maven",
+      "expression": "LGPL-2.1-only OR Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "4b9abebc4338048a7c2dc184e9f800deb349366bdf28eb23c2677a77b4c87726"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "jul-to-slf4j",
+      "version": "2.0.18",
+      "kind": "maven",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "4e7f90c86ab51278228bce153122f1d8df30149d13ce9ef524c8444a84c32dcc"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "lang-tag",
+      "version": "1.7",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "lettuce-core",
+      "version": "7.5.2.RELEASE",
+      "kind": "maven",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e93e373bdee8dc03b8441d7f7158006109271970def3a78ef20b30f0d870d9ad"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "listenablefuture",
+      "version": "9999.0-empty-to-avoid-conflict-with-guava",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "log4j-api",
+      "version": "2.25.5",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "0b23e26a6260c82e2608899128a81a0c82e81f15d708779d0639227f6a2f801f"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "log4j-to-slf4j",
+      "version": "2.25.5",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "0ccd7e8250b33edc64612733af1b614c40eec22505446b6faec1c7a40cbeda95"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "logback-classic",
+      "version": "1.5.34",
+      "kind": "maven",
+      "expression": "EPL-2.0 OR LGPL-2.1-only",
+      "elected": [
+        "EPL-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "6e1f002892b81cbe0647019b150c8a056efc1add565671a4f8af629b6cd2cc7b"
+      ],
+      "textSource": "CANONICAL_EPL-2.0_TEXT"
+    },
+    {
+      "name": "logback-core",
+      "version": "1.5.34",
+      "kind": "maven",
+      "expression": "EPL-2.0 OR LGPL-2.1-only",
+      "elected": [
+        "EPL-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "6e1f002892b81cbe0647019b150c8a056efc1add565671a4f8af629b6cd2cc7b"
+      ],
+      "textSource": "CANONICAL_EPL-2.0_TEXT"
+    },
+    {
+      "name": "micrometer-commons",
+      "version": "1.17.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "62fb8a3a9621dc2388174caaabe9c2317b694bb9a1d46c98bcf5655b68f51be3",
+        "df207ca1a2ea3794caf112d7c1f024c87b4ddfe91d3f243977ad1d3cd085d538"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "micrometer-core",
+      "version": "1.17.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "62fb8a3a9621dc2388174caaabe9c2317b694bb9a1d46c98bcf5655b68f51be3",
+        "df207ca1a2ea3794caf112d7c1f024c87b4ddfe91d3f243977ad1d3cd085d538"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "micrometer-jakarta9",
+      "version": "1.17.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "62fb8a3a9621dc2388174caaabe9c2317b694bb9a1d46c98bcf5655b68f51be3",
+        "df207ca1a2ea3794caf112d7c1f024c87b4ddfe91d3f243977ad1d3cd085d538"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "micrometer-observation",
+      "version": "1.17.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "62fb8a3a9621dc2388174caaabe9c2317b694bb9a1d46c98bcf5655b68f51be3",
+        "df207ca1a2ea3794caf112d7c1f024c87b4ddfe91d3f243977ad1d3cd085d538"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "netty-buffer",
+      "version": "4.2.17.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "netty-codec-base",
+      "version": "4.2.17.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "netty-codec-dns",
+      "version": "4.2.17.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "netty-common",
+      "version": "4.2.17.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "netty-handler",
+      "version": "4.2.17.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "netty-resolver-dns",
+      "version": "4.2.17.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "netty-resolver",
+      "version": "4.2.17.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "netty-transport-native-unix-common",
+      "version": "4.2.17.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "netty-transport",
+      "version": "4.2.17.Final",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "nimbus-jose-jwt",
+      "version": "10.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "oauth2-oidc-sdk",
+      "version": "11.37.2",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "org.eclipse.jgit",
+      "version": "7.3.0.202506031305-r",
+      "kind": "maven",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "postgresql",
+      "version": "42.7.12",
+      "kind": "maven",
+      "expression": "BSD-2-Clause",
+      "elected": [
+        "BSD-2-Clause"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "08bb580d3cb8f9a4a05f008466a294fdb019e0e177d03a035d46f1eb94077de5"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "reactive-streams",
+      "version": "1.0.4",
+      "kind": "maven",
+      "expression": "MIT-0",
+      "elected": [
+        "MIT-0"
+      ],
+      "status": "NO_NOTICE_REQUIRED",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "reactor-core",
+      "version": "3.8.6",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "6b9522191b8cb7126b2d214edd7f782d2ccd83c467e9c03b8af9e0bf903b49b4"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "redis-authx-core",
+      "version": "0.1.1-beta2",
+      "kind": "maven",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "slf4j-api",
+      "version": "2.0.18",
+      "kind": "maven",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "4e7f90c86ab51278228bce153122f1d8df30149d13ce9ef524c8444a84c32dcc"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "snakeyaml",
+      "version": "2.6",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "spring-aop",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-aspects",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-beans",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-actuator-autoconfigure",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-actuator",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-autoconfigure",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-data-commons",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-data-jpa",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-data-redis",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-flyway",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-health",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-hibernate",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-http-client",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-http-converter",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-jackson",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-jarmode-tools",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-jdbc",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-jpa",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-loader",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "REFERENCE_COPY"
+    },
+    {
+      "name": "spring-boot-micrometer-metrics",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-micrometer-observation",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-netty",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-persistence",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-restclient",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-security-oauth2-client",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-security",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-servlet",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-session-data-redis",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-session",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-sql",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-tomcat",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-transaction",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-validation",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-web-server",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot-webmvc",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-boot",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628",
+        "5e5780b75405b58d1fc5b6b59301ba7b6133f7023b48b60e2057ddb0e63a9ca7"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-context-support",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-context",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-core",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-data-commons",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "90aa4a23c24e6120e00ced9b3a8a3b15524c07ac522c03e92a755a709f93c1f7",
+        "47fe79dc8612c297952d47f338831b2292aedc8e95e140cea1da072cd01315ff"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-data-jpa",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "90aa4a23c24e6120e00ced9b3a8a3b15524c07ac522c03e92a755a709f93c1f7",
+        "fcd558a5cc07c4536c46bb383405ec5d8c9cfd71d6ddbc7e40230bb82ef1c069"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-data-keyvalue",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "92a6e674a30766d9ed9cefb52a6480674f8318a3a8a0f449c4b5828a5f9b5f35",
+        "99c8bd2bb919bbbb2f939eec0098eec211984d464b62b0bc6672bca093aaebca"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-data-redis",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c1b9df1275e769f3dbab000d1e457a2d4b0f28eb5da6c77e48dc37eeba202ed7",
+        "3bc19e53dc23f8c8d32bdb55f2aa910e5ab67941f5693b03064ca3ca31376818"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-expression",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-jdbc",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-messaging",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-orm",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-oxm",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-security-config",
+      "version": "7.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-security-core",
+      "version": "7.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-security-crypto",
+      "version": "7.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-security-oauth2-client",
+      "version": "7.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-security-oauth2-core",
+      "version": "7.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-security-oauth2-jose",
+      "version": "7.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-security-web",
+      "version": "7.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-session-core",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "spring-session-data-redis",
+      "version": "4.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "spring-tx",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-web",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "spring-webmvc",
+      "version": "7.0.9",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e6b6198486da7dcad3d62c2f9043a8b5e472fe2991b4b144076262c8adccda0f",
+        "ca6b51825e9feea8bafd49d40f47b914659b783b4b70f40850ed662021320ddd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "springdoc-openapi-starter-common",
+      "version": "3.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+        "0bde020771533605fb7966fd031c78f03b3c2b2804474ea32fd7b20248df8c70"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "springdoc-openapi-starter-webmvc-api",
+      "version": "3.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+        "0bde020771533605fb7966fd031c78f03b3c2b2804474ea32fd7b20248df8c70"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "springdoc-openapi-starter-webmvc-ui",
+      "version": "3.1.0",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+        "0bde020771533605fb7966fd031c78f03b3c2b2804474ea32fd7b20248df8c70"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "swagger-annotations-jakarta",
+      "version": "2.2.52",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "aa4dc81ef2c6b4c2fd8cb7a7a4245c34396acd5a5dfa1ba6c8c0cf9ee88423fb",
+        "f1fc76fa8bfb48a9a794376e1be0609d8d723b530e98b1970c7369b19587caef"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "swagger-core-jakarta",
+      "version": "2.2.52",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "aa4dc81ef2c6b4c2fd8cb7a7a4245c34396acd5a5dfa1ba6c8c0cf9ee88423fb",
+        "921b5b663bdc02e9e4152bd75dd81bee295d9a4313457145204bd16b3747415e"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "swagger-models-jakarta",
+      "version": "2.2.52",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "aa4dc81ef2c6b4c2fd8cb7a7a4245c34396acd5a5dfa1ba6c8c0cf9ee88423fb",
+        "ca0e15ea1bb6b4e16dc9d0fe95414ce10938606a0e2335e3ca58307705a5757a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "swagger-ui",
+      "version": "5.32.11",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7200000367e0e8b47822d563a5ddd2dd3a97cc05b32bd7dbcc7b4eeb92b76628"
+      ],
+      "textSource": "CANONICAL_Apache-2.0_TEXT"
+    },
+    {
+      "name": "tomcat-embed-core",
+      "version": "11.0.26",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "8c39166d578175fb936229613e48de47d9e494b8c7c2fda6da717a1be29c8724",
+        "234d3234bb332895157270092fa2a11e80aa0b3d70d59e13de0eed4c2adb1790"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "tomcat-embed-el",
+      "version": "11.0.26",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "0317acaa42a5e48bec061cf009cb5c8b4b8ff845f3c6ba548f67c5c22c29fc96"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "tomcat-embed-websocket",
+      "version": "11.0.26",
+      "kind": "maven",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "0317acaa42a5e48bec061cf009cb5c8b4b8ff845f3c6ba548f67c5c22c29fc96"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "txw2",
+      "version": "4.0.9",
+      "kind": "maven",
+      "expression": "EDL-1.0",
+      "elected": [
+        "EDL-1.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c56e52168c596cb8ca8dca3a648886f19924461928eb8102f5eb31710aee9e31",
+        "757d97415f437b8e48ee96694425bbcf25330a2b355348272494fdf57950391a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "webjars-locator-lite",
+      "version": "1.1.3",
+      "kind": "maven",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "fast_float (bundled in Redis)",
+      "version": null,
+      "kind": "native-embedded",
+      "expression": "MIT OR Apache-2.0 OR BSL-1.0",
+      "elected": [
+        "BSL-1.0"
+      ],
+      "status": "NO_NOTICE_REQUIRED",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "fpconv (bundled in Redis)",
+      "version": null,
+      "kind": "native-embedded",
+      "expression": "BSL-1.0",
+      "elected": [
+        "BSL-1.0"
+      ],
+      "status": "NO_NOTICE_REQUIRED",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "hdr_histogram (bundled in Redis)",
+      "version": null,
+      "kind": "native-embedded",
+      "expression": "BSD-2-Clause OR CC0-1.0",
+      "elected": [
+        "CC0-1.0"
+      ],
+      "status": "NO_NOTICE_REQUIRED",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "Henry Spencer regex (bundled in PostgreSQL)",
+      "version": null,
+      "kind": "native-embedded",
+      "expression": "Spencer-94",
+      "elected": [
+        "Spencer-94"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "hiredis (bundled in Redis)",
+      "version": null,
+      "kind": "native-embedded",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "Lua (bundled in Redis)",
+      "version": "5.1",
+      "kind": "native-embedded",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "Snowball stemmers (bundled in PostgreSQL)",
+      "version": null,
+      "kind": "native-embedded",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "xxHash (bundled in Redis)",
+      "version": null,
+      "kind": "native-embedded",
+      "expression": "BSD-2-Clause",
+      "elected": [
+        "BSD-2-Clause"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "IANA time zone database (compiled by PostgreSQL)",
+      "version": null,
+      "kind": "native-runtime",
+      "expression": "CC0-1.0",
+      "elected": [
+        "CC0-1.0"
+      ],
+      "status": "NO_NOTICE_REQUIRED",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "openssl",
+      "version": "3.5.8",
+      "kind": "native-runtime",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/runtime/postgres/share/code-intelligence-notices/"
+    },
+    {
+      "name": "pgvector",
+      "version": "0.8.7",
+      "kind": "native-runtime",
+      "expression": "PostgreSQL",
+      "elected": [
+        "PostgreSQL"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/runtime/postgres/share/code-intelligence-notices/"
+    },
+    {
+      "name": "postgresql",
+      "version": "16.15",
+      "kind": "native-runtime",
+      "expression": "PostgreSQL",
+      "elected": [
+        "PostgreSQL"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/runtime/postgres/share/code-intelligence-notices/"
+    },
+    {
+      "name": "redis",
+      "version": "8.10.2",
+      "kind": "native-runtime",
+      "expression": "LicenseRef-RSALv2 OR SSPL-1.0 OR AGPL-3.0-only",
+      "elected": [
+        "AGPL-3.0-only"
+      ],
+      "status": "BUNDLED_ELSEWHERE",
+      "licenceTextSha256": [],
+      "location": "Contents/Resources/runtime/postgres/share/code-intelligence-notices/"
+    },
+    {
+      "name": "@monaco-editor/loader",
+      "version": "1.7.0",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "4798fdbac1cbcc37a0261bf164271dfd742eb79dbc13d9e33ad1f2b234c33cc3"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@monaco-editor/react",
+      "version": "4.7.0",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "da0f19a87a0a014e0f6e1de99bff8073771b5b6204d8b2671d2648ab8b32cf01"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@tanstack/query-core",
+      "version": "5.101.4",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "a405ee70c632bb938acb7ac5f210e814409b3760ea9d2329d8ed8ffcfd11a0e7"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@tanstack/react-query",
+      "version": "5.101.4",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "a405ee70c632bb938acb7ac5f210e814409b3760ea9d2329d8ed8ffcfd11a0e7"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@types/d3-color",
+      "version": "3.1.3",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@types/d3-drag",
+      "version": "3.0.7",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@types/d3-interpolate",
+      "version": "3.0.4",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@types/d3-selection",
+      "version": "3.0.11",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@types/d3-transition",
+      "version": "3.0.9",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@types/d3-zoom",
+      "version": "3.0.8",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@types/trusted-types",
+      "version": "2.0.7",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@xyflow/react",
+      "version": "12.11.3",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "023119ac20fb1c8c9930abe0bcd196989a1960388529a96fc43cebf96f07c9ff"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@xyflow/system",
+      "version": "0.0.80",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "023119ac20fb1c8c9930abe0bcd196989a1960388529a96fc43cebf96f07c9ff"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "classcat",
+      "version": "5.0.5",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "f101c761d255d0dddc77dd8a9327733b03d381798ec54a1bb718367207b48a8e"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "cookie",
+      "version": "1.1.1",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c02110eedc16c7114f1a9bdc026c65626ce1d9c7e27fd51a8e0feee8a48a6858"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "d3-color",
+      "version": "3.1.0",
+      "kind": "npm-bundled",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "d3-dispatch",
+      "version": "3.0.1",
+      "kind": "npm-bundled",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "d3-drag",
+      "version": "3.0.0",
+      "kind": "npm-bundled",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "d3-ease",
+      "version": "3.0.1",
+      "kind": "npm-bundled",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "b989d9085148d21ff64a75e14462aefa06b2589a55553b07b1460c70081c7d08"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "d3-interpolate",
+      "version": "3.0.1",
+      "kind": "npm-bundled",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "d3-selection",
+      "version": "3.0.0",
+      "kind": "npm-bundled",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "d3-timer",
+      "version": "3.0.1",
+      "kind": "npm-bundled",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "d3-transition",
+      "version": "3.0.1",
+      "kind": "npm-bundled",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "d3-zoom",
+      "version": "3.0.0",
+      "kind": "npm-bundled",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "dompurify",
+      "version": "3.4.16",
+      "kind": "npm-bundled",
+      "expression": "(MPL-2.0 OR Apache-2.0)",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "elkjs",
+      "version": "0.12.0",
+      "kind": "npm-bundled",
+      "expression": "EPL-2.0 OR GPL-3.0-or-later",
+      "elected": [
+        "EPL-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "637e81f4a1b6b4079535c499fca05e238cf7605c1ff5b76d60d7da7ce96700c9"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "marked",
+      "version": "14.0.0",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "monaco-editor",
+      "version": "0.56.0",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "33e4ff1a06ef62ba21788ea162564ee8165269a24a9ce6ef301837447eab0ac6",
+        "790537262fc78a764e121e6b92b959bcd3f5c310b47d9d9b9e92e17fe0af5336"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "react-dom",
+      "version": "19.2.8",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "react-router-dom",
+      "version": "7.18.2",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "77c9ee6a9c5d5782fb0c50b50d101189116314c14f7df0a1b0d385fc96a7ba49"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "react-router",
+      "version": "7.18.2",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "77c9ee6a9c5d5782fb0c50b50d101189116314c14f7df0a1b0d385fc96a7ba49"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "react",
+      "version": "19.2.8",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "scheduler",
+      "version": "0.27.0",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "set-cookie-parser",
+      "version": "2.7.2",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c5c6c5183a789d122f267c405f685037efb87e27fcde28ab1dd7378a2d2f5962"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "state-local",
+      "version": "1.0.7",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "3154651e339acde2858130fb40566eb80ced1b03508c57fcb52bb709ab0a0cea"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "tailwindcss",
+      "version": "4.3.3",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "60e0b68c0f35c078eef3a5d29419d0b03ff84ec1df9c3f9d6e39a519a5ae7985"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "use-sync-external-store",
+      "version": "1.6.0",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "zustand",
+      "version": "4.5.7",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": [],
+      "textSource": "VERSION_MISMATCH"
+    },
+    {
+      "name": "zustand",
+      "version": "5.0.15",
+      "kind": "npm-bundled",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c1e6e266563517467b1bf874817d23e426f3149252bd7d42758cd697514b8417"
+      ],
+      "textSource": "CHECKOUT_MODULE_TEXT"
+    },
+    {
+      "name": "@borewit/text-codec",
+      "version": "0.2.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5b3af80f317313a8b8c227b0c8bffae67728cfec1786137b0553e625f2affec9"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@lukeed/csprng",
+      "version": "1.1.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "9a9edad7baae52622bddf3c15b2ef8a33d2c89f2d25408ad13e8a7481c6b0c97"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@nestjs/common",
+      "version": "11.2.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "56967de93525b12a30717e4446ccef3bbe32fafdbe2350f143c1cc6971b19ed3"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@nestjs/core",
+      "version": "11.2.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "56967de93525b12a30717e4446ccef3bbe32fafdbe2350f143c1cc6971b19ed3"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@nestjs/platform-express",
+      "version": "11.2.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "56967de93525b12a30717e4446ccef3bbe32fafdbe2350f143c1cc6971b19ed3"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-asym-key",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "1a00d37fb9fca78a7f792fa6c8fd13f0123388756d81b471bcec11484316ff73"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-cms",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "1ecdd8e8977af83c07c5f97bec87b47d27059b7ea323ca3160fbfa2314f5d99c"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-csr",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "031b1aac1313d91559ecc89cb6ce7c822f39f1a1259fae0f9b8d01a90c35c85a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-ecc",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "031b1aac1313d91559ecc89cb6ce7c822f39f1a1259fae0f9b8d01a90c35c85a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-pfx",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "031b1aac1313d91559ecc89cb6ce7c822f39f1a1259fae0f9b8d01a90c35c85a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-pkcs8",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "031b1aac1313d91559ecc89cb6ce7c822f39f1a1259fae0f9b8d01a90c35c85a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-pkcs9",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "3ee7c4b649b783688f1186c9aa0da50e331027514c9bfa143f27983e23783c71"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-rsa",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "031b1aac1313d91559ecc89cb6ce7c822f39f1a1259fae0f9b8d01a90c35c85a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-schema",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "1ecdd8e8977af83c07c5f97bec87b47d27059b7ea323ca3160fbfa2314f5d99c"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-x509-attr",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "031b1aac1313d91559ecc89cb6ce7c822f39f1a1259fae0f9b8d01a90c35c85a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-x509-post-quantum",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "1a00d37fb9fca78a7f792fa6c8fd13f0123388756d81b471bcec11484316ff73"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/asn1-x509",
+      "version": "2.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "1ecdd8e8977af83c07c5f97bec87b47d27059b7ea323ca3160fbfa2314f5d99c"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/utils",
+      "version": "2.0.3",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "ce2ae0f0066d1be56ab4ec851cc611805bb95cdc8dd858b301e22ee54b351d43"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@peculiar/x509",
+      "version": "2.1.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "3d5d1b1150b1fc25144d342daaba3875899b8dc2fcb172ea4810cc69affbe4d3"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@tokenizer/inflate",
+      "version": "0.4.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5bb0e8b566dee0e946cafd9bbed359eb0494580df86457876b4f41bba5c77b25"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "@tokenizer/token",
+      "version": "0.3.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "TEXT_MISSING",
+      "licenceTextSha256": []
+    },
+    {
+      "name": "@ts-morph/common",
+      "version": "0.28.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c2a4cfb69592431f4b3a179c114909bb76a979d5748c19ca595c94133c623b12"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "accepts",
+      "version": "2.0.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "71f83c4c0621102a56d9853812777b85751bce7e9726f686f5b056c1f8a4b0e6"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "append-field",
+      "version": "1.0.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "fe9a7f8b8afc8cea446e8d65a3bbf9bbe278d96c35320b43e57c47f26e447619"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "asn1js",
+      "version": "3.0.10",
+      "kind": "npm",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "ebe5d98519d0dfcbcb80e20b22a56e7321e8557cd14355760434bbd4c1f4f683"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "balanced-match",
+      "version": "4.0.4",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "d408f38ffa3355c5faec517153295338892eb0f1ea43f57874bb23c6075979b5"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "body-parser",
+      "version": "2.3.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "23d466b1b134b415b66fa50c6526b4cf3e7b9258554da88d3abb371721e7ce68"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "brace-expansion",
+      "version": "5.0.12",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "9c63a23124d68cd30cd316a94a1a0bca34f032786df6df69fc4b5f136bac8d2e"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "busboy",
+      "version": "1.6.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "d06b5d27bbbbe22c36b1fd88406b1208876e2d37d795f5b8eaed951a459a3111"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "bytes",
+      "version": "3.1.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e3b44af066615de2ea48d18d852d0762f18c0b2efcea714fa48a6f729d405b85"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "call-bind-apply-helpers",
+      "version": "1.0.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "call-bound",
+      "version": "1.0.4",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "code-block-writer",
+      "version": "13.0.3",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "2769ffd3960ca1197b672b10d18b5216f423cb5c07dc328590548c47724d50fd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "content-disposition",
+      "version": "1.1.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "bd47ce7b88c7759630d1e2b9fcfa170a0f1fde522be09e13fb1581a79d090400"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "content-type",
+      "version": "1.0.5",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "257aed98914108e91a337912727b6a802eef218248507f74b76faffaff517a38"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "content-type",
+      "version": "2.1.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "257aed98914108e91a337912727b6a802eef218248507f74b76faffaff517a38"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "content-type",
+      "version": "2.1.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "257aed98914108e91a337912727b6a802eef218248507f74b76faffaff517a38"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "cookie-signature",
+      "version": "1.2.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "0dd4e47333485760cf8c265db5a5e24ae8d7401064c6f2e19793ee81a5bef42f"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "cookie",
+      "version": "0.7.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c02110eedc16c7114f1a9bdc026c65626ce1d9c7e27fd51a8e0feee8a48a6858"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "cors",
+      "version": "2.8.6",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "1aa9a12863eefb583779b2ca0e5d73c610b6e6d07529ae0472721769a6ea0a32"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "debug",
+      "version": "4.4.3",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "3a61c6c96caf5c1d9b623fb9b04c822b783dfcb78aa7e49c76a3f643e6ed7f95"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "depd",
+      "version": "2.0.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "bd134b41da59e452fb5a1d366b660886f741c87c2bf9428e93764c419fbc40f5"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "dunder-proto",
+      "version": "1.0.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "ee-first",
+      "version": "1.1.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "965ef284f7f4c176842ec2e87fa13e79feed777d56d7a21a5a3b38f1bb6dc288"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "encodeurl",
+      "version": "2.0.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7585ea7bba616ccbbe43cb54ecb67956688c3c5641bb84f3099a652a73193afe"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "es-define-property",
+      "version": "1.0.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "es-errors",
+      "version": "1.3.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "es-object-atoms",
+      "version": "1.1.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "escape-html",
+      "version": "1.0.3",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "255aa557a1f55224ce522f311629c0bf20854740a67955cefd798fbd1d3d1ded"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "etag",
+      "version": "1.8.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "a7996721249a136fbcfc1c201bcb5f414f38a701d4a24f28abe65e16cfcce813"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "express",
+      "version": "5.2.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "95a5762890e5c1c9808921cef095661fc482c5e1f0bba31446ac85595df6237c"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "fast-safe-stringify",
+      "version": "2.1.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "f0ffe1359ba08038bb99f194c80fbb4f2aae216e749e97b2cd6b006d1861e27b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "fdir",
+      "version": "6.5.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "9a39f2aadab11a3697edd668ff2d8ad885b649737b7ab4d3bf12b34e5ada0c86"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "file-type",
+      "version": "21.3.4",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "finalhandler",
+      "version": "2.1.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "47dcccf62bf40469d23849b0b1dc8df9fc91bce219b880c638d4dc4596e6b5cf"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "forwarded",
+      "version": "0.2.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "bd47ce7b88c7759630d1e2b9fcfa170a0f1fde522be09e13fb1581a79d090400"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "fresh",
+      "version": "2.0.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "a0ec0dab16b3666f24950f86d257930ac2ad475557b4bfe245620e0817d8a45d"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "function-bind",
+      "version": "1.1.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "773e131a7684726005a7e4688a80b4620033bc08499bc1404dd1a1eb3bca725e"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "get-intrinsic",
+      "version": "1.3.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "get-proto",
+      "version": "1.0.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "be46ce1e3b0479af9ce82d22b465a6d7d2ff084fca0aaf3d54172da2b5eb5781"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "gopd",
+      "version": "1.2.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "d90bf0a089da4cf43d644ed240a0b3825dcdb705e64e38371d56995a4cc9e4c5"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "has-symbols",
+      "version": "1.1.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "206c1adcf206dc0031b11232f5b054ec5f1662407ab1ca415247921cab2068ab"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "hasown",
+      "version": "2.0.4",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "bf9b0d665be2a689851eea667ca9f42066ea1d903b38349c51e6a44b2577680a"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "http-errors",
+      "version": "2.0.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "dcb94ff9b1e037a847bc20589dc81a1066d041fd4c16deb18b0fa968c66cf395"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "iconv-lite",
+      "version": "0.7.3",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "ac779f7314c74f232ef847ea86e714abe25cf6eeb5cc97b69451b74e2af6492d"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "ieee754",
+      "version": "1.2.1",
+      "kind": "npm",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "18d45466ba3253deae04667e267a91ea8de8548f18c1125264d1c9db28194cc1"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "inherits",
+      "version": "2.0.4",
+      "kind": "npm",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5ffe28e7ade7d8f10d85d5337a73fd793dac5c462fb9a28fbf8c5046c7fbca3b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "ipaddr.js",
+      "version": "1.9.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "62568a2d1337b77171ecca9db10579163446de1ba6151678e81f06cdc199971b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "is-promise",
+      "version": "4.0.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "44191656d296391e0ec97e32f5385f0d02b6f2992694082d22ea04ba0f66f9e4"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "iterare",
+      "version": "1.2.1",
+      "kind": "npm",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "2537bb3d445dd08c12be3ec5c686f0394a3ccd6bfa94dac5d269940a9cb7ff98"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "load-esm",
+      "version": "1.0.3",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "0ac9ad48738b9e891d410809e56af32d0112632b5e1ede9777042124ece1f2e4"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "math-intrinsics",
+      "version": "1.1.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "media-typer",
+      "version": "0.3.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "74d8054d56d522bdaa340d3d71130cb204997d523a5292c85ac1264dd77c8d06"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "media-typer",
+      "version": "1.1.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "bd47ce7b88c7759630d1e2b9fcfa170a0f1fde522be09e13fb1581a79d090400"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "merge-descriptors",
+      "version": "2.0.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "70b126abc64d7ea06e1243349073935caa16fa47a41a571773ccf0b350b1d574"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "mime-db",
+      "version": "1.52.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cc1dfd4dafa27271e8212cd3b274eeb3f262e40a6fdab36ddc3f9696f706f58b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "mime-db",
+      "version": "1.54.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cc1dfd4dafa27271e8212cd3b274eeb3f262e40a6fdab36ddc3f9696f706f58b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "mime-types",
+      "version": "2.1.35",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "71f83c4c0621102a56d9853812777b85751bce7e9726f686f5b056c1f8a4b0e6"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "mime-types",
+      "version": "3.0.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "71f83c4c0621102a56d9853812777b85751bce7e9726f686f5b056c1f8a4b0e6"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "minimatch",
+      "version": "10.2.6",
+      "kind": "npm",
+      "expression": "BlueOak-1.0.0",
+      "elected": [
+        "BlueOak-1.0.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "2c7c5d22ed5a8ee968c64757710979afcd77438c48b4a265b94e615babd8a901"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "ms",
+      "version": "2.1.3",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "multer",
+      "version": "2.4.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cc8f87aafbf72a74bafed2a8f6925d8895e1c716b36bd3df7ee0c46be54e87bb"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "negotiator",
+      "version": "1.0.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "553d4d20029a24e315b428a1a54a9e109eaa340f2e958a4f50a92362c2c4070b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "object-assign",
+      "version": "4.1.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "6fb9754611c20f6649f68805e8c990e83261f29316e29de9e6cedae607b8634c"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "object-inspect",
+      "version": "1.13.4",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "bd40cc437e28a3ad7bef2ad34e6b72e757b182e67bda1acadbab4ef0476f8232"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "on-finished",
+      "version": "2.4.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "8089bcc08845ec143e5761f4a101a65b8c792a0dedbfeeb90a15560c0b77f768"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "once",
+      "version": "1.4.0",
+      "kind": "npm",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "parseurl",
+      "version": "1.3.3",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "11d017c3b9f1ee3f44caf7203035f0461d5b57e0db8ce1bc03a9af34fa7d3f6b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "path-browserify",
+      "version": "1.0.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "a22b9d5763f574e5db347c30acc0b33eaf4846767c03d2e27d012e864e79a824"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "path-to-regexp",
+      "version": "8.4.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "4eeb3271453a891df609e5a9f4ee79a68307f730c13417a3bfeffa604ac8cf25"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "picomatch",
+      "version": "4.0.5",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "proxy-addr",
+      "version": "2.0.8",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "a7996721249a136fbcfc1c201bcb5f414f38a701d4a24f28abe65e16cfcce813"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "pvtsutils",
+      "version": "1.3.6",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c620c1d08a47c93ce242914a4269b86e41df5a97845325725a5f83d5d6f9d7fd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "pvutils",
+      "version": "1.2.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "15c88630f1e778db64a446cb31b67362cc9eb7a048fdf5ac7ab51905b74464cd"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "qs",
+      "version": "6.16.0",
+      "kind": "npm",
+      "expression": "BSD-3-Clause",
+      "elected": [
+        "BSD-3-Clause"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "e7dc37bf662d7f786efcb46c545615e70c1daf458a38385521c63cf6607cdfe1"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "range-parser",
+      "version": "1.3.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "f655e6291356ec0de7a8f0e69f294961a2cea86678ec94588be1e6a492e278ab"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "raw-body",
+      "version": "3.0.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "37876d7de8bdf5e5b9b58a697ebc34044624e493e6f49eff5c938e5226dcac6b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "reflect-metadata",
+      "version": "0.2.2",
+      "kind": "npm",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "19246466cb51e46c12b22e43b4d2703ac981cb4295d061d6e20609bd5845510b",
+        "c5217b0544ea9c91d010863582d6f6b35ec50e4146c34dee085ddcec5dd92def"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "reflect-metadata",
+      "version": "0.2.2",
+      "kind": "npm",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "19246466cb51e46c12b22e43b4d2703ac981cb4295d061d6e20609bd5845510b",
+        "c5217b0544ea9c91d010863582d6f6b35ec50e4146c34dee085ddcec5dd92def"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "router",
+      "version": "2.2.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "d0bca4e517157b7a6120c085f5fe43a35b90c095e3bbeb9e67f220c608506a16"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "rxjs",
+      "version": "7.8.2",
+      "kind": "npm",
+      "expression": "Apache-2.0",
+      "elected": [
+        "Apache-2.0"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "81c407ac717813b0e3795402960e04003c7bba8ba59b621624707028531c9ade"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "safer-buffer",
+      "version": "2.1.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "4bc935e71be198c67ddf3c2b5fddb195f6edc182bfc155a96a6db61b44b494b9"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "send",
+      "version": "1.2.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "25a328069fe771f8ed5b6f983ed4b0e6c84b3312ac0f69b28c3d52dc277962c9"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "serve-static",
+      "version": "2.2.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "63b9a188d7d43e64b0558b7115255045b9fe20a5fc3ff483421cb899e7f52bcb"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "setprototypeof",
+      "version": "1.2.0",
+      "kind": "npm",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "76d6d1ea0c268da37dd3c961b4fcfb23dee8417fff9e8786d4d44c585b781b69"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "side-channel-list",
+      "version": "1.0.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "side-channel-map",
+      "version": "1.0.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "side-channel-weakmap",
+      "version": "1.0.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc3f455254c0af0655cc3ff46a41ed644b67599f6043346169d285bf2b3cf3b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "side-channel",
+      "version": "1.1.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "cfc3f455254c0af0655cc3ff46a41ed644b67599f6043346169d285bf2b3cf3b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "statuses",
+      "version": "2.0.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "512cfa4d5e7a7569c7ae4dd95241cb6ae2aaf648ef9ebd080c01bd24868d26e9"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "streamsearch",
+      "version": "1.1.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "7c28463b739e2e73a49bf127d0bda427f8c55f0b37365a044c3c3f254716118b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "strtok3",
+      "version": "10.3.5",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c77d564d48f13e7ece47d5dcc57102810744828d5f5af5826808a0320de3bb76"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "tinyglobby",
+      "version": "0.2.17",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "22c68811e174cbbfb3813d4135918df4f540959c14d872e601d9abe83d3cde8f"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "toidentifier",
+      "version": "1.0.1",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "a832d679750e49ab433626ab196350b89964b60eb0d3edd3341887c7d5f4c128"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "token-types",
+      "version": "6.1.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "eb0bff8faaba4581e0f09c962e0f795f1f8810191c9d616f3f66f36be4b3a5dc"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "ts-morph",
+      "version": "27.0.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "c2a4cfb69592431f4b3a179c114909bb76a979d5748c19ca595c94133c623b12"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "tslib",
+      "version": "1.14.1",
+      "kind": "npm",
+      "expression": "0BSD",
+      "elected": [
+        "0BSD"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "dd835e67a9a297da32f9467d7677a5d02c8e50e10f15da43b810147c79c04b9b",
+        "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "tslib",
+      "version": "2.8.1",
+      "kind": "npm",
+      "expression": "0BSD",
+      "elected": [
+        "0BSD"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "da16ddb65f8ca390998fb99223d0112498b56b45784d00afd77ff8ce1ac4de8b",
+        "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "tslib",
+      "version": "2.8.1",
+      "kind": "npm",
+      "expression": "0BSD",
+      "elected": [
+        "0BSD"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "da16ddb65f8ca390998fb99223d0112498b56b45784d00afd77ff8ce1ac4de8b",
+        "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "tsyringe",
+      "version": "4.10.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "27ebda9d51f0a56b7e281ccd8230a27236dcb51c05f64b07869ecf6e965d68b0"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "type-is",
+      "version": "1.6.18",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "23d466b1b134b415b66fa50c6526b4cf3e7b9258554da88d3abb371721e7ce68"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "type-is",
+      "version": "2.1.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "23d466b1b134b415b66fa50c6526b4cf3e7b9258554da88d3abb371721e7ce68"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "uid",
+      "version": "2.0.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "9a9edad7baae52622bddf3c15b2ef8a33d2c89f2d25408ad13e8a7481c6b0c97"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "uint8array-extras",
+      "version": "1.5.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "unpipe",
+      "version": "1.0.0",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "1a526fbe8d8577f5a4b1c2821842b55b7c0e18862531c62ae4ce69c9b19b74b6"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "vary",
+      "version": "1.1.2",
+      "kind": "npm",
+      "expression": "MIT",
+      "elected": [
+        "MIT"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "bd47ce7b88c7759630d1e2b9fcfa170a0f1fde522be09e13fb1581a79d090400"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    },
+    {
+      "name": "wrappy",
+      "version": "1.0.2",
+      "kind": "npm",
+      "expression": "ISC",
+      "elected": [
+        "ISC"
+      ],
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
+    }
+  ]
+}
