@@ -91,7 +91,8 @@ function verifyAttestation(io, validate, options, loaded) {
       const target = path.join(root, component.path);
       requireThat(within(root, target), 'ARTIFACT_PATH_INVALID');
       let actual;
-      try { actual = artifactDigest(checkedAbsolute(target), budget); }
+      // Only the re-hashed component trees are inputs; the output may still live under the repository root.
+      try { io.protect(target); actual = artifactDigest(checkedAbsolute(target), budget); }
       catch (error) { if (error instanceof ContractError) throw error; throw new ContractError('ARTIFACT_PATH_INVALID'); }
       requireThat(actual.sha256 === component.sha256 && actual.files === component.files && actual.kind === component.kind, 'ARTIFACT_DIGEST_MISMATCH');
       checkedComponents.push({ name: component.name, kind: actual.kind, files: actual.files, sha256: actual.sha256 });

@@ -58,7 +58,6 @@ function main(argv) {
     runnerDigest = sha256(Buffer.from(implementation.map(file => file + ':' + sha256(io.read(path.join(__dirname, file)))).join('\n')));
     loaded = loadContracts(io, options);
     if (options.executionAttestation && loaded.observations) {
-      if (options.productArtifactRoot) io.protect(options.productArtifactRoot);
       attested = verifyAttestation(io, validator(io), options, loaded);
       loaded.executionAttested = true;
     }
