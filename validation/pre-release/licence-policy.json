@@ -116,5 +116,10 @@
     { "ref": "postgresql:snowball", "name": "Snowball stemmers (bundled in PostgreSQL)", "parent": "postgresql", "expression": "BSD-3-Clause", "binary": "postgres/lib/dict_snowball.dylib", "witness": "snowball" },
     { "ref": "postgresql:spencer-regex", "name": "Henry Spencer regex (bundled in PostgreSQL)", "parent": "postgresql", "expression": "Spencer-94", "binary": "postgres/bin/postgres", "witness": null, "note": "Licence identification from the PostgreSQL source layout (src/backend/regex/COPYRIGHT); not observable in the binary." }
   ],
-  "embeddedEvidence": "Embedded components are reviewed assertions from the upstream source layout, corroborated where possible by a name string in the shipped binary. jemalloc and linenoise strings are absent from redis-server (macOS builds use libc malloc; linenoise is redis-cli only). Embedded versions and their exact licence files in the source archives are not verified offline."
+  "excludedRuntime": [
+    { "group": "org.openjdk.jmh", "classPrefix": "org/openjdk/jmh/", "reason": "Benchmark harness (GPL-2.0 WITH Classpath-exception-2.0) declared in compile scope by jsqlparser 5.3; no jsqlparser class references it, so it must not ship in the backend JAR (supply-chain D2)." },
+    { "group": "net.sf.jopt-simple", "artifact": "jopt-simple", "classPrefix": "joptsimple/", "reason": "Reaches the runtime only through jmh-core (supply-chain D2)." },
+    { "group": "org.apache.commons", "artifact": "commons-math3", "classPrefix": "org/apache/commons/math3/", "reason": "Reaches the runtime only through jmh-core (supply-chain D2)." }
+  ],
+  "embeddedEvidence":"Embedded components are reviewed assertions from the upstream source layout, corroborated where possible by a name string in the shipped binary. jemalloc and linenoise strings are absent from redis-server (macOS builds use libc malloc; linenoise is redis-cli only). Embedded versions and their exact licence files in the source archives are not verified offline."
 }

@@ -22,6 +22,7 @@ const macho = require('./sbom-macho.cjs');
 const maven = require('./sbom-maven.cjs');
 const zip = require('./sbom-zip.cjs');
 const licence = require('./licence-obligations.cjs');
+const jreSupply = require('./sbom-jre-supply.cjs');
 const { ensureOutputParent } = require('./owned-output.cjs');
 
 const MiB = 1024 * 1024;
@@ -33,6 +34,9 @@ class SbomError extends Error { constructor(code, detail) { super(code); this.co
 const need = (ok, code, detail) => { if (!ok) throw new SbomError(code, detail); };
 const LICENCE_FILE = /^(?:licen[cs]e|copying|copyright|unlicense|copyrightnotice|notice|thirdpartynotices?|third-party-notices|legal)(?:[._-][A-Za-z0-9._-]*)?$/i;
 const NOTICE_FILE = /^(?:notice|thirdpartynotices?|third-party-notices)(?:[._-][A-Za-z0-9._-]*)?$/i;
+// Eclipse projects (JGit) ship their licence texts as about.html at the JAR root; it
+// counts only when it reproduces licence wording rather than links.
+const ECLIPSE_ABOUT_LICENCE = /Redistribution and use in source and binary forms|Permission is hereby granted|TERMS AND CONDITIONS FOR USE, REPRODUCTION|THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS/;
 
 // ---------------------------------------------------------------- arguments
 function argumentsFor(argv) {
@@ -343,8 +347,8 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
     noticeEvidence: legalFiles.some(item => item.rel.endsWith('/LICENSE')) ? [{ kind: 'LICENCE', visibility: 'BUNDLE_LEGAL', location: runtime + 'jre/legal/' }] : [],
     properties: { javaVersion, vendorWitness: vendor.value, vendorCandidates: vendor.candidates, buildWitness: build.value, modules,
       legalFiles: legalFiles.length, embeddedThirdPartyNotices: thirdPartyMd },
-    // macos-runtime-supply.json locks only the four C sources; the JDK used by jlink has no URL/digest record.
-    provenance: { recordedSourceUrl: null, recordedSha256: null, status: 'NO_REPOSITORY_SUPPLY_RECORD' } });
+    provenance: jreSupply.provenance(readers.supply.jre, { buildWitness: build.value, javaVersion, vendorWitness: vendor.value }) });
+  components.get('temurin-jre').externalReferences = jreSupply.externalReferences(components.get('temurin-jre').provenance);
 
   // ---- Native runtimes from the source lock
   const sourceLockRel = runtime + 'postgres/share/code-intelligence-notices/source-lock.json';
@@ -517,9 +521,11 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
       properties: { members: members.length, memberListing: memberError || 'OK', licenceDeclarationSource: licenceSource, licenceChain: declared.chain,
         unmappedLicenceNames: unknown.map(item => item.name || item.url), bundleLicense: bundleLicense || null,
         packageRoots: [...new Set(members.filter(item => item.name.endsWith('.class')).map(item => item.name.split('/').slice(0, 3).join('.')))].slice(0, 40) } });
+    const about = members.find(item => item.type === 'file' && item.name === 'about.html');
+    if (about) licenceMembers.push(about);
     for (const member of licenceMembers) {
       let text = null; try { text = zip.readMember(nested, member, 2 * MiB); } catch { text = null; }
-      if (!text) continue;
+      if (!text || (member === about && !ECLIPSE_ABOUT_LICENCE.test(text.toString('utf8')))) continue;
       const kind = NOTICE_FILE.test(path.posix.basename(member.name)) ? 'NOTICE' : 'LICENCE';
       comp.noticeEvidence.push({ kind, visibility: 'ARTEFACT', location: `${location}!/${member.name}`, sha256: sha256(text) });
       comp.licenceTexts = [...(comp.licenceTexts || []), { location: `${location}!/${member.name}`, sha256: sha256(text), text: text.toString('utf8') }];
@@ -701,6 +707,8 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
     if (comp.firstParty) { comp.licence = { class: 'PERMISSIVE', chosen: ['MIT'], obligations: [], findings: [] }; continue; }
     const replaceable = comp.kind === 'maven' || comp.kind === 'npm' ? 'MANIFEST_HASH_ENFORCED' : comp.ref === 'ffmpeg' ? 'SIGNED_BUNDLE' : 'UNKNOWN';
     comp.licence = licence.evaluate({ expression: comp.expression, noticeEvidence: comp.noticeEvidence, replaceable, legalReview: policyEntry?.legalReview || null });
+    const excluded = comp.kind === 'maven' ? licence.excludedRuntime({ groupId: comp.group, artifactId: comp.name }) : null;
+    if (excluded) comp.licence.findings.push({ code: 'EXCLUDED_RUNTIME_ARTEFACT', blocking: true, reason: excluded.reason });
   }
 
   return { appRoot, entries, files, symlinks, attribution, unattributed, components, manifestCheck, product, witnesses, machoReport, machoSummary,
@@ -770,6 +778,7 @@ function cycloneDx(result, meta) {
       ...(comp.firstParty ? { supplier: { name: 'Code Intelligence (first party)' } } : {}),
       ...(hash ? { hashes: [{ alg: 'SHA-256', content: hash }] } : {}),
       ...(licences(comp) ? { licenses: licences(comp) } : {}), ...(comp.purl ? { purl: comp.purl } : {}),
+      ...(comp.externalReferences ? { externalReferences: comp.externalReferences } : {}),
       ...(rows.length ? { evidence: { occurrences: rows.slice(0, LIMITS.occurrences).map(row => ({ location: row.location })) } } : {}),
       properties };
   });
@@ -807,6 +816,7 @@ function cycloneDx(result, meta) {
 // within the fields, enums and reference rules it relies on.
 const COMPONENT_TYPES = new Set(['application', 'framework', 'library', 'container', 'platform', 'operating-system', 'device',
   'device-driver', 'firmware', 'file', 'machine-learning-model', 'data']);
+const EXTERNAL_REFERENCE_TYPES = new Set(['vcs', 'distribution', 'website', 'license', 'build-meta', 'release-notes', 'other']);
 function validateCycloneDx(bom) {
   const errors = [], refs = new Set();
   const check = (ok, message) => { if (!ok) errors.push(message); };
@@ -828,6 +838,10 @@ function validateCycloneDx(bom) {
     for (const property of item.properties || []) check(typeof property.name === 'string' && typeof property.value === 'string', `${where}: property`);
     for (const occurrence of item.evidence?.occurrences || []) check(typeof occurrence.location === 'string', `${where}: occurrence`);
     check(item.purl === undefined || /^pkg:[a-z]+\/.+/.test(item.purl), `${where}: purl`);
+    for (const reference of item.externalReferences || []) {
+      check(EXTERNAL_REFERENCE_TYPES.has(reference.type) && /^https:\/\/\S+$/.test(reference.url)
+        && (reference.hashes || []).every(hash => hash.alg === 'SHA-256' && /^[a-f0-9]{64}$/.test(hash.content)), `${where}: externalReference`);
+    }
   };
   component(bom.metadata.component, 'metadata.component');
   (bom.components || []).forEach((item, index) => component(item, `components[${index}]`));
@@ -859,7 +873,7 @@ async function main(argv) {
   const resolvedFile = path.join(repo, 'validation/local/pre-release-final', options.resolved);
   const resolvedBytes = readRegular(resolvedFile, 4 * MiB), resolvedMaven = JSON.parse(resolvedBytes.toString('utf8'));
   need(resolvedMaven?.kind === 'RESOLVED_GRADLE_RUNTIME_ARTIFACTS' && Array.isArray(resolvedMaven.components), 'RESOLVED_MAVEN_INVALID');
-  const toolFiles = ['sbom-candidate.cjs', 'sbom-macho.cjs', 'sbom-maven.cjs', 'sbom-zip.cjs', 'licence-obligations.cjs', 'licence-policy.json', 'inventory-candidate.cjs'];
+  const toolFiles = ['sbom-candidate.cjs', 'sbom-macho.cjs', 'sbom-maven.cjs', 'sbom-zip.cjs', 'sbom-jre-supply.cjs', 'licence-obligations.cjs', 'licence-policy.json', 'inventory-candidate.cjs'];
   const toolSha256 = sha256(toolFiles.map(name => sha256(fs.readFileSync(path.join(__dirname, name)))).join('\n'));
   const started = new Date().toISOString();
   const result = await analyse({ repo, appRelative, resolvedMaven, gradleCache: options.gradleCache, electronZip: options.electronZip,

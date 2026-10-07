@@ -146,5 +146,13 @@ function evaluate({ expression, noticeEvidence = [], replaceable = 'UNKNOWN', le
   return { class: klass, chosen: election.chosen, electionRequired: election.electionRequired, obligations, findings };
 }
 
+// Maven coordinates that must not be part of the production runtime at all,
+// whatever their licence (policy excludedRuntime). Returns the matching rule.
+function excludedRuntime(coordinate, policy = POLICY) {
+  if (!coordinate || typeof coordinate.groupId !== 'string') return null;
+  return (policy.excludedRuntime || []).find(rule => rule.group === coordinate.groupId
+    && (!rule.artifact || rule.artifact === coordinate.artifactId)) || null;
+}
+
 module.exports = Object.freeze({ POLICY, SEVERITY, LicenceError, parseExpression, elect, spdxFromName, expressionFromDeclarations,
-  identifyText, evaluate, canonicalId });
+  identifyText, evaluate, canonicalId, excludedRuntime });
