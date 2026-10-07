@@ -128,6 +128,12 @@ public class CoverageService {
                 outcomes);
     }
 
+    /** Recorded per-file outcomes of a snapshot, or null when the snapshot predates per-file measurement. */
+    @Transactional(readOnly = true)
+    public CoverageReport.OutcomeSummary outcomes(long snapshotId) {
+        return computeOutcomes(snapshotId);
+    }
+
     private CoverageReport.OutcomeSummary computeOutcomes(long snapshotId) {
         return jdbc.sql("""
                 select m.discovered_files, m.excluded_for_count+m.excluded_for_size+m.excluded_binary as excluded_files,
