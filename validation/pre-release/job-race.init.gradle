@@ -1,0 +1,22 @@
+import org.gradle.api.tasks.testing.Test
+
+// Applied after docker-integration.init.gradle by job-race-backend.cjs only. It adds the
+// runner-built TypeScript analyzer location so the job race tests can start, own and kill
+// their own analyzer process. No secrets, ports or user paths are passed.
+def node = System.getenv('CI_JOB_RACE_NODE') ?: ''
+def analyzer = System.getenv('CI_JOB_RACE_TS_ANALYZER') ?: ''
+if (node || analyzer) {
+    def nodeFile = new File(node)
+    def analyzerDir = new File(analyzer)
+    if (!nodeFile.isAbsolute() || !nodeFile.canExecute() || !analyzerDir.isAbsolute()
+            || !new File(analyzerDir, 'accuracy-server.cjs').isFile()
+            || !new File(analyzerDir, 'dist/app.module.js').isFile()) {
+        throw new GradleException('JOB_RACE_ANALYZER_INVALID')
+    }
+    allprojects {
+        tasks.withType(Test).configureEach {
+            systemProperty 'job-race.node', nodeFile.path
+            systemProperty 'job-race.ts-analyzer', analyzerDir.path
+        }
+    }
+}
