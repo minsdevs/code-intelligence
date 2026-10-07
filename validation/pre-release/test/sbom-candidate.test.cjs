@@ -212,6 +212,8 @@ test('file attribution maps every known bundle path family and leaves unknown fi
   assert.equal(sbom.attributeBackendMember('BOOT-INF/classes/static/assets/index.js'), 'first-party:frontend');
   assert.equal(sbom.attributeBackendMember('org/springframework/boot/loader/launch/JarLauncher.class'), 'spring-boot-loader');
   assert.equal(sbom.attributeBackendMember('com/evil/Injected.class'), null);
+  for (const name of ['package.json', 'src/main.cjs', 'build/update-keys.json']) assert.equal(sbom.firstPartyAsarMember(name), true, name);
+  for (const name of ['build/other.json', 'node_modules/x/package.json', 'update-keys.json']) assert.equal(sbom.firstPartyAsarMember(name), false, name);
 });
 
 test('npm helpers resolve nested package roots and declared licence expressions', () => {

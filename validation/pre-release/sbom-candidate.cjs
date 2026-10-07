@@ -196,6 +196,10 @@ function attributeFile(rel) {
   if (/^ts-analyzer\/(?:dist\/.+|package\.json|package-lock\.json)$/.test(r)) return 'first-party:ts-analyzer';
   return null;
 }
+// app.asar members written by this repository (desktop build.files): sources, metadata, update keys.
+function firstPartyAsarMember(name) {
+  return name === 'package.json' || name.startsWith('src/') || name === 'build/update-keys.json';
+}
 function attributeBackendMember(name) {
   if (/^BOOT-INF\/lib\/[^/]+\.jar$/.test(name)) return 'nested-jar';
   if (name.startsWith('BOOT-INF/classes/static/')) return 'first-party:frontend';
@@ -435,7 +439,7 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
   for (const entry of asarEntries) {
     const location = `${resources}app.asar!/${entry.name}`, bytes = asarMember(entry), digest = sha256(bytes);
     let ref = null;
-    if (entry.name === 'package.json' || entry.name.startsWith('src/')) ref = 'first-party:desktop';
+    if (firstPartyAsarMember(entry.name)) ref = 'first-party:desktop';
     else { const root = npmRoot(entry.name); if (root && asarRoots.has(root)) ref = asarRoots.get(root).ref; }
     attribution.push({ location, component: ref, sha256: digest, bytes: entry.size, container: resources + 'app.asar' });
     if (ref && ref.startsWith('npm:')) {
@@ -968,7 +972,7 @@ async function main(argv) {
     components: summary.counts.components, completeSbom: summary.completeSbom, sha256: hashes };
 }
 
-module.exports = { LIMITS, argumentsFor, attributeFile, attributeBackendMember, npmRoot, npmExpression, plistStrings, uniqueWitness,
+module.exports = { LIMITS, argumentsFor, attributeFile, attributeBackendMember, firstPartyAsarMember, npmRoot, npmExpression, plistStrings, uniqueWitness,
   codeBytesEqualIgnoringSignature, treeDigest, cycloneDx, validateCycloneDx, otoolCompare, main };
 if (require.main === module) {
   main(process.argv.slice(2)).then(result => process.stdout.write(JSON.stringify(result) + '\n')).catch(error => {
