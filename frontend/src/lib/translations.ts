@@ -831,6 +831,13 @@ export const en: Record<string, string> = {
   'import.localConfirmDesc': 'Check the folder and request a preview. Analysis starts only after you review the files to import and approve them separately.',
   'preview.ready': 'Preview ready. Review the {count} files selected for import, then approve.',
   'workspace.analysisFinished': 'Analysis finished. The repository overview is open. Check the analysis coverage report for what was not analyzed.',
+  'graph.nodeHint': 'Press Enter to open this item.',
+  'graph.edgeHint': 'A recorded relation. Its name gives the direction and details.',
+  'graph.edgeName': '{source} → {target} · {details}',
+  'graph.unknownItem': 'item outside the graph',
+  'neighborhood.selectedNode': '{name} · {location} · selected item',
+  'arch.groupNode': '{layer} layer',
+  'arch.edgeCount': '{count} relations',
 }
 
 export const ko: Record<string, string> = {
@@ -1640,4 +1647,11 @@ export const ko: Record<string, string> = {
   'import.localConfirmDesc': '폴더를 확인하고 미리보기를 요청하세요. 가져올 파일을 검토한 뒤 별도로 승인하면 분석을 시작합니다.',
   'preview.ready': '미리보기가 준비되었습니다. 가져올 파일 {count}개를 검토한 뒤 승인하세요.',
   'workspace.analysisFinished': '분석이 끝났습니다. 레포 개요를 열었습니다. 분석하지 못한 범위는 분석 범위 보고서에서 확인하세요.',
+  'graph.nodeHint': 'Enter 키로 이 항목을 엽니다.',
+  'graph.edgeHint': '기록된 관계입니다. 이름에 방향과 세부 정보가 있습니다.',
+  'graph.edgeName': '{source} → {target} · {details}',
+  'graph.unknownItem': '그래프 밖 항목',
+  'neighborhood.selectedNode': '{name} · {location} · 선택 항목',
+  'arch.groupNode': '{layer} 계층',
+  'arch.edgeCount': '관계 {count}개',
 }

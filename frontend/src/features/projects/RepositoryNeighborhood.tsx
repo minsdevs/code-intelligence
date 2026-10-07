@@ -34,8 +34,18 @@ export default function RepositoryNeighborhood({
   const graph = useMemo(() => {
     const byId = new Map<number, GraphNodeSummary>([[selected.id, selected]])
     for (const relation of (relations ?? []).slice(0, 40)) byId.set(relation.node.id, relation.node)
+    const location = (node: GraphNodeSummary) => node.filePath ?? node.nodeType
+    const name = (id: number | undefined) =>
+      (id != null ? byId.get(id)?.name : undefined) ?? t('graph.unknownItem')
     const nodes: Node[] = [...byId.values()].map((node, index) => ({
       id: String(node.id),
+      // Screen readers read the name; never the database id React Flow would fall back to.
+      ariaLabel:
+        index === 0
+          ? t('neighborhood.selectedNode')
+              .replace('{name}', node.name)
+              .replace('{location}', location(node))
+          : `${node.name} · ${location(node)}`,
       position:
         index === 0 ? { x: 320, y: 0 } : { x: direction === 'in' ? 0 : 640, y: (index - 1) * 90 },
       data: { label: `${node.name}\n${node.filePath ?? node.nodeType}` },
@@ -57,6 +67,13 @@ export default function RepositoryNeighborhood({
         source: String(relation.sourceNodeId),
         target: String(relation.targetNodeId),
         label: `${relation.edgeType} · ${relationConfidenceLabel(t, relation.confidence)}`,
+        ariaLabel: t('graph.edgeName')
+          .replace('{source}', name(relation.sourceNodeId))
+          .replace('{target}', name(relation.targetNodeId))
+          .replace(
+            '{details}',
+            `${relation.edgeType} · ${relationConfidenceLabel(t, relation.confidence)}`,
+          ),
         markerEnd: { type: MarkerType.ArrowClosed },
         labelStyle: { fontSize: 10, fill: 'var(--color-ink)' },
         labelBgStyle: { fill: 'var(--color-surface-1)' },
@@ -114,12 +131,27 @@ export default function RepositoryNeighborhood({
             <p className="py-3 text-sm text-ink-muted">{t('neighborhood.empty')}</p>
           ) : (
             <>
-              <div className="h-72 rounded border border-line" aria-label={t('neighborhood.graph')}>
+              <div
+                className="h-72 rounded border border-line"
+                aria-label={t('neighborhood.graph')}
+                onKeyDown={(event) => {
+                  // React Flow only selects a node on Enter; open it as a click does.
+                  const element = (event.target as Element).closest('.react-flow__node')
+                  const target = graph.byId.get(Number(element?.getAttribute('data-id')))
+                  if (event.key === 'Enter' && target) onSelect(target)
+                }}
+              >
                 <ReactFlow
                   nodes={graph.nodes}
                   edges={graph.edges}
                   nodesDraggable={false}
                   nodesConnectable={false}
+                  deleteKeyCode={null}
+                  ariaLabelConfig={{
+                    'node.a11yDescription.default': t('graph.nodeHint'),
+                    'node.a11yDescription.keyboardDisabled': t('graph.nodeHint'),
+                    'edge.a11yDescription.default': t('graph.edgeHint'),
+                  }}
                   fitView
                   minZoom={0.15}
                   maxZoom={1.5}
