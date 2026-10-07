@@ -100,10 +100,10 @@ public class CodeReviewService {
         long snapshotId = requireSnapshot(project);
         PullRow pull = requirePull(projectId, pullNumber);
         String context = buildContext(projectId, snapshotId, pull);
-        String userPrompt = SecretMask.redact("QUESTION:\nReview pull request #" + pullNumber
+        String userPrompt = PersonalDataMask.mask(SecretMask.redact("QUESTION:\nReview pull request #" + pullNumber
                 + "\n\n---BEGIN CONTEXT---\n"
                 + context
-                + "\n---END CONTEXT---");
+                + "\n---END CONTEXT---"));
         AIProvider.ChatResponse raw =
                 usage.chat(userId, projectId, provider, "review", new AIProvider.ChatRequest(SYSTEM, userPrompt, true));
         Parsed parsed = parse(raw);
