@@ -143,6 +143,10 @@ final class PublishedFactAudit {
                 result.count("nodeFileLevelVerified");
                 continue;
             }
+            if (start == null || end == null) {
+                result.fail("incomplete node span " + key + " " + start + "-" + end);
+                continue;
+            }
             String span = span(source, start, end);
             if (span == null) {
                 result.fail("node span outside retained bytes " + key + " " + start + "-" + end + " of "
@@ -150,7 +154,9 @@ final class PublishedFactAudit {
                 continue;
             }
             String name = (String) node.get("name");
-            if ("FILE".equals(type)) {
+            if ("FILE".equals(type)
+                    || (("CONFIG".equals(type) || "MIGRATION".equals(type))
+                            && key.equals(type.toLowerCase(java.util.Locale.ROOT) + ":" + path))) {
                 // A file fact spans the whole retained file and is named by its last path segment.
                 if (start != 1 || end != source.lines().size() || !path.endsWith("/" + name) && !path.equals(name)) {
                     result.fail("file fact span/name " + key + " lines " + start + "-" + end + " of "

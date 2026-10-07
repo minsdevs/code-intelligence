@@ -190,6 +190,9 @@ class EvidenceHistoryIntegrationTest {
     static final String API = "web/src/api.ts";
     static final String API_RENAMED = "web/src/users-api.ts";
     static final String APP = "web/src/App.tsx";
+    static final String PACKAGE_JSON = "web/package.json";
+    static final String APPLICATION_YML = "svc-a/src/main/resources/application.yml";
+    static final String MIGRATION = "svc-a/src/main/resources/db/migration/V1__users.sql";
 
     static Map<String, String> initialTree() {
         Map<String, String> tree = new LinkedHashMap<>();
@@ -249,6 +252,11 @@ class EvidenceHistoryIntegrationTest {
                 import { both } from './calls';
                 export function App() { return <div>{both()}</div>; }
                 """);
+        // Whole-file CONFIG/MIGRATION facts: LF-terminated, CRLF without a final newline, and CRLF-terminated.
+        tree.put(PACKAGE_JSON, "{\"name\":\"c06-web\",\"version\":\"1.0.0\"}\n");
+        tree.put(APPLICATION_YML, "server:\r\n  port: 8080\r\nspring:\r\n  application:\r\n    name: c06");
+        // No table statement: DB_TABLE facts still publish an open line range (accuracy finding D6).
+        tree.put(MIGRATION, "CREATE SEQUENCE c06_ids\r\n  START WITH 1\r\n  INCREMENT BY 1;\r\n");
         return tree;
     }
 
@@ -279,6 +287,7 @@ class EvidenceHistoryIntegrationTest {
         pinnedNote = notes.create(project, user, new NoteService.UpsertNote("Pinned", "See @file:" + API))
                 .id();
         var audit = auditAll("C06-01");
+        assertThat(audit.get(snapshot).nodeTypes).containsKeys("CONFIG", "MIGRATION");
         assertThat(audit.get(snapshot).counts.getOrDefault("nodeSpanVerified", 0))
                 .isPositive();
         assertThat(audit.get(snapshot).counts.getOrDefault("edgeSpanVerified", 0))
@@ -466,7 +475,7 @@ class EvidenceHistoryIntegrationTest {
     @Test
     @Order(13)
     @DisplayName(
-            "C06-13 GC: no retained snapshot source is evicted; legacy-contract pruning ignores note pins (recorded)")
+            "C06-13 GC: no retained snapshot source is evicted; legacy-contract pruning keeps note-pinned snapshots")
     void retentionNeverEvictsRetainedSource() {
         assertThat(snapshots).hasSizeGreaterThan(app.snapshotRetention() + 2);
         for (long snapshot : snapshots) {
@@ -488,7 +497,7 @@ class EvidenceHistoryIntegrationTest {
         REPORT.put("C06-13 legacyPrune", legacyPruneOfANotePinnedSnapshot());
     }
 
-    /** Legacy (source_contract_version 0, e.g. GitHub) snapshots are pruned by FinalizeStep without pin checks. */
+    /** Legacy (source_contract_version 0, e.g. GitHub) snapshots pinned by a note survive FinalizeStep pruning. */
     private Map<String, Object> legacyPruneOfANotePinnedSnapshot() {
         String unique = UUID.randomUUID().toString();
         long legacyUser = jdbc.queryForObject(
@@ -543,12 +552,11 @@ class EvidenceHistoryIntegrationTest {
         observed.put("pinnedFileRowKept", fileKept);
         observed.put("noteKept", noteKept);
         observed.put("status", snapshotKept && fileKept ? "PASS" : "FAIL_SPEC_DEVIATION");
-        // Observed behaviour is asserted so regressions in either direction are visible; the gate row is FAIL.
         assertThat(noteKept).isTrue();
         assertThat(snapshotKept)
-                .as("legacy prune removes the note-pinned snapshot")
-                .isFalse();
-        assertThat(fileKept).isFalse();
+                .as("legacy prune keeps the note-pinned snapshot")
+                .isTrue();
+        assertThat(fileKept).isTrue();
         // A surviving legacy snapshot reports unmeasured results, never recorded success.
         var legacyCoverage = coverage.buildReport(legacy, ids.getLast());
         assertThat(legacyCoverage.measurementStatus()).isEqualTo("LEGACY_UNMEASURED");
