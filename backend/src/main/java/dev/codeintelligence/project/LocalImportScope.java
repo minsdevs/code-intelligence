@@ -1,6 +1,6 @@
 package dev.codeintelligence.project;
 
-import dev.codeintelligence.analysis.core.LanguageDetector;
+import dev.codeintelligence.common.LanguageDetector;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

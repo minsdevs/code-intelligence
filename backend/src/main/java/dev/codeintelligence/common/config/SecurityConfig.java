@@ -95,7 +95,7 @@ public class SecurityConfig {
         http.cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
-                        .ignoringRequestMatchers("/api/desktop/paths")
+                        .ignoringRequestMatchers("/api/desktop/paths", "/api/desktop/owner-memory")
                         .ignoringRequestMatchers(MaintenanceFilter::isControlRequest))
                 .addFilterBefore(
                         new DesktopAuthenticationFilter(desktopAuthProperties, accountService),

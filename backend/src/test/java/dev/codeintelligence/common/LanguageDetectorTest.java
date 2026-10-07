@@ -1,4 +1,4 @@
-package dev.codeintelligence.analysis.core;
+package dev.codeintelligence.common;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

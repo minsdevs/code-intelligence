@@ -17,6 +17,9 @@ import dev.codeintelligence.auth.DesktopAuthenticationFilter;
 import dev.codeintelligence.auth.DesktopCapabilityFilter;
 import dev.codeintelligence.auth.GithubOAuth2UserService;
 import dev.codeintelligence.auth.UserAccount;
+import dev.codeintelligence.job.AnalysisMemoryWatchdog;
+import dev.codeintelligence.job.OwnerTreeMemoryController;
+import dev.codeintelligence.job.ReportedOwnerTreeMemory;
 import dev.codeintelligence.project.DesktopPathAuthorizationController;
 import dev.codeintelligence.project.DesktopPathAuthorizationService;
 import jakarta.servlet.DispatcherType;
@@ -252,6 +255,52 @@ class DesktopRequestSecurityTest {
     }
 
     @Test
+    void ownerMemoryIsReportedOnlyByMainAndAnswersWhetherARunIsWatched() throws Exception {
+        String body = "{\"ownerTreeBytes\":1073741824}";
+        var memory = context.getBean(ReportedOwnerTreeMemory.class);
+        mvc.perform(post(OwnerTreeMemoryController.PATH)
+                        .secure(true)
+                        .header(HEADER, TOKEN)
+                        .contentType("application/json")
+                        .content(body))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(OwnerTreeMemoryController.PATH)
+                        .secure(true)
+                        .header(HEADER, TOKEN)
+                        .header("X-Code-Intelligence-Path-Token", TOKEN)
+                        .contentType("application/json")
+                        .content(body))
+                .andExpect(status().isForbidden());
+        assertThat(memory.ownerTreeBytes()).isEmpty();
+        mvc.perform(post(OwnerTreeMemoryController.PATH)
+                        .secure(true)
+                        .header(HEADER, TOKEN)
+                        .header("X-Code-Intelligence-Path-Token", "b".repeat(64))
+                        .contentType("application/json")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.watching").value(false));
+        assertThat(memory.ownerTreeBytes()).hasValue(1073741824L);
+        try (var ignored = context.getBean(AnalysisMemoryWatchdog.class).watch(() -> {})) {
+            mvc.perform(post(OwnerTreeMemoryController.PATH)
+                            .secure(true)
+                            .header(HEADER, TOKEN)
+                            .header("X-Code-Intelligence-Path-Token", "b".repeat(64))
+                            .contentType("application/json")
+                            .content(body))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.watching").value(true));
+        }
+        mvc.perform(post(OwnerTreeMemoryController.PATH)
+                        .secure(true)
+                        .header(HEADER, TOKEN)
+                        .header("X-Code-Intelligence-Path-Token", "b".repeat(64))
+                        .contentType("application/json")
+                        .content("{\"ownerTreeBytes\":-1}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void restoringAPersistedRootReturnsNoSelectionGrant(@TempDir Path folder) throws Exception {
         String body = "{\"path\":\"" + folder.toString().replace("\\", "\\\\") + "\",\"purpose\":\"RESTORE\"}";
         mvc.perform(post("/api/desktop/paths")
@@ -278,7 +327,9 @@ class DesktopRequestSecurityTest {
         SecurityConfig.class,
         TestEndpoints.class,
         DesktopPathAuthorizationController.class,
-        DesktopPathAuthorizationService.class
+        DesktopPathAuthorizationService.class,
+        OwnerTreeMemoryController.class,
+        ReportedOwnerTreeMemory.class
     })
     static class TestConfiguration implements WebMvcConfigurer {
         @Override
@@ -289,6 +340,11 @@ class DesktopRequestSecurityTest {
         @Bean
         DesktopAuthProperties desktopAuthProperties() {
             return new DesktopAuthProperties(TOKEN, "test", ORIGIN);
+        }
+
+        @Bean
+        AnalysisMemoryWatchdog analysisMemoryWatchdog(ReportedOwnerTreeMemory memory) {
+            return new AnalysisMemoryWatchdog(6L * 1024 * 1024 * 1024, memory, null);
         }
 
         @Bean

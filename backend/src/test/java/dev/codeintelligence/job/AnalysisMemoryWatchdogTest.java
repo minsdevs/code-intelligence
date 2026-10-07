@@ -20,9 +20,8 @@ class AnalysisMemoryWatchdogTest {
 
     @Test
     void theShippedLimitIsSixGibibytes() {
-        assertThat(new AnalysisMemoryProperties(6 * GIB, 0).limitBytes()).isEqualTo(6 * GIB);
-        assertThatThrownBy(() -> new AnalysisMemoryProperties(0, 0)).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> new AnalysisMemoryProperties(6 * GIB, -1)).isInstanceOf(IllegalStateException.class);
+        assertThat(new AnalysisMemoryProperties(6 * GIB).limitBytes()).isEqualTo(6 * GIB);
+        assertThatThrownBy(() -> new AnalysisMemoryProperties(0)).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
@@ -91,25 +90,33 @@ class AnalysisMemoryWatchdogTest {
     }
 
     @Test
-    void psOutputIsSummedOverTheOwnerTreeOnly() {
-        String ps = """
-                  1     0   9000
-                 50     1    200
-                 51    50    300
-                 52    51    400
-                 60     1   5000
-                 61    60   7000
-                """;
-        assertThat(ProcessTreeMemory.ownerTreeBytes(ps, 50)).hasValue((200 + 300 + 400) * 1024L);
-        assertThat(ProcessTreeMemory.ownerTreeBytes(ps, 61)).hasValue(7000 * 1024L);
-        assertThat(ProcessTreeMemory.ownerTreeBytes(ps, 99)).isEmpty();
-        assertThat(ProcessTreeMemory.ownerTreeBytes("garbage line\n", 1)).isEmpty();
+    void watchingIsReportedOnlyWhileARunIsRegistered() {
+        try (var watchdog = new AnalysisMemoryWatchdog(6 * GIB, OptionalLong::empty, null)) {
+            assertThat(watchdog.watching()).isFalse();
+            var registration = watchdog.watch(() -> {});
+            assertThat(watchdog.watching()).isTrue();
+            registration.close();
+            assertThat(watchdog.watching()).isFalse();
+        }
     }
 
     @Test
-    void theRealProcessTreeOfThisJvmIsMeasurable() {
-        OptionalLong own = new ProcessTreeMemory(ProcessHandle.current().pid()).ownerTreeBytes();
-        assertThat(own).isPresent();
-        assertThat(own.getAsLong()).isGreaterThan(16L * 1024 * 1024);
+    void theReportedOwnerTreeCountsOnlyWhileFresh() {
+        AtomicLong now = new AtomicLong(1_000);
+        var memory = new ReportedOwnerTreeMemory(now::get);
+        assertThat(memory.ownerTreeBytes()).isEmpty();
+        memory.report(7 * GIB);
+        assertThat(memory.ownerTreeBytes()).hasValue(7 * GIB);
+        now.addAndGet(ReportedOwnerTreeMemory.MAX_AGE.toNanos());
+        assertThat(memory.ownerTreeBytes()).hasValue(7 * GIB);
+        now.incrementAndGet();
+        // A stale report is unmeasurable: it neither blocks admission nor stops runs.
+        assertThat(memory.ownerTreeBytes()).isEmpty();
+        try (var watchdog = new AnalysisMemoryWatchdog(6 * GIB, memory, null)) {
+            assertThat(watchdog.admits()).isTrue();
+            memory.report(6 * GIB + 1);
+            assertThat(watchdog.admits()).isFalse();
+        }
+        assertThatThrownBy(() -> memory.report(-1)).isInstanceOf(IllegalArgumentException.class);
     }
 }

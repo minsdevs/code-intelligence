@@ -1,4 +1,4 @@
-package dev.codeintelligence.analysis.core;
+package dev.codeintelligence.common;
 
 import java.util.Locale;
 import java.util.Map;

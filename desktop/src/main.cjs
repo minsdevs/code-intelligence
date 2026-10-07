@@ -8,7 +8,7 @@ const {
   safeStorage,
   shell
 } = require('electron');
-const { spawn, spawnSync } = require('node:child_process');
+const { execFile, spawn, spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -43,6 +43,7 @@ const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
 const { TEST_ONLY_MODE, adapterIsolationRuntimeMode, openAdapterIsolation } = require('./adapter-isolation.cjs');
 const { openAdapterControl } = require('./adapter-control.cjs');
 const { openUpdateStartup } = require('./update-startup.cjs');
+const { startOwnerMemoryReporter } = require('./owner-memory.cjs');
 const packageMetadata = require('../package.json');
 
 // App documents and workers may run only bundled same-origin script and reach only the app origin.
@@ -80,6 +81,7 @@ let startupPhase = 'MANIFEST';
 let shutdownPhase = 'QUEUED';
 let isolatedPlan;
 let adapterControl;
+let ownerMemory;
 function noteStartup(phase) {
   startupPhase = phase;
   console.error('DESKTOP_STARTUP ' + phase);
@@ -192,7 +194,7 @@ async function readAuthorizedRoots() {
 
 function loseRuntimeOwnership() {
   stopping = true; runtime = runtime || {}; runtime.ready = false; runtime.recoveryRequired = true;
-  clearTimeout(restartTimer); restartTimer = null;
+  clearTimeout(restartTimer); restartTimer = null; stopOwnerMemory();
   runtime.error = 'Desktop ownership was lost. Recovery is required before reopening.';
   mainWindow?.webContents.send('runtime:changed', publicRuntimeStatus());
   return Promise.allSettled([Promise.resolve().then(() => aiGateway?.latchOffline('USER_OFF')),
@@ -396,7 +398,7 @@ async function spawnManaged(name, command, args, options = {}) {
     if (!spawned && !(Number.isInteger(child.pid) && child.pid > 0)) { onStopped('spawn error'); return; }
     // A kill/IPC error is not exit evidence. Keep the live process owned until its real exit.
     runtime = runtime || { ready: false };
-    runtime.ready = false; runtime.recoveryRequired = true;
+    runtime.ready = false; runtime.recoveryRequired = true; stopOwnerMemory();
     runtime.error = 'A bundled service requires recovery before restart.';
     Promise.resolve().then(() => aiGateway?.latchOffline('USER_OFF')).catch(() => {});
   };
@@ -711,8 +713,6 @@ async function spawnBackend({ maintenanceId = '', traceStartup = false } = {}) {
       APP_DESKTOP_AI_BOOTSTRAP_STDIN: 'true',
       APP_DESKTOP_MAINTENANCE_STARTUP_ID: maintenanceId,
       GITHUB_NATIVE_CLIENT_ID: nativeGithubClientId(),
-      // Root of the owner tree that the backend's 6 GiB analysis memory watchdog measures.
-      ANALYSIS_MEMORY_OWNER_PID: String(process.pid),
       CORS_ALLOWED_ORIGINS: runtime.apiBaseUrl
     }
   });
@@ -786,6 +786,7 @@ async function startRuntime() {
   assertSafetyReady();
   runtime.ready = true;
   restartAttempts = 0;
+  startOwnerMemory();
   mainWindow?.webContents.send('runtime:changed', publicRuntimeStatus());
 }
 
@@ -835,6 +836,7 @@ async function stopChild(name) {
 
 async function stopRuntime({ keepDatabase = false } = {}) {
   stopping = true;
+  stopOwnerMemory();
   clearTimeout(restartTimer);
   restartTimer = null;
   runtime = runtime || { ready: false };
@@ -908,6 +910,7 @@ function shutdownRuntime() {
   if (shutdownPromise) return shutdownPromise;
   quitting = true;
   stopping = true;
+  stopOwnerMemory();
   noteShutdown('QUEUED');
   clearTimeout(restartTimer);
   restartTimer = null;
@@ -992,6 +995,30 @@ async function openBackupProductState() {
     connection: { host: '127.0.0.1', port: runtime.ports.postgres, user: 'codeintel' }, env: postgresEnvironment(),
     expectedDataDirectory: path.join(userData, 'postgres'), ownedPostgres: children.get('postgres'), dataRoot,
     ...(runtime.windowsBoundary ? { windowsBoundary: runtime.windowsBoundary } : {}) });
+}
+
+// 05 §4: main measures the owner tree rooted at itself for the backend's analysis memory watchdog,
+// so the backend never starts a process to do it. Windows has no /bin/ps; there the watchdog
+// stays unmeasured, as before.
+function startOwnerMemory() {
+  if (ownerMemory || quitting || runtime.windowsBoundary) return;
+  ownerMemory = startOwnerMemoryReporter({ root: process.pid, execFile, setTimeout, clearTimeout,
+    active: () => Boolean(runtime?.ready && !stopping), report: reportOwnerMemory });
+}
+
+function stopOwnerMemory() {
+  ownerMemory?.stop();
+  ownerMemory = null;
+}
+
+async function reportOwnerMemory(ownerTreeBytes) {
+  const response = await runtime.transport.backend.request(`${runtime.apiBaseUrl}/api/desktop/owner-memory`, {
+    method: 'POST', signal: AbortSignal.timeout(5000),
+    headers: { 'Content-Type': 'application/json', 'X-Code-Intelligence-Token': runtime.apiToken,
+      'X-Code-Intelligence-Path-Token': runtime.pathToken }, body: JSON.stringify({ ownerTreeBytes })
+  });
+  if (!response.ok) return false;
+  return (await response.json())?.watching === true;
 }
 
 async function maintenanceControl(transactionId, operation) {
@@ -1113,6 +1140,7 @@ async function resumeAfterBackup({ transactionId, restored, recovery = false }) 
     await saveEncryptedJson(runtime.pathsFile, runtime.authorizedRoots);
   }
   stopping = false; runtime.ready = true; runtime.error = null;
+  startOwnerMemory();
   if (restored) await mainWindow?.loadURL(runtime.apiBaseUrl);
   mainWindow?.webContents.send('runtime:changed', publicRuntimeStatus());
 }
@@ -1131,7 +1159,7 @@ function backupPorts() {
     async failure() {
       runtime.ready = false; runtime.recoveryRequired = true;
       runtime.error = 'Backup or restore requires offline recovery. Preserved data was not discarded.';
-      stopping = true; clearTimeout(restartTimer); restartTimer = null;
+      stopping = true; clearTimeout(restartTimer); restartTimer = null; stopOwnerMemory();
       // Stop every possible writer even if a different child fails to terminate. Keep PostgreSQL
       // owned for inspection; normal startup/AI remain blocked by the outstanding recovery state.
       const stopped = await Promise.allSettled(['backend', 'ts-analyzer', 'redis'].map(stopChild));

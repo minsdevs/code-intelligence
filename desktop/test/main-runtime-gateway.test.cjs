@@ -119,6 +119,10 @@ async function harness(t, options = {}) {
       } else child.stdin = null;
       children.push({ command, args: [...args], options: config, child }); queueMicrotask(() => child.emit('spawn')); return child;
     },
+    execFile(file, args, config, callback) {
+      (controls.execFiles ??= []).push({ file, args: [...args], shell: config.shell, env: config.env });
+      queueMicrotask(() => callback(null, controls.psTable ?? ''));
+    },
     spawnSync(command, args, config) {
       synchronous.push({ command, args, options: config }); events.push(`run.${path.basename(command)}`);
       if (path.basename(command) === 'initdb') fs.writeFileSync(path.join(args[args.indexOf('-D') + 1], 'PG_VERSION'), '16');
@@ -505,6 +509,33 @@ test('a denied initial document can acquire runtime authority only after its mai
   assert.equal(departed.returnValue, null);
 });
 
+test('main reports its owner tree to the backend watchdog with one fixed ps and the main capability', async t => {
+  const h = await harness(t); await h.start();
+  assert.equal(h.run('runtime.ready'), true);
+  const tick = () => [...h.timers].find(timer => timer.fn.name === 'tick');
+  let watching = true;
+  h.controls.fetch = async url => new URL(url).pathname === '/api/desktop/owner-memory'
+    ? { ok: true, json: async () => ({ watching }) } : undefined;
+  // Main (4242) owns the backend (25001) and its child (25002); 9999 is outside the tree.
+  h.controls.psTable = '  4242     1  1000\n25001  4242  2000\n25002 25001   300\n 9999     1 50000\n';
+  let timer = tick(); assert.equal(timer.delay, 0); h.timers.delete(timer); await timer.fn();
+  assert.deepEqual(h.controls.execFiles, [{ file: '/bin/ps', args: ['-axo', 'pid=,ppid=,rss='], shell: false, env: {} }]);
+  const reports = () => h.requests.filter(value => new URL(value.url).pathname === '/api/desktop/owner-memory');
+  assert.equal(reports().length, 1);
+  assert.deepEqual(JSON.parse(reports()[0].config.body), { ownerTreeBytes: 3300 * 1024 });
+  assert.equal(reports()[0].config.headers['X-Code-Intelligence-Path-Token'], h.run('runtime.pathToken'));
+  // A watched run makes main sample every 2 s; otherwise every 5 s.
+  timer = tick(); assert.equal(timer.delay, 2000); watching = false; h.timers.delete(timer); await timer.fn();
+  assert.equal(tick().delay, 5000);
+  // While the runtime is not ready, main neither samples nor reports.
+  h.run('runtime.ready = false');
+  timer = tick(); h.timers.delete(timer); await timer.fn();
+  assert.equal(h.controls.execFiles.length, 2); assert.equal(reports().length, 2);
+  h.run('runtime.ready = true');
+  h.run('stopOwnerMemory()');
+  assert.equal(tick(), undefined);
+});
+
 test('existing local data permits first source enrollment without a fresh paid-AI exemption', async t => {
   const h = await harness(t), data = path.join(h.paths.userData, 'data');
   await h.realLifecycle.loadDesktopSecrets({ userData: h.paths.userData, safeStorage: h.safeStorage });
@@ -531,8 +562,8 @@ test('actual main startup passes fresh enrollment before paths file and private 
   const backend = h.children.find(value => path.basename(value.command) === 'java');
   assert.equal(backend.options.stdio[0], 'pipe'); assert.equal(backend.options.env.APP_DESKTOP_AI_BOOTSTRAP_STDIN, 'true');
   assert.equal(backend.options.env.GITHUB_NATIVE_CLIENT_ID, 'public-native-client');
-  // The backend's 6 GiB analysis watchdog measures the whole owner tree rooted at this main process.
-  assert.equal(backend.options.env.ANALYSIS_MEMORY_OWNER_PID, '4242');
+  // The backend's 6 GiB analysis watchdog gets the owner tree from main and starts no process itself.
+  assert.equal(backend.options.env.ANALYSIS_MEMORY_OWNER_PID, undefined);
   for (const child of h.children) {
     assert.doesNotMatch(JSON.stringify({ args: child.args, env: child.options.env }), new RegExp(`${h.cap}|${h.channelEpoch}|${data.source.capability}|private/ai.sock|host-provider-sentinel|host-node-sentinel|host-java-sentinel|host-github-sentinel`));
     assert.equal(JSON.stringify({ args: child.args, env: child.options.env }).includes(data.source.socketPath), false);

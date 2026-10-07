@@ -1,5 +1,6 @@
 package dev.codeintelligence.analysis.core;
 
+import dev.codeintelligence.common.LanguageDetector;
 import dev.codeintelligence.job.JobCancellation;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
