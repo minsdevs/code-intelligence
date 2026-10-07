@@ -11,9 +11,9 @@ import dev.codeintelligence.analysis.core.AnalysisContext;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Iterator;
 import java.util.Locale;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,32 +25,59 @@ final class JavaParseSupport {
 
     private JavaParseSupport() {}
 
-    static List<ParsedJavaFile> parseJavaFiles(AnalysisContext ctx) {
-        JavaParser parser = parser();
-        List<ParsedJavaFile> units = new ArrayList<>();
-        for (InventoriedFile file : ctx.inventory().files()) {
-            if (!isJava(file)) {
-                continue;
-            }
-            Path absolute = ctx.clonePath().resolve(file.path()).normalize();
-            if (!Files.isRegularFile(absolute)) {
-                continue;
-            }
-            try {
-                ParseResult<CompilationUnit> parsed = parser.parse(absolute);
-                if (!parsed.isSuccessful() || parsed.getResult().isEmpty()) {
-                    continue;
+    /**
+     * Parses lazily, one file per iteration step, so a caller holds a single syntax tree at a time
+     * instead of the whole project's (heap and resident memory then do not grow with the project).
+     */
+    static Iterable<ParsedJavaFile> parseJavaFiles(AnalysisContext ctx) {
+        return () -> new Iterator<>() {
+            private final JavaParser parser = parser();
+            private final Iterator<InventoriedFile> files =
+                    ctx.inventory().files().iterator();
+            private ParsedJavaFile next;
+
+            @Override
+            public boolean hasNext() {
+                while (next == null && files.hasNext()) {
+                    next = parse(ctx, parser, files.next());
                 }
-                CompilationUnit cu = parsed.getResult().get();
-                String pkg = cu.getPackageDeclaration()
-                        .map(decl -> decl.getNameAsString())
-                        .orElse("");
-                units.add(new ParsedJavaFile(file, cu, pkg));
-            } catch (Exception e) {
-                log.warn("Skipping Java file {}: {}", file.path(), e.toString());
+                return next != null;
             }
+
+            @Override
+            public ParsedJavaFile next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                ParsedJavaFile unit = next;
+                next = null;
+                return unit;
+            }
+        };
+    }
+
+    private static ParsedJavaFile parse(AnalysisContext ctx, JavaParser parser, InventoriedFile file) {
+        if (!isJava(file)) {
+            return null;
         }
-        return units;
+        Path absolute = ctx.clonePath().resolve(file.path()).normalize();
+        if (!Files.isRegularFile(absolute)) {
+            return null;
+        }
+        try {
+            ParseResult<CompilationUnit> parsed = parser.parse(absolute);
+            if (!parsed.isSuccessful() || parsed.getResult().isEmpty()) {
+                return null;
+            }
+            CompilationUnit cu = parsed.getResult().get();
+            String pkg = cu.getPackageDeclaration()
+                    .map(decl -> decl.getNameAsString())
+                    .orElse("");
+            return new ParsedJavaFile(file, cu, pkg);
+        } catch (Exception e) {
+            log.warn("Skipping Java file {}: {}", file.path(), e.toString());
+            return null;
+        }
     }
 
     static boolean isJava(InventoriedFile file) {
