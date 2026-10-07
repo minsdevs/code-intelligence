@@ -1,0 +1,14 @@
+{
+  "source": "APFS clone of .native-product-LA8ZS9/Code Intelligence Validation.app (candidate directory not written)",
+  "app": "validation/local/adr01-stage/Code Intelligence Validation.app (removed after the runs)",
+  "appId": "dev.codeintelligence.desktop.validation",
+  "adapterSupervisor": {
+    "format": 1,
+    "supervisorSha256": "b304188f313b69fbc2727589aec493f8b26a6924caa5dd4ac0fc87d4cbbf62b5",
+    "bridgeSha256": "1b74e6e9bb39441aa2ccbf59e3646da044d7c3b460fa7d5574e2d056cadaf90f"
+  },
+  "asarHeaderSha256": "78a39deca0f2b9bdd833b53eb742c467db971ea42a895ecd09c1426c8342d90f",
+  "runAsNodeFuse": "DISABLE",
+  "bytes": { "service": 338612224 },
+  "assembleWallSeconds": 13.2
+}

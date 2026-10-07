@@ -1,0 +1,118 @@
+{
+  "format": 1,
+  "scope": "ADR-01 staged xpc-required app, ad-hoc signatures (not a candidate)",
+  "app": "/Users/minseokchae/Dev/ciw/adr01/validation/local/adr01-stage/Code Intelligence Validation.app",
+  "expectUnavailable": true,
+  "observedAt": "2026-10-07T10:22:21.419Z",
+  "mockKeychain": true,
+  "realAccount": false,
+  "checks": {
+    "services": [
+      "backend",
+      "postgres",
+      "redis"
+    ],
+    "job": {
+      "status": "FAILED",
+      "failureCode": "ADAPTER_ISOLATION_UNAVAILABLE",
+      "error": "step 'TS_PARSING' failed: TypeScript/JavaScript analysis isolation is unavailable (SUPERVISOR_UNSIGNED); the analysis did not run. Reinstall or update the app.",
+      "tsParsing": "FAILED"
+    },
+    "processes": [],
+    "alertText": "step 'TS_PARSING' failed: TypeScript/JavaScript analysis isolation is unavailable (SUPERVISOR_UNSIGNED); the analysis did not run. Reinstall or update the app.\n\nThe isolated analysis environment could not be verified, so the TypeScript/JavaScript analyzer did not run. It never runs outside that environment. Reinstall or update the app, then retry.\n\nRetry\nOpen existing project to start a new analysis",
+    "adapterIsolationLog": [
+      "DESKTOP_ADAPTER_ISOLATION ADAPTER_ISOLATION_UNAVAILABLE SUPERVISOR_UNSIGNED"
+    ]
+  },
+  "startup": {
+    "phase": "READY",
+    "state": "RUNNING"
+  },
+  "shutdownTrace": [
+    {
+      "phase": "QUEUED",
+      "state": "RUNNING",
+      "elapsedMs": 0
+    },
+    {
+      "phase": "STOPPING",
+      "state": "RUNNING",
+      "elapsedMs": 0
+    },
+    {
+      "phase": "SAFETY_OFF",
+      "state": "RUNNING",
+      "elapsedMs": 0
+    },
+    {
+      "phase": "BACKEND",
+      "state": "RUNNING",
+      "elapsedMs": 55
+    },
+    {
+      "phase": "ANALYZER",
+      "state": "RUNNING",
+      "elapsedMs": 882
+    },
+    {
+      "phase": "REDIS",
+      "state": "RUNNING",
+      "elapsedMs": 882
+    },
+    {
+      "phase": "POSTGRES",
+      "state": "RUNNING",
+      "elapsedMs": 1363
+    },
+    {
+      "phase": "SOURCES",
+      "state": "RUNNING",
+      "elapsedMs": 1848
+    },
+    {
+      "phase": "SAFETY",
+      "state": "RUNNING",
+      "elapsedMs": 1856
+    },
+    {
+      "phase": "CONNECTIONS",
+      "state": "RUNNING",
+      "elapsedMs": 1965
+    },
+    {
+      "phase": "OWNER_LOCKS",
+      "state": "RUNNING",
+      "elapsedMs": 1966
+    },
+    {
+      "phase": "TRANSPORT",
+      "state": "RUNNING",
+      "elapsedMs": 1966
+    },
+    {
+      "phase": "STORAGE",
+      "state": "RUNNING",
+      "elapsedMs": 1968
+    },
+    {
+      "phase": "PRIVATE_IPC",
+      "state": "RUNNING",
+      "elapsedMs": 1968
+    },
+    {
+      "phase": "COMPLETE",
+      "state": "COMPLETE",
+      "elapsedMs": 1968
+    }
+  ],
+  "shutdown": {
+    "phase": "COMPLETE",
+    "state": "COMPLETE",
+    "elapsedMs": 1968
+  },
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "adapterProcessesAfterExit": 0
+}
