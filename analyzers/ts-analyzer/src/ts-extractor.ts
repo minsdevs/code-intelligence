@@ -5,6 +5,7 @@ import { extractGeneric } from './generic-extractor'
 import { extractSemanticGraph } from './semantic-extractor'
 import { assertParseable } from './syntax-diagnostics'
 import { createReactComponentResolver } from './react-component-binding'
+import { forEachDescendantOfKinds } from './walk'
 
 const HTTP_METHODS: Record<string, true> = {
   GET: true,
@@ -15,6 +16,9 @@ const HTTP_METHODS: Record<string, true> = {
   HEAD: true,
   OPTIONS: true,
 }
+
+const DECLARATION_KINDS = [SyntaxKind.FunctionDeclaration, SyntaxKind.FunctionExpression, SyntaxKind.ArrowFunction,
+  SyntaxKind.CallExpression]
 
 const STORE_FACTORIES_BY_SOURCE: Record<string, string[]> = {
   zustand: ['create', 'createStore'],
@@ -35,7 +39,10 @@ export function extractTs(files: AnalyzeFile[]): AnalyzeResponse {
       module: ts.ModuleKind.ESNext,
       esModuleInterop: true,
       skipLibCheck: true,
-      noResolve: false,
+      // Every input is already a root file, so imports still resolve to them for the checker.
+      // Following imports would only recurse once per link of an import chain (stack overflow
+      // on the large size class); the in-memory file system holds no other source.
+      noResolve: true,
       strict: false,
     },
   })
@@ -107,7 +114,7 @@ function scriptKind(path: string): ts.ScriptKind {
 }
 
 function collectRoutes(source: SourceFile, filePath: string, routes: RouteHit[], resolveComponent: ReturnType<typeof createReactComponentResolver>): void {
-  source.forEachDescendant((node) => {
+  forEachDescendantOfKinds(source, [SyntaxKind.JsxOpeningElement, SyntaxKind.JsxSelfClosingElement], (node) => {
     if (!Node.isJsxOpeningElement(node) && !Node.isJsxSelfClosingElement(node)) {
       return
     }
@@ -161,7 +168,7 @@ function isReactRoute(tag: Node): boolean {
  * Works for plain JS/TS router config files.
  */
 function collectVueRouter(source: SourceFile, filePath: string, routes: RouteHit[]): void {
-  source.forEachDescendant((node) => {
+  forEachDescendantOfKinds(source, [SyntaxKind.CallExpression], (node) => {
     if (!Node.isCallExpression(node)) {
       return
     }
@@ -384,7 +391,7 @@ function collectDeclarations(
   stores: SymbolHit[],
   componentDeclarations: Map<Node, SymbolHit>,
 ): void {
-  source.forEachDescendant((node) => {
+  forEachDescendantOfKinds(source, DECLARATION_KINDS, (node) => {
     if (Node.isFunctionDeclaration(node) || Node.isFunctionExpression(node) || Node.isArrowFunction(node)) {
       const name = functionName(node)
       if (!name) {
@@ -509,7 +516,7 @@ function httpMethod(options: Node | undefined): string {
 }
 
 function collectApiCalls(source: SourceFile, filePath: string, apiCalls: ApiCallHit[], bindings: HttpBindings): void {
-  source.forEachDescendant((node) => {
+  forEachDescendantOfKinds(source, [SyntaxKind.CallExpression], (node) => {
     if (!Node.isCallExpression(node)) {
       return
     }
@@ -640,9 +647,8 @@ function enclosingName(node: Node): string | null {
 }
 
 function containsJsx(node: Node): boolean {
-  return node
-    .getDescendants()
-    .some((child) => Node.isJsxElement(child) || Node.isJsxSelfClosingElement(child) || Node.isJsxFragment(child))
+  return [SyntaxKind.JsxElement, SyntaxKind.JsxSelfClosingElement, SyntaxKind.JsxFragment]
+    .some((kind) => node.getFirstDescendantByKind(kind) !== undefined)
 }
 
 function isPascalCase(name: string): boolean {

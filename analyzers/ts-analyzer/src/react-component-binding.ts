@@ -1,12 +1,15 @@
 import { Node, SyntaxKind, ts, type SourceFile } from 'ts-morph'
 import type { AnalyzeFile, RouteComponentResolution, SymbolHit } from './types'
 import { createImportResolver } from './semantic-extractor'
+import { forEachDescendantOfKinds } from './walk'
 
 type ExportRef = { node?: Node; local?: string; source?: string; imported?: string; typeOnly?: boolean }
 type Module = { source: SourceFile; locals: Map<string, Node[]>; exports: Map<string, ExportRef[]> }
 const unresolved: RouteComponentResolution = { status: 'UNRESOLVED', target: null }
 const filePath = (source: SourceFile): string => source.getFilePath().replace(/^\//, '')
 const keyOf = (hit: SymbolHit): string => JSON.stringify([hit.filePath, hit.name])
+const WRITE_KINDS = [SyntaxKind.BinaryExpression, SyntaxKind.PrefixUnaryExpression, SyntaxKind.PostfixUnaryExpression,
+  SyntaxKind.ForOfStatement, SyntaxKind.ForInStatement]
 
 /**
  * Resolve only supplied value declarations. Never run an import, evaluate a helper,
@@ -131,7 +134,7 @@ function writtenBindings(sources: SourceFile[]): Set<Node> {
     } else if (Node.isSpreadElement(node)) targets(node.getExpression())
     else if (Node.isBinaryExpression(node) && node.getOperatorToken().getKind() === SyntaxKind.EqualsToken) targets(node.getLeft())
   }
-  for (const source of sources) source.forEachDescendant(node => {
+  for (const source of sources) forEachDescendantOfKinds(source, WRITE_KINDS, node => {
     if (Node.isBinaryExpression(node) && node.getOperatorToken().getKind() >= SyntaxKind.FirstAssignment
       && node.getOperatorToken().getKind() <= SyntaxKind.LastAssignment) targets(node.getLeft())
     else if ((Node.isPrefixUnaryExpression(node) || Node.isPostfixUnaryExpression(node))
