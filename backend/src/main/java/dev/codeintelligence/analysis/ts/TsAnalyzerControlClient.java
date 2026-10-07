@@ -65,7 +65,8 @@ final class TsAnalyzerControlClient {
         }
         JsonNode error = response.get("error");
         if (error != null && error.isObject() && error.path("status").asInt(0) == 400) {
-            TsSyntaxInputException syntax = TsSyntaxInputException.fromResponse(JSON.writeValueAsBytes(error.get("response")));
+            TsSyntaxInputException syntax =
+                    TsSyntaxInputException.fromResponse(JSON.writeValueAsBytes(error.get("response")));
             if (syntax != null) throw syntax;
             throw new TsAnalyzerException("ts-analyzer rejected input without a recognized diagnostic", null);
         }
@@ -87,7 +88,10 @@ final class TsAnalyzerControlClient {
             });
             try {
                 channel.connect(UnixDomainSocketAddress.of(socket));
-                ByteBuffer out = ByteBuffer.allocate(4 + request.length).putInt(request.length).put(request).flip();
+                ByteBuffer out = ByteBuffer.allocate(4 + request.length)
+                        .putInt(request.length)
+                        .put(request)
+                        .flip();
                 while (out.hasRemaining()) channel.write(out);
                 ByteBuffer prefix = readFully(channel, 4);
                 int length = prefix.getInt();
@@ -107,7 +111,8 @@ final class TsAnalyzerControlClient {
 
     private byte[] envelope(String op, byte[] body) {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream((body == null ? 0 : body.length) + 128);
-        bytes.writeBytes(("{\"capability\":\"" + capability + "\",\"op\":\"" + op + "\"").getBytes(StandardCharsets.UTF_8));
+        bytes.writeBytes(
+                ("{\"capability\":\"" + capability + "\",\"op\":\"" + op + "\"").getBytes(StandardCharsets.UTF_8));
         if (body != null) {
             bytes.writeBytes(",\"body\":".getBytes(StandardCharsets.UTF_8));
             bytes.writeBytes(body);

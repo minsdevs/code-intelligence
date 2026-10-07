@@ -44,14 +44,18 @@ class TsAnalyzerControlClientTest {
                 while (server.isOpen()) {
                     try (SocketChannel connection = server.accept()) {
                         ByteBuffer prefix = read(connection, 4);
-                        JsonNode request = JSON.readTree(read(connection, prefix.getInt()).array());
+                        JsonNode request =
+                                JSON.readTree(read(connection, prefix.getInt()).array());
                         requests.add(request);
                         byte[] response = answer.apply(request);
                         if (response == null) {
                             Thread.sleep(5_000);
                             continue;
                         }
-                        ByteBuffer out = ByteBuffer.allocate(4 + response.length).putInt(response.length).put(response).flip();
+                        ByteBuffer out = ByteBuffer.allocate(4 + response.length)
+                                .putInt(response.length)
+                                .put(response)
+                                .flip();
                         while (out.hasRemaining()) connection.write(out);
                     } catch (IOException | InterruptedException | RuntimeException e) {
                         if (!server.isOpen()) return;
@@ -68,7 +72,8 @@ class TsAnalyzerControlClientTest {
 
         TsAnalyzerClient client(int timeoutSeconds) {
             return new TsAnalyzerClient(
-                    new TsAnalyzerProperties("", timeoutSeconds, "", "", socket.toString(), CAPABILITY), RestClient.builder());
+                    new TsAnalyzerProperties("", timeoutSeconds, "", "", socket.toString(), CAPABILITY),
+                    RestClient.builder());
         }
 
         @Override
@@ -86,16 +91,21 @@ class TsAnalyzerControlClientTest {
 
     @Test
     void sendsTheCapabilityAndTheBudgetedRequestAndMapsTheResult() throws Exception {
-        try (var main = new FakeDesktopMain(request -> "health".equals(request.get("op").stringValue())
-                ? bytes("{\"ok\":true,\"result\":{}}")
-                : bytes("{\"ok\":true,\"result\":{\"apiCalls\":[{\"method\":\"GET\",\"url\":\"/api/items\",\"filePath\":\"src/a.ts\","
-                        + "\"lineStart\":1,\"owner\":\"f\"}],\"unknownField\":1}}"))) {
+        try (var main =
+                new FakeDesktopMain(request -> "health".equals(request.get("op").stringValue())
+                        ? bytes("{\"ok\":true,\"result\":{}}")
+                        : bytes(
+                                "{\"ok\":true,\"result\":{\"apiCalls\":[{\"method\":\"GET\",\"url\":\"/api/items\",\"filePath\":\"src/a.ts\","
+                                        + "\"lineStart\":1,\"owner\":\"f\"}],\"unknownField\":1}}"))) {
             var client = main.client(5);
             assertThat(client.enabled()).isTrue();
             client.health();
-            var request = new TsAnalyzeDtos.Request(List.of(new TsAnalyzeDtos.FilePayload("src/a.ts", "fetch('/api/items')")));
+            var request = new TsAnalyzeDtos.Request(
+                    List.of(new TsAnalyzeDtos.FilePayload("src/a.ts", "fetch('/api/items')")));
             var response = client.analyze(request);
-            assertThat(response.apiCalls()).extracting(TsAnalyzeDtos.ApiCallHit::url).containsExactly("/api/items");
+            assertThat(response.apiCalls())
+                    .extracting(TsAnalyzeDtos.ApiCallHit::url)
+                    .containsExactly("/api/items");
             assertThat(main.requests).hasSize(2);
             assertThat(JSON.writeValueAsString(main.requests.get(0)))
                     .isEqualTo("{\"capability\":\"" + CAPABILITY + "\",\"op\":\"health\"}");
@@ -120,8 +130,8 @@ class TsAnalyzerControlClientTest {
                     .satisfies(error -> assertThat(((RecoveryActionFailure) error).failureCode())
                             .isEqualTo("ADAPTER_ISOLATION_UNAVAILABLE"));
         }
-        try (var main = new FakeDesktopMain(request -> bytes(
-                "{\"ok\":false,\"code\":\"ADAPTER_ISOLATION_UNAVAILABLE\",\"reason\":\"/Users/x <script>\"}"))) {
+        try (var main = new FakeDesktopMain(request ->
+                bytes("{\"ok\":false,\"code\":\"ADAPTER_ISOLATION_UNAVAILABLE\",\"reason\":\"/Users/x <script>\"}"))) {
             assertThatThrownBy(() -> main.client(5).analyze(new TsAnalyzeDtos.Request(List.of())))
                     .isInstanceOf(TsAdapterIsolationException.class)
                     .hasMessageContaining("(UNKNOWN)")

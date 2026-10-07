@@ -47,9 +47,7 @@ public record TsAnalyzerProperties(
         controlSocket = controlSocket == null ? "" : controlSocket;
         controlCapability = controlCapability == null ? "" : controlCapability;
         if (!controlSocket.isEmpty() || !controlCapability.isEmpty()) {
-            if (StringUtils.hasText(baseUrl)
-                    || StringUtils.hasText(tlsCertSha256)
-                    || StringUtils.hasText(authToken)) {
+            if (StringUtils.hasText(baseUrl) || StringUtils.hasText(tlsCertSha256) || StringUtils.hasText(authToken)) {
                 throw new IllegalStateException("ts-analyzer control socket excludes the HTTP analyzer settings");
             }
             if (!controlSocket.startsWith("/")
