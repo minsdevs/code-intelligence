@@ -332,7 +332,9 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
   const javaVersion = /^JAVA_VERSION="([^"]+)"$/m.exec(release)?.[1] || null;
   const modules = (/^MODULES="([^"]*)"$/m.exec(release)?.[1] || '').split(' ').filter(Boolean);
   const jvm = bytesOf(runtime + 'jre/lib/server/libjvm.dylib');
-  const vendor = uniqueWitness(jvm, /(Eclipse Adoptium|Oracle Corporation|Azul Systems, Inc\.|Amazon\.com Inc\.|Microsoft|BellSoft)/g);
+  // Every OpenJDK libjvm carries "Oracle Corporation" as java.vm.specification.vendor,
+  // so only distributor names count; an Oracle-built JDK therefore stays unidentified.
+  const vendor = uniqueWitness(jvm, /(Eclipse Adoptium|Azul Systems, Inc\.|Amazon\.com Inc\.|Microsoft|BellSoft)/g);
   const build = uniqueWitness(jvm, /\b(21\.[0-9]+\.[0-9]+\+[0-9]+(?:-LTS)?)\b/g);
   const legalFiles = files.filter(item => item.rel.startsWith(runtime + 'jre/legal/'));
   const thirdPartyMd = [...new Set(legalFiles.filter(item => item.rel.endsWith('.md')).map(item => path.posix.basename(item.rel, '.md')))].sort();
@@ -340,7 +342,9 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
     purl: `pkg:generic/eclipse-temurin@${encodeURIComponent(build.value || javaVersion)}?arch=aarch64&os=mac`,
     noticeEvidence: legalFiles.some(item => item.rel.endsWith('/LICENSE')) ? [{ kind: 'LICENCE', visibility: 'BUNDLE_LEGAL', location: runtime + 'jre/legal/' }] : [],
     properties: { javaVersion, vendorWitness: vendor.value, vendorCandidates: vendor.candidates, buildWitness: build.value, modules,
-      legalFiles: legalFiles.length, embeddedThirdPartyNotices: thirdPartyMd } });
+      legalFiles: legalFiles.length, embeddedThirdPartyNotices: thirdPartyMd },
+    // macos-runtime-supply.json locks only the four C sources; the JDK used by jlink has no URL/digest record.
+    provenance: { recordedSourceUrl: null, recordedSha256: null, status: 'NO_REPOSITORY_SUPPLY_RECORD' } });
 
   // ---- Native runtimes from the source lock
   const sourceLockRel = runtime + 'postgres/share/code-intelligence-notices/source-lock.json';
@@ -349,7 +353,9 @@ async function analyse({ repo, appRelative, resolvedMaven, gradleCache, electron
   const nativeNames = { postgres: 'postgresql', redis: 'redis', openssl: 'openssl', pgvector: 'pgvector' };
   const binaryWitness = {
     postgresql: uniqueWitness(bytesOf(runtime + 'postgres/bin/postgres'), /PostgreSQL ([0-9]+\.[0-9]+)/g),
-    redis: uniqueWitness(bytesOf(runtime + 'redis/bin/redis-server'), /\b(8\.[0-9]+\.[0-9]+)\b/g),
+    // The bare-version pattern also hits command-history strings ("8.6.0" ...); the
+    // REDIS_VERSION constant name precedes the server's own version string.
+    redis: uniqueWitness(bytesOf(runtime + 'redis/bin/redis-server'), /REDIS_VERSION\0([0-9]+\.[0-9]+\.[0-9]+)\0/g),
     openssl: uniqueWitness(bytesOf(runtime + 'postgres/lib/libcrypto.3.dylib'), /OpenSSL ([0-9]+\.[0-9]+\.[0-9]+)/g),
     pgvector: { value: /default_version\s*=\s*'([0-9.]+)'/.exec(bytesOf(runtime + 'postgres/share/extension/vector.control').toString('utf8'))?.[1] || null, candidates: {} },
   };
@@ -916,6 +922,15 @@ async function main(argv) {
     electron: { version: result.components.get('electron').version, chromium: result.witnesses.chromium.value, v8: result.witnesses.v8.value,
       node: result.witnesses.node.value, provenance: result.electronProvenance },
     macho: result.machoSummary, licence: { classCounts, findingCounts, thirdPartyNoticesIndex: result.noticesIndex },
+    provenance: {
+      runtimes: ['electron', 'temurin-jre', 'postgresql', 'pgvector', 'redis', 'openssl', 'spring-boot-loader'].map(ref => {
+        const comp = result.components.get(ref); return { ref, version: comp.version, provenance: comp.provenance || null };
+      }),
+      maven: comps.filter(comp => comp.kind === 'maven' && comp.ref !== 'spring-boot-loader').reduce((acc, comp) => {
+        acc[comp.provenance.coordinateSource] = (acc[comp.provenance.coordinateSource] || 0) + 1; return acc; }, {}),
+      npm: comps.filter(comp => comp.kind === 'npm').reduce((acc, comp) => {
+        const key = `${comp.provenance.lockScope}:${comp.provenance.lockComparison}`; acc[key] = (acc[key] || 0) + 1; return acc; }, {}),
+    },
     completeSbom: result.unattributed.length === 0, outputs: hashes,
     limits: ['Frontend bundle components are lockfile declarations, not byte-bound to the minified assets.',
       'Nested backend JAR members inherit their JAR component; shaded third-party packages inside a JAR are listed only as package roots.',
