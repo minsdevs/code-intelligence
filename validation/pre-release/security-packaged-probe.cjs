@@ -244,6 +244,16 @@ function rendererCspFailures(renderer) {
   return failures;
 }
 
+// SEC-M-04 expectations: the wire must equal what desktop/scripts/electron-fuses.cjs flips for a
+// validation build of this package metadata (validation keeps --inspect for Playwright only).
+function fuseFailures(state, metadata) {
+  if (!state) return ['FUSES_NOT_READ'];
+  const { fusesFor, VALIDATION_APP_ID } = require('../../desktop/scripts/electron-fuses.cjs');
+  return Object.entries(fusesFor(VALIDATION_APP_ID, metadata))
+    .map(([name, enabled]) => [name[0].toUpperCase() + name.slice(1), enabled ? 'ENABLE' : 'DISABLE'])
+    .filter(([name, expected]) => state[name] !== expected).map(([name]) => `FUSE_${name}_${state[name] ?? 'MISSING'}`);
+}
+
 async function main(argv = process.argv.slice(2)) {
   const options = argumentsFor(argv);
   assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64'); process.umask(0o077);
@@ -263,6 +273,11 @@ async function main(argv = process.argv.slice(2)) {
   try {
     report.checks.static = staticInspection(repo, app, runtime);
     report.checks.fuses = await readFuses(repo, app);
+    const appMetadata = JSON.parse(createRequire(path.join(repo, 'desktop/package.json'))('@electron/asar')
+      .extractFile(path.join(app, 'Contents/Resources/app.asar'), 'package.json'));
+    const failedFuses = fuseFailures(report.checks.fuses.state, appMetadata);
+    report.expectations = { fuses: { status: failedFuses.length ? 'FAIL' : 'PASS', failures: failedFuses,
+      adapterIsolation: appMetadata.adapterIsolation ?? 'legacy-http' } };
     report.checks.effectiveNodeModes = effectiveNodeModes(report.checks.static.executable, scratch);
     delete report.checks.static.executable; save();
   } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
@@ -431,5 +446,5 @@ async function main(argv = process.argv.slice(2)) {
   return report;
 }
 
-module.exports = { argumentsFor, plistKeys, walkModes, plaintextSecretScan, rendererCspFailures };
+module.exports = { argumentsFor, plistKeys, walkModes, plaintextSecretScan, rendererCspFailures, fuseFailures };
 if (require.main === module) main().catch(error => { console.error('SECURITY_PROBE_PREFLIGHT_FAILED', String(error?.message ?? '').slice(0, 160)); process.exitCode = 1; });
