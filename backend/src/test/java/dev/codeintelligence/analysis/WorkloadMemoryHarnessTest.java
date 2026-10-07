@@ -86,16 +86,26 @@ class WorkloadMemoryHarnessTest {
         }
         System.out.println("[workload-memory] steps " + rows);
         assertThat(jdbc.queryForObject(
-                        "select status from snapshots where id = ?", String.class, ctx.snapshotId().orElseThrow()))
+                        "select status from snapshots where id = ?",
+                        String.class,
+                        ctx.snapshotId().orElseThrow()))
                 .isEqualTo("READY");
     }
 
     /** The desktop analyzes a synthetic single-commit repository (RetainedRunWorkspace); so does the harness. */
     private static void commit(Path tree) throws Exception {
-        try (Git git = Git.init().setInitialBranch("snapshot").setDirectory(tree.toFile()).call()) {
+        try (Git git = Git.init()
+                .setInitialBranch("snapshot")
+                .setDirectory(tree.toFile())
+                .call()) {
             git.add().addFilepattern(".").call();
             PersonIdent ident = new PersonIdent("workload", "workload@test.local");
-            git.commit().setMessage("workload").setAuthor(ident).setCommitter(ident).setSign(false).call();
+            git.commit()
+                    .setMessage("workload")
+                    .setAuthor(ident)
+                    .setCommitter(ident)
+                    .setSign(false)
+                    .call();
         }
     }
 
@@ -128,7 +138,8 @@ class WorkloadMemoryHarnessTest {
                 .filter(pool -> pool.getType() == MemoryType.HEAP)
                 .toList();
         private final MemoryPoolMXBean oldGen = heapPools.stream()
-                .filter(pool -> pool.getName().contains("Tenured") || pool.getName().contains("Old"))
+                .filter(pool ->
+                        pool.getName().contains("Tenured") || pool.getName().contains("Old"))
                 .findFirst()
                 .orElseThrow();
         private final Thread thread;
@@ -149,7 +160,9 @@ class WorkloadMemoryHarnessTest {
         }
 
         long used() {
-            return heapPools.stream().mapToLong(pool -> pool.getUsage().getUsed()).sum();
+            return heapPools.stream()
+                    .mapToLong(pool -> pool.getUsage().getUsed())
+                    .sum();
         }
 
         void sample() {
@@ -180,7 +193,8 @@ class WorkloadMemoryHarnessTest {
 
         private static long fullGcCount() {
             return ManagementFactory.getGarbageCollectorMXBeans().stream()
-                    .filter(gc -> gc.getName().contains("MarkSweep") || gc.getName().contains("Old"))
+                    .filter(gc ->
+                            gc.getName().contains("MarkSweep") || gc.getName().contains("Old"))
                     .mapToLong(GarbageCollectorMXBean::getCollectionCount)
                     .sum();
         }
