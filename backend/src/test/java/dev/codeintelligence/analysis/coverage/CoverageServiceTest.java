@@ -181,6 +181,53 @@ class CoverageServiceTest {
     }
 
     @Test
+    void coverageIsReportedPerCapabilityWithoutInventingUnrecordedCapabilities() throws Exception {
+        jdbc.update("""
+                insert into snapshot_inventory_measurements
+                (snapshot_id, discovered_files, excluded_for_count, excluded_for_size, excluded_binary, excluded_submodules)
+                values (?,10,1,1,1,2)
+                """, snapshotId);
+        String[] states = {"SUCCESS", "PARTIAL", "FAILED", "UNSUPPORTED", "UNMEASURED", "TARGETED", "LEGACY_UNMEASURED"
+        };
+        for (int i = 0; i < states.length; i++) {
+            jdbc.update(
+                    "update files set analysis_status=?, analysis_targeted=? where snapshot_id=? and path=?",
+                    states[i],
+                    i < 3 || i == 5,
+                    snapshotId,
+                    "fixture-" + i);
+        }
+        CoverageReport report = service.getReport(projectId, userId, snapshotId);
+        assertThat(report.capabilityOutcomes())
+                .extracting(CoverageReport.CapabilityOutcome::capability)
+                .containsExactly("P", "S", "C", "F", "X");
+        CoverageReport.CapabilityOutcome parse = report.capabilityOutcomes().getFirst();
+        // eligible = success + partial + failed + unsupported + pending; with unmeasured it partitions the file rows.
+        assertThat(parse)
+                .isEqualTo(new CoverageReport.CapabilityOutcome("P", "PER_FILE_RECORDED", 5, 1, 1, 1, 1, 1, 2));
+        assertThat(parse.eligibleFiles() + parse.unmeasuredFiles())
+                .isEqualTo(report.fileCoverage().inventoriedFiles());
+        assertThat(report.capabilityOutcomes().subList(1, 5)).allSatisfy(capability -> {
+            assertThat(capability.measurementStatus()).isEqualTo("NOT_RECORDED");
+            assertThat(capability.eligibleFiles()).isNull();
+            assertThat(capability.successfulFiles()).isNull();
+            assertThat(capability.failedFiles()).isNull();
+            assertThat(capability.unmeasuredFiles()).isNull();
+        });
+        JsonNode wire = json.readTree(json.writeValueAsString(report));
+        assertThat(wire.path("capabilityOutcomes").get(0).path("eligibleFiles").asInt())
+                .isEqualTo(5);
+        assertThat(wire.path("capabilityOutcomes").get(1).get("successfulFiles").isNull())
+                .isTrue();
+
+        CoverageReport old = service.getReport(projectId, userId, snapshot());
+        assertThat(old.capabilityOutcomes()).hasSize(5).allSatisfy(capability -> {
+            assertThat(capability.measurementStatus()).isEqualTo("LEGACY_UNMEASURED");
+            assertThat(capability.eligibleFiles()).isNull();
+        });
+    }
+
+    @Test
     void storedFilesAreInventoryAndSerializedOutcomesRemainUnknown() throws Exception {
         CoverageReport report = service.getReport(projectId, userId);
         assertThat(report.measurementStatus()).isEqualTo("LEGACY_UNMEASURED");
