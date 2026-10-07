@@ -63,6 +63,17 @@ function parseLsof(text) {
   return rows.filter(row => row.fd === 'txt' || row.fd === 'mem');
 }
 
+// lsof reports a process's own executable as its first program-text ("txt") mapping.
+function executablesFromMappings(rows, pids) {
+  const executables = new Map(pids.map(pid => [pid, null]));
+  for (const row of rows) if (row.fd === 'txt' && executables.get(row.pid) === null) executables.set(row.pid, row.name);
+  return executables;
+}
+function executablesOutside(executables, app) {
+  return [...executables].filter(([, file]) => typeof file !== 'string' || !file.startsWith(app + '/'))
+    .map(([pid, executable]) => ({ pid, executable }));
+}
+
 function isMachO(file) {
   try {
     const descriptor = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW), bytes = Buffer.alloc(8);
@@ -154,12 +165,17 @@ async function packagedRun({ repo, app, runtime, report, save }) {
     const processes = await readOwnerMemory(owner.process().pid);
     const pids = processes.map(row => row.pid);
     const { stdout } = await execute('/bin/ps', ['-p', pids.join(','), '-o', 'pid=,comm='], { timeout: 5000, env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' } });
-    const executables = stdout.trim().split('\n').map(line => /^\s*(\d+)\s+(.+?)\s*$/.exec(line)).filter(Boolean).map(match => ({ pid: Number(match[1]), comm: match[2] }));
+    // Display only: PostgreSQL children retitle themselves, so comm is not an executable path.
+    run.processTitles = stdout.trim().split('\n').map(line => /^\s*(\d+)\s+(.+?)\s*$/.exec(line)).filter(Boolean).map(match => match[2]).sort();
     run.processCount = pids.length;
-    run.executablesOutsideBundle = executables.filter(row => !row.comm.startsWith(app + '/')).map(row => row.comm);
     const mappings = await lsofFor(pids);
     run.mappedEntries = mappings.length;
     run.mappedPids = [...new Set(mappings.map(row => row.pid))].length;
+    const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
+    const outside = executablesOutside(executablesFromMappings(mappings, pids), app);
+    // A short-lived child that exited before lsof has no mapping; one still alive without one fails closed.
+    run.exitedBeforeInspection = outside.filter(row => row.executable === null && !alive(row.pid)).length;
+    run.executablesOutsideBundle = outside.filter(row => row.executable !== null || alive(row.pid)).map(row => row.executable ?? `pid ${row.pid}: no program text`);
     const evaluated = evaluateMappings(mappings, { app, profileRoot: plan.root });
     run.mappingClasses = evaluated.classes; run.mappingFindings = evaluated.findings;
     run.nonCodeOutsideBundleAndOs = evaluated.nonCodeOutside.map(file => file.startsWith(plan.root) ? '<profile>' + file.slice(plan.root.length) : file);
@@ -233,5 +249,6 @@ async function main(argv = process.argv.slice(2)) {
   return report;
 }
 
-module.exports = { sandboxProfile, classifyMappedPath, parseLsof, evaluateMappings, argumentsFor, DEVELOPER_ROOTS, main };
+module.exports = { sandboxProfile, classifyMappedPath, parseLsof, executablesFromMappings, executablesOutside, evaluateMappings,
+  argumentsFor, DEVELOPER_ROOTS, main };
 if (require.main === module) main().catch(error => { console.error(error?.message?.match(/^[A-Z_]+$/) ? error.message : 'LOADER_PROBE_PREFLIGHT_FAILED'); process.exitCode = 1; });

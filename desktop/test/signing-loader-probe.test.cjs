@@ -21,6 +21,17 @@ test('lsof field output keeps only program text and memory-mapped images', () =>
     { pid: 102, fd: 'mem', type: 'REG', name: '/opt/homebrew/lib/libssl.3.dylib' }]);
 });
 
+test('process executables come from the first program-text mapping, not a retitled process name', () => {
+  // PostgreSQL children rewrite their title ("postgres: checkpointer"); ps comm is not a path.
+  const rows = probe.parseLsof(['p201', 'ftxt', 'tREG', `n${APP}/Contents/Resources/runtime/postgres/bin/postgres`, 'ftxt', 'tREG', 'n/usr/lib/dyld',
+    'p202', 'fmem', 'tREG', `n${APP}/Contents/Resources/runtime/postgres/lib/libpq.5.dylib`, 'ftxt', 'tREG', 'n/opt/homebrew/bin/postgres',
+    'p203', 'fmem', 'tREG', `n${APP}/Contents/Resources/runtime/redis/lib/libssl.3.dylib`, ''].join('\n'));
+  assert.deepEqual([...probe.executablesFromMappings(rows, [201, 202, 203, 204])],
+    [[201, `${APP}/Contents/Resources/runtime/postgres/bin/postgres`], [202, '/opt/homebrew/bin/postgres'], [203, null], [204, null]]);
+  assert.deepEqual(probe.executablesOutside(probe.executablesFromMappings(rows, [201, 202, 203, 204]), APP),
+    [{ pid: 202, executable: '/opt/homebrew/bin/postgres' }, { pid: 203, executable: null }, { pid: 204, executable: null }]);
+});
+
 test('mapped paths are classified as bundle, OS, profile, developer root or other', () => {
   const context = { app: APP, profileRoot: PROFILE };
   assert.equal(probe.classifyMappedPath(`${APP}/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework`, context), 'bundle');
