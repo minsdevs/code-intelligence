@@ -1,16 +1,16 @@
 {
   "format": 1,
   "generatedFrom": {
-    "candidateBundleDigest": "f00875023a63c5c4e0da4941e5b655078ea70cd3a087200e0e4247b60bd4d7d9"
+    "candidateBundleDigest": "563ffe9239596ac7f6c1b8826277b610d85d116eebd2f49d893001f40beb28d8"
   },
   "policy": "ENGINEERING_REVIEW_NOT_LEGAL_ADVICE",
   "counts": {
     "BUNDLED_ELSEWHERE": 13,
-    "TEXT_MISSING": 15,
-    "INCLUDED": 311,
+    "TEXT_MISSING": 14,
+    "INCLUDED": 312,
     "NO_NOTICE_REQUIRED": 5
   },
-  "texts": 179,
+  "texts": 180,
   "components": [
     {
       "name": "chromium",
@@ -1216,8 +1216,11 @@
       "elected": [
         "BSD-3-Clause"
       ],
-      "status": "TEXT_MISSING",
-      "licenceTextSha256": []
+      "status": "INCLUDED",
+      "licenceTextSha256": [
+        "657a3c8185dd5ab1e9997f675ad3bcc79ca87249da08b12d4138212d2ae74262"
+      ],
+      "textSource": "SHIPPED_IN_ARTEFACT"
     },
     {
       "name": "postgresql",
