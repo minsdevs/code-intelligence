@@ -61,6 +61,12 @@ async function assemble(candidate, stageDirectory) {
   asar.extractAll(archive, unpacked);
   fs.rmSync(path.join(unpacked, 'src'), { recursive: true });
   fs.cpSync(path.join(desktop, 'src'), path.join(unpacked, 'src'), { recursive: true });
+  // Other packed files of this checkout (e.g. build/update-keys.json), as listed in build.files.
+  for (const entry of JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8')).build.files) {
+    if (/[*?]/.test(entry) || entry === 'package.json') continue;
+    fs.mkdirSync(path.dirname(path.join(unpacked, entry)), { recursive: true });
+    fs.copyFileSync(path.join(desktop, entry), path.join(unpacked, entry));
+  }
   const metadata = JSON.parse(fs.readFileSync(path.join(unpacked, 'package.json'), 'utf8'));
   fs.writeFileSync(path.join(unpacked, 'package.json'), JSON.stringify({ ...metadata, adapterIsolation: 'xpc-required' }, null, 2) + '\n');
   fs.rmSync(archive);
@@ -161,7 +167,9 @@ async function analyze(app, evidenceDirectory, { expectUnavailable }) {
     electronApp = await electron.launch({ executablePath: path.join(contents, 'MacOS', APP_NAME),
       args: ['--use-mock-keychain', '--isolated-run-claim=' + plan.claimFile], cwd: repo, env, timeout: 90000 });
     child = electronApp.process(); stop = observeStartup(child, report, save);
-    child.stderr.on('data', chunk => { for (const line of String(chunk).split('\n')) if (line.startsWith('DESKTOP_ADAPTER_ISOLATION')) stderr.push(line); });
+    child.stderr.on('data', chunk => {
+      for (const line of String(chunk).split('\n')) if (/^(DESKTOP_|\[desktop\])/.test(line) && stderr.length < 100) stderr.push(line.slice(0, 300));
+    });
     page = await electronApp.firstWindow({ timeout: 90000 }); page.setDefaultTimeout(30000);
     await expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible({ timeout: 90000 });
     let status;
@@ -231,9 +239,10 @@ async function analyze(app, evidenceDirectory, { expectUnavailable }) {
       await page.getByRole('alert').waitFor({ timeout: 30000 });
       report.checks.alertText = await page.getByRole('alert').innerText();
     }
-    report.checks.adapterIsolationLog = stderr;
+    report.checks.desktopLog = stderr;
     save();
-  } finally {
+  } catch (error) { report.failure = String(error?.message ?? error).split('\n')[0]; report.checks.desktopLog = stderr; save(); throw error; }
+  finally {
     if (electronApp) {
       const owner = child, current = electronApp;
       try { await closeValidatedApplication({ process: () => owner, close: () => owner.exitCode !== null ? Promise.resolve() : current.close() }, report); }
