@@ -35,13 +35,17 @@ public final class AnalysisInputFingerprint {
             update(complete, String.valueOf(file.contentHash()));
         }
         Set<String> javaPaths = context.inventory().files().stream()
-                .filter(file -> "java".equalsIgnoreCase(file.language()) || file.path().toLowerCase(java.util.Locale.ROOT).endsWith(".java"))
-                .map(file -> file.path()).collect(Collectors.toSet());
+                .filter(file -> "java".equalsIgnoreCase(file.language())
+                        || file.path().toLowerCase(java.util.Locale.ROOT).endsWith(".java"))
+                .map(file -> file.path())
+                .collect(Collectors.toSet());
         Map<String, String> files = new LinkedHashMap<>();
         Path root = context.clonePath().toAbsolutePath().normalize();
         try (var paths = Files.walk(root)) {
             byte[] buffer = new byte[8192];
-            for (Path path : paths.filter(path -> !isMetadata(root.relativize(path))).sorted().toList()) {
+            for (Path path : paths.filter(path -> !isMetadata(root.relativize(path)))
+                    .sorted()
+                    .toList()) {
                 checkpoint();
                 if (Files.isSymbolicLink(path)) return null;
                 String relative = root.relativize(path).toString().replace('\\', '/');
@@ -64,8 +68,10 @@ public final class AnalysisInputFingerprint {
                 if (javaPaths.contains(relative)) files.put(relative, hash);
                 else if (!isForeignSource(relative)) update(environment, hash);
             }
-            return new Snapshot(HexFormat.of().formatHex(complete.digest()),
-                    HexFormat.of().formatHex(environment.digest()), Map.copyOf(files));
+            return new Snapshot(
+                    HexFormat.of().formatHex(complete.digest()),
+                    HexFormat.of().formatHex(environment.digest()),
+                    Map.copyOf(files));
         } catch (IOException | java.io.UncheckedIOException | SecurityException failure) {
             return null;
         }
@@ -73,14 +79,22 @@ public final class AnalysisInputFingerprint {
 
     private static boolean isForeignSource(String relative) {
         String name = relative.toLowerCase(java.util.Locale.ROOT);
-        return name.endsWith(".js") || name.endsWith(".jsx") || name.endsWith(".mjs")
-                || name.endsWith(".cjs") || name.endsWith(".ts") || name.endsWith(".tsx")
-                || name.endsWith(".mts") || name.endsWith(".cts");
+        return name.endsWith(".js")
+                || name.endsWith(".jsx")
+                || name.endsWith(".mjs")
+                || name.endsWith(".cjs")
+                || name.endsWith(".ts")
+                || name.endsWith(".tsx")
+                || name.endsWith(".mts")
+                || name.endsWith(".cts");
     }
 
     public static MessageDigest digest() {
-        try { return MessageDigest.getInstance("SHA-256"); }
-        catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     public static String hash(String value) {

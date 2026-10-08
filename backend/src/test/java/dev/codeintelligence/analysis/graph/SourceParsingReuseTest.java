@@ -18,7 +18,8 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 class SourceParsingReuseTest {
-    @TempDir Path root;
+    @TempDir
+    Path root;
 
     @Test
     void actualStepReusesConfigAcrossJobWorkspacePathsAndRecomputesChangedBytes() throws Exception {
@@ -29,20 +30,25 @@ class SourceParsingReuseTest {
         Files.writeString(first.resolve("compose.yaml"), "services:\n  app:\n    build: .\n");
         Files.writeString(second.resolve("compose.yaml"), "services:\n  app:\n    build: .\n");
         GraphPersistenceService persistence = mock(GraphPersistenceService.class);
-        List<InventoriedFile> files = List.of(new InventoriedFile("Dockerfile", "dockerfile", 17, 1, ""),
+        List<InventoriedFile> files = List.of(
+                new InventoriedFile("Dockerfile", "dockerfile", 17, 1, ""),
                 new InventoriedFile("compose.yaml", "yaml", 30, 3, ""));
-        SourceParsingStep step = new SourceParsingStep(List.of(new DockerAnalyzer()), jdbc(files), persistence, mock(EvidenceService.class));
+        SourceParsingStep step = new SourceParsingStep(
+                List.of(new DockerAnalyzer()), jdbc(files), persistence, mock(EvidenceService.class));
         step.run(new TestJobContext(1, 2, 3L, first));
         step.run(new TestJobContext(2, 2, 4L, second));
         ArgumentCaptor<AnalysisResult> results = ArgumentCaptor.forClass(AnalysisResult.class);
         verify(persistence, times(2)).persist(anyLong(), anyLong(), results.capture());
         assertThat(results.getAllValues().get(0).nodes()).isNotEmpty();
-        assertThat(results.getAllValues().get(1)).isEqualTo(results.getAllValues().get(0));
-        assertThat(results.getAllValues().get(1).nodes().getFirst()).isSameAs(results.getAllValues().get(0).nodes().getFirst());
+        assertThat(results.getAllValues().get(1))
+                .isEqualTo(results.getAllValues().get(0));
+        assertThat(results.getAllValues().get(1).nodes().getFirst())
+                .isSameAs(results.getAllValues().get(0).nodes().getFirst());
         Files.writeString(second.resolve("Dockerfile"), "FROM alpine:3.21\n");
         step.run(new TestJobContext(3, 2, 5L, second));
         verify(persistence, times(3)).persist(anyLong(), anyLong(), results.capture());
-        assertThat(results.getValue()).isEqualTo(new DockerAnalyzer().analyze(new AnalysisContext(2, 5, second, FileInventory.of(files))));
+        assertThat(results.getValue())
+                .isEqualTo(new DockerAnalyzer().analyze(new AnalysisContext(2, 5, second, FileInventory.of(files))));
     }
 
     @SuppressWarnings("unchecked")

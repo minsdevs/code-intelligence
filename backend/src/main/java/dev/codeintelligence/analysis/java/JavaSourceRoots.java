@@ -27,22 +27,24 @@ final class JavaSourceRoots {
         Path normalized = clonePath.toAbsolutePath().normalize();
         Set<Path> inferredRoots = new LinkedHashSet<>();
         try (Stream<Path> walk = Files.walk(normalized)) {
-            walk.filter(path -> !dev.codeintelligence.analysis.core.AnalysisInputFingerprint.isMetadata(normalized.relativize(path))).forEach(path -> {
-                if (Files.isDirectory(path) && isStandardSourceRoot(path)) {
-                    roots.add(path.toAbsolutePath().normalize());
-                }
+            walk.filter(path -> !dev.codeintelligence.analysis.core.AnalysisInputFingerprint.isMetadata(
+                            normalized.relativize(path)))
+                    .forEach(path -> {
+                        if (Files.isDirectory(path) && isStandardSourceRoot(path)) {
+                            roots.add(path.toAbsolutePath().normalize());
+                        }
 
-                if (Files.isRegularFile(path)
-                        && path.getFileName()
-                                .toString()
-                                .toLowerCase(Locale.ROOT)
-                                .endsWith(".java")) {
-                    Path root = inferRoot(normalized, path);
-                    if (root != null) {
-                        inferredRoots.add(root);
-                    }
-                }
-            });
+                        if (Files.isRegularFile(path)
+                                && path.getFileName()
+                                        .toString()
+                                        .toLowerCase(Locale.ROOT)
+                                        .endsWith(".java")) {
+                            Path root = inferRoot(normalized, path);
+                            if (root != null) {
+                                inferredRoots.add(root);
+                            }
+                        }
+                    });
         } catch (IOException ignored) {
             // Skip unreadable paths.
         }
@@ -57,7 +59,8 @@ final class JavaSourceRoots {
                 continue;
             }
             try (Stream<Path> walk = Files.walk(root)) {
-                walk.filter(path -> !dev.codeintelligence.analysis.core.AnalysisInputFingerprint.isMetadata(root.relativize(path)))
+                walk.filter(path -> !dev.codeintelligence.analysis.core.AnalysisInputFingerprint.isMetadata(
+                                root.relativize(path)))
                         .filter(Files::isRegularFile)
                         .filter(path -> path.getFileName().toString().endsWith(".java"))
                         .forEach(javaFile -> {

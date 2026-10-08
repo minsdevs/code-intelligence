@@ -22,12 +22,13 @@ import org.slf4j.LoggerFactory;
 final class JavaParseSupport {
 
     private static final Logger log = LoggerFactory.getLogger(JavaParseSupport.class);
-    static final java.util.concurrent.atomic.AtomicLong PARSER_INVOCATIONS = new java.util.concurrent.atomic.AtomicLong();
+    static final java.util.concurrent.atomic.AtomicLong PARSER_INVOCATIONS =
+            new java.util.concurrent.atomic.AtomicLong();
 
     private JavaParseSupport() {}
 
-    static ParseAhead<InventoriedFile, ParsedJavaFile> parseAhead(AnalysisContext context,
-            java.util.List<InventoriedFile> files) {
+    static ParseAhead<InventoriedFile, ParsedJavaFile> parseAhead(
+            AnalysisContext context, java.util.List<InventoriedFile> files) {
         return new ParseAhead<>(files, JavaParseSupport::parser, (parser, file) -> parse(context, parser, file));
     }
 
@@ -38,8 +39,11 @@ final class JavaParseSupport {
      */
     static Iterable<ParsedJavaFile> parseJavaFiles(AnalysisContext ctx) {
         return () -> new Iterator<>() {
-            private final ParseAhead<InventoriedFile, ParsedJavaFile> parses = parseAhead(ctx,
-                    ctx.inventory().files().stream().filter(JavaParseSupport::isJava).toList());
+            private final ParseAhead<InventoriedFile, ParsedJavaFile> parses = parseAhead(
+                    ctx,
+                    ctx.inventory().files().stream()
+                            .filter(JavaParseSupport::isJava)
+                            .toList());
             private ParsedJavaFile next;
 
             @Override

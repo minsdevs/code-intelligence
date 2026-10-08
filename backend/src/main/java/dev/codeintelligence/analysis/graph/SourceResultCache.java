@@ -1,8 +1,8 @@
 package dev.codeintelligence.analysis.graph;
 
 import dev.codeintelligence.analysis.config.*;
-import dev.codeintelligence.analysis.core.AnalysisContext;
 import dev.codeintelligence.analysis.core.AnalysisCacheWeight;
+import dev.codeintelligence.analysis.core.AnalysisContext;
 import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
@@ -12,15 +12,25 @@ import java.util.Set;
 
 /** Whole-input reuse for known deterministic config analyzers; unknown analyzers always execute. */
 final class SourceResultCache {
-    private static final Set<Class<?>> SUPPORTED = Set.of(BuildFileAnalyzer.class, DockerAnalyzer.class,
-            GithubActionsAnalyzer.class, KubernetesAnalyzer.class, ServerlessAnalyzer.class,
-            SqlMigrationAnalyzer.class, TerraformAnalyzer.class, VercelAnalyzer.class, YamlConfigAnalyzer.class);
+    private static final Set<Class<?>> SUPPORTED = Set.of(
+            BuildFileAnalyzer.class,
+            DockerAnalyzer.class,
+            GithubActionsAnalyzer.class,
+            KubernetesAnalyzer.class,
+            ServerlessAnalyzer.class,
+            SqlMigrationAnalyzer.class,
+            TerraformAnalyzer.class,
+            VercelAnalyzer.class,
+            YamlConfigAnalyzer.class);
     private static final long MAX_BYTES = 16L * 1024 * 1024;
     private final Map<Class<?>, Entry> entries = new LinkedHashMap<>();
     private long bytes;
+
     private record Entry(String key, AnalysisResult result, long bytes) {}
 
-    static boolean supports(CodeAnalyzer analyzer) { return SUPPORTED.contains(analyzer.getClass()); }
+    static boolean supports(CodeAnalyzer analyzer) {
+        return SUPPORTED.contains(analyzer.getClass());
+    }
 
     AnalysisResult analyze(CodeAnalyzer analyzer, AnalysisContext context, String fingerprint) {
         AnalysisInputFingerprint.checkpoint();
