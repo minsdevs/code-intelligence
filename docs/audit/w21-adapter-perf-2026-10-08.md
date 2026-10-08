@@ -105,3 +105,9 @@ npm run build
 ```
 
 임시 profiler/stdio·HTTP harness/quiet wrapper, 보존용 baseline dist 및 취소된 synthetic fixture는 제거했다. 실패·취소·coverage·CPU profile·JUnit·canonical 증거는 `validation/local/w21-adapter-perf`에 그대로 보존한다. 영구 telemetry나 새로운 runtime abstraction은 남기지 않았다.
+
+## 통합 담당자 재검증
+
+동일 대상 10파일을 독립 실행하여 **142/142 PASS**를 확인했다(`main-core/verify.log`). 이어진 build는 npm user/global config에 같은 `/dev/null` 경로를 지정한 러너 설정 오류로 시작하지 못했다(`main-core/build.log`). 원본 러너와 오류를 보존하고 각기 다른 빈 config 파일을 사용하여 **build만 재실행 PASS**했다(`main-build-retry/build.log`, `status.txt`). 이미 통과한 대상 시험을 반복하거나 최초 build를 PASS로 바꾸지 않았다.
+
+메인 명령은 `validation/local/followup-main-verification/recheck-w21.sh main-core` 및 같은 스크립트의 `main-build-retry build-only`다. 공통 quiet·native lock·caffeinate를 사용했으며 제품 코드 변경 없이 재검증했다. 새 통합 후보의 전체 파이프라인 시간·최종20회·출시 판정은 별도다.
