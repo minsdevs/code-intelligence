@@ -10,12 +10,17 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.core.annotation.Order;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -26,14 +31,21 @@ public class FlowDetectionStep implements JobStep {
     public static final String KEY = "FLOW_DETECTION";
     public static final int ORDER = 920;
     static final int CALLS_DEPTH = 5;
+    /** Flows and flow steps per JDBC batch: one round trip each instead of one per row. */
+    private static final int BATCH = 500;
 
     private final JdbcClient jdbc;
+    private final NamedParameterJdbcTemplate batches;
     private final TransactionTemplate transactionTemplate;
     private final EvidenceService evidenceService;
 
     public FlowDetectionStep(
-            JdbcClient jdbc, TransactionTemplate transactionTemplate, EvidenceService evidenceService) {
+            JdbcClient jdbc,
+            NamedParameterJdbcTemplate batches,
+            TransactionTemplate transactionTemplate,
+            EvidenceService evidenceService) {
         this.jdbc = jdbc;
+        this.batches = batches;
         this.transactionTemplate = transactionTemplate;
         this.evidenceService = evidenceService;
     }
@@ -61,22 +73,24 @@ public class FlowDetectionStep implements JobStep {
             jdbc.sql("delete from flows where snapshot_id = :snapshotId")
                     .param("snapshotId", snapshotId)
                     .update();
-            persistBackend(ctx.projectId(), snapshotId, graph);
-            persistFeBe(ctx.projectId(), snapshotId, graph);
-            persistInfra(ctx.projectId(), snapshotId, graph);
-            persistEvent(ctx.projectId(), snapshotId, graph);
+            List<PendingFlow> flows = new ArrayList<>();
+            persistBackend(flows, graph);
+            persistFeBe(flows, graph);
+            persistInfra(flows, graph);
+            persistEvent(flows, graph);
+            insertFlows(ctx.projectId(), snapshotId, flows);
         });
         ctx.updateProgress(100);
     }
 
-    private void persistBackend(long projectId, long snapshotId, Graph graph) {
+    private void persistBackend(List<PendingFlow> flows, Graph graph) {
         for (Node endpoint : graph.nodesByType.getOrDefault("API_ENDPOINT", List.of())) {
             List<Step> steps = backendSteps(graph, endpoint);
-            insertFlow(projectId, snapshotId, endpoint.name(), "BACKEND", endpoint.id, steps, endpoint.filePath);
+            flows.add(new PendingFlow(endpoint.name(), "BACKEND", endpoint.id, steps, endpoint.filePath));
         }
     }
 
-    private void persistFeBe(long projectId, long snapshotId, Graph graph) {
+    private void persistFeBe(List<PendingFlow> flows, Graph graph) {
         for (Node route : graph.nodesByType.getOrDefault("FE_ROUTE", List.of())) {
             List<Step> steps = new ArrayList<>();
             steps.add(new Step(route.id, null, "Route " + route.name));
@@ -100,11 +114,11 @@ public class FlowDetectionStep implements JobStep {
             if (steps.size() < 2) {
                 continue;
             }
-            insertFlow(projectId, snapshotId, route.name(), "FE_BE", route.id, steps, route.filePath);
+            flows.add(new PendingFlow(route.name(), "FE_BE", route.id, steps, route.filePath));
         }
     }
 
-    private void persistInfra(long projectId, long snapshotId, Graph graph) {
+    private void persistInfra(List<PendingFlow> flows, Graph graph) {
         for (Node container : graph.nodesByType.getOrDefault("CONTAINER", List.of())) {
             List<Step> steps = new ArrayList<>();
             steps.add(new Step(container.id, null, container.name));
@@ -119,11 +133,11 @@ public class FlowDetectionStep implements JobStep {
             if (steps.size() < 2) {
                 continue;
             }
-            insertFlow(projectId, snapshotId, container.name(), "INFRA", container.id, steps, container.filePath);
+            flows.add(new PendingFlow(container.name(), "INFRA", container.id, steps, container.filePath));
         }
     }
 
-    private void persistEvent(long projectId, long snapshotId, Graph graph) {
+    private void persistEvent(List<PendingFlow> flows, Graph graph) {
         for (Node topic : graph.nodesByType.getOrDefault("QUEUE_TOPIC", List.of())) {
             List<Step> steps = new ArrayList<>();
             for (Edge edge : graph.in.getOrDefault(topic.id, List.of())) {
@@ -138,7 +152,7 @@ public class FlowDetectionStep implements JobStep {
                 continue;
             }
             steps.add(new Step(topic.id, null, topic.name));
-            insertFlow(projectId, snapshotId, topic.name(), "EVENT", topic.id, steps, topic.filePath);
+            flows.add(new PendingFlow(topic.name(), "EVENT", topic.id, steps, topic.filePath));
         }
     }
 
@@ -202,46 +216,65 @@ public class FlowDetectionStep implements JobStep {
         return steps;
     }
 
-    private void insertFlow(
-            long projectId,
-            long snapshotId,
-            String name,
-            String kind,
-            long entryNodeId,
-            List<Step> steps,
-            String filePath) {
-        long flowId = jdbc.sql("""
-                        insert into flows (snapshot_id, name, kind, entry_node_id)
-                        values (:snapshotId, :name, :kind, :entryNodeId)
-                        returning id
-                        """)
-                .param("snapshotId", snapshotId)
-                .param("name", name)
-                .param("kind", kind)
-                .param("entryNodeId", entryNodeId)
-                .query(Long.class)
-                .single();
-        int seq = 0;
-        for (Step step : steps) {
-            seq++;
-            jdbc.sql("""
+    /** Inserts the flows in order with their steps and evidence, a batch of rows per round trip. */
+    private void insertFlows(long projectId, long snapshotId, List<PendingFlow> flows) {
+        List<Long> flowIds = new ArrayList<>(flows.size());
+        for (int start = 0; start < flows.size(); start += BATCH) {
+            List<PendingFlow> chunk = flows.subList(start, Math.min(start + BATCH, flows.size()));
+            GeneratedKeyHolder keys = new GeneratedKeyHolder();
+            batches.batchUpdate(
+                    """
+                            insert into flows (snapshot_id, name, kind, entry_node_id)
+                            values (:snapshotId, :name, :kind, :entryNodeId)
+                            """,
+                    chunk.stream()
+                            .map(flow -> new MapSqlParameterSource()
+                                    .addValue("snapshotId", snapshotId)
+                                    .addValue("name", flow.name())
+                                    .addValue("kind", flow.kind())
+                                    .addValue("entryNodeId", flow.entryNodeId()))
+                            .toArray(SqlParameterSource[]::new),
+                    keys,
+                    new String[] {"id"});
+            List<Map<String, Object>> returned = keys.getKeyList();
+            if (returned.size() != chunk.size()) {
+                throw new IllegalStateException(
+                        "flow insert returned " + returned.size() + " ids for " + chunk.size() + " rows");
+            }
+            for (Map<String, Object> key : returned) flowIds.add(((Number) key.get("id")).longValue());
+        }
+        List<SqlParameterSource> stepRows = new ArrayList<>();
+        Map<Long, List<NewEvidence>> evidence = new LinkedHashMap<>();
+        for (int index = 0; index < flows.size(); index++) {
+            PendingFlow flow = flows.get(index);
+            long flowId = flowIds.get(index);
+            int seq = 0;
+            for (Step step : flow.steps()) {
+                seq++;
+                stepRows.add(new MapSqlParameterSource()
+                        .addValue("flowId", flowId)
+                        .addValue("seq", seq)
+                        .addValue("nodeId", step.nodeId())
+                        .addValue("edgeId", step.edgeId())
+                        .addValue("description", step.description()));
+            }
+            if (flow.filePath() != null) {
+                evidence.put(
+                        flowId,
+                        List.of(new NewEvidence(
+                                EvidenceKind.FILE_LINE, flow.filePath(), 1, 1, flow.kind() + " " + flow.name())));
+            }
+        }
+        for (int start = 0; start < stepRows.size(); start += BATCH) {
+            batches.batchUpdate(
+                    """
                             insert into flow_steps (flow_id, seq, node_id, edge_id, description)
                             values (:flowId, :seq, :nodeId, :edgeId, :description)
-                            """)
-                    .param("flowId", flowId)
-                    .param("seq", seq)
-                    .param("nodeId", step.nodeId())
-                    .param("edgeId", step.edgeId())
-                    .param("description", step.description())
-                    .update();
+                            """,
+                    stepRows.subList(start, Math.min(start + BATCH, stepRows.size()))
+                            .toArray(SqlParameterSource[]::new));
         }
-        if (filePath != null) {
-            evidenceService.replaceLinked(
-                    projectId,
-                    EvidenceSubjects.FLOW,
-                    flowId,
-                    List.of(new NewEvidence(EvidenceKind.FILE_LINE, filePath, 1, 1, kind + " " + name)));
-        }
+        evidenceService.replaceLinkedAll(projectId, EvidenceSubjects.FLOW, evidence);
     }
 
     private Graph load(long snapshotId) {
@@ -306,4 +339,6 @@ public class FlowDetectionStep implements JobStep {
     private record Edge(long id, long sourceId, long targetId, String type) {}
 
     private record Step(long nodeId, Long edgeId, String description) {}
+
+    private record PendingFlow(String name, String kind, long entryNodeId, List<Step> steps, String filePath) {}
 }

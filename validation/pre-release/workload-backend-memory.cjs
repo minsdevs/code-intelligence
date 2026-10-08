@@ -9,6 +9,9 @@
 //   (cd analyzers/ts-analyzer && npm run build)
 //   node validation/pre-release/workload-backend-memory.cjs --class medium [--heap 2048m]
 //     [--files N --bytes B] [--heap-dump-dir <dir>] [--keep-fixture]
+//     [--explain-ms <ms> --explain-log <file>]   plans of slower statements (auto_explain, PostgreSQL log)
+//     [--jfr <file>]                             CPU profile of the test JVM (JFR, profile settings)
+//     [--jvm-args "<-X options>"]                extra collector/heap options to compare (observation only)
 const assert = require('node:assert/strict');
 const { spawn, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -54,6 +57,20 @@ async function main() {
     const args = ['--offline', '-p', path.join(ROOT, 'backend'), 'workloadMemoryTest', '--console=plain',
       `-PworkloadFixture=${fixture}`, `-PworkloadTsUrl=${url}`, `-PworkloadHeap=${heap}`];
     if (dumpDir) args.push(`-PworkloadHeapDumpDir=${path.resolve(dumpDir)}`);
+    const explainMs = option('--explain-ms');
+    const explainLog = option('--explain-log');
+    assert((explainMs === undefined) === (explainLog === undefined), 'usage: --explain-ms <ms> --explain-log <file>');
+    if (explainMs !== undefined) {
+      assert(/^[0-9]+$/.test(explainMs), 'EXPLAIN_MS_INVALID');
+      args.push(`-PworkloadExplainMs=${explainMs}`, `-PworkloadExplainLog=${path.resolve(explainLog)}`);
+    }
+    const jfr = option('--jfr');
+    if (jfr) args.push(`-PworkloadJfr=${path.resolve(jfr)}`);
+    const jvmArgs = option('--jvm-args');
+    if (jvmArgs) {
+      assert(/^(-X[A-Za-z0-9:+=._-]+ ?)+$/.test(jvmArgs), 'JVM_ARGS_INVALID');
+      args.push(`-PworkloadJvmArgs=${jvmArgs}`);
+    }
     // The test JVM prints its pid; both processes' RSS is sampled every 500 ms.
     const peaks = { analyzer: 0, testJvm: 0 };
     let testJvm = null;

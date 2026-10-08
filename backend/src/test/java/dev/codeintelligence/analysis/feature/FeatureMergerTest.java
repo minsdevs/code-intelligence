@@ -50,4 +50,28 @@ class FeatureMergerTest {
             assertThat(merged.getFirst().nodeKeys()).containsExactlyInAnyOrder("endpoint:GET:/todos", "route:/todos");
         }
     }
+
+    /**
+     * Large workload: one seed per frontend route prefix (about 4,250) next to one endpoint seed of
+     * every API endpoint; each Jaccard comparison copied both sets twice, so comparing every pair
+     * copied the large seed thousands of times (20 s of FEATURE_DETECTION).
+     */
+    @Test
+    void comparingManySeedsWithOneLargeSeedDoesNotCopyTheLargeSeedPerPair() {
+        java.util.Set<String> api = new java.util.HashSet<>();
+        for (int i = 0; i < 100_000; i++) api.add("endpoint:GET:/api/items" + i);
+        java.util.List<FeatureMerger.Seed> seeds = new java.util.ArrayList<>();
+        seeds.add(new FeatureMerger.Seed("api", api, true));
+        for (int i = 0; i < 1_500; i++) seeds.add(new FeatureMerger.Seed("p" + i, Set.of("route:/p" + i), true));
+
+        long started = System.nanoTime();
+        List<FeatureMerger.Seed> merged = FeatureMerger.merge(seeds, 0.5);
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000;
+
+        assertThat(merged).hasSize(1_501);
+        assertThat(FeatureMerger.jaccard(Set.of(), Set.of())).isEqualTo(1.0);
+        assertThat(FeatureMerger.jaccard(Set.of("a", "b", "c"), Set.of("b", "c", "d")))
+                .isEqualTo(2.0 / 4);
+        assertThat(elapsedMs).isLessThan(1_000);
+    }
 }

@@ -346,17 +346,32 @@ tasks.register<Test>("workloadMemoryTest") {
     val tsUrl = providers.gradleProperty("workloadTsUrl")
     val heap = providers.gradleProperty("workloadHeap").orElse("2048m")
     val dumpDir = providers.gradleProperty("workloadHeapDumpDir")
+    val explainMs = providers.gradleProperty("workloadExplainMs")
+    val explainLog = providers.gradleProperty("workloadExplainLog")
+    val jfr = providers.gradleProperty("workloadJfr")
+    val extraJvmArgs = providers.gradleProperty("workloadJvmArgs")
     doFirst {
         require(fixture.isPresent && tsUrl.isPresent) { "Use validation/pre-release/workload-backend-memory.cjs." }
         require(tsUrl.get().matches(Regex("http://127\\.0\\.0\\.1:[0-9]+"))) { "Only a local analyzer is allowed." }
         systemProperty("workload.fixture", fixture.get())
         systemProperty("workload.ts-url", tsUrl.get())
+        if (explainMs.isPresent && explainLog.isPresent) {
+            systemProperty("workload.explain-ms", explainMs.get())
+            systemProperty("workload.explain-log", explainLog.get())
+        }
     }
     // The desktop backend's heap options (desktop/src/jvm-options.cjs) with an optional heap dump.
     minHeapSize = "64m"
     maxHeapSize = heap.get()
     jvmArgs("-XX:+UseSerialGC")
     if (dumpDir.isPresent) jvmArgs("-XX:+HeapDumpOnOutOfMemoryError", "-XX:HeapDumpPath=${dumpDir.get()}")
+    if (jfr.isPresent) jvmArgs("-XX:StartFlightRecording=filename=${jfr.get()},settings=profile")
+    // Observation only: compare collector settings against the desktop's (space-separated -XX/-X options).
+    if (extraJvmArgs.isPresent) {
+        val extra = extraJvmArgs.get().split(" ").filter { it.isNotBlank() }
+        require(extra.all { it.matches(Regex("-X[A-Za-z0-9:+=._-]+")) }) { "Only -X JVM options are allowed." }
+        jvmArgs(extra)
+    }
     outputs.upToDateWhen { false }
     testLogging {
         events("passed", "failed")
