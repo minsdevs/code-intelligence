@@ -132,8 +132,8 @@ Windows work is deferred. Local app completion does not imply signed distributio
 >
 > **Release remains blocked** on the real browser 10-step E2E and an approved
 > accuracy/false-positive oracle for representative repositories. Desktop
-> backup/restore was implemented for the local macOS runtime and is now blocked pending safe replacement; roadmap P2
-> incremental reanalysis is not implemented.
+> backup/restore was implemented for the local macOS runtime and was blocked pending safe replacement;
+> incremental reanalysis was not implemented at that historical RC. Current behavior is described below.
 
 This repository currently ships a browser-based local workspace with a Spring
 Boot backend and optional analyzer sidecars, plus an Electron desktop runtime
@@ -681,10 +681,13 @@ not a production deployment.
 - **Copyable prompt:** Context Preview can generate a masked, copyable prompt
   without an AI key or provider request. It is a handoff artifact, not a claim
   that an external model was called.
-- **Reanalysis diff:** local refresh remains an explicitly confirmed full
-  reanalysis. Snapshot comparison shows changed features, flows, findings,
-  nodes, relations, coverage, rename candidates, and regression warnings;
-  incremental P2 reanalysis is still out of scope.
+- **Reanalysis diff:** local refresh still requires explicit approval and produces a new immutable
+  snapshot. Unchanged, authenticated encrypted blobs from the current committed snapshot can be
+  retained without rewriting them. Bounded in-process parser caches reuse matching inputs; dependency,
+  configuration, or uncertain resolution changes trigger conservative recomputation. A cold or evicted
+  cache follows the full analysis path. This does not establish the performance release gate.
+  Snapshot comparison shows changed features, flows, findings, nodes, relations, coverage,
+  rename candidates, and regression warnings.
 - **Desktop recovery:** Protocol3 runtimes offer encrypted backups from Settings. Restore loads
   reviewed typed data and verified source objects into fresh staging, preserves prior DB/source
   images, keeps AI OFF and clears credentials, sessions and folder grants. Runtime health is
@@ -701,9 +704,11 @@ not a production deployment.
 
 ### Current analysis boundaries
 
-- TypeScript/NestJS project context is sent as one request, limited to 20,000 files
-  and 10 MiB of serialized UTF-8 JSON (1 MiB per file). Larger inputs fail explicitly;
-  independent partial batches are not used. This is not a large-monorepo guarantee.
+- TypeScript/NestJS keeps one complete project manifest. Large packaged inputs use a sealed
+  session (at most 50,000 files and 512 MiB of source), with bounded 1 MiB transfer chunks
+  and result pages. The single-request path retains its 20,000-file / 10 MiB JSON limit.
+  Limits are explicit failures, not independent partial-project analysis or silent truncation.
+  These protocol ceilings are not a large-monorepo performance guarantee.
 - A running cancelled job stays `CANCELLING` until its current step exits. Reanalysis
   and deletion remain blocked during that interval; cancellation does not undo a
   completed step. Flyway V21 keeps this state in the active-job uniqueness constraint.

@@ -345,10 +345,12 @@ AI 컨텍스트를 구성하기 전에 secret을 마스킹하지만, 사용자�
 - **복사 가능한 prompt:** Context Preview는 AI key나 provider 요청 없이
   secret을 마스킹한 prompt를 생성하고 복사할 수 있습니다. 이는 외부 model
   호출이 발생했다는 의미가 아닙니다.
-- **재분석 diff:** local refresh는 명시적으로 확인하는 전체 재분석입니다.
-  Snapshot comparison에서 feature, flow, finding, node, relation, coverage,
-  rename candidate와 regression warning을 비교합니다. 증분 P2 재분석은
-  여전히 범위 밖입니다.
+- **재분석 diff:** local refresh는 계속 명시적 승인을 요구하며 새 불변 스냅샷을 만듭니다.
+  현재 확정된 스냅샷의 변경 없는 암호화 blob은 인증한 뒤 다시 쓰지 않고 보존할 수 있습니다.
+  용량이 제한된 프로세스 내부 parser cache는 일치하는 입력을 재사용하며, 의존성·설정 변경이나
+  불확실한 해석은 보수적으로 다시 계산합니다. cache가 없거나 퇴출되었으면 전체 분석 경로를
+  따릅니다. 이 구현만으로 성능 출시 게이트 통과를 뜻하지 않습니다. Snapshot comparison에서
+  feature, flow, finding, node, relation, coverage, rename candidate와 regression warning을 비교합니다.
 - **Desktop recovery:** protocol3 runtime은 Settings에서 암호화 백업을 제공합니다.
   복원은 typed 데이터·검증된 소스를 새 staging에 적재하고 이전 DB/소스를 보존합니다.
   AI OFF를 유지하며 자격증명·세션·폴더 승인을 폐기하고, 쓰기를 차단한 채 정상 기동을
@@ -363,9 +365,11 @@ AI 컨텍스트를 구성하기 전에 secret을 마스킹하지만, 사용자�
 
 ### 현재 분석 경계
 
-- TypeScript/NestJS는 프로젝트 문맥을 하나의 요청으로 전달합니다. 최대 20,000파일,
-  직렬화된 UTF-8 JSON 10MiB, 개별 파일 1MiB이며 초과하면 명시적으로 실패합니다.
-  문맥을 잃는 독립 batch는 사용하지 않습니다. 대형 monorepo 지원 완료를 뜻하지 않습니다.
+- TypeScript/NestJS는 완전한 프로젝트 manifest 하나를 유지합니다. 패키지의 큰 입력은
+  sealed session(최대 50,000파일·소스 512MiB)을 사용하며 전송 chunk와 결과 page는
+  각각 1MiB로 제한합니다. 단일 요청 경로의 20,000파일·JSON 10MiB 한도도 유지합니다.
+  한도 초과는 명시적으로 실패하며, 문맥을 잃는 독립 batch나 묵시적 잘라내기는 하지 않습니다.
+  이 프로토콜 상한이 대형 monorepo의 성능 보장을 뜻하지는 않습니다.
 - 실행 중 취소한 job은 현재 step이 끝날 때까지 `CANCELLING`입니다. 이 동안 재분석과
   삭제를 막으며 이미 완료한 step은 되돌리지 않습니다. Flyway V21이 active-job
   unique index에 이 상태를 포함합니다.
