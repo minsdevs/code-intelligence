@@ -127,6 +127,7 @@ public class GraphBuildStep implements JobStep {
                         join graph_nodes fnode
                           on fnode.snapshot_id = tnode.snapshot_id
                          and fnode.node_type = 'FILE'
+                         and fnode.file_id = tnode.file_id
                          and fnode.natural_key = 'file:' || f.path
                         where tnode.snapshot_id = :snapshotId
                           and tnode.node_type in (
