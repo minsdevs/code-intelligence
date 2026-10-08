@@ -150,3 +150,25 @@ node validation/analyzer-transport-integration/incremental-smoke.cjs
 명령: 공통 wait-quiet 후 `node validation/analyzer-transport-integration/incremental-smoke.cjs`. 증거: `validation/local/w17-adapter-incremental/backend-cap-smoke.log`. 소스/토큰/키는 로그에 기록하지 않았다.
 
 **medium 5,500여 TS/JS 파일의 실제 보관량은 NOT RUN.** 이 659항목 결과를 medium에서 모두 보관된다는 증거로 사용하지 않는다. [INFERENCE] 같은 평균 항목 크기라면 16 MiB를 크게 초과하므로 medium에서는 adapter 자체 16 MiB 출력 한도와 backend UTF-16 16 MiB 한도가 각각 재사용률을 제한한다. cap 확대·threshold 변경은 하지 않았다.
+
+## 압축·파일별 Nest metadata 후속 — 중간 증거
+
+사용자가 승인한 후속 범위에서 Node 내장 deflate-raw 압축과 인증된 파일별 Nest 원시 DTO 재사용을 추가했다. AST는 보관하지 않는다. HMAC 검증 뒤에만 inflate하며, 당시 구현 상한은 wire/backend 항목 128 KiB, owner 16 MiB, inflate 항목 128 KiB / 호출 전체 64 MiB였다. 손상/과대/누적 예산 소진은 재계산한다. 이 절은 중간 실패를 포함하며 완료/게이트 통과 기록이 아니다.
+
+- RED: `compact-metadata-red.log`, 새 2개 회귀 모두 실패(압축 codec 없음, metadata 재사용 없음).
+- GREEN: `compact-metadata-green-2.log`, build 및 대상 3파일 18개 통과. `compact-metadata-green-1.log`의 계측 변수 중복 build 실패는 수정하고 보존했다.
+- 안전/세션: `compact-safety-green.log`, 대상 2파일 5개 통과 및 실제 stdio/HTTP smoke. 인증 전 inflate 배제, signed corrupt stream/과대 확장/잘못된 metadata DTO/누적 budget 소진, dependency/config/global 변경을 검증했다.
+- 1,200파일 mixed fixture: backend 비용 12,213,362→2,050,726 bytes, 659개 모두 보관. refresh 569 reuse / metadata 61 reuse / compiler 343(이전465). 기존 fetch 본문 smoke는 compiler 134→20→0, 전체 응답 hash 유지.
+
+실제 medium 단회 명령: 공통 wait-quiet 후 `node validation/analyzer-transport-integration/incremental-smoke.cjs --medium`. 실제 10,000파일/50 MiB 생성 및 기본1% mutation, production 새 stdio session, 독립 cache 없는 full 응답 비교를 사용했다. macOS `/usr/bin/time -l`로 각 worker의 peak RSS를 측정했다. packaged 실행이나 timing gate가 아니다. 증거 `medium-compact-1.log`.
+
+| 단계 | 진단 elapsed ms | compiler files | result / metadata reuse | peak RSS bytes |
+| --- | ---: | ---: | ---: | ---: |
+| cold | 21,040 | 9,546 | 0 / 0 | 2,089,598,976 |
+| 1% refresh | 15,992 | 6,791 | 2,330 / 0 | 2,132,819,968 |
+| 독립 full | 20,913 | 별도 계측 없음 | cache 없음 | 2,084,356,096 |
+| 무변경 | 6,955 | 2,050 | 5,497 / 599 | 1,206,878,208 |
+
+medium 실제 source/config 입력 5,503개. cold/refresh cache 5,497항목, token UTF-8 8,528,895 bytes, JSON 배열 8,699,303 bytes, backend 비용 17,057,790 bytes. 16 MiB 정책상 5,422개 보관 / 75개 퇴출이다. 변경/무변경 모두 독립 full 전체 응답 equality는 통과했으나 **무변경 compiler 0 assertion에서 실패**했다. 이후 backend-cap refresh 단계는 **NOT RUN**이다. 사용자 확인 대기 지시에 따라 당시 진행 중이던 유한 시험만 끝내고 중단했으며, 이후 확인된 범위 재개 승인을 받았다. 실패 로그는 유지한다.
+
+남은 승인 범위: medium 16 MiB 수용 비용 개선, metadata의 실제 참조 의존성 키, 큰 결과의 안전한 bounded decode 및 0-parse 회귀 해결. Backend/build는 수정·실행하지 않았다. 상한/설계 추가 결정은 coordinator에게 먼저 문의한다.

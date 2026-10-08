@@ -52,10 +52,10 @@ export class AnalyzeService {
     try {
       const incremental = typeof cacheKey === 'string' && /^[0-9a-f]{64}$/.test(cacheKey)
       let reused = 0
-      let programFiles = 0
+      let metadataReused = 0, programFiles = 0
       const result = extractTs(files, { incremental, cacheKey: incremental ? cacheKey : undefined,
-        onReuse: () => { reused++ }, onProgram: (program) => { programFiles += program.files } })
-      if (incremental) console.error('TS_INCREMENTAL', JSON.stringify({ files: files.length, reused, programFiles }))
+        onReuse: () => { reused++ }, onMetadataReuse: () => { metadataReused++ }, onProgram: (program) => { programFiles += program.files } })
+      if (incremental) console.error('TS_INCREMENTAL', JSON.stringify({ files: files.length, reused, metadataReused, programFiles }))
       return result
     } catch (error) {
       if (!(error instanceof ParserSyntaxError)) throw error

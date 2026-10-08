@@ -6,12 +6,14 @@ import {
   collectManifestFacts,
   createImportResolver,
   type ManifestFacts,
+  type ManifestFileFacts,
   type SliceScope,
 } from './semantic-extractor'
 import { ParserSyntaxError, syntaxDiagnostics, type ParserSyntaxDiagnostic } from './syntax-diagnostics'
 import { assembleResponse, createProgramProject, extractProgram, type ProgramOutput } from './ts-extractor'
 import type { AnalyzeFile, AnalyzeResponse } from './types'
-import { CACHE_LISTS, CACHE_TOTAL_BYTES, cacheKeys, encodeCachedFile, readCachedFile, type CachedRow } from './incremental-cache'
+import { CACHE_DECODED_BYTES, CACHE_LISTS, CACHE_TOTAL_BYTES, cacheKeys, encodeCachedFile,
+  readCachedEnvelope, decodeCachedFile, type CachedEnvelope, type CachedFile, type CachedRow } from './incremental-cache'
 
 /**
  * Sliced whole-manifest extraction (R10, large size class). One compiler program for 100 MiB of
@@ -38,40 +40,75 @@ type SliceRun = { output: ProgramOutput; ranges: Map<unknown[], Range[]>; outsid
 export function extractSliced(
   files: AnalyzeFile[], tsFiles: AnalyzeFile[], budget = SLICE_PROGRAM_BYTES,
   onProgram?: (program: { files: number; bytes: number }) => void,
-  incremental = false, onReuse?: (path: string) => void, cacheKey?: string,
+  incremental = false, onReuse?: (path: string) => void, cacheKey?: string, onMetadataReuse?: (path: string) => void,
 ): AnalyzeResponse {
   const plan: Plan = { ...planManifest(files, tsFiles), onProgram }
   const identity = incremental ? cacheKeys(files, plan) : undefined
-  const cached = new Map<string, ReturnType<typeof readCachedFile>>()
+  const envelopes = new Map<string, CachedEnvelope>()
   if (identity) for (const file of tsFiles) {
-    const entry = readCachedFile(file.cache, file.path, undefined, identity.whole, cacheKey)
-    if (entry) cached.set(file.path, entry)
+    const entry = readCachedEnvelope(file.cache, file.path, cacheKey)
+    if (entry) envelopes.set(file.path, entry)
+  }
+  const decoded = new Map<string, CachedFile | undefined>()
+  const decodeBudget = { remaining: CACHE_DECODED_BYTES }
+  const load = (path: string): CachedFile | undefined => {
+    if (!decoded.has(path)) {
+      const envelope = envelopes.get(path)
+      decoded.set(path, envelope ? decodeCachedFile(envelope, decodeBudget) : undefined)
+    }
+    return decoded.get(path)
+  }
+  const cached = new Map<string, CachedFile>()
+  if (identity) for (const [path, envelope] of envelopes) if (envelope.manifest === identity.whole) {
+    const entry = load(path)
+    if (entry) cached.set(path, entry)
   }
   plan.singleProgram = incremental && tsFiles.every((file) => !file.cache)
     && tsFiles.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0) <= 16 * 1024 * 1024
   if (plan.singleProgram) budget = Number.POSITIVE_INFINITY
   const facts: ManifestFacts = { providers: [], providerMethods: new Map(), prefixFacts: new Map() }
-  // First pass: manifest-wide Nest facts, from the only files that can declare them.
-  const nestFiles = cached.size === plan.order.length ? [] : plan.order.filter((path) => plan.nestCandidate(path))
-  runSlices(plan, nestFiles, budget, (project, scope) => {
+  const metadata = new Map<string, ManifestFileFacts>()
+  const metadataDependencies = new Map<string, string>()
+  const metadataEscalated = new Set<string>()
+  const candidates = plan.order.filter((path) => plan.nestCandidate(path))
+  if (identity) for (const path of candidates) {
+    const envelope = envelopes.get(path)
+    if (!envelope || (envelope.dependency !== identity.dependencies.get(path) && envelope.dependency !== identity.whole)) continue
+    const entry = load(path)
+    if (entry?.metadata) {
+      metadata.set(path, entry.metadata)
+      metadataDependencies.set(path, envelope.dependency)
+      onMetadataReuse?.(path)
+    }
+  }
+  // Only changed or unauthenticated metadata needs a first-pass compiler program.
+  runSlices(plan, candidates.filter((path) => !metadata.has(path)), budget, (project, scope) => {
     const run: ManifestFacts = { providers: [], providerMethods: new Map(), prefixFacts: new Map() }
+    const byFile = new Map<string, ManifestFileFacts>()
     const outside = new Set<string>()
     scope.outside = () => { if (scope.current) outside.add(scope.current) }
-    collectManifestFacts(project, files, scope, run)
-    // Registration order within a file is kept; files are ordered by the whole-manifest order below.
-    facts.providers.push(...run.providers.filter((provider) => !outside.has(provider.filePath)))
-    for (const [key, method] of run.providerMethods) facts.providerMethods.set(key, method)
-    for (const [path, value] of run.prefixFacts) if (!outside.has(path)) facts.prefixFacts.set(path, value)
+    collectManifestFacts(project, files, scope, run, (path, value) => byFile.set(path, value))
+    for (const path of outside) metadataEscalated.add(path)
+    for (const [path, value] of byFile) if (!outside.has(path)) {
+      metadata.set(path, value)
+      if (identity) metadataDependencies.set(path, metadataEscalated.has(path) ? identity.whole : identity.dependencies.get(path)!)
+    }
     return { outside }
   })
-  facts.providers.sort((a, b) => plan.index.get(a.filePath)! - plan.index.get(b.filePath)!)
+  for (const path of candidates) {
+    const value = metadata.get(path)!
+    facts.providers.push(...value.providers.map((provider) => ({ filePath: path, ...provider })))
+    for (const [key, method] of value.methods) facts.providerMethods.set(key, method)
+    facts.prefixFacts.set(path, value.prefix)
+  }
   const keys = identity?.keys(facts)
-  if (identity && keys) for (const file of tsFiles) {
-    if (!cached.has(file.path)) {
-      const entry = readCachedFile(file.cache, file.path, keys.get(file.path), identity.whole, cacheKey)
-      if (entry) cached.set(file.path, entry)
+  if (identity && keys) for (const path of plan.order) {
+    const envelope = envelopes.get(path)
+    if (!cached.has(path) && envelope && (envelope.key === keys.get(path) || envelope.key === identity.whole)) {
+      const entry = load(path)
+      if (entry) cached.set(path, entry)
     }
-    if (cached.has(file.path)) onReuse?.(file.path)
+    if (cached.has(path)) onReuse?.(path)
   }
 
   const diagnostics: { index: number; diagnostics: ParserSyntaxDiagnostic[] }[] = []
@@ -136,7 +173,9 @@ export function extractSliced(
     let bytes = 0
     for (const path of plan.order) {
       const key = escalated.has(path) ? identity.whole : cached.get(path)?.key ?? keys!.get(path)!
-      const encoded = encodeCachedFile(path, key, identity.whole, rows.get(path) ?? [], cacheKey)
+      const encoded = encodeCachedFile({ path, key, manifest: identity.whole,
+        dependency: metadataDependencies.get(path) ?? identity.dependencies.get(path)!,
+        rows: rows.get(path) ?? [], metadata: metadata.get(path) }, cacheKey)
       if (!encoded) continue
       if (bytes + Buffer.byteLength(encoded) > CACHE_TOTAL_BYTES) break
       bytes += Buffer.byteLength(encoded)

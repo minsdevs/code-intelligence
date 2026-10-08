@@ -9,13 +9,15 @@ const { once } = require('node:events');
 const root = path.resolve(__dirname, '../..');
 const { FrameDecoder, encodeFrame, ADAPTER_STDIO_PROTOCOL, ADAPTER_STDIO_VERSION } =
   require(path.join(root, 'analyzers/ts-analyzer/dist/stdio-transport.js'));
-const { planWorkload, generateWorkload, mutateWorkload } = require('../pre-release/workload-fixture.cjs');
+const { planWorkload, generateWorkload, mutateWorkload, SIZE_CLASSES } = require('../pre-release/workload-fixture.cjs');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 const cacheKey = crypto.randomBytes(32).toString('hex');
 
 async function worker(adapter) {
   const runToken = crypto.randomBytes(32).toString('hex');
-  const child = spawn(process.execPath, ['dist/stdio.js'], {
+  const timed = process.platform === 'darwin' && process.argv.includes('--medium');
+  const child = spawn(timed ? '/usr/bin/time' : process.execPath,
+    timed ? ['-l', process.execPath, 'dist/stdio.js'] : ['dist/stdio.js'], {
     cwd: path.join(root, 'analyzers', adapter),
     env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'C', LC_ALL: 'C', ADAPTER_RUN_TOKEN: runToken },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -53,13 +55,20 @@ async function worker(adapter) {
       child.stdin.end();
       const [code] = await done;
       assert.equal(code, 0);
-      return stderr.split('\n').filter(line => /^(TS|TREE)_INCREMENTAL /.test(line))
+      const metrics = stderr.split('\n').filter(line => /^(TS|TREE)_INCREMENTAL /.test(line))
         .map(line => JSON.parse(line.slice(line.indexOf(' ') + 1)));
+      if (timed) {
+        const peak = stderr.match(/^\s*(\d+)\s+maximum resident set size$/m);
+        assert.ok(peak, 'native worker peak RSS measurement missing');
+        metrics.peakRssBytes = Number(peak[1]);
+      }
+      return metrics;
     },
   };
 }
 
-async function tsSession(files, incremental) {
+async function tsSession(files, incremental, phase) {
+  const started = performance.now();
   const transport = await worker('ts-analyzer');
   const manifest = { fileCount: files.length,
     bytes: files.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0),
@@ -77,7 +86,10 @@ async function tsSession(files, incremental) {
     for (const name of Object.keys(result)) result[name].push(...(response[name] || []));
   }
   await transport.analyze({ files: [], session: { op: 'close', id } });
-  return { result, metrics: await transport.close() };
+  const metrics = await transport.close();
+  const resources = { elapsedMs: Math.round(performance.now() - started), peakRssBytes: metrics.peakRssBytes };
+  if (phase && process.argv.includes('--medium')) console.log(JSON.stringify({ phase, metrics: metrics[0], resources, cache: backendBudget(result).stats }));
+  return { result, metrics, resources };
 }
 
 function withCache(files, result) {
@@ -146,40 +158,44 @@ async function treeHttp(input, incremental) {
   }
 }
 
-async function tsRevisionSmoke() {
+async function tsRevisionSmoke(spec = { files: 1200, bytes: 6 * 1024 * 1024, seed: 'g-perf-1' }) {
   const fs = require('node:fs');
   const temporary = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'adapter-revision-smoke-')));
   try {
-    const spec = { files: 1200, bytes: 6 * 1024 * 1024, seed: 'g-perf-1' };
+
     const manifest = generateWorkload({ root: temporary, ...spec });
     // Match TsParsingStep's source/config inventory; Java belongs to its separate parser.
     const files = planWorkload(spec).files.filter(file => /\.(?:ts|tsx|mts|cts|mjs|cjs|js|jsx|py|go)$/.test(file.path)
       || /(?:^|\/)(?:package|(?:tsconfig|jsconfig)(?:\.[^/]+)?)\.json$/.test(file.path))
       .map(({ path, content }) => ({ path, content }));
-    const cold = await tsSession(files, true);
+    const cold = await tsSession(files, true, 'cold');
     const mutation = mutateWorkload({ root: temporary, manifest });
     const changed = files.map(file => ({ path: file.path, content: fs.readFileSync(path.join(temporary, file.path), 'utf8') }));
     const edited = changed.filter((file, index) => file.content !== files[index].content).map(file => file.path);
     assert.ok(edited.some(file => file.endsWith('.service.ts')));
-    const refresh = await tsSession(withCache(changed, cold.result), true);
-    const clean = await tsSession(changed, false);
+    const refresh = await tsSession(withCache(changed, cold.result), true, 'refresh');
+    const clean = await tsSession(changed, false, 'clean-full');
     const { cache: _cache, ...graph } = refresh.result;
     assert.deepEqual(graph, clean.result);
     assert.ok(refresh.metrics[0].programFiles < cold.metrics[0].programFiles);
     assert.ok(refresh.metrics[0].reused > 0);
-    const unchanged = await tsSession(withCache(changed, refresh.result), true);
+    const unchanged = await tsSession(withCache(changed, refresh.result), true, 'unchanged');
     const { cache: _unchangedCache, ...unchangedGraph } = unchanged.result;
     assert.deepEqual(unchangedGraph, clean.result);
     assert.equal(unchanged.metrics[0].programFiles, 0);
     const boundedCold = backendBudget(cold.result);
-    const boundedRefresh = await tsSession(withCache(changed, boundedCold.result), true);
+    assert.equal(boundedCold.stats.retained, files.filter(file => /\.(?:ts|tsx|mts|cts|mjs|cjs|js|jsx)$/.test(file.path)).length);
+    const boundedRefresh = await tsSession(withCache(changed, boundedCold.result), true, 'backend-capped-refresh');
     const { cache: _boundedCache, ...boundedGraph } = boundedRefresh.result;
     assert.deepEqual(boundedGraph, clean.result);
     assert.ok(boundedRefresh.metrics[0].reused > 0);
+    assert.ok(boundedRefresh.metrics[0].metadataReused > 0);
     return { workloadFiles: manifest.files, changedFiles: mutation.changedFiles, adapterChangedFiles: edited.length,
       cold: cold.metrics[0], refresh: refresh.metrics[0], unchanged: unchanged.metrics[0],
       backendBudget: { cold: boundedCold.stats, refresh: backendBudget(boundedRefresh.result).stats,
         refreshMetrics: boundedRefresh.metrics[0], fullEquality: true },
+      workerResources: { cold: cold.resources, refresh: refresh.resources, full: clean.resources,
+        unchanged: unchanged.resources, backendCappedRefresh: boundedRefresh.resources },
       canonicalSha256: sha(JSON.stringify(graph)), fullEquality: true };
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
@@ -188,6 +204,12 @@ async function tsRevisionSmoke() {
 
 
 async function main() {
+  if (process.argv.includes('--medium')) {
+    const medium = await tsRevisionSmoke({ ...SIZE_CLASSES.medium, seed: 'g-perf-1' });
+    console.log(JSON.stringify({ kind: 'production-stdio-medium-cache-diagnostic', packaged: false,
+      timingGate: false, workersDestroyedBetweenRuns: true, ...medium }, null, 2));
+    return;
+  }
   const files = planWorkload({ files: 240, bytes: 1024 * 1024, seed: 'incremental-transport' }).files
     .map(({ path, content }) => ({ path, content }));
   const cold = await tsSession(files, true);

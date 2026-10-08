@@ -127,6 +127,12 @@ export type ManifestFacts = {
   providerMethods: Map<string, DeclarationRef>
   prefixFacts: Map<string, GlobalPrefixFacts>
 }
+export type ManifestFileFacts = {
+  providers: { token: string; ref: Pick<DeclarationRef, 'key' | 'name' | 'filePath'> }[]
+  methods: [string, Pick<DeclarationRef, 'key' | 'name' | 'filePath'>][]
+  prefix: GlobalPrefixFacts
+}
+
 
 export type GlobalPrefixFacts = { unknown: boolean; applications: number; invalid: boolean; prefixes: string[] }
 
@@ -267,7 +273,8 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[], sco
  * First pass of a sliced extraction: the Nest provider registrations, provider class methods and
  * global-prefix facts of the owned files, which every later slice needs whole-manifest.
  */
-export function collectManifestFacts(project: Project, files: AnalyzeFile[], scope: SliceScope, facts: ManifestFacts): void {
+export function collectManifestFacts(project: Project, files: AnalyzeFile[], scope: SliceScope, facts: ManifestFacts,
+  onFile?: (path: string, facts: ManifestFileFacts) => void): void {
   const sourceFiles = project.getSourceFiles()
   const resolveImport = scopedResolver(createImportResolver(files, scope.pathSet), scope)
   const bindingsByFile = new Map(sourceFiles.map((source) => [filePathOf(source), collectImportBindings(source)]))
@@ -281,12 +288,22 @@ export function collectManifestFacts(project: Project, files: AnalyzeFile[], sco
     scope.current = filePath
     try {
       const providers = new Map<string, DeclarationRef>()
+      const own: ManifestFileFacts = { providers: [], methods: [], prefix: prefixFacts(source) }
       collectNestModules([source], bindingsByFile, resolveImport, declarationsByFileAndName, classesByName, ignore, ignore, providers,
-        (token, ref) => facts.providers.push({ filePath, token, ref: { key: ref.key, name: ref.name, filePath: ref.filePath } }))
+        (token, ref) => {
+          const plain = { key: ref.key, name: ref.name, filePath: ref.filePath }
+          facts.providers.push({ filePath, token, ref: plain })
+          own.providers.push({ token, ref: plain })
+        })
       for (const ref of providers.values()) {
-        for (const [key, method] of methodsByOwnerAndName) if (key.startsWith(`${ref.key}.`)) facts.providerMethods.set(key, method)
+        for (const [key, method] of methodsByOwnerAndName) if (key.startsWith(`${ref.key}.`)) {
+          const plain = { key: method.key, name: method.name, filePath: method.filePath }
+          facts.providerMethods.set(key, plain)
+          own.methods.push([key, plain])
+        }
       }
-      facts.prefixFacts.set(filePath, prefixFacts(source))
+      facts.prefixFacts.set(filePath, own.prefix)
+      onFile?.(filePath, own)
     } finally { scope.current = null }
   }
 }
