@@ -52,7 +52,7 @@ const codes = new Set(['STARTUP_TIMEOUT', 'STARTUP_SDK_TIMEOUT', 'STARTUP_FAILED
   'PROJECT_DELETE_FAILED', 'CANCEL_LOCK_NOT_RELEASED', 'CANCEL_ENDED_WITHOUT_CANCELLED', 'MEMORY_SAMPLE_FAILED', 'MEMORY_EVIDENCE_LIMIT', 'MEMORY_SAMPLING_INCOMPLETE',
   'OBSERVED_PROCESSES_REMAIN', 'WORKLOAD_FIXTURE_CHANGED', 'DISK_SPACE_LOW', 'NATIVE_ELECTRON_CLOSE_TIMEOUT',
   'NATIVE_ELECTRON_EXIT_TIMEOUT', 'NATIVE_ELECTRON_UNCLEAN_EXIT', 'NATIVE_SHUTDOWN_RECOVERY_REQUIRED',
-  'NATIVE_SHUTDOWN_UNCONFIRMED', 'NATIVE_SHUTDOWN_DIAGNOSTIC_TIMEOUT', 'NOT_RUN_AFTER_ANALYSIS_FAILURE']);
+  'NATIVE_SHUTDOWN_UNCONFIRMED', 'NATIVE_SHUTDOWN_DIAGNOSTIC_TIMEOUT', 'NOT_RUN_AFTER_ANALYSIS_FAILURE', 'WORKLOAD_HOST_OBSERVATION_FAILED']);
 function failureCode(error, fallback = 'WORKLOAD_BENCHMARK_CHECK_FAILED') {
   let message; try { message = error?.message; } catch { /* Do not inspect thrown details. */ }
   return codes.has(message) ? message : fallback;
@@ -108,6 +108,35 @@ function jobTimings(job) {
 }
 function failedStep(job) {
   return stepTimings(job).find(step => step.status === 'FAILED')?.key ?? null;
+}
+
+function observeQuietHost() {
+  let output;
+  try { output = execFileSync('/usr/bin/pgrep', ['-x', 'mdworker_shared'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] }); }
+  catch (error) {
+    if (error.status !== 1 || String(error.stdout ?? '').trim()) throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED');
+    output = '';
+  }
+  const text = output.trim();
+  if (text && !/^\d+(?:\n\d+)*$/.test(text)) throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED');
+  return { observedAt: new Date().toISOString(), loadAverage: os.loadavg(), mdworkers: text ? text.split('\n').length : 0 };
+}
+
+async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  const started = performance.now();
+  let observations = [], rejectedObservations = 0;
+  for (;;) {
+    const sample = observe();
+    if (!Array.isArray(sample.loadAverage) || sample.loadAverage.length !== 3
+      || !sample.loadAverage.every(value => Number.isFinite(value) && value >= 0)
+      || !Number.isSafeInteger(sample.mdworkers) || sample.mdworkers < 0) throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED');
+    if (sample.loadAverage[0] < 4 && sample.mdworkers <= 6) observations.push(sample);
+    else { observations = []; rejectedObservations++; }
+    // No final sleep: the third observation is the one immediately preceding launch.
+    if (observations.length === 3) return { status: 'ADMITTED', loadAverageLimit: 4, mdworkerLimit: 6,
+      sampleIntervalMs: 30000, waitedMs: Math.round(performance.now() - started), rejectedObservations, observations };
+    await pause(30000);
+  }
 }
 
 function freeBytes(directory) {
@@ -187,9 +216,10 @@ async function main(argv = process.argv.slice(2)) {
       hardware: execFileSync('/usr/sbin/sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim(),
       cpuBrand: execFileSync('/usr/sbin/sysctl', ['-n', 'machdep.cpu.brand_string'], { encoding: 'utf8' }).trim(),
       performanceCores: Number(execFileSync('/usr/sbin/sysctl', ['-n', 'hw.perflevel0.physicalcpu'], { encoding: 'utf8' }).trim()),
-      logicalCpus: os.cpus().length, memoryBytes: os.totalmem(), loadAverageBefore: os.loadavg(), freeBytesAtStart: freeAtStart,
+      logicalCpus: os.cpus().length, memoryBytes: os.totalmem(), loadAverageAfterFixturePreparation: os.loadavg(), loadAverageBefore: null, freeBytesAtStart: freeAtStart,
       power: observePowerSource(), backgroundState: 'shared development machine; other agents may run builds/tests; packaged-app launches serialized by the caller-held native lock',
-      powerObservationScope: 'Series start and both boundaries of each run; not continuous monitoring' },
+      powerObservationScope: 'Series start and both boundaries of each run; not continuous monitoring',
+      loadObservationScope: 'Three quiet observations 30 seconds apart after fixture preparation and before every app launch; not continuous monitoring' },
     warmup: null, runs: [] };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   const sampleFile = path.join(evidence, 'resource-samples.csv'), fd = fs.openSync(sampleFile, 'wx', 0o600);
@@ -513,9 +543,9 @@ async function main(argv = process.argv.slice(2)) {
     if (sequence === 0) report.warmup = run; else report.runs.push(run);
     plan = newPlan(); run.profile = path.basename(plan.root);
     save(); plan.assertIdentity();
-    run.powerAtStart = observePowerSource(); run.loadAverageAtStart = os.loadavg(); run.freeBytesAtStart = freeBytes('/private/tmp');
+    run.freeBytesAtStart = freeBytes('/private/tmp');
     const folder = path.join(work, `run-${sequence}`);
-    const started = performance.now();
+    let started = performance.now(), launchAttempted = false;
     let sdk, owner, sampler, memory, failure = null, stopObserving;
     const diagnostics = {};
     try {
@@ -525,6 +555,12 @@ async function main(argv = process.argv.slice(2)) {
         if (hashTree(folder).treeSha256 !== fixture.treeSha256) throw new Error('WORKLOAD_FIXTURE_CHANGED');
         if (options.rows.includes('cancel')) cloneTree(pristine, folder + '-cancel');
       }
+      run.quietAdmission = await waitForQuietHost();
+      run.loadAverageAtStart = run.quietAdmission.observations.at(-1).loadAverage;
+      if (sequence === 0) report.environment.loadAverageBefore = run.loadAverageAtStart;
+      run.powerAtStart = observePowerSource();
+      started = performance.now();
+      launchAttempted = true;
       const launched = await stage('STARTUP_FAILED', () => launch(run, started));
       ({ sdk, owner } = launched);
       sampler = startPhaseSampler(owner.process().pid, fd, sequence, started, { read: () => readOwnerMemory(owner.process().pid) });
@@ -586,7 +622,8 @@ async function main(argv = process.argv.slice(2)) {
           run.cleanupConfirmed = true;
         } catch (error) { run.cleanupFailure = failureCode(error); failure ||= run.cleanupFailure; }
         run.exit = { code: owner.process().exitCode, signal: owner.process().signalCode, shutdown: diagnostics.shutdown ?? null };
-      } else { run.cleanupFailure = 'NO_CAPTURED_CHILD'; failure ||= 'STARTUP_SDK_TIMEOUT'; }
+      } else if (!launchAttempted) run.cleanupConfirmed = true;
+      else { run.cleanupFailure = 'NO_CAPTURED_CHILD'; failure ||= 'STARTUP_SDK_TIMEOUT'; }
       stopObserving?.();
       run.memory = memory ? { samples: memory.samples, peakRssKiB: memory.peakRssKiB, maximumGapMs: Math.round(memory.maximumGapMs),
         maximumReadMs: Math.round(memory.maximumReadMs), failure: memory.failure, missingOwnerSamples: memory.missingOwnerSamples,
@@ -651,8 +688,10 @@ async function main(argv = process.argv.slice(2)) {
     report.measurementStatus = report.runs.length === options.runs && report.runs.every(run => run.status === 'PASS') ? 'COMPLETE' : 'INCOMPLETE';
     report.environmentGate = acObservedAtRunBoundaries(report.environment.power, [report.warmup, ...report.runs])
       ? 'AC_OBSERVED_AT_RUN_BOUNDARIES' : 'AC_POWER_NOT_CONFIRMED';
+    report.loadGate = report.runs.length === options.runs && [report.warmup, ...report.runs].every(run => run?.quietAdmission?.status === 'ADMITTED')
+      ? 'QUIET_HOST_OBSERVED_AT_LAUNCH' : 'QUIET_HOST_NOT_CONFIRMED';
     report.status = options.series
-      ? (Object.values(assessed).length && Object.values(assessed).every(row => row.status === 'PASS') && report.environmentGate === 'AC_OBSERVED_AT_RUN_BOUNDARIES' ? 'PASS' : 'FAIL')
+      ? (Object.values(assessed).length && Object.values(assessed).every(row => row.status === 'PASS') && report.environmentGate === 'AC_OBSERVED_AT_RUN_BOUNDARIES' && report.loadGate === 'QUIET_HOST_OBSERVED_AT_LAUNCH' ? 'PASS' : 'FAIL')
       : 'SMOKE_ONLY';
     for (const [name, expected] of Object.entries(sources)) assert.equal(hash(path.join(repo, name)), expected);
     assert.equal(hash(path.join(app, 'Contents/Resources/app.asar')), report.appAsarSha256);
@@ -678,5 +717,5 @@ async function main(argv = process.argv.slice(2)) {
   return report;
 }
 
-module.exports = { argumentsFor, instantMs, stepTimings, jobTimings, CLASS_SETTINGS, CANCEL_TRIGGER, main };
+module.exports = { argumentsFor, instantMs, stepTimings, jobTimings, waitForQuietHost, CLASS_SETTINGS, CANCEL_TRIGGER, main };
 if (require.main === module) main().catch(() => { console.error('WORKLOAD_BENCHMARK_PREFLIGHT_FAILED'); process.exitCode = 1; });
