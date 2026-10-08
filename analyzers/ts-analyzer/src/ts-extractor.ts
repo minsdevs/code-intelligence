@@ -37,6 +37,8 @@ const STORE_FACTORIES_BY_SOURCE: Record<string, string[]> = {
 export const SINGLE_PROGRAM_BYTES = 16 * 1024 * 1024
 
 export type ExtractOptions = {
+  incremental?: boolean
+  onReuse?: (path: string) => void
   singleProgramBytes?: number
   sliceProgramBytes?: number
   /** Observes each sliced program's size (tests). */
@@ -46,8 +48,8 @@ export type ExtractOptions = {
 export function extractTs(files: AnalyzeFile[], options: ExtractOptions = {}): AnalyzeResponse {
   const tsFiles = files.filter((file) => isTsJs(file.path))
   const bytes = tsFiles.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0)
-  if (bytes > (options.singleProgramBytes ?? SINGLE_PROGRAM_BYTES)) {
-    return extractSliced(files, tsFiles, options.sliceProgramBytes, options.onProgram)
+  if (options.incremental || bytes > (options.singleProgramBytes ?? SINGLE_PROGRAM_BYTES)) {
+    return extractSliced(files, tsFiles, options.sliceProgramBytes, options.onProgram, options.incremental, options.onReuse)
   }
   const project = createProgramProject(tsFiles)
   assertParseable(project, project.getSourceFiles())

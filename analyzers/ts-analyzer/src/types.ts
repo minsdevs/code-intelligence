@@ -1,6 +1,8 @@
 export type AnalyzeFile = {
   path: string
   content: string
+  /** Backend-owned extraction result; never part of the source manifest. */
+  cache?: string
 }
 
 export type AnalyzeRequest = {
@@ -111,6 +113,7 @@ export type UnresolvedCallHit = {
 }
 
 export type AnalyzeResponse = {
+  cache?: string[]
   fileOutcomes?: { path: string; status: 'SUCCESS' | 'PARTIAL' | 'UNMEASURED'; reason: string }[]
   routes: RouteHit[]
   components: SymbolHit[]
