@@ -98,7 +98,7 @@ public class TsAnalyzerClient {
                     .body(TsAnalyzeDtos.Response.class);
             return body == null ? TsAnalyzeDtos.Response.EMPTY : body;
         } catch (RestClientException e) {
-            throw new TsAnalyzerException("ts-analyzer request failed", properties.pinnedTls() ? null : e);
+            throw new TsAnalyzerException("ts-analyzer request failed", e, !properties.pinnedTls());
         }
     }
 
@@ -120,7 +120,7 @@ public class TsAnalyzerClient {
                     .retrieve()
                     .toBodilessEntity();
         } catch (RestClientException e) {
-            throw new TsAnalyzerException("ts-analyzer health failed", properties.pinnedTls() ? null : e);
+            throw new TsAnalyzerException("ts-analyzer health failed", e, !properties.pinnedTls());
         }
     }
 }

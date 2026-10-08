@@ -137,6 +137,8 @@ class JobAnalyzerWorkerRaceIntegrationTest {
 
         assertThat(exit).as("SIGKILL exit status of the owned analyzer").isEqualTo(128 + 9);
         assertThat(awaitTerminal(job)).isEqualTo("FAILED");
+        assertThat(jdbc.queryForObject("select failure_code from analysis_jobs where id=?", String.class, job))
+                .isEqualTo("TS_ANALYZER_TRANSPORT_ERROR");
         assertThat(stepStatus(job, "TS_PARSING")).isEqualTo("FAILED");
         assertThat(jdbc.queryForObject("select error from analysis_jobs where id=?", String.class, job))
                 .contains("TS_PARSING");

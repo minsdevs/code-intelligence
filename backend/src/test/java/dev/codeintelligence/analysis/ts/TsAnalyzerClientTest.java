@@ -62,6 +62,27 @@ class TsAnalyzerClientTest {
     }
 
     @Test
+    void pinnedTimeoutIsClassifiedBeforeItsSensitiveCauseIsDiscarded() {
+        var builder = Mockito.spy(RestClient.builder());
+        var server = MockRestServiceServer.bindTo(builder).build();
+        Mockito.doReturn(builder).when(builder).clone();
+        Mockito.doReturn(builder).when(builder).requestFactory(ArgumentMatchers.any());
+        var client = new TsAnalyzerClient(
+                new TsAnalyzerProperties("https://127.0.0.1:3040", 2, "a1".repeat(32), "b2".repeat(32)), builder);
+        server.expect(MockRestRequestMatchers.anything())
+                .andRespond(MockRestResponseCreators.withException(
+                        new java.net.http.HttpTimeoutException("private marker")));
+        assertThatThrownBy(() -> client.analyze(new TsAnalyzeDtos.Request(List.of())))
+                .isInstanceOf(dev.codeintelligence.common.RecoveryActionFailure.class)
+                .hasNoCause()
+                .hasMessage("ts-analyzer request failed")
+                .satisfies(
+                        error -> assertThat(((dev.codeintelligence.common.RecoveryActionFailure) error).failureCode())
+                                .isEqualTo("TS_ANALYZER_TIMEOUT"));
+        server.verify();
+    }
+
+    @Test
     void anAnalyzerRejectionWithoutSyntaxDiagnosticsNamesItsCode() {
         var builder = Mockito.spy(RestClient.builder());
         var server = MockRestServiceServer.bindTo(builder).build();
