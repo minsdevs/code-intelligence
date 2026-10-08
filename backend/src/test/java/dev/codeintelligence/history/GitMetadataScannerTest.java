@@ -12,6 +12,8 @@ class GitMetadataScannerTest {
     @TempDir
     Path dir;
 
+    private static final long BUDGET_MS = 4_000;
+
     private final GitMetadataScanner scanner = new GitMetadataScanner();
 
     @Test
@@ -74,5 +76,43 @@ class GitMetadataScannerTest {
         assertThat(scan.commits()).hasSize(2);
         assertThat(scan.omittedCommitCount()).isEqualTo(3);
         assertThat(scan.commits()).extracting(ScannedCommit::message).containsExactly("c5 rename b", "c4 add b");
+    }
+
+    /**
+     * G-PERF medium/large GIT_METADATA (38 s on the large workload's single commit of 50,000 added
+     * files): each file's patch header abbreviated its blob id, and JGit checks an abbreviation for
+     * uniqueness by listing the loose-object directory it falls in, so the scan grew with
+     * (files × objects per directory).
+     */
+    @Test
+    void scanningOneCommitThatAddsManyFilesStaysLinear() throws Exception {
+        int files = 30_000;
+        try (org.eclipse.jgit.api.Git git = org.eclipse.jgit.api.Git.init()
+                .setInitialBranch("snapshot")
+                .setDirectory(dir.toFile())
+                .call()) {
+            for (int i = 0; i < files; i++) {
+                java.nio.file.Path file = dir.resolve("src/p" + (i % 100) + "/F" + i + ".txt");
+                java.nio.file.Files.createDirectories(file.getParent());
+                java.nio.file.Files.writeString(file, "line " + i + "\n");
+            }
+            git.add().addFilepattern(".").call();
+            org.eclipse.jgit.lib.PersonIdent ident = new org.eclipse.jgit.lib.PersonIdent("w", "w@test.local");
+            git.commit()
+                    .setMessage("snapshot")
+                    .setAuthor(ident)
+                    .setCommitter(ident)
+                    .setSign(false)
+                    .call();
+        }
+
+        long started = System.nanoTime();
+        GitMetadataScan scan = scanner.scan(dir, 10);
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000;
+
+        assertThat(scan.commits()).hasSize(1);
+        assertThat(scan.commits().getFirst().files()).hasSize(files);
+        assertThat(scan.commits().getFirst().additions()).isEqualTo(files);
+        assertThat(elapsedMs).isLessThan(BUDGET_MS);
     }
 }
