@@ -63,7 +63,7 @@ jobs:
         run: node desktop/scripts/native-acceptance.cjs macos
       - name: Preserve credential-free diagnostic evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: native-macos-arm64-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/native-acceptance-artifacts/
@@ -96,7 +96,7 @@ jobs:
         run: ./desktop/scripts/native-acceptance-windows.ps1
       - name: Preserve credential-free diagnostic evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: native-windows-2025-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
