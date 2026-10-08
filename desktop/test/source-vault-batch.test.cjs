@@ -74,6 +74,38 @@ async function countDurability(t, root) {
   return counts;
 }
 
+test('retaining committed source authenticates bytes without another durability write', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const a = await vault.put({ projectId: 3, bytes: Buffer.from('unchanged source') });
+  const b = await vault.put({ projectId: 3, bytes: Buffer.from('another source') });
+  const blobs = [a, b].map(({ sha256, byteSize, keyId }) => ({ sha256, byteSize, keyId }));
+  const before = await fs.readFile(f.blob(a));
+  const counts = await countDurability(t, f.root);
+  assert.deepEqual(await vault.retain({ projectId: 3, blobs }), { count: 2 });
+  assert.deepEqual(counts, { sync: 0, rename: 0 });
+  assert.deepEqual(await fs.readFile(f.blob(a)), before);
+  await assert.rejects(vault.retain({ projectId: 4, blobs }), code('SOURCE_VAULT_MISSING'));
+  await assert.rejects(vault.retain({ projectId: 3, blobs: [{ ...blobs[0], keyId: 'e'.repeat(32) }] }),
+    code('SOURCE_VAULT_INTEGRITY'));
+  const damaged = Buffer.from(before); damaged[damaged.length - 1] ^= 1;
+  await fs.writeFile(f.blob(a), damaged);
+  await assert.rejects(vault.retain({ projectId: 3, blobs }), code('SOURCE_VAULT_INTEGRITY'));
+});
+
+test('retention cannot acknowledge missing, oversized or caller-mutated addresses', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const a = await vault.put({ projectId: 1, bytes: Buffer.from('immutable reference') });
+  const ref = { sha256: a.sha256, byteSize: a.byteSize, keyId: a.keyId };
+  await assert.rejects(vault.retain({ projectId: 1, blobs: [] }), code('SOURCE_VAULT_ARGUMENT'));
+  await assert.rejects(vault.retain({ projectId: 1, blobs: Array(129).fill(ref) }), code('SOURCE_VAULT_ARGUMENT'));
+  const pending = vault.retain({ projectId: 1, blobs: [ref] });
+  ref.sha256 = '0'.repeat(64);
+  assert.deepEqual(await pending, { count: 1 });
+  await assert.rejects(vault.retain({ projectId: 1, blobs: [ref] }), code('SOURCE_VAULT_MISSING'));
+});
+
 test('staged blobs become readable and durable only through a barrier of the same vault session', async t => {
   const f = await fixture(t);
   const vault = await f.create();

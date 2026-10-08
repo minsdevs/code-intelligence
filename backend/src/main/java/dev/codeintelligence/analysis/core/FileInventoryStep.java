@@ -22,6 +22,7 @@ public class FileInventoryStep implements JobStep {
 
     private final FileInventoryScanner scanner;
     private final JdbcClient jdbc;
+    private final org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate batches;
     private final TransactionTemplate transactionTemplate;
     private final AnalysisProperties analysisProperties;
     private final EvidenceService evidenceService;
@@ -29,11 +30,13 @@ public class FileInventoryStep implements JobStep {
     public FileInventoryStep(
             FileInventoryScanner scanner,
             JdbcClient jdbc,
+            org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate batches,
             TransactionTemplate transactionTemplate,
             AnalysisProperties analysisProperties,
             EvidenceService evidenceService) {
         this.scanner = scanner;
         this.jdbc = jdbc;
+        this.batches = batches;
         this.transactionTemplate = transactionTemplate;
         this.analysisProperties = analysisProperties;
         this.evidenceService = evidenceService;
@@ -56,25 +59,31 @@ public class FileInventoryStep implements JobStep {
             jdbc.sql("delete from files where snapshot_id = :snapshotId")
                     .param("snapshotId", snapshotId)
                     .update();
-            for (InventoriedFile file : result.files()) {
+            for (int offset = 0; offset < result.files().size(); offset += 500) {
                 JobCancellation.checkpoint();
-                jdbc.sql("""
-                                insert into files (snapshot_id, path, language, size, line_count, content_hash, analysis_status, analysis_reason)
-                                values (:snapshotId, :path, :language, :size, :lineCount, :contentHash, :status, :reason)
-                                """)
-                        .param("snapshotId", snapshotId)
-                        .param("path", file.path())
-                        .param("language", file.language())
-                        .param("size", file.size())
-                        .param("lineCount", file.lineCount())
-                        .param("contentHash", file.contentHash())
-                        .param("status", FileAnalysisOutcome.initialStatus(file))
-                        .param(
-                                "reason",
-                                "UNSUPPORTED".equals(FileAnalysisOutcome.initialStatus(file))
-                                        ? "SOURCE_LANGUAGE_UNSUPPORTED"
-                                        : "PARSER_NOT_MEASURED")
-                        .update();
+                var batch = new org.springframework.jdbc.core.namedparam.SqlParameterSource
+                        [Math.min(500, result.files().size() - offset)];
+                for (int index = 0; index < batch.length; index++) {
+                    InventoriedFile file = result.files().get(offset + index);
+                    String status = FileAnalysisOutcome.initialStatus(file);
+                    batch[index] = new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                            .addValue("snapshotId", snapshotId)
+                            .addValue("path", file.path())
+                            .addValue("language", file.language())
+                            .addValue("size", file.size())
+                            .addValue("lineCount", file.lineCount())
+                            .addValue("contentHash", file.contentHash())
+                            .addValue("status", status)
+                            .addValue(
+                                    "reason",
+                                    "UNSUPPORTED".equals(status)
+                                            ? "SOURCE_LANGUAGE_UNSUPPORTED"
+                                            : "PARSER_NOT_MEASURED");
+                }
+                batches.batchUpdate("""
+                        insert into files (snapshot_id, path, language, size, line_count, content_hash, analysis_status, analysis_reason)
+                        values (:snapshotId, :path, :language, :size, :lineCount, :contentHash, :status, :reason)
+                        """, batch);
             }
             jdbc.sql("""
                     insert into snapshot_inventory_measurements

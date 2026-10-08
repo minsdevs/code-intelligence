@@ -138,7 +138,7 @@ class RetainedSourceIntegrationTest {
     @Autowired
     LocalSnapshotStore retained;
 
-    @Autowired
+    @MockitoSpyBean
     SourceStoreClient sourceClient;
 
     @Autowired
@@ -189,6 +189,65 @@ class RetainedSourceIntegrationTest {
     @AfterAll
     static void closeBridge() throws Exception {
         if (bridge != null) bridge.close();
+    }
+
+    @Test
+    void renamedUnchangedFilesReuseDurableBytesWithoutRestaging() throws Exception {
+        Fixture f = fixture(A);
+        long previous = analyze(f.initial());
+        String renamed = "src/main/java/demo/Renamed.java";
+        Files.move(f.source().resolve(FILE), f.source().resolve(renamed));
+        clearInvocations(sourceClient);
+        long next = analyze(refresh(f));
+        assertThat(files.fileContent(f.project(), f.user(), renamed, next).content())
+                .isEqualTo(A);
+        assertThat(files.fileContent(f.project(), f.user(), FILE, previous).content())
+                .isEqualTo(A);
+        assertThat(jdbc.queryForList("select path from files where snapshot_id=?", String.class, next))
+                .containsExactly(renamed);
+        assertThat(count("source_blobs", f.project())).isEqualTo(1);
+        verify(sourceClient, org.mockito.Mockito.never()).stage(anyLong(), any());
+        verify(sourceClient).retain(eq(f.project()), any());
+    }
+
+    @Test
+    void sameSizeChangesStageNewBytesWhileUnchangedFilesRemainReusable() throws Exception {
+        Fixture f = fixture(A);
+        analyze(f.initial());
+        String unchanged = "retained.txt";
+        Files.writeString(f.source().resolve(unchanged), A);
+        Files.writeString(f.source().resolve(FILE), B);
+        clearInvocations(sourceClient);
+        long next = analyze(refresh(f));
+        assertThat(files.fileContent(f.project(), f.user(), FILE, next).content())
+                .isEqualTo(B);
+        assertThat(files.fileContent(f.project(), f.user(), unchanged, next).content())
+                .isEqualTo(A);
+        assertThat(count("source_blobs", f.project())).isEqualTo(2);
+        verify(sourceClient).stage(f.project(), B.getBytes(StandardCharsets.UTF_8));
+        verify(sourceClient).retain(eq(f.project()), any());
+    }
+
+    @Test
+    void damagedReusableSourceCannotPublishEvenWhenLiveBytesAreAvailable() throws Exception {
+        Fixture f = fixture(A);
+        long previous = analyze(f.initial());
+        UUID generation = currentGeneration(f.project());
+        Files.writeString(f.source().resolve("same.txt"), A);
+        Context next = refresh(f);
+        Path blob = bridge.blob(f.project(), hash(A));
+        byte[] original = Files.readAllBytes(blob);
+        byte[] damaged = original.clone();
+        damaged[damaged.length - 1] ^= 1;
+        Files.write(blob, damaged);
+        try {
+            assertThatThrownBy(() -> run(next, importStep)).isInstanceOf(SourceStoreException.class);
+            assertThat(currentSnapshot(f.project())).isEqualTo(previous);
+            assertThat(currentGeneration(f.project())).isEqualTo(generation);
+            assertThat(count("snapshots", f.project())).isEqualTo(1);
+        } finally {
+            Files.write(blob, original);
+        }
     }
 
     @Test

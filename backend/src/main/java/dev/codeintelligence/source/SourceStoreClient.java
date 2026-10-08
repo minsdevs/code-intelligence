@@ -157,6 +157,35 @@ public class SourceStoreClient {
         deadline.check();
     }
 
+    /** Authenticates already durable, project-scoped blobs without retransmitting their source. */
+    public void retain(long projectId, java.util.List<StoredBlob> blobs) {
+        requireEnabled();
+        if (blobs == null || blobs.isEmpty() || blobs.size() > 128) throw SourceStoreException.invalidRequest();
+        var references = new java.util.ArrayList<Map<String, Object>>(blobs.size());
+        for (StoredBlob blob : blobs) {
+            if (blob == null
+                    || blob.sha256() == null
+                    || !blob.sha256().matches("[0-9a-f]{64}")
+                    || blob.keyId() == null
+                    || !blob.keyId().matches("[0-9a-f]{32}")) throw SourceStoreException.invalidRequest();
+            validateInput(projectId, blob.byteSize());
+            references.add(Map.of("sha256", blob.sha256(), "byteSize", blob.byteSize(), "keyId", blob.keyId()));
+        }
+        Deadline deadline = new Deadline();
+        String requestId = UUID.randomUUID().toString();
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("version", 1);
+        request.put("requestId", requestId);
+        request.put("auth", properties.brokerToken());
+        request.put("operation", "RETAIN");
+        request.put("projectId", Long.toString(projectId));
+        request.put("blobs", references);
+        JsonNode result = exchange(request, requestId, deadline);
+        exactFields(result, Set.of("count"));
+        if (sequence(result.get("count")) != references.size()) throw SourceStoreException.integrity();
+        deadline.check();
+    }
+
     public byte[] read(long projectId, String sha256, long byteSize) {
         requireEnabled();
         validateInput(projectId, byteSize);

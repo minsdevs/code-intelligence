@@ -318,3 +318,21 @@ test('a staged receipt from a different address or with a malformed session is n
     assert.equal(response.code, 'SOURCE_BROKER_UNAVAILABLE');
   }
 });
+
+test('retention accepts only bounded project addresses and never hidden payload or scope fields', async t => {
+  let retained = 0;
+  const f = await fixture(t, { async retain({ blobs }) { retained += blobs.length; return { count: blobs.length }; } });
+  const base = { version: 1, requestId: crypto.randomUUID(), auth: AUTH, operation: 'RETAIN', projectId: '7',
+    blobs: [{ sha256, byteSize: bytes.length, keyId: 'b'.repeat(32) }] };
+  for (const change of [{ auth: 'c'.repeat(64) }, { projectId: '0' }, { blobs: [] },
+    { blobs: Array(129).fill(base.blobs[0]) }, { path: '/private/source' },
+    { blobs: [{ ...base.blobs[0], bytes: bytes.toString('base64') }] },
+    { blobs: [{ ...base.blobs[0], keyId: 'b'.repeat(32) + '\n' }] },
+    { blobs: [{ ...base.blobs[0], byteSize: MAX_FRAME }] }]) {
+    assert.equal((await exchange(f.socketPath, { ...base, ...change })).ok, false);
+  }
+  assert.equal(retained, 0);
+  assert.deepEqual((await exchange(f.socketPath, base)).result, { count: 1 });
+  assert.equal(retained, 1);
+});
+

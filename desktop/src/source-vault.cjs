@@ -1034,6 +1034,32 @@ async function initialize(options, fresh, restoreStage = false) {
           return Object.freeze({ format: FORMAT_MAJOR, ...target });
         });
       },
+      retain(value) {
+        let projectId;
+        let references;
+        try {
+          ensureUsable();
+          if (restoreStage) fail('SOURCE_VAULT_MODE');
+          projectId = projectArgument(value?.projectId);
+          if (!Array.isArray(value?.blobs) || value.blobs.length < 1 || value.blobs.length > 128)
+            fail('SOURCE_VAULT_ARGUMENT');
+          references = value.blobs.map(blob => {
+            if (!fields(blob, ['sha256', 'byteSize', 'keyId'])) fail('SOURCE_VAULT_ARGUMENT');
+            return ciphertextArguments({ projectId, ...blob });
+          });
+        } catch (error) { return Promise.reject(safeError(error)); }
+        // Only authenticated, already durable addresses are reused. New staged bytes are flushed
+        // by enqueue before verification; no metadata receipt precedes their durability barrier.
+        return enqueue(async () => {
+          for (const expected of references) {
+            const stored = await readStored(expected);
+            try { if (stored.keyId !== expected.keyId) fail('SOURCE_VAULT_INTEGRITY'); }
+            finally { stored.bytes.fill(0); }
+          }
+          await verifyRoots();
+          return Object.freeze({ count: references.length });
+        });
+      },
       read(value) {
         let expected;
         try { expected = readArguments(value); } catch (error) { return Promise.reject(safeError(error)); }
