@@ -149,7 +149,8 @@ public class JavaAnalyzer implements CodeAnalyzer {
             AnalysisContext ctx,
             ParserConfiguration configuration,
             Collector collector,
-            AnalysisInputFingerprint.Snapshot input) {
+            AnalysisInputFingerprint.Snapshot input,
+            SourceDeclarations sourceDeclarations) {
         List<InventoriedFile> files =
                 ctx.inventory().files().stream().filter(JavaAnalyzer::isJava).toList();
         Map<String, FilePhases> next = new LinkedHashMap<>();
@@ -183,6 +184,12 @@ public class JavaAnalyzer implements CodeAnalyzer {
                 next.put(file.path(), new FilePhases(blob, declarations(unit.cu), types, null, null));
             }
         }
+        // Only prune when every solver-visible declaration is known under its source-root name.
+        // Failed parses, partial inventories and nonstandard package layouts retain the full solver.
+        sourceDeclarations.complete = input != null
+                && input.javaSourcesComplete()
+                && collector.outcomes.isEmpty()
+                && sourceDeclarations.packagesMatch(next);
         java.security.MessageDigest global = AnalysisInputFingerprint.digest();
         AnalysisInputFingerprint.update(global, input == null ? "unknown" : input.environment());
         if (!collector.outcomes.isEmpty() && input != null) AnalysisInputFingerprint.update(global, input.complete());
@@ -351,10 +358,12 @@ public class JavaAnalyzer implements CodeAnalyzer {
         Set<Path> sourceRoots = JavaSourceRoots.find(ctx.clonePath());
         collector.projectTypes.addAll(JavaSourceRoots.projectTypes(sourceRoots));
         // Only immutable phase events survive a refresh; syntax trees stay bounded to a parse pass.
-        ParserConfiguration configuration = createConfiguration(sourceRoots);
+        SourceDeclarations sourceDeclarations =
+                new SourceDeclarations(collector.projectTypes, sourceRoots, ctx.clonePath());
+        ParserConfiguration configuration = createConfiguration(sourceRoots, sourceDeclarations);
         Map<String, FilePhases> next;
         try {
-            next = analyzeIncrementally(ctx, configuration, collector, input);
+            next = analyzeIncrementally(ctx, configuration, collector, input, sourceDeclarations);
         } finally {
             releaseFacades();
         }
@@ -392,19 +401,27 @@ public class JavaAnalyzer implements CodeAnalyzer {
                 || file.path().toLowerCase(Locale.ROOT).endsWith(".java");
     }
 
-    private static ParserConfiguration createConfiguration(Set<Path> sourceRoots) {
+    private static ParserConfiguration createConfiguration(Set<Path> sourceRoots, SourceDeclarations declarations) {
         CombinedTypeSolver typeSolver = new CombinedTypeSolver(
                 CombinedTypeSolver.ExceptionHandlers.IGNORE_NONE, List.of(), cache(JavaAnalyzer::solvedTrees));
         for (Path root : sourceRoots) {
             if (Files.isDirectory(root)) {
                 // The solver only reads declarations from its own trees; without their token lists
                 // (call-site spans come from the analyzer's trees) each parse allocates and keeps less.
-                typeSolver.add(new JavaParserTypeSolver(
-                        root,
-                        new JavaParser(new ParserConfiguration().setStoreTokens(false)),
-                        cache((Path file, Optional<CompilationUnit> tree) -> tree.isPresent() ? 1 : 0),
-                        cache((Path directory, List<CompilationUnit> trees) -> trees.size()),
-                        cache(JavaAnalyzer::solvedTrees)));
+                typeSolver.add(
+                        new JavaParserTypeSolver(
+                                root,
+                                new JavaParser(new ParserConfiguration().setStoreTokens(false)),
+                                cache((Path file, Optional<CompilationUnit> tree) -> tree.isPresent() ? 1 : 0),
+                                cache((Path directory, List<CompilationUnit> trees) -> trees.size()),
+                                cache(JavaAnalyzer::solvedTrees)) {
+                            @Override
+                            public SymbolReference<ResolvedReferenceTypeDeclaration> tryToSolveType(String name) {
+                                return declarations.mayDeclare(name)
+                                        ? super.tryToSolveType(name)
+                                        : SourceDeclarations.ABSENT;
+                            }
+                        });
             }
         }
         typeSolver.add(new ReflectionTypeSolver(true));
@@ -412,6 +429,55 @@ public class JavaAnalyzer implements CodeAnalyzer {
         configuration.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
         configuration.setSymbolResolver(new JavaSymbolSolver(typeSolver));
         return configuration;
+    }
+
+    /** The first pass already discovers secondary and nested types; no extra trees or cache survive. */
+    private static final class SourceDeclarations {
+        private static final SymbolReference<ResolvedReferenceTypeDeclaration> ABSENT = SymbolReference.unsolved();
+        private final Set<String> names;
+        private final Set<Path> roots;
+        private final Path workspace;
+        private boolean complete;
+
+        private SourceDeclarations(Set<String> names, Set<Path> roots, Path workspace) {
+            this.names = names;
+            this.roots = roots;
+            this.workspace = workspace;
+        }
+
+        boolean packagesMatch(Map<String, FilePhases> files) {
+            if (roots.isEmpty()) return true;
+            Path tree = workspace.toAbsolutePath().normalize();
+            for (var entry : files.entrySet()) {
+                AnalysisInputFingerprint.checkpoint();
+                String declaredPackage = "";
+                for (Event event : entry.getValue().types.events) {
+                    if (event.value instanceof GraphNodeDraft node && "PACKAGE".equals(node.nodeType())) {
+                        declaredPackage = node.name();
+                        break;
+                    }
+                }
+                Path directory = tree.resolve(entry.getKey()).normalize().getParent();
+                for (Path root = directory; root != null; root = root.getParent()) {
+                    if (roots.contains(root)
+                            && !declaredPackage.equals(root.relativize(directory)
+                                    .toString()
+                                    .replace('\\', '.')
+                                    .replace('/', '.'))) return false;
+                }
+            }
+            return true;
+        }
+
+        boolean mayDeclare(String name) {
+            if (!complete || names.contains(name)) return true;
+            // An inherited nested type may be addressed through a subclass rather than its
+            // declaring owner. Leave every suffix of a known source owner to the real solver.
+            for (int dot = name.lastIndexOf('.'); dot > 0; dot = name.lastIndexOf('.', dot - 1)) {
+                if (names.contains(name.substring(0, dot))) return true;
+            }
+            return false;
+        }
     }
 
     /** Like the solver's own size-limited caches (softly held values, least recently used evicted), by weight. */
