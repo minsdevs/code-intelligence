@@ -40,6 +40,7 @@ CI_DOCKER_TEST_ROOT="$PWD/$E" CI_DOCKER_TEST_TMP="$PWD/.citd-w19<label>" \
 ## 의미·안전 회귀
 
 - Desktop 대상 157/157 성공, 실패/skip 0: `desktop-green.log`. 새 RETAIN128 말미 손상 거부·queued stage 내구성·교체된 project ancestor symlink 거부와 기존 cross-project/blob integrity/atomic durability/backup/Windows fixture 경계를 포함한다.
+- Backend 대상 **297/297 성공**, 실패/skip 0: `backend-final/test-totals.json`, `backend-final/junit/test/*.xml`. LocalImport 19, LocalIngestPolicy 69, barrier 3, 실제 Node vault/Unix broker를 쓰는 RetainedSource 40, secrets corpus 73, SourceStoreClient 92, 실제 scoped HTTP 승인/import smoke 1개다. 신규 empty/duplicate/Unicode byte·Git OID roundtrip과 capture 취소 후 이전 snapshot 보존·불완전 staging 회수·재시도도 성공했다.
 - 변경 Java 두 파일의 targeted `spotlessJavaApply` 성공: `format.log`. 전체 formatter는 실행하지 않았고 일회 target init은 제거했다.
 
 ```sh
@@ -49,8 +50,27 @@ node --test desktop/test/source-vault.test.cjs desktop/test/source-vault-batch.t
   desktop/test/source-vault-backup.test.cjs
 ```
 
+```sh
+E="$PWD/validation/local/w19-import-perf/backend-final"
+"$COORD/wait-quiet.sh"
+env -i HOME="$HOME" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C \
+  DOCKER_HOST="unix://$HOME/.docker/run/docker.sock" \
+  CI_DOCKER_TEST_ROOT="$E" CI_DOCKER_TEST_TMP="$PWD/.citd-w19final" \
+  backend/gradlew -p backend --offline --no-daemon --console=plain --max-workers=2 \
+  -I "$PWD/validation/pre-release/docker-integration.init.gradle" cleanTest test \
+  --tests dev.codeintelligence.project.LocalImportServiceTest \
+  --tests dev.codeintelligence.project.LocalIngestPolicyTest \
+  --tests dev.codeintelligence.project.LocalSnapshotStoreBarrierTest \
+  --tests dev.codeintelligence.project.RetainedSourceIntegrationTest \
+  --tests dev.codeintelligence.project.ImportSecretsCorpusIntegrationTest \
+  --tests dev.codeintelligence.source.SourceStoreClientTest \
+  --tests dev.codeintelligence.project.LocalPreviewApiIntegrationTest.aScopedApprovalImportsExactlyTheApprovedScope
+```
+
+재실행에는 기존 증거를 덮어쓰지 않는 새 private root/tmp가 필요하다. Gradle loopback handshake 경고는 원본 로그에 남겼으며 시험 실패로 바꾸어 세거나 숨기지 않았다. commit `59c3608`·`721de28`은 의미 회귀, `2d3676a`는 제품 최적화와 초기 감사를 담는다. 최종 감사 갱신은 별도 문서 commit이다. 공용 README/07 및 p6 후보 감사는 수정하지 않았다.
+
 ## 판정 경계
 
 WORKLOAD row PASS나 이 유닛의 타깃 시험 통과는 SLO 통과가 아니다. `resultEqualsFull=null/NOT_RUN`을 유지한다. 이 변경은 성능 최적화이며 기존 의미적 버그의 RED→GREEN을 조작하지 않는다. 새 회귀는 소비자 byte/OID·취소/회수·retention 안전 경계를 검사한다.
 
-전체 suite, 새 packaged 후보, large 성능 비교, medium 전체 refresh 30초 목표, 최종20회, 실제 Keychain/사용자 프로필, 실계정, signing/notary, paid AI, Actions/push는 이 유닛에서 NOT_RUN이다.
+전체 suite, 새 packaged 후보, large 성능 비교, medium 전체 refresh 30초 목표, 최종20회, 실제 Windows native boundary, 실제 Keychain/사용자 프로필, 실계정, signing/notary, paid AI, Actions/push는 이 유닛에서 NOT_RUN이다.
