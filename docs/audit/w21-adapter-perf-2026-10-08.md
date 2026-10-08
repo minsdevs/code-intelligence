@@ -28,3 +28,21 @@
 ## 제한
 
 packaged workload의 `resultEqualsFull=null`/`NOT_RUN`은 그대로다. 단독 session equality를 packaged graph equality로 주장하지 않는다. 전체 suite·새 packaged candidate·최종20회·실계정/실사용 profile/Keychain·paid AI·signing/notary·Actions·push는 **NOT_RUN**이며 릴리스 판정은 변경하지 않는다.
+
+## 변경 없는 p6 실제 격리 worker
+
+coordinator 승인으로 원본 p6 app의 `adapter-bridge`만 직접 실행했다. app/asar/manifest/helper는 수정·재서명하지 않았다. 제품 `attestSupervisor`의 manifest hash, codesign, sandbox-only entitlement 및 bridge entitlement 검사를 통과한 뒤 `createBridgeAdapter`로 분석했다. source-broker/import/DB 측정은 아니다.
+
+공통 `wait-quiet.sh → with-native-lock.sh → caffeinate → env -i`, lock 내부 `QUIET-REQUIRED` 독점 생성 및 trap 정리. 각 phase 직전에 30초 간격 load1<4·mdworker≤6을 3회 확인했다. 공통 quiet에서 660초 기다린 뒤 시작하여 3회 admission 규칙이 실제 적용됐다. 타 worker DB/JFR/build와 직렬화했다.
+
+| medium, 새 worker/session | 전체 ms | analyze ms | open ms | put 합계 ms | page 합계 ms |
+|---|---:|---:|---:|---:|---:|
+| cold, cache 없음 | 16,628 | 15,709 | 385 | 108 | 240 |
+| 1% revision refresh | 10,911 | 10,193 | 170 | 122 | 242 |
+| 독립 clean full | 15,890 | 15,247 | 171 | 105 | 208 |
+
+매 회 5,503 input·26,271,681 source bytes. chunk 27/35/27개, page 요청 54/54/47개(첫 analyze page 제외). cold/refresh token5,499개 전부 owner 정책 안에 보관(15,770,462 bytes), eviction/oversize0. 전체 canonical hash `80f561e0c6ac6578c86ef70d1c7315c9059bd49b658cccbc58a75720d57bf264` 동일. helper가 worker TS_INCREMENTAL stderr를 전달하지 않아 native compiler/reuse 개수는 측정했다고 주장하지 않는다.
+
+시작 load1 cold3.097 / refresh2.377 / full2.302, 종료2.920 / 2.712 / 2.998. 증거 `p6-native-medium.log`. bridge SHA-256 `1b74e6e9bb39441aa2ccbf59e3646da044d7c3b460fa7d5574e2d056cadaf90f`, supervisor SHA-256 `919914109d729dd4838388f3a4c9350c0c5b14510110630ed67d8de5325da1d8`.
+
+**해석:** packaged TS cold92–93초 / refresh49–50초 차이는 이 실제 격리 worker/compiler/protocol 경로 자체에서 재현되지 않았다. cold→refresh 계산 감소는 존재하며 session 전송은 1초 미만이다. [INFERENCE] backend source 읽기/mapper/outcome/persistence 등 잔여 전체 경로를 분리해야 한다. 차액을 SQL 시간으로 간주하지 않으며 main이 공통 DB 구간을 별도 계측·수정한다.
