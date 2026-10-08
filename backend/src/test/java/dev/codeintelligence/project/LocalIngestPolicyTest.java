@@ -208,10 +208,25 @@ class LocalIngestPolicyTest {
     @ValueSource(
             strings = {
                 "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "github_pat_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "gHo_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "ghU_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "GHs_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "gHR_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "AK" + "IA" + "AAAAAAAAAAAAAAAA",
+                "sk-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "AI" + "za" + "AAAAAAAAAAAAAAAAAAAA",
+                "bEaReR\tAAAAAAAAAAAAAAAA==",
                 "-----BEGIN RSA PRIVATE KEY-----",
+                "-----BEGIN PRIVATE KEY-----",
                 "password=literal-password",
+                "passwd=literal-password",
                 "client_secret=literal-client-secret",
-                "api_key=literal-api-key"
+                "ToKeN: 'literal-token'",
+                "SECRET: literal-secret",
+                "api_key=literal-api-key",
+                "api-key: literal-api-key",
+                "APIKEY: literal-api-key"
             })
     void theEntireBoundedFileIsCheckedForCredentialMaterial(String sentinel) throws Exception {
         Path source = source("Main.java", "class Main {}\n");
@@ -401,7 +416,14 @@ class LocalIngestPolicyTest {
         service().importFolder(source, target());
         Files.writeString(source.resolve("a.txt"), "new");
         try (ServerSocketChannel socket = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
-            socket.bind(UnixDomainSocketAddress.of(source.resolve("socket")));
+            Path socketPath = source.resolve("socket").toAbsolutePath();
+            Path workingDirectory = Path.of("").toAbsolutePath();
+            if (socketPath.getRoot().equals(workingDirectory.getRoot())) {
+                Path relative = workingDirectory.relativize(socketPath);
+                // Keep the same owned fixture, without spending the Unix socket limit on checkout prefixes.
+                if (relative.toString().length() < socketPath.toString().length()) socketPath = relative;
+            }
+            socket.bind(UnixDomainSocketAddress.of(socketPath));
             assertThatThrownBy(() -> service().importFolder(source, target())).isInstanceOf(LocalImportException.class);
         }
         assertThat(Files.readString(target().resolve("a.txt"))).isEqualTo("old");

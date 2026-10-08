@@ -74,6 +74,7 @@ final class LocalSourcePolicy {
             "png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "pdf", "zip", "jar", "war", "ear", "class", "woff",
             "woff2", "eot", "ttf", "otf", "mp3", "mp4", "webm", "mov", "avi", "wav", "ogg", "exe", "dll", "so", "dylib",
             "bin", "7z", "tar", "gz", "bz2", "rar", "xz", "sqlite", "db", "wasm", "pyc", "o", "a", "lib");
+    // New signatures/assignment names must also be covered by the conservative hasSecretMarker filter.
     private static final List<Pattern> SECRETS = List.of(
             Pattern.compile("-----BEGIN [A-Z ]*PRIVATE KEY-----"),
             Pattern.compile("(?i)(?:github_pat_|gh[pousr]_)[A-Za-z0-9_]{20,}"),
@@ -458,8 +459,36 @@ final class LocalSourcePolicy {
         return containsSecret(text, false);
     }
 
+    private static boolean hasSecretMarker(String text) {
+        // Every current signature/assignment contains one of these literals. A hit is not a secret
+        // verdict: the complete regex and placeholder/source-vs-config rules still decide below.
+        for (int i = 0; i < text.length(); i++) {
+            boolean candidate =
+                    switch (text.charAt(i) | 0x20) {
+                        case 'a' -> text.startsWith("AKIA", i) || text.startsWith("AIza", i);
+                        case 'b' -> text.regionMatches(true, i, "bearer", 0, 6);
+                        case 'g' ->
+                            text.regionMatches(true, i, "github_pat_", 0, 11)
+                                    || (i + 3 < text.length()
+                                            && (text.charAt(i + 1) | 0x20) == 'h'
+                                            && text.charAt(i + 3) == '_'
+                                            && "pousr".indexOf(text.charAt(i + 2) | 0x20) >= 0);
+                        case 'k' -> text.regionMatches(true, i, "key", 0, 3);
+                        case 'p' -> text.regionMatches(true, i, "passw", 0, 5);
+                        case 's' -> text.startsWith("sk-", i) || text.regionMatches(true, i, "secret", 0, 6);
+                        case 't' -> text.regionMatches(true, i, "token", 0, 5);
+                        default -> false;
+                    };
+            if (candidate) return true;
+        }
+        return false;
+    }
+
     private static boolean containsSecret(String text, boolean unquotedCredentials) {
-        if (SECRETS.stream().anyMatch(pattern -> pattern.matcher(text).find())) return true;
+        if (!hasSecretMarker(text)) return false;
+        for (Pattern pattern : SECRETS) {
+            if (pattern.matcher(text).find()) return true;
+        }
         Matcher assignments = ASSIGNMENT.matcher(text);
         while (assignments.find()) {
             if (assignments.group(3) != null && !unquotedCredentials) continue;
