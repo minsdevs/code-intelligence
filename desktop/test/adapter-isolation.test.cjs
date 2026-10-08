@@ -200,10 +200,10 @@ test('an oversized request is refused before any byte reaches the adapter', asyn
 
 // A synthetic bridge (or TEST_ONLY worker) process: reads the open line (bridge only), then plays the
 // worker side of the framed session. No supervisor, analyzer or Electron process is started.
-function fakeProcesses({ exitBeforeHandshake, hang = false, tokenFromEnv = false } = {}) {
+function fakeProcesses({ exitBeforeHandshake, hang = false, hangAfter = Infinity, tokenFromEnv = false } = {}) {
   const calls = [];
   const spawn = (command, args, options) => {
-    const child = new EventEmitter(), call = { command, args: [...args], env: { ...options.env }, stdio: options.stdio, preamble: null, frames: [], killed: null };
+    const child = new EventEmitter(), call = { command, args: [...args], env: { ...options.env }, stdio: options.stdio, preamble: null, frames: [], killed: null, answered: 0, stdinEnded: false };
     calls.push(call);
     Object.assign(child, { stdin: new PassThrough(), stdout: new PassThrough(), exitCode: null, signalCode: null });
     const exit = (code, signal = null) => {
@@ -212,6 +212,22 @@ function fakeProcesses({ exitBeforeHandshake, hang = false, tokenFromEnv = false
     };
     child.kill = signal => { call.killed = signal; exit(null, signal); return true; };
     const decoder = createFrameDecoder(MAX_REQUEST_FRAME_BYTES);
+    // Like the analyzer, a worker knows only the 03 §6 sessions opened in its own process.
+    const sessions = new Set();
+    const answer = ({ id, body }) => {
+      const command = body.session;
+      if (!command) return { id, ok: true, result: { analyzed: body.files.length } };
+      if (command.op === 'open') {
+        const opened = crypto.randomBytes(16).toString('hex');
+        sessions.add(opened);
+        return { id, ok: true, result: { session: { id: opened, op: 'open' } } };
+      }
+      const refuse = code => ({ id, ok: false, error: { status: 400, response: { statusCode: 400, code, retryable: false } } });
+      if (!sessions.has(command.id)) return refuse('SESSION_UNKNOWN');
+      if (!['put', 'seal', 'analyze', 'page', 'close'].includes(command.op)) return refuse('SESSION_INVALID');
+      if (command.op === 'close') sessions.delete(command.id);
+      return { id, ok: true, result: { session: { id: command.id, op: command.op } } };
+    };
     let pending = Buffer.alloc(0), token = tokenFromEnv ? options.env.ADAPTER_RUN_TOKEN : null;
     child.stdin.on('data', chunk => {
       if (exitBeforeHandshake !== undefined && call.preamble !== null) return;
@@ -227,15 +243,15 @@ function fakeProcesses({ exitBeforeHandshake, hang = false, tokenFromEnv = false
       }
       for (const frame of decoder.push(bytes)) {
         call.frames.push(frame);
-        if (hang) continue;
+        if (hang || (frame.runToken === undefined && ++call.answered > hangAfter)) continue;
         if (frame.runToken !== undefined) {
           child.stdout.write(encodeFrame(frame.runToken === token
             ? { protocol: ADAPTER_STDIO_PROTOCOL, version: ADAPTER_STDIO_VERSION, ready: true }
             : { protocol: ADAPTER_STDIO_PROTOCOL, version: ADAPTER_STDIO_VERSION, error: 'PROTOCOL_MISMATCH' }, 1024));
-        } else child.stdout.write(encodeFrame({ id: frame.id, ok: true, result: { analyzed: frame.body.files.length } }, 1 << 20));
+        } else child.stdout.write(encodeFrame(answer(frame), 1 << 20));
       }
     });
-    child.stdin.on('finish', () => setImmediate(() => exit(0)));
+    child.stdin.on('finish', () => { call.stdinEnded = true; setImmediate(() => exit(0)); });
     return child;
   };
   return { spawn, calls };
@@ -260,6 +276,52 @@ test('each isolated analysis runs its own bridge session with a fresh run token 
   await adapter.verify(); await adapter.verify();
   assert.equal(fake.calls.length, 3, 'the live handshake check runs once per runtime start');
   assert.equal(fake.calls[2].frames.length, 1, 'verification sends no analysis');
+});
+
+test('one analyzer session runs in one bridge session from open to close (03 §6)', async () => {
+  const fake = fakeProcesses();
+  const adapter = createBridgeAdapter({ bridge: '/b', spawn: fake.spawn });
+  const opened = await adapter.analyze({ session: { op: 'open', fileCount: 1, bytes: 1, digest: 'a'.repeat(64) } });
+  const id = opened.session.id;
+  for (const op of ['put', 'seal', 'analyze', 'page', 'close']) {
+    assert.deepEqual(await adapter.analyze({ session: { op, id } }), { session: { id, op } }, op);
+  }
+  assert.equal(fake.calls.length, 1, 'every command of the session reached the worker that opened it');
+  assert.deepEqual(fake.calls[0].frames.slice(1).map(frame => frame.body.session.op), ['open', 'put', 'seal', 'analyze', 'page', 'close']);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(fake.calls[0].killed, null, 'close ends the session by closing stdin');
+  assert.ok(fake.calls[0].stdinEnded, 'the worker is gone after close');
+  const late = await adapter.analyze({ session: { op: 'put', id } }).catch(error => error);
+  assert.deepEqual([late.code, late.status, late.response.code], ['ADAPTER_REQUEST_REJECTED', 400, 'SESSION_UNKNOWN'], 'a closed session is not reopened');
+  assert.deepEqual(await adapter.analyze({ files: [] }), { analyzed: 0 }, 'single requests keep their own bridge session');
+  assert.equal(fake.calls.length, 3);
+});
+
+test('an analyzer session ends on a rejection, an abandoned command or idleness', async () => {
+  const open = adapter => adapter.analyze({ session: { op: 'open', fileCount: 1, bytes: 1, digest: 'a'.repeat(64) } }).then(reply => reply.session.id);
+  const fake = fakeProcesses();
+  const adapter = createBridgeAdapter({ bridge: '/b', spawn: fake.spawn, idleMs: 20 });
+  const idle = await open(adapter);
+  await new Promise(resolve => setTimeout(resolve, 80));
+  assert.ok(fake.calls[0].stdinEnded, 'an idle session ends its worker');
+  const late = await adapter.analyze({ session: { op: 'seal', id: idle } }).catch(error => error);
+  assert.equal(late.response?.code, 'SESSION_UNKNOWN');
+  const rejected = await open(adapter);
+  const refusal = await adapter.analyze({ session: { op: 'reopen', id: rejected } }).catch(error => error);
+  assert.equal(refusal.code, 'ADAPTER_REQUEST_REJECTED');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(fake.calls.at(-1).stdinEnded, 'a rejected command ends its worker');
+
+  const hanging = fakeProcesses({ hangAfter: 1 });
+  const held = createBridgeAdapter({ bridge: '/b', spawn: hanging.spawn });
+  const abandoned = await open(held);
+  const controller = new AbortController();
+  const pending = held.analyze({ session: { op: 'analyze', id: abandoned } }, { signal: controller.signal });
+  await new Promise(resolve => setImmediate(resolve));
+  controller.abort();
+  assert.equal(await reason(pending), 'ADAPTER_CLOSED');
+  assert.equal(hanging.calls[0].killed, 'SIGKILL', 'an abandoned command kills the session worker');
+  assert.equal(hanging.calls.length, 1);
 });
 
 test('bridge refusals keep their cause and an abandoned analysis kills its bridge', async () => {

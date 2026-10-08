@@ -113,6 +113,28 @@ test('the product supervisor runs only signed, hash-checked, sandboxed workers f
     await assert.rejects(adapter.analyze({ files: 'not-an-array' }), error => error.code === 'ADAPTER_REQUEST_REJECTED' && error.status === 400);
   });
 
+  await t.test('one analyzer session above the single-request bounds runs in one sandboxed worker (03 §6)', async () => {
+    // About 10.7 MiB of source in and over 100 MiB of result pages out: more than one 10 MiB request
+    // frame and one 64 MiB response frame, so only the session protocol can carry it.
+    const files = Array.from({ length: 45 }, (_, f) => ({ path: `src/m${f}.ts`, content: Array.from({ length: 2500 },
+      (_, i) => `export function f${f}_${i}(): number { return g${f}_${i}() }\nfunction g${f}_${i}(): number { return ${i} }\n`).join('') }));
+    const line = file => `${file.path}\n${crypto.createHash('sha256').update(file.content).digest('hex')}\n`;
+    const manifest = { fileCount: files.length, bytes: files.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0),
+      digest: crypto.createHash('sha256').update(files.map(line).join('')).digest('hex') };
+    assert.ok(manifest.bytes > 10.5 * 1024 * 1024);
+    const adapter = createBridgeAdapter({ bridge: path.join(contents, 'MacOS', 'adapter-bridge') });
+    const send = session => adapter.analyze({ session });
+    const { session: { id } } = await send({ op: 'open', ...manifest });
+    for (let seq = 0; seq * 4 < files.length; seq++) await send({ op: 'put', id, seq, files: files.slice(seq * 4, seq * 4 + 4) });
+    await send({ op: 'seal', id, ...manifest });
+    const pages = [await send({ op: 'analyze', id })];
+    for (let page = 1; page < pages[0].session.pages; page++) pages.push(await send({ op: 'page', id, page }));
+    await send({ op: 'close', id });
+    assert.ok(pages.reduce((sum, page) => sum + Buffer.byteLength(JSON.stringify(page)), 0) > 64 * 1024 * 1024);
+    const functions = pages.flatMap(page => page.nodes).filter(node => node.type === 'METHOD' && /^[fg]\d+_\d+$/.test(node.name));
+    assert.equal(functions.length, 2 * 2500 * files.length);
+  });
+
   await t.test('unknown workers, changed workers and other callers are refused', () => {
     const unknown = bridge(app, 'shell', '');
     assert.deepEqual([unknown.status, unknown.stderr.trim()], [70, 'ADAPTER_BRIDGE WORKER_UNKNOWN']);

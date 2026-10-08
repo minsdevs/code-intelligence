@@ -62,6 +62,28 @@ class TsAnalyzerClientTest {
     }
 
     @Test
+    void anAnalyzerRejectionWithoutSyntaxDiagnosticsNamesItsCode() {
+        var builder = Mockito.spy(RestClient.builder());
+        var server = MockRestServiceServer.bindTo(builder).build();
+        Mockito.doReturn(builder).when(builder).clone();
+        Mockito.doReturn(builder).when(builder).requestFactory(ArgumentMatchers.any());
+        var client = new TsAnalyzerClient(new TsAnalyzerProperties("http://127.0.0.1:3040", 2), builder);
+        server.expect(MockRestRequestMatchers.anything())
+                .andRespond(MockRestResponseCreators.withBadRequest()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"statusCode\":400,\"code\":\"SESSION_UNKNOWN\",\"message\":\"source marker\","
+                                + "\"retryable\":false}"));
+        assertThatThrownBy(() -> client.analyze(new TsAnalyzeDtos.Request(List.of())))
+                .isInstanceOf(dev.codeintelligence.common.RecoveryActionFailure.class)
+                .hasNoCause()
+                .hasMessage("ts-analyzer rejected the analysis request (SESSION_UNKNOWN)")
+                .satisfies(
+                        error -> assertThat(((dev.codeintelligence.common.RecoveryActionFailure) error).failureCode())
+                                .isEqualTo("TS_ANALYZER_REJECTED"));
+        server.verify();
+    }
+
+    @Test
     void analyzeRoundTripsFixtureShapedFiles() {
         try (FakeTsAnalyzer fake = new FakeTsAnalyzer()) {
             TsAnalyzerClient client =
