@@ -185,6 +185,32 @@ class LocalImportServiceTest {
     }
 
     @Test
+    void snapshotObjectsPreserveEmptyDuplicateAndUnicodeContent() throws Exception {
+        Path source = Files.createDirectories(tempDir.resolve("object-source"));
+        var contents = java.util.Map.of(
+                "empty.txt", "",
+                "a.txt", "shared source\n".repeat(1024),
+                "b.txt", "shared source\n".repeat(1024),
+                "한글.txt", "class 이름 {}\n");
+        for (var entry : contents.entrySet()) Files.writeString(source.resolve(entry.getKey()), entry.getValue());
+        Path target = tempDir.resolve("data/repos/objects");
+        var imported = service.importFolder(source, target);
+        try (var git = org.eclipse.jgit.api.Git.open(target.toFile());
+                var walk = new org.eclipse.jgit.revwalk.RevWalk(git.getRepository())) {
+            var commit = walk.parseCommit(org.eclipse.jgit.lib.ObjectId.fromString(imported.headSha()));
+            for (var entry : contents.entrySet()) {
+                try (var tree = org.eclipse.jgit.treewalk.TreeWalk.forPath(git.getRepository(), entry.getKey(), commit.getTree())) {
+                    assertThat(tree).isNotNull();
+                    assertThat(git.getRepository().open(tree.getObjectId(0)).getBytes())
+                            .isEqualTo(entry.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                }
+            }
+        }
+        assertThat(new FileInventoryScanner().scan(target, 100, 1_048_576).files())
+                .extracting(file -> file.path()).containsExactlyInAnyOrderElementsOf(contents.keySet());
+    }
+
+    @Test
     void importFolder_replacesStaleFilesAndCreatesAnalyzableGitSnapshot() throws Exception {
         Path source = tempDir.resolve("replace-source");
         Files.createDirectories(source);
