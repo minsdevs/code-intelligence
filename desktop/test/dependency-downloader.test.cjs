@@ -36,9 +36,17 @@ const builder = builderRequire('./util/electronGet.js');
 const binaryDownload = builderRequire('./binDownload.js');
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 let sequence = 0;
+// The callers only request URLs built from these fixture paths. Other local processes may probe
+// any listening loopback port (observed: `GET /` from a desktop dev tool during the retry backoff);
+// answer those 404 without reaching the handler so they never count as downloader requests.
+const fixturePaths = new Set(['/artifact.zip', '/tool.bin', '/tool.zip', '/same-url']);
 
 async function serve(t, handler, tls, configure = () => {}) {
-  const server = tls ? https.createServer(tls, handler) : http.createServer(handler);
+  const fixtureHandler = (req, res) => {
+    if (fixturePaths.has(URL.parse(req.url, 'http://fixture.invalid')?.pathname)) return handler(req, res);
+    res.writeHead(404).end();
+  };
+  const server = tls ? https.createServer(tls, fixtureHandler) : http.createServer(fixtureHandler);
   const sockets = new Set();
   server.on('connection', socket => {
     sockets.add(socket);
