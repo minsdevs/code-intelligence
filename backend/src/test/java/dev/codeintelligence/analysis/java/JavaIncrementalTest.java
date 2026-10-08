@@ -23,6 +23,22 @@ class JavaIncrementalTest {
         assertThat(analyzer.analyze(context())).isSameAs(first);
     }
 
+    @Test
+    void bodyEditReusesUnchangedDeclarationsAndMatchesIndependentFull() throws Exception {
+        Files.writeString(root.resolve("A.java"), "class A { int value() { return 1; } }");
+        Files.writeString(root.resolve("B.java"), "class B { int use() { return new A().value(); } }");
+        JavaAnalyzer analyzer = new JavaAnalyzer();
+        AnalysisResult first = analyzer.analyze(context());
+        Files.writeString(root.resolve("A.java"), "class A { int value() { return 2; } }");
+        AnalysisResult changed = analyzer.analyze(context());
+        assertThat(analyzer.cacheStats().parserInvocations()).isEqualTo(3);
+        assertThat(analyzer.cacheStats().reusedPhases()).isEqualTo(3);
+        assertThat(changed).isEqualTo(new JavaAnalyzer().analyze(context()));
+        var original = first.nodes().stream().filter(node -> node.naturalKey().equals("java:B")).findFirst().orElseThrow();
+        assertThat(changed.nodes().stream().filter(node -> node.naturalKey().equals("java:B")).findFirst().orElseThrow())
+                .isSameAs(original);
+    }
+
     private AnalysisContext context() throws Exception {
         try (var paths = Files.list(root)) {
             List<InventoriedFile> files = paths.sorted().map(path -> {

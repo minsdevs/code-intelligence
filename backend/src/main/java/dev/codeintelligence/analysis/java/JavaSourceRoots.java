@@ -104,10 +104,9 @@ final class JavaSourceRoots {
     }
 
     private static String peekPackage(Path javaFile) {
-        try {
-            byte[] bytes = Files.readAllBytes(javaFile);
-            int len = Math.min(bytes.length, PEEK_BYTES);
-            String head = new String(bytes, 0, len, StandardCharsets.UTF_8);
+        try (var input = Files.newInputStream(javaFile)) {
+            byte[] bytes = input.readNBytes(PEEK_BYTES);
+            String head = new String(bytes, StandardCharsets.UTF_8);
             Matcher matcher = PACKAGE_DECL.matcher(head);
             return matcher.find() ? matcher.group(1) : null;
         } catch (IOException e) {
