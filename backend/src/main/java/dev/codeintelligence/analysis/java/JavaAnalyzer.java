@@ -90,6 +90,8 @@ public class JavaAnalyzer implements CodeAnalyzer {
      * every project file. Evicted trees are parsed again on their next use.
      */
     static final int SOLVER_CACHED_TREES = 128;
+    private String completedKey;
+    private AnalysisResult completedResult;
 
     @Override
     public boolean supports(FileInventory inventory) {
@@ -99,7 +101,10 @@ public class JavaAnalyzer implements CodeAnalyzer {
     }
 
     @Override
-    public AnalysisResult analyze(AnalysisContext ctx) {
+    public synchronized AnalysisResult analyze(AnalysisContext ctx) {
+        JobCancellation.checkpoint();
+        String key = JavaInputFingerprint.compute(ctx);
+        if (key != null && key.equals(completedKey)) return completedResult;
         Collector collector = new Collector();
         Set<Path> sourceRoots = JavaSourceRoots.find(ctx.clonePath());
         collector.projectTypes.addAll(JavaSourceRoots.projectTypes(sourceRoots));
@@ -113,7 +118,16 @@ public class JavaAnalyzer implements CodeAnalyzer {
         } finally {
             releaseFacades();
         }
-        return collector.toResult();
+        AnalysisResult result = collector.toResult();
+        JobCancellation.checkpoint();
+        if (key != null && result.nodes().size() + result.edges().size() + result.evidences().size() <= 100_000) {
+            completedKey = key;
+            completedResult = result;
+        } else {
+            completedKey = null;
+            completedResult = null;
+        }
+        return result;
     }
 
     private void analyze(AnalysisContext ctx, ParserConfiguration configuration, Collector collector) {
