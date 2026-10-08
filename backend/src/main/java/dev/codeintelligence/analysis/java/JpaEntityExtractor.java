@@ -19,13 +19,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.springframework.stereotype.Component;
 
 /**
  * {@code @Entity}/{@code @Table} → DB_ENTITY nodes. MAPS_TO matching against migration tables is
  * Phase 2 (§11.2).
  */
-@Component
 public class JpaEntityExtractor implements CodeAnalyzer {
 
     @Override
@@ -35,9 +33,13 @@ public class JpaEntityExtractor implements CodeAnalyzer {
 
     @Override
     public AnalysisResult analyze(AnalysisContext ctx) {
+        return analyzeFiles(JavaParseSupport.parseJavaFiles(ctx));
+    }
+
+    AnalysisResult analyzeFiles(Iterable<JavaParseSupport.ParsedJavaFile> files) {
         List<GraphNodeDraft> nodes = new ArrayList<>();
         List<AnalyzerEvidence> evidences = new ArrayList<>();
-        for (JavaParseSupport.ParsedJavaFile unit : JavaParseSupport.parseJavaFiles(ctx)) {
+        for (JavaParseSupport.ParsedJavaFile unit : files) {
             for (TypeDeclaration<?> type : unit.cu().getTypes()) {
                 extractType(type, unit, nodes, evidences);
             }
