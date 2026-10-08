@@ -13,13 +13,11 @@ import dev.codeintelligence.analysis.core.NaturalKeys;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import org.springframework.stereotype.Component;
 
 /**
  * Writes {@code graph_nodes.metadata.layer} for Spring stereotype / JPA types. Metadata is merged
  * onto existing CLASS/INTERFACE nodes during SOURCE_PARSING persist.
  */
-@Component
 public class LayerTagger implements CodeAnalyzer {
 
     @Override
@@ -29,8 +27,12 @@ public class LayerTagger implements CodeAnalyzer {
 
     @Override
     public AnalysisResult analyze(AnalysisContext ctx) {
+        return analyzeFiles(JavaParseSupport.parseJavaFiles(ctx));
+    }
+
+    AnalysisResult analyzeFiles(Iterable<JavaParseSupport.ParsedJavaFile> files) {
         List<GraphNodeDraft> nodes = new ArrayList<>();
-        for (JavaParseSupport.ParsedJavaFile unit : JavaParseSupport.parseJavaFiles(ctx)) {
+        for (JavaParseSupport.ParsedJavaFile unit : files) {
             for (TypeDeclaration<?> type : unit.cu().getTypes()) {
                 tagType(type, unit, nodes);
             }

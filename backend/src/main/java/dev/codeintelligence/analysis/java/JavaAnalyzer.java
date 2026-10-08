@@ -55,7 +55,8 @@ import dev.codeintelligence.analysis.core.GraphNodeType;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.NaturalKeys;
 import dev.codeintelligence.evidence.EvidenceKind;
-import dev.codeintelligence.job.JobCancellation;
+import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
+import dev.codeintelligence.analysis.core.AnalysisCacheWeight;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -90,6 +91,164 @@ public class JavaAnalyzer implements CodeAnalyzer {
      * every project file. Evicted trees are parsed again on their next use.
      */
     static final int SOLVER_CACHED_TREES = 128;
+    private String completedKey;
+    private AnalysisResult completedResult;
+    private Map<String, FilePhases> phases = Map.of();
+    private long cachedProject = Long.MIN_VALUE;
+    private final java.util.concurrent.atomic.AtomicInteger parses = new java.util.concurrent.atomic.AtomicInteger();
+    private int reusedPhases;
+    private long retainedBytes;
+    static final long MAX_CACHE_BYTES = 64L * 1024 * 1024;
+    private final long cacheBudget;
+
+    public JavaAnalyzer() { this(MAX_CACHE_BYTES); }
+
+    JavaAnalyzer(long cacheBudget) { this.cacheBudget = Math.max(0, Math.min(MAX_CACHE_BYTES, cacheBudget)); }
+    record CacheStats(int parserInvocations, int reusedPhases, int files, long retainedBytes) {}
+    synchronized CacheStats cacheStats() { return new CacheStats(parses.get(), reusedPhases, phases.size(), retainedBytes); }
+
+    private record Tape(String context, List<Event> events) {
+        void replay(Collector collector) {
+            collector.replaying = true;
+            try { for (Event event : events) event.replay(collector); }
+            finally { collector.replaying = false; }
+        }
+    }
+    private record FilePhases(String blob, String declarations, Tape types, Tape members, Tape calls) {}
+
+    private Map<String, FilePhases> analyzeIncrementally(AnalysisContext ctx, ParserConfiguration configuration,
+            Collector collector, AnalysisInputFingerprint.Snapshot input) {
+        List<InventoriedFile> files = ctx.inventory().files().stream().filter(JavaAnalyzer::isJava).toList();
+        Map<String, FilePhases> next = new LinkedHashMap<>();
+        List<InventoriedFile> changed = files.stream().filter(file -> reusable(file, input, ctx.projectId()) == null).toList();
+        configuration.setStoreTokens(true);
+        try (ParseAhead<InventoriedFile, ParsedUnit> units = parseAhead(ctx, configuration, changed)) {
+            for (InventoriedFile file : files) {
+                AnalysisInputFingerprint.checkpoint();
+                FilePhases previous = reusable(file, input, ctx.projectId());
+                if (previous != null) {
+                    previous.types.replay(collector);
+                    reusedPhases++;
+                    next.put(file.path(), previous);
+                    continue;
+                }
+                ParsedUnit unit;
+                try { unit = units.next().get(); }
+                catch (Exception failure) {
+                    collector.evidence(parseFailure(file, failure, ctx.clonePath()));
+                    collector.outcomes.put(file.path(), new FileAnalysisOutcome(file.path(), "FAILED", "JAVA_PARSE_FAILED"));
+                    continue;
+                }
+                collector.recording = new ArrayList<>();
+                registerTypes(unit, collector);
+                Tape types = finishTape(collector, "");
+                String blob = input == null ? null : input.files().get(file.path());
+                next.put(file.path(), new FilePhases(blob, declarations(unit.cu), types, null, null));
+            }
+        }
+        java.security.MessageDigest global = AnalysisInputFingerprint.digest();
+        AnalysisInputFingerprint.update(global, input == null ? "unknown" : input.environment());
+        if (!collector.outcomes.isEmpty() && input != null) AnalysisInputFingerprint.update(global, input.complete());
+        AnalysisInputFingerprint.update(global, collector.projectTypes.toString());
+        for (var entry : next.entrySet()) {
+            AnalysisInputFingerprint.update(global, entry.getKey());
+            AnalysisInputFingerprint.update(global, entry.getValue().declarations);
+        }
+        String dependencies = java.util.HexFormat.of().formatHex(global.digest());
+        for (int phase = 1; phase <= 2; phase++) {
+            configuration.setStoreTokens(true);
+            // Resolution is sequential: earlier files may introduce fallback symbols. The tape key
+            // includes that exact prefix context as well as every declaration/configuration dependency.
+            JavaParser parser = new JavaParser(configuration);
+            Set<String> scheduled = new java.util.HashSet<>();
+            List<InventoriedFile> missing = new ArrayList<>();
+            for (InventoriedFile file : files) {
+                FilePhases entry = next.get(file.path());
+                if (entry == null) continue;
+                Tape previous = phase == 1 ? entry.members : entry.calls;
+                if (input == null || previous == null || !previous.context.startsWith(dependencies)) {
+                    missing.add(file);
+                    scheduled.add(file.path());
+                }
+            }
+            try (ParseAhead<InventoriedFile, ParsedUnit> ahead = parseAhead(ctx, configuration, missing)) {
+            for (InventoriedFile file : files) {
+                AnalysisInputFingerprint.checkpoint();
+                FilePhases entry = next.get(file.path());
+                if (entry == null) continue;
+                String context = dependencies + collector.contextKey();
+                Tape tape = phase == 1 ? entry.members : entry.calls;
+                if (input != null && tape != null && tape.context.equals(context)) {
+                    tape.replay(collector);
+                    reusedPhases++;
+                } else {
+                    ParsedUnit unit = scheduled.contains(file.path()) ? reparsed(ahead.next()) : parseFile(ctx, parser, file);
+                    collector.recording = new ArrayList<>();
+                    if (phase == 1) visitMembers(unit, collector);
+                    else visitCalls(unit, collector);
+                    tape = finishTape(collector, context);
+                }
+                next.put(file.path(), phase == 1
+                        ? new FilePhases(entry.blob, entry.declarations, entry.types, tape, entry.calls)
+                        : new FilePhases(entry.blob, entry.declarations, entry.types, entry.members, tape));
+                if (phase == 2) collector.outcomes.put(file.path(), new FileAnalysisOutcome(file.path(),
+                        collector.unresolvedFiles.contains(file.path()) ? "PARTIAL" : "SUCCESS",
+                        collector.unresolvedFiles.contains(file.path()) ? "UNRESOLVED_CALLS" : "JAVA_PARSED"));
+            }
+            }
+        }
+        return next;
+    }
+
+    private FilePhases reusable(InventoriedFile file, AnalysisInputFingerprint.Snapshot input, long project) {
+        if (input == null || project != cachedProject) return null;
+        FilePhases entry = phases.get(file.path());
+        return entry != null && entry.blob != null && entry.blob.equals(input.files().get(file.path())) ? entry : null;
+    }
+
+    private static Tape finishTape(Collector collector, String context) {
+        Tape tape = new Tape(context, List.copyOf(collector.recording));
+        collector.recording = null;
+        return tape;
+    }
+
+    private static String declarations(CompilationUnit unit) {
+        CompilationUnit declaration = unit.clone();
+        declaration.findAll(MethodDeclaration.class).forEach(method -> {
+            if (method.getBody().isPresent()) method.setBody(new com.github.javaparser.ast.stmt.BlockStmt());
+        });
+        declaration.findAll(ConstructorDeclaration.class)
+                .forEach(constructor -> constructor.setBody(new com.github.javaparser.ast.stmt.BlockStmt()));
+        declaration.findAll(FieldDeclaration.class).forEach(field -> field.getVariables().forEach(variable -> {
+            // Explicit field types determine external resolution; inferred/anonymous declarations
+            // retain their initializer as a conservative dependency.
+            if (!variable.getType().isVarType() && variable.getInitializer().stream()
+                    .flatMap(value -> value.findAll(ObjectCreationExpr.class).stream())
+                    .noneMatch(value -> value.getAnonymousClassBody().isPresent())) variable.removeInitializer();
+        }));
+        declaration.findAll(com.github.javaparser.ast.body.InitializerDeclaration.class)
+                .forEach(initializer -> initializer.setBody(new com.github.javaparser.ast.stmt.BlockStmt()));
+        declaration.getAllContainedComments().forEach(comment -> comment.remove());
+        declaration.removeComment();
+        return AnalysisInputFingerprint.hash(declaration.toString());
+    }
+
+    private void retain(Map<String, FilePhases> next, boolean known) {
+        if (!known) { phases = Map.of(); retainedBytes = 0; return; }
+        Map<String, FilePhases> bounded = new LinkedHashMap<>();
+        long bytes = 0;
+        for (var entry : next.entrySet()) {
+            long weight = 512L + entry.getKey().length() * 2L;
+            for (Tape tape : List.of(entry.getValue().types, entry.getValue().members, entry.getValue().calls))
+                for (Event event : tape.events) weight += event.weight();
+            if (weight > cacheBudget - bytes) continue;
+            bounded.put(entry.getKey(), entry.getValue());
+            bytes += weight;
+        }
+        phases = Map.copyOf(bounded);
+        retainedBytes = bytes;
+    }
+
 
     @Override
     public boolean supports(FileInventory inventory) {
@@ -99,69 +258,47 @@ public class JavaAnalyzer implements CodeAnalyzer {
     }
 
     @Override
-    public AnalysisResult analyze(AnalysisContext ctx) {
+    public synchronized AnalysisResult analyze(AnalysisContext ctx) {
+        return analyze(ctx, AnalysisInputFingerprint.capture(ctx));
+    }
+
+    public synchronized AnalysisResult analyze(AnalysisContext ctx, AnalysisInputFingerprint.Snapshot input) {
+        AnalysisInputFingerprint.checkpoint();
+        parses.set(0);
+        reusedPhases = 0;
+        String key = input == null ? null : input.complete();
+        if (key != null && key.equals(completedKey)) {
+            log.info("Java incremental reuse: parsed=0, completedHit=true, retainedBytes={}", retainedBytes);
+            return completedResult;
+        }
         Collector collector = new Collector();
         Set<Path> sourceRoots = JavaSourceRoots.find(ctx.clonePath());
         collector.projectTypes.addAll(JavaSourceRoots.projectTypes(sourceRoots));
-        // Each pass needs every file's results from the previous one, but a syntax tree with its
-        // tokens costs about 80x its source in heap. Retaining all of them exhausted the 2 GiB
-        // backend heap at 26 MB of Java (G-PERF medium), so every pass parses again, one file at
-        // a time, and only the parsed file list is kept.
+        // Only immutable phase events survive a refresh; syntax trees stay bounded to a parse pass.
         ParserConfiguration configuration = createConfiguration(sourceRoots);
+        Map<String, FilePhases> next;
         try {
-            analyze(ctx, configuration, collector);
+            next = analyzeIncrementally(ctx, configuration, collector, input);
         } finally {
             releaseFacades();
         }
-        return collector.toResult();
+        AnalysisResult result = collector.toResult();
+        AnalysisInputFingerprint.checkpoint();
+        retain(next, input != null);
+        cachedProject = ctx.projectId();
+        if (key != null && phases.size() == next.size()
+                && AnalysisCacheWeight.of(result) <= cacheBudget) {
+            completedKey = key;
+            completedResult = result;
+        } else {
+            completedKey = null;
+            completedResult = null;
+        }
+        log.info("Java incremental reuse: parsed={}, reusedPhases={}, retainedBytes={}",
+                parses.get(), reusedPhases, retainedBytes);
+        return result;
     }
 
-    private void analyze(AnalysisContext ctx, ParserConfiguration configuration, Collector collector) {
-        List<InventoriedFile> parsed = new ArrayList<>();
-        try (ParseAhead<InventoriedFile, ParsedUnit> units = parseAhead(
-                ctx,
-                configuration,
-                ctx.inventory().files().stream().filter(JavaAnalyzer::isJava).toList())) {
-            while (units.hasNext()) {
-                JobCancellation.checkpoint();
-                ParseAhead.Result<InventoriedFile, ParsedUnit> result = units.next();
-                InventoriedFile file = result.file();
-                ParsedUnit unit;
-                try {
-                    unit = result.get();
-                } catch (Exception e) {
-                    log.warn("Skipping Java file {}: {}", file.path(), e.toString());
-                    collector.evidences.add(parseFailure(file, e, ctx.clonePath()));
-                    collector.outcomes.put(
-                            file.path(), new FileAnalysisOutcome(file.path(), "FAILED", "JAVA_PARSE_FAILED"));
-                    continue;
-                }
-                registerTypes(unit, collector);
-                parsed.add(file);
-            }
-        }
-        try (ParseAhead<InventoriedFile, ParsedUnit> units = parseAhead(ctx, configuration, parsed)) {
-            while (units.hasNext()) {
-                JobCancellation.checkpoint();
-                visitMembers(reparsed(units.next()), collector);
-            }
-        }
-        try (ParseAhead<InventoriedFile, ParsedUnit> units = parseAhead(ctx, configuration, parsed)) {
-            while (units.hasNext()) {
-                JobCancellation.checkpoint();
-                ParsedUnit unit = reparsed(units.next());
-                visitCalls(unit, collector);
-                collector.outcomes.put(
-                        unit.file.path(),
-                        new FileAnalysisOutcome(
-                                unit.file.path(),
-                                collector.unresolvedFiles.contains(unit.file.path()) ? "PARTIAL" : "SUCCESS",
-                                collector.unresolvedFiles.contains(unit.file.path())
-                                        ? "UNRESOLVED_CALLS"
-                                        : "JAVA_PARSED"));
-            }
-        }
-    }
 
     /** Parses ahead on helper threads (parsing is most of this analyzer's time); visits stay in order here. */
     private ParseAhead<InventoriedFile, ParsedUnit> parseAhead(
@@ -234,6 +371,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
     }
 
     private ParsedUnit parseFile(AnalysisContext ctx, JavaParser parser, InventoriedFile file) {
+        parses.incrementAndGet();
         Path absolute = ctx.clonePath().resolve(file.path()).normalize();
         if (!Files.isRegularFile(absolute)) {
             throw new IllegalStateException("file missing");
@@ -273,14 +411,14 @@ public class JavaAnalyzer implements CodeAnalyzer {
 
     private void registerType(TypeDeclaration<?> type, String pkg, String filePath, Collector collector) {
         String fqcn = fqcn(pkg, type);
-        collector.projectTypes.add(fqcn);
+        collector.projectType(fqcn);
         if (type instanceof ClassOrInterfaceDeclaration coi && (coi.isInterface() || coi.isAbstract())) {
-            collector.virtualTypes.add(fqcn);
+            collector.virtualType(fqcn);
         }
         String typeKey = NaturalKeys.javaType(fqcn);
         collector.put(GraphNodeDraft.of(
                 nodeTypeOf(type), typeKey, type.getNameAsString(), filePath, lineStart(type), lineEnd(type)));
-        collector.evidences.add(declarationEvidence(typeKey, filePath, type));
+        collector.evidence(declarationEvidence(typeKey, filePath, type));
         if (!pkg.isBlank()) {
             collector.edge(NaturalKeys.javaType(pkg), typeKey, GraphEdgeType.DECLARES, EdgeConfidence.CONFIRMED);
         }
@@ -312,10 +450,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
         } else if (type instanceof NodeWithImplements<?> implementing) {
             // Records and enums dispatch interface calls too; record them for class-hierarchy candidates.
             for (ClassOrInterfaceType impl : implementing.getImplementedTypes()) {
-                collector
-                        .supertypes
-                        .computeIfAbsent(fqcn, key -> new java.util.LinkedHashSet<>())
-                        .add(JavaTypeNames.resolve(impl, cu, pkg));
+                collector.supertype(fqcn, JavaTypeNames.resolve(impl, cu, pkg));
             }
         }
         if (type instanceof EnumDeclaration enm) {
@@ -391,10 +526,9 @@ public class JavaAnalyzer implements CodeAnalyzer {
             String filePath,
             Collector collector) {
         String typeKey = NaturalKeys.javaType(fqcn);
-        Set<String> supertypes = collector.supertypes.computeIfAbsent(fqcn, key -> new java.util.LinkedHashSet<>());
         for (ClassOrInterfaceType ext : type.getExtendedTypes()) {
             String target = JavaTypeNames.resolve(ext, cu, pkg);
-            supertypes.add(target);
+            collector.supertype(fqcn, target);
             GraphNodeType targetKind = type.isInterface() ? GraphNodeType.INTERFACE : GraphNodeType.CLASS;
             ensureType(target, targetKind, filePath, collector);
             collector.edge(typeKey, NaturalKeys.javaType(target), GraphEdgeType.EXTENDS, EdgeConfidence.CONFIRMED);
@@ -402,7 +536,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
         for (ClassOrInterfaceType impl : type.getImplementedTypes()) {
             String target = JavaTypeNames.resolve(impl, cu, pkg);
-            supertypes.add(target);
+            collector.supertype(fqcn, target);
             ensureType(target, GraphNodeType.INTERFACE, filePath, collector);
             collector.edge(typeKey, NaturalKeys.javaType(target), GraphEdgeType.IMPLEMENTS, EdgeConfidence.CONFIRMED);
             usesType(typeKey, target, filePath, collector);
@@ -464,13 +598,10 @@ public class JavaAnalyzer implements CodeAnalyzer {
         if (callable instanceof MethodDeclaration method
                 && !method.isStatic()
                 && method.getBody().isPresent()) {
-            collector
-                    .concreteMethods
-                    .computeIfAbsent(ownerFqcn, key -> new ArrayList<>())
-                    .add(new DeclaredMethod(methodKey, methodName, params));
+            collector.concreteMethod(ownerFqcn, new DeclaredMethod(methodKey, methodName, params));
         }
         collector.edge(ownerKey, methodKey, GraphEdgeType.DECLARES, EdgeConfidence.CONFIRMED);
-        collector.evidences.add(declarationEvidence(methodKey, filePath, callable));
+        collector.evidence(declarationEvidence(methodKey, filePath, callable));
         annotate(callable, methodKey, cu, pkg, filePath, collector);
         if (callable instanceof MethodDeclaration method && !method.getType().isVoidType()) {
             usesType(methodKey, JavaTypeNames.resolve(method.getType(), cu, pkg), filePath, collector);
@@ -536,7 +667,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
             collector.edge(callerKey, targetKey, GraphEdgeType.CALLS, EdgeConfidence.CONFIRMED, site);
             return;
         }
-        collector.unresolvedFiles.add(filePath);
+        collector.unresolved(filePath);
         String methodName = call.getNameAsString();
         List<String> argTypes = argumentTypes(call, cu, pkg);
         Optional<String> receiver = receiverType(call, enclosingFqcn, cu, pkg);
@@ -936,8 +1067,60 @@ public class JavaAnalyzer implements CodeAnalyzer {
         private final Map<String, Set<String>> supertypes = new LinkedHashMap<>();
         /** Instance methods with a body (including interface defaults), by declaring project type. */
         private final Map<String, List<DeclaredMethod>> concreteMethods = new LinkedHashMap<>();
+        private final java.security.MessageDigest context = AnalysisInputFingerprint.digest();
+        private List<Event> recording;
+        private boolean replaying;
+
+        void record(EventKind kind, Object value, Object other) {
+            if (replaying) return;
+            Event event = new Event(kind, value, other);
+            if (recording != null) recording.add(event);
+            if (kind.affectsResolution) AnalysisInputFingerprint.update(context, event.semantic());
+        }
+
+        String contextKey() {
+            try {
+                return java.util.HexFormat.of().formatHex(((java.security.MessageDigest) context.clone()).digest());
+            } catch (CloneNotSupportedException impossible) { throw new IllegalStateException(impossible); }
+        }
+
+        void projectType(String type) {
+            record(EventKind.PROJECT_TYPE, type, null);
+            projectTypes.add(type);
+        }
+
+        void virtualType(String type) {
+            record(EventKind.VIRTUAL_TYPE, type, null);
+            virtualTypes.add(type);
+        }
+
+        void supertype(String type, String parent) {
+            record(EventKind.SUPERTYPE, type, parent);
+            supertypes.computeIfAbsent(type, ignored -> new java.util.LinkedHashSet<>()).add(parent);
+        }
+
+        void concreteMethod(String owner, DeclaredMethod method) {
+            record(EventKind.CONCRETE_METHOD, owner, method);
+            concreteMethods.computeIfAbsent(owner, ignored -> new ArrayList<>()).add(method);
+        }
+
+        void evidence(AnalyzerEvidence evidence) {
+            record(EventKind.EVIDENCE, evidence, null);
+            evidences.add(evidence);
+        }
+
+        void unresolved(String file) {
+            record(EventKind.UNRESOLVED, file, null);
+            unresolvedFiles.add(file);
+        }
+
+        void edgeDraft(GraphEdgeDraft edge) {
+            record(EventKind.EDGE, edge, null);
+            edges.add(edge);
+        }
 
         void put(GraphNodeDraft node) {
+            record(EventKind.NODE, node, null);
             GraphNodeDraft existing = nodes.get(node.naturalKey());
             if (existing != null
                     && !"PACKAGE".equals(node.nodeType())
@@ -958,6 +1141,8 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
 
         void projectMethod(String key, String name) {
+            if (projectMethodsByName.getOrDefault(name, Set.of()).contains(key)) return;
+            record(EventKind.PROJECT_METHOD, key, name);
             projectMethodsByName
                     .computeIfAbsent(name, ignored -> new java.util.LinkedHashSet<>())
                     .add(key);
@@ -980,7 +1165,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
             if (source == null || target == null || source.equals(target)) {
                 return;
             }
-            edges.add(GraphEdgeDraft.of(source, target, type, confidence).withMetadata(metadata));
+            edgeDraft(GraphEdgeDraft.of(source, target, type, confidence).withMetadata(metadata));
         }
 
         AnalysisResult toResult() {
@@ -991,7 +1176,46 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
     }
 
+    private enum EventKind {
+        PROJECT_TYPE(true), VIRTUAL_TYPE(true), SUPERTYPE(true), CONCRETE_METHOD(true),
+        EVIDENCE(false), UNRESOLVED(false), NODE(true), PROJECT_METHOD(true), EDGE(false);
+        final boolean affectsResolution;
+        EventKind(boolean affectsResolution) { this.affectsResolution = affectsResolution; }
+    }
+
+    private record Event(EventKind kind, Object value, Object other) {
+        long weight() {
+            long additional = other instanceof DeclaredMethod method
+                    ? 96 + AnalysisCacheWeight.of(method.key) + AnalysisCacheWeight.of(method.name) + AnalysisCacheWeight.of(method.params)
+                    : AnalysisCacheWeight.of(other);
+            return 64 + AnalysisCacheWeight.of(value) + additional;
+        }
+        String semantic() {
+            if (value instanceof GraphNodeDraft node)
+                return kind + ":" + node.nodeType() + ":" + node.naturalKey() + ":" + node.filePath()
+                        + ":" + (node.lineStart() != null);
+            return kind + ":" + value + ":" + other;
+        }
+
+        void replay(Collector collector) {
+            if (kind.affectsResolution) AnalysisInputFingerprint.update(collector.context, semantic());
+            switch (kind) {
+                case PROJECT_TYPE -> collector.projectType((String) value);
+                case VIRTUAL_TYPE -> collector.virtualType((String) value);
+                case SUPERTYPE -> collector.supertype((String) value, (String) other);
+                case CONCRETE_METHOD -> collector.concreteMethod((String) value, (DeclaredMethod) other);
+                case EVIDENCE -> collector.evidence((AnalyzerEvidence) value);
+                case UNRESOLVED -> collector.unresolved((String) value);
+                case NODE -> collector.put((GraphNodeDraft) value);
+                case PROJECT_METHOD -> collector.projectMethod((String) value, (String) other);
+                case EDGE -> collector.edgeDraft((GraphEdgeDraft) value);
+            }
+        }
+    }
+
     private record ParsedUnit(InventoriedFile file, CompilationUnit cu, String pkg) {}
 
-    private record DeclaredMethod(String key, String name, List<String> params) {}
+    private record DeclaredMethod(String key, String name, List<String> params) {
+        DeclaredMethod { params = List.copyOf(params); }
+    }
 }
