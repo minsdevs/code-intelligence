@@ -30,6 +30,9 @@ async function fakeProvider(t, respond = (_request, response) => {
 }) {
   const received = [];
   const server = http.createServer((incoming, response) => {
+    // Keep provider-shaped requests observable even when their method or path is wrong.
+    if (['GET', 'HEAD'].includes(incoming.method) && incoming.headers.authorization === undefined
+      && incoming.url !== '/v1/chat/completions') { response.writeHead(404).end(); incoming.resume(); return; }
     const chunks = [];
     incoming.on('data', chunk => chunks.push(chunk));
     incoming.on('end', () => {
@@ -127,4 +130,24 @@ test('the validation transport follows no redirect and accepts only a JSON 2xx a
   const transport = createProviderTransport(validation(provider.origin));
   await assert.rejects(transport(request()), { message: 'AI provider response unavailable' });
   assert.equal(provider.received.length, 1);
+});
+
+test('foreign probes leave provider response sequence intact and wrong provider paths count', async t => {
+  let responses = 0;
+  const provider = await fakeProvider(t, (_incoming, response) => response.end(String(++responses)));
+  const send = (url, options = {}) => new Promise((resolve, reject) => {
+    const outgoing = http.request(provider.origin + url, { agent: false, ...options }, response => {
+      let body = ''; response.on('data', chunk => { body += chunk; });
+      response.on('end', () => resolve({ status: response.statusCode, body }));
+    });
+    outgoing.on('error', reject); outgoing.end();
+  });
+  assert.equal((await send('/')).status, 404);
+  assert.equal((await send('/favicon.ico')).status, 404);
+  assert.equal(responses, 0); assert.equal(provider.received.length, 0);
+  assert.equal((await send('/v1/chat/completions', { method: 'POST' })).body, '1');
+  assert.equal((await send('/wrong-provider-path', { method: 'POST' })).body, '2');
+  assert.equal((await send('/', { headers: request().headers })).body, '3');
+  assert.deepEqual(provider.received.map(value => value.url), ['/v1/chat/completions', '/wrong-provider-path', '/']);
+  assert.equal(responses, 3);
 });

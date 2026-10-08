@@ -21,11 +21,23 @@ async function main() {
       ports: { backend: port, analyzer: 1, postgres: 2, redis: 3 }, getApiToken: () => token });
     server.setSecureContext({ key: fs.readFileSync(transport.materials.backend.key), cert: transport.materials.backend.pem });
     server.on('request', (request, response) => {
+      if (['GET', 'HEAD'].includes(request.method) && request.headers['x-code-intelligence-token'] === undefined
+        && !['/ready', '/still-ready', '/private'].includes(request.url)) {
+        response.writeHead(404).end(); request.resume(); return;
+      }
       requests.push(request.url);
       response.writeHead(request.headers['x-code-intelligence-token'] === token ? 204 : 401);
       response.end();
     });
     const client = transport.backend;
+    const probe = url => new Promise((resolve, reject) => {
+      https.get(client.origin + url, { rejectUnauthorized: false, agent: false }, response => {
+        response.resume(); response.on('end', () => resolve(response.statusCode));
+      }).on('error', reject);
+    });
+    assert.equal(await probe('/'), 404);
+    assert.equal(await probe('/favicon.ico'), 404);
+    assert.deepEqual(requests, []);
     assert.equal((await client.request(client.origin + '/ready')).status, 204);
     clients.push(createPinnedClient(transport.materials.analyzer, port, { 'X-Code-Intelligence-Token': 'must-not-leak' }));
     clients.push(createPinnedClient({ ...transport.materials.backend, pin: '0'.repeat(64) }, port,
@@ -34,6 +46,9 @@ async function main() {
     assert.deepEqual(requests, ['/ready']);
     assert.equal((await client.request(client.origin + '/still-ready')).status, 204);
     assert.deepEqual(requests, ['/ready', '/still-ready']);
+    assert.equal((await client.request(client.origin + '/wrong-path')).status, 204);
+    assert.equal(await probe('/private'), 401);
+    assert.deepEqual(requests, ['/ready', '/still-ready', '/wrong-path', '/private']);
   } finally {
     await Promise.all(clients.map(client => client.close()));
     try { await transport?.close(); }

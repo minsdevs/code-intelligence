@@ -47,11 +47,15 @@ async function fixture(t) {
   } finally { await storage.close(); }
   const requests = [];
   servers[0].on('request', (req, res) => {
+    if (['GET', 'HEAD'].includes(req.method) && req.headers['x-code-intelligence-token'] === undefined
+      && !['/health', '/never'].includes(req.url)) { res.writeHead(404).end(); req.resume(); return; }
     requests.push(req.url);
     assert.equal(req.headers['x-code-intelligence-token'], token);
     res.writeHead(204); res.end();
   });
   servers[1].on('request', (req, res) => {
+    if (['GET', 'HEAD'].includes(req.method) && req.headers.authorization === undefined
+      && req.url !== '/health') { res.writeHead(404).end(); req.resume(); return; }
     assert.equal(req.headers.authorization, 'Bearer ' + transport.analyzerToken); res.writeHead(204); res.end();
   });
   servers[2].on('secureConnection', socket => {
