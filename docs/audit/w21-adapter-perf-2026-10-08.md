@@ -20,8 +20,8 @@
 ## 변경 경계
 
 - `semantic-extractor.ts`: metadata 소비자용 method 목록을 정확한 owner로 한 번 묶는다. method name의 quoted/computed dot을 자르지 않으며 기존 declaration/map 순서를 유지한다.
-- `react-component-binding.ts`: JSX component proof가 처음 필요한 때에만 전체 program write set을 계산한다. 조회 파일 범위·write 판정·ambiguity·scope 증명은 줄이지 않는다.
-- consumer 회귀: provider alias/overload/동명 class/점 포함 method, unsupported element 뒤 valid route 및 다음 route의 write proof/전체 cold·warm equality.
+- 최종 제품 변경은 provider owner-index와 그 consumer 회귀뿐이다. provider가 없는 경우 index를 할당하지 않는다. provider alias/overload/동명 class/점 포함 method 및 cold·warm 전체 equality를 검사한다.
+- React write-set 지연 계산은 실제 session precise coverage에서 cold/refresh/full 호출수 모두 1→1로 효과가 없어 원복했고 그 변경 전용 시험도 제거했다. hotspot이라는 이유만으로 입증되지 않은 최적화를 남기지 않는다.
 - `AdapterResultCache`, Tree caller, SourceParsing, outcome loop, GraphPersistence, desktop bridge/supervisor는 변경하지 않는다. 신규 migration 없음.
 - 50k/512 MiB source, request 10 MiB/chunk 1 MiB, 기존 source/root 증명, HMAC-before-inflate, 4 MiB/entry·64 MiB/call decode, owner 16 MiB, unknown/transitive/SCC/global/Nest 의미는 유지한다. cap 증가는 없다.
 
@@ -46,3 +46,14 @@ coordinator 승인으로 원본 p6 app의 `adapter-bridge`만 직접 실행했�
 시작 load1 cold3.097 / refresh2.377 / full2.302, 종료2.920 / 2.712 / 2.998. 증거 `p6-native-medium.log`. bridge SHA-256 `1b74e6e9bb39441aa2ccbf59e3646da044d7c3b460fa7d5574e2d056cadaf90f`, supervisor SHA-256 `919914109d729dd4838388f3a4c9350c0c5b14510110630ed67d8de5325da1d8`.
 
 **해석:** packaged TS cold92–93초 / refresh49–50초 차이는 이 실제 격리 worker/compiler/protocol 경로 자체에서 재현되지 않았다. cold→refresh 계산 감소는 존재하며 session 전송은 1초 미만이다. [INFERENCE] backend source 읽기/mapper/outcome/persistence 등 잔여 전체 경로를 분리해야 한다. 차액을 SQL 시간으로 간주하지 않으며 main이 공통 DB 구간을 별도 계측·수정한다.
+
+## 실행 횟수 진단과 유지/폐기 결정
+
+동일 synthetic small session(553 source/config)에 V8 precise coverage를 적용했다. baseline `f66057a` 보존 dist와 변경 dist를 각각 새 cold/refresh/full worker로 실행했다. `call-count-diagnostic.log`, `baseline-count-small-*.worker.log`, `green-count-small-*.worker.log`에 원시 block counter를 보존한다. coverage/JIT 영향 및 high load 때문에 wall-time 비교 자료가 아니다.
+
+- 기존 `collectManifestFacts`의 provider별 전체 method loop body 79,355회 = provider 59 × method 1,345. 실제 필요한 owner method 처리 664회.
+- 변경 후 전체 method index 1,345회 + owner method 처리 664회. prefix predicate 반복 대신 정확한 owner lookup을 사용한다. 전체 canonical 결과는 baseline/변경 모두 `0a7cc79abb849fd935ec8ac141261f5211bcf211e2fc74a20f8db068545e5ce5`로 동일했다.
+- `writtenBindings`는 baseline/변경 모두 각 phase 1회였다. 해당 lazy 변경은 이 경로의 실제 AST 순회를 제거하지 못하므로 폐기했다.
+- 이는 성능상 불필요 반복의 재현→제거와 의미 보존 증거다. 기존 의미 오류를 재현한 semantic RED라고 주장하지 않는다.
+
+large 최초 worker 진입 전 low-load admission만 21분 지속돼 중단했다. `large-admission-cancelled.log`와 원본 `baseline-quiet-large.log` 보존. main 승인으로 반복하지 않았으며 large cache eviction/재사용 원인 및 quiet 전후 시간 비교는 **NOT_RUN**이다. 원래50k/200MiB fixture, limits, SLO는 변경하지 않았다.
