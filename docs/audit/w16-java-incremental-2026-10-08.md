@@ -7,7 +7,7 @@
 - 키는 실제 bytes SHA-256, project ID, 상대 경로, inventory 및 선언/solver 환경으로 구성한다. snapshot ID, 임시 workspace 절대 경로, mtime, `.git`은 정체성이 아니다. 프로세스 수명 캐시이므로 바이너리/grammar/rule 변경 후 새 프로세스에는 재사용 데이터가 없다. symlink/알 수 없는 파일 종류/읽기 실패는 캐시를 우회하고, 파싱 실패가 있으면 전체 입력 키까지 의존성에 포함한다.
 - 메서드/생성자 body, 명시적 타입 필드의 일반 initializer, 주석은 외부 선언 키에서 분리했다. inferred/anonymous field initializer는 보수적으로 유지한다. 일반 JS/TS 소스 bytes만 바뀌어도 Java 전역 무효화가 일어나던 문제를 제거했다. 설정과 미분류 파일은 계속 포함한다. fixture 상수 이름이나 수치에 따른 분기는 없다.
 - 프로젝트 간 phase 재사용을 차단한다. 같은 메서드 후보를 재등록하는 no-op은 resolver 상태를 바꾸지 않는다. 취소된 실행은 마지막 완료 세대를 대체하지 않는다.
-- retained AST는 없다. 기존 bounded ParseAhead 및 solver 제한을 유지하고, phase 64 MiB, 완료 결과 64 MiB, framework 16 MiB, config 16 MiB의 보수적 heap 추정 상한을 적용한다. 개수 4096 제한은 제거했다. 상한 초과는 재계산이며 중간/외부 디스크 캐시는 만들지 않는다. 큰 프로젝트의 모든 파일이 항상 이 상한 안에 들어간다고 주장하지 않는다.
+- retained AST는 없다. 기존 bounded ParseAhead 및 solver 제한을 유지한다. 후속 medium 실측에 따라 Java phase+완료 결과 합산256MiB, framework16MiB, config16MiB의 고정 보수적 heap 추정 상한을 적용했다(아래 후속 절). 초기 구현은 phase64MiB/완료 결과64MiB였다. 개수4096 제한은 제거했다. 상한 초과는 재계산이며 중간/외부 디스크 캐시는 만들지 않는다. 큰 프로젝트의 모든 파일이 항상 상한 안에 들어간다고 주장하지 않는다.
 - `JavaFrameworkAnalyzer`가 JPA/Kafka/Layer/Spring 추출기를 한 단기 AST에 적용한다. 기존 네 별도 Spring bean을 제거하고 실제 standalone 분석 API는 독립 oracle/기존 단위 테스트에 사용한다. visitor가 AST를 바꾸지 않으며 analyzer-major 순서 및 Kafka 첫 topic 규칙을 유지한다. 명시적 Java phase 3회 + framework parse 1회로 cold 추출 중복을 줄인다.
 - `SourceParsingStep` 실제 실행 경로에서 fingerprint를 한 번 공유한다. 기존 job-thread Java 실행, helper-thread 병렬 실행, merge 순서 및 파일별 격리를 보존한다. `AnalysisContext`의 네 필드와 생성자 계약은 바꾸지 않았다.
 - 비Java 설정 분석기는 BuildFile/Docker/GithubActions/Kubernetes/Serverless/SqlMigration/Terraform/Vercel/YamlConfig 9종의 완전한 동일 입력 결과만 재사용한다. 미등록 분석기는 재사용하지 않는다. TS/tree 분석기 및 import/source-vault/transport/SQL inventory는 변경하지 않았다.
@@ -35,7 +35,7 @@ caffeinate -i ./gradlew --offline cleanTest test \
 - 앞선 단위 증거도 삭제하지 않았다: `red-1.log`→`green-1.log`(완료 결과 재사용), `red-2.log`→`green-2d.log`(파일 phase 재사용), `red-3.log`→`green-3.log`(실제 bean 단일 framework parse), `red-4b.log`→`green-4b.log`(실제 SourceParsingStep config 재사용). `red-4.log/green-4.log`는 graph가 없는 Docker-only fixture 오류이며 유효한 제품 RED가 아니다. `green-2.log/green-2b.log`의 실패도 보존했다.
 - `pipeline-smoke-1/2/3.log/xml`은 Git fixture/미완료 job fixture 및 프로젝트 간 무효화/no-op resolver context 문제를 각각 드러냈다. 실제 FinalizeStep을 실행하도록 fixture를 고치고 프로젝트 격리 및 no-op 상태 갱신을 수정했다. `pipeline-smoke-4.log/xml`은 2개/2통과다.
 
-최종 명령:
+초기 299862e까지의 최종 명령:
 
 ```sh
 DOCKER_HOST="unix://$HOME/.docker/run/docker.sock" caffeinate -i \
@@ -70,3 +70,60 @@ Spring 제품 bean, 임시 Git 저장소, 격리 Postgres/Redis, FileInventorySt
 - 공유 문서 제안: “Java/source 분석은 프로세스 수명 내 실제 bytes와 프로젝트·상대경로·선언·설정·의존성 정체성으로 결과를 재사용한다. 변경 파일을 다시 파싱하고, 구조/미분류 의존성 변경과 캐시 상한 초과는 안전하게 재계산한다. Java framework 추출기는 AST를 공유하되 장기 보관하지 않는다. 증분/독립 full의 canonical graph·evidence·outcome 동등성을 단위 및 실제 DB pipeline에서 검증했으며, packaged timing gate의 통과 여부는 별도 후보 증거로만 판정한다.”
 
 구현 커밋: `d2094b2`, `6535d33`, `d0e6ddc`, `bb37392`, `f13cd3d` (모두 `[skip ci]`).
+
+
+## 후속: 실제 medium 보관량과 대기 취소
+
+이 절은 299862e 이후 후속 변경/증거다. 앞의 55개 및 초기 smoke 수치는 당시 실행 그대로 보존한다.
+
+### 계상 및 고정 예산
+
+- 공식 생성기의 medium(10,000파일/50MiB, Java 4,496파일)을 throwaway probe로 진단했다. 제품 경로 밖의 진단이며 package/timing gate가 아니다.
+- 기존 64MiB phase 예산: 796파일 보관, cold 13,488 parse/38,803ms. 1% 변경 100파일 중 Java 17파일인데 11,112 parse/2,376 재사용/30,879ms였다. 증거: medium-probe-baseline.log/xml. 이 초기 probe의 heapUsed에는 inspection 임시 할당이 섞였으므로 정확한 live-heap 비교에는 사용하지 않는다.
+- probe에서만 512MiB로 전체 보관을 관측했다(제품 설정 아님). 중복 계상 377,638,166 bytes 대 identity별 보수 추정 165,250,008 bytes. inspection 전 GC후 heap은 139,584,640 bytes(기준 23,030,728), RSS 1,241,488KiB. 증거: medium-probe-representation.log/xml. 압축률도 메모리 내에서 조사했지만 제품 직렬화/압축 계층은 도입하지 않았다.
+- 실제 수정은 공유 객체의 identity 중복 계상만 제거하고 **Java phase+완료 결과 합산 256MiB**를 고정 상한으로 둔다. 완료 결과는 phase 보관 후 남은 예산 안에서만 보관한다. framework/config의 각16MiB 상한은 유지한다. 서로 다른 객체가 값만 같다고 계상을 생략하지 않는다.
+- 계상은 payload만이 아니다. 파일별 기본512 bytes, blob/선언/context/key 문자열, tape96 bytes와 이벤트 배열 참조8 bytes/항목, event64 bytes, 선언 method96 bytes를 포함한다. graph record 고정 overhead, map96+64 bytes/entry, collection48+8 bytes/항목, 문자열48+2 bytes/문자도 포함한다. 공유 identity 제거 범위는 단일 retained 파일/결과다. 파일 사이 또는 phase/완료 결과 사이의 공유는 여전히 중복 계상하므로 보수적이다. 계산용 IdentityHashMap은 임시이며 장기 보관하지 않는다.
+- 정상 제품 기본 생성자/256MiB에서 모든 4,496 Java파일을 보관했다. cold retained 추정184,032,312 bytes; 변경 후184,764,648 bytes. Java17 변경→**51 parse/13,437 재사용/1,604ms**, framework17 parse/4,479 재사용. 변경 후 inspection 전 GC후 heap148,455,440 bytes, RSS1,251,360KiB. Java와 framework 모두 독립 full graph/evidence/outcomes equality=true. 증거: medium-probe-bounded.log/xml. 이는 lock 추가 전 예산 수정의 진단이며 공식 RSS/30초 gate 판정이 아니다.
+
+Probe 명령(cwd backend):
+
+~~~sh
+caffeinate -i ./gradlew --offline \
+  --init-script ../validation/local/w16-java-incremental/medium-probe.gradle \
+  cleanTest test --tests dev.codeintelligence.analysis.java.MediumReuseProbeTest
+~~~
+
+init script는 test JVM에 -Xmx2g와 -XX:+UseSerialGC를 설정했다. probe/source/임시 init script는 완료 후 제거했고 결과 원문은 남겼다.
+
+공유 계상 RED/GREEN 명령:
+
+~~~sh
+caffeinate -i ./gradlew --offline cleanTest test \
+  --tests dev.codeintelligence.analysis.java.JavaCacheAccountingTest
+~~~
+
+cache-accounting-red.log/xml: 1개/1실패(동일 참조와 별도 객체의 계상이 모두236 bytes). 수정 후 cache-accounting-green.log 및 cache-accounting-green-results/: 계상1 + 기존 증분19 + 혼합3 =23개 통과. 작은 예산 fallback/취소/독립 full 동등성을 유지했다.
+
+### 첫 parser를 기다리는 job의 취소
+
+- JavaAnalyzer/JavaFrameworkAnalyzer의 메서드 전체 monitor를 ReentrantLock.lockInterruptibly로 교체했다. 취소 시 interrupt 상태를 복원하고 기존 JobCancelledException으로 종료한다. 캐시 lookup/계산/게시의 직렬성과 마지막 완료 세대는 유지한다. cacheStats도 동일 잠금을 사용한다.
+- SourceResultCache는 analyzer 실행 및 weight 계산을 monitor 밖에서 수행한다. 안에는 최대9종의 짧은 lookup/교체만 있어 같은 긴 analyzer 대기 문제가 없다. 해당 코드는 변경하지 않았다.
+- 결정적 회귀는 실제 ParseAhead worker의 source 접근을 latch로 막고, 두 번째 virtual-thread job이 제품 analyze overload에 진입해 대기한 뒤 interrupt한다. 첫 parser를 풀기 **전에** 두 번째 job이 JobCancelledException+interrupt 보존으로 끝나야 한다. 그 뒤 첫 parser를 풀어 최초 작업 성공, independent full equality, 완료 결과 재사용의 동등성을 확인한다. 잠금 필드/monitor reflection 단언은 없다.
+
+~~~sh
+caffeinate -i ./gradlew --offline cleanTest test \
+  --tests dev.codeintelligence.analysis.java.JavaAnalysisCancellationTest
+~~~
+
+queued-cancel-red.log/xml: 2개/2실패(첫 parser가 해제되기 전 두 번째 job 종료를 기다리다 TimeoutException). queued-cancel-green.log/xml: 2개 통과. 대기 진입 이후 interrupt하도록 동기화를 강화한 최종 결과에도 두 분석기 모두 아래 순서를 기록했다:
+
+~~~text
+cancelledBeforeParserRelease=true interruptPreserved=true firstSucceeded=true equality=true
+~~~
+
+### 후속 최종 결과
+
+앞의 최종 Gradle 명령과 같은 소유 슬라이스 selector를 --offline cleanTest로 실행했다. **58개 통과, 실패/오류/skip 0**. evidence: followup-final-targeted.log, followup-final-results/TEST-*.xml. 96/512파일 실제 DB pipeline equality와 실제 혼합 fixture1% equality도 재통과했다. 변경된 5개 Java 파일만 FileCollection으로 지정해 서식을 적용했다(followup-format.log). JavaIncrementalTest.java는 수정하지 않았다.
+
+NOT RUN은 앞 절과 같다. 특히 medium 진단의 Java 분석 시간/RSS만으로 packaged refresh30초 또는 공식 totalRSS4GiB 통과를 주장하지 않는다. 사용자 승인 대기 중에는 유한 시험 종료와 증거 보존만 수행했고, 재개 승인 뒤 대기 취소 수정을 완료했다.
+
