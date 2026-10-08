@@ -17,11 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
@@ -29,16 +25,16 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class GraphPersistenceService {
 
-    /** Rows per JDBC batch or IN list: one round trip each instead of one per row. */
+    /** Rows per SQL values batch or lookup IN list. */
     static final int BATCH = 500;
 
-    private static final String UPSERT_NODE = """
+    private static final String UPSERT_NODES = """
             insert into graph_nodes (
                 snapshot_id, node_type, natural_key, name, file_id,
                 line_start, line_end, area_type, metadata)
-            values (
-                :snapshotId, :nodeType, :naturalKey, :name, :fileId,
-                :lineStart, :lineEnd, :areaType, cast(:metadata as jsonb))
+            select :snapshotId, v.node_type, v.natural_key, v.name, cast(v.file_id as bigint),
+                cast(v.line_start as integer), cast(v.line_end as integer), v.area_type, cast(v.metadata as jsonb)
+            from (values :nodes) as v(node_type, natural_key, name, file_id, line_start, line_end, area_type, metadata)
             on conflict (snapshot_id, natural_key) do update set
                 node_type = excluded.node_type,
                 name = excluded.name,
@@ -47,22 +43,20 @@ public class GraphPersistenceService {
                 line_end = case when excluded.node_type = 'AMBIGUOUS' then null else coalesce(excluded.line_end, graph_nodes.line_end) end,
                 area_type = coalesce(excluded.area_type, graph_nodes.area_type),
                 metadata = case when excluded.node_type = 'AMBIGUOUS' then excluded.metadata else graph_nodes.metadata || excluded.metadata end
+            returning natural_key, id
             """;
 
     private final JdbcClient jdbc;
-    private final NamedParameterJdbcTemplate batches;
     private final TransactionTemplate transactionTemplate;
     private final EvidenceService evidenceService;
     private final JsonMapper jsonMapper;
 
     public GraphPersistenceService(
             JdbcClient jdbc,
-            NamedParameterJdbcTemplate batches,
             TransactionTemplate transactionTemplate,
             EvidenceService evidenceService,
             JsonMapper jsonMapper) {
         this.jdbc = jdbc;
-        this.batches = batches;
         this.transactionTemplate = transactionTemplate;
         this.evidenceService = evidenceService;
         this.jsonMapper = jsonMapper;
@@ -129,16 +123,21 @@ public class GraphPersistenceService {
             }
             evidenceService.replaceLinkedAll(projectId, EvidenceSubjects.GRAPH_NODE, replacedEvidence);
             Map<String, Long> stored = CustomPlans.run(jdbc, () -> storedNodeIds(snapshotId, ids, safe.edges()));
-            List<SqlParameterSource> edgeRows = new ArrayList<>();
+            Map<EdgeKey, Object[]> edgeRows = new LinkedHashMap<>();
             for (GraphEdgeDraft edge : safe.edges()) {
                 Long source = ids.getOrDefault(edge.sourceNaturalKey(), stored.get(edge.sourceNaturalKey()));
                 Long target = ids.getOrDefault(edge.targetNaturalKey(), stored.get(edge.targetNaturalKey()));
                 if (source == null || target == null || source.equals(target)) {
                     continue;
                 }
-                edgeRows.add(edgeRow(snapshotId, source, target, edge));
+                EdgeKey key = new EdgeKey(source, target, edge.edgeType());
+                // A repeated conflict key must observe the previous update, not share its INSERT.
+                if (edgeRows.size() == BATCH || edgeRows.containsKey(key)) upsertEdges(snapshotId, edgeRows);
+                edgeRows.put(
+                        key,
+                        new Object[] {source, target, edge.edgeType(), edge.confidence(), toJson(edge.metadata())});
             }
-            upsertEdges(edgeRows);
+            upsertEdges(snapshotId, edgeRows);
             FileAnalysisOutcome.recordAll(
                     jdbc,
                     snapshotId,
@@ -172,59 +171,64 @@ public class GraphPersistenceService {
         return stored;
     }
 
-    /** Upserts in input order (later duplicates merge into earlier rows) and returns each row's id. */
+    /** Upserts in input order; repeated keys merge sequentially, independent of RETURNING order. */
     private List<Long> upsertNodes(long snapshotId, List<GraphNodeDraft> nodes, Map<String, Long> fileIds) {
         List<Long> ids = new ArrayList<>(nodes.size());
-        for (int start = 0; start < nodes.size(); start += BATCH) {
-            List<GraphNodeDraft> chunk = nodes.subList(start, Math.min(start + BATCH, nodes.size()));
-            SqlParameterSource[] rows = chunk.stream()
-                    .map(node -> new MapSqlParameterSource()
-                            .addValue("snapshotId", snapshotId)
-                            .addValue("nodeType", node.nodeType())
-                            .addValue("naturalKey", node.naturalKey())
-                            .addValue("name", node.name())
-                            .addValue("fileId", node.filePath() == null ? null : fileIds.get(node.filePath()))
-                            .addValue("lineStart", node.lineStart())
-                            .addValue("lineEnd", node.lineEnd())
-                            .addValue("areaType", node.areaType())
-                            .addValue("metadata", toJson(node.metadata())))
-                    .toArray(SqlParameterSource[]::new);
-            GeneratedKeyHolder keys = new GeneratedKeyHolder();
-            batches.batchUpdate(UPSERT_NODE, rows, keys, new String[] {"id"});
-            List<Map<String, Object>> returned = keys.getKeyList();
-            if (returned.size() != chunk.size()) {
-                throw new IllegalStateException(
-                        "graph node upsert returned " + returned.size() + " ids for " + chunk.size() + " rows");
-            }
-            for (Map<String, Object> key : returned) ids.add(((Number) key.get("id")).longValue());
+        List<Object[]> rows = new ArrayList<>(Math.min(BATCH, nodes.size()));
+        LinkedHashMap<String, Long> idsByKey = new LinkedHashMap<>();
+        for (GraphNodeDraft node : nodes) {
+            if (rows.size() == BATCH || idsByKey.containsKey(node.naturalKey()))
+                upsertNodeRows(snapshotId, rows, idsByKey, ids);
+            idsByKey.put(node.naturalKey(), null);
+            rows.add(new Object[] {
+                node.nodeType(),
+                node.naturalKey(),
+                node.name(),
+                node.filePath() == null ? null : fileIds.get(node.filePath()),
+                node.lineStart(),
+                node.lineEnd(),
+                node.areaType(),
+                toJson(node.metadata())
+            });
         }
+        upsertNodeRows(snapshotId, rows, idsByKey, ids);
         return ids;
     }
 
-    private SqlParameterSource edgeRow(long snapshotId, long sourceId, long targetId, GraphEdgeDraft edge) {
-        return new MapSqlParameterSource()
-                .addValue("snapshotId", snapshotId)
-                .addValue("sourceId", sourceId)
-                .addValue("targetId", targetId)
-                .addValue("edgeType", edge.edgeType())
-                .addValue("confidence", edge.confidence())
-                .addValue("metadata", toJson(edge.metadata()));
+    private void upsertNodeRows(
+            long snapshotId, List<Object[]> rows, LinkedHashMap<String, Long> idsByKey, List<Long> ids) {
+        if (rows.isEmpty()) return;
+        jdbc.sql(UPSERT_NODES)
+                .param("snapshotId", snapshotId)
+                .param("nodes", rows)
+                .query(rs -> {
+                    idsByKey.replace(rs.getString("natural_key"), rs.getLong("id"));
+                });
+        for (Long id : idsByKey.values()) {
+            if (id == null) throw new IllegalStateException("graph node upsert did not return every requested key");
+            ids.add(id);
+        }
+        rows.clear();
+        idsByKey.clear();
     }
 
-    private void upsertEdges(List<SqlParameterSource> rows) {
-        for (int start = 0; start < rows.size(); start += BATCH) {
-            batches.batchUpdate(
-                    """
-                            insert into graph_edges (
-                                snapshot_id, source_node_id, target_node_id, edge_type, confidence, metadata)
-                            values (
-                                :snapshotId, :sourceId, :targetId, :edgeType, :confidence, cast(:metadata as jsonb))
-                            on conflict (snapshot_id, source_node_id, target_node_id, edge_type) do update set
-                                confidence = excluded.confidence,
-                                metadata = excluded.metadata
-                            """,
-                    rows.subList(start, Math.min(start + BATCH, rows.size())).toArray(SqlParameterSource[]::new));
-        }
+    private record EdgeKey(long sourceId, long targetId, String type) {}
+
+    private void upsertEdges(long snapshotId, Map<EdgeKey, Object[]> rows) {
+        if (rows.isEmpty()) return;
+        jdbc.sql("""
+                insert into graph_edges (
+                    snapshot_id, source_node_id, target_node_id, edge_type, confidence, metadata)
+                select :snapshotId, v.source_id, v.target_id, v.edge_type, v.confidence, cast(v.metadata as jsonb)
+                from (values :edges) as v(source_id, target_id, edge_type, confidence, metadata)
+                on conflict (snapshot_id, source_node_id, target_node_id, edge_type) do update set
+                    confidence = excluded.confidence,
+                    metadata = excluded.metadata
+                """)
+                .param("snapshotId", snapshotId)
+                .param("edges", rows.values())
+                .update();
+        rows.clear();
     }
 
     /** File ids by the drafts' own path spelling; one query instead of one per node. */

@@ -22,12 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-/**
- * G-PERF finding 3: SOURCE_PARSING, GRAPH_BUILD and TS_PARSING persisted every node, file lookup,
- * evidence and edge with its own statement round trip (tens of thousands per small workload over
- * the desktop's TLS loopback connection). Persisting a graph must cost a bounded number of round
- * trips per batch, not per row, and store exactly the same rows.
- */
+/** Guards bounded JDBC execution calls and the graph/evidence rows they persist, not wire round trips. */
 @SpringBootTest(properties = "app.token-enc-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 @Import({TestcontainersConfiguration.class, StatementCounter.class})
 class GraphPersistenceRoundTripTest {
@@ -49,7 +44,7 @@ class GraphPersistenceRoundTripTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void persistingAGraphCostsRoundTripsPerBatchNotPerRow() {
+    void persistingAGraphCostsJdbcCallsPerBatchNotPerRow() {
         long userId = jdbcTemplate.queryForObject(
                 "insert into users (github_id, login) values (?, ?) returning id",
                 Long.class,
@@ -145,5 +140,54 @@ class GraphPersistenceRoundTripTest {
         assertThat(jdbcTemplate.queryForObject(
                         "select count(*) from graph_edges where snapshot_id = ?", Integer.class, snapshotId))
                 .isEqualTo(2 * NODES + 1);
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional
+    void duplicateKeysPreserveSequentialUpdatesWithNullableColumns() {
+        long userId = jdbcTemplate.queryForObject(
+                "insert into users (github_id, login) values (?, ?) returning id",
+                Long.class,
+                System.nanoTime(),
+                "duplicate-graph-" + System.nanoTime());
+        long projectId = jdbcTemplate.queryForObject("""
+                insert into projects (user_id, name, repo_owner, repo_name)
+                values (?, 'duplicates', 'acme', ?) returning id
+                """, Long.class, userId, "duplicates-" + System.nanoTime());
+        long snapshotId = jdbcTemplate.queryForObject("""
+                insert into snapshots (project_id, commit_sha, status)
+                values (?, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'ANALYZING') returning id
+                """, Long.class, projectId);
+        var nodes = List.of(
+                new GraphNodeDraft(
+                        "METHOD", "java:a", "initial", null, null, null, null, Map.of("first", 1, "state", "old")),
+                new GraphNodeDraft(
+                        "METHOD", "java:a", "final", null, null, null, null, Map.of("last", 2, "state", "new")),
+                new GraphNodeDraft("METHOD", "java:b", "target", null, null, null, null, Map.of()));
+        var edges = List.of(
+                new GraphEdgeDraft("java:a", "java:b", "CALLS", "CONFIRMED", Map.of("old", true)),
+                new GraphEdgeDraft("java:a", "java:b", "CALLS", "LIKELY", Map.of("latest", true)));
+
+        persistence.persist(projectId, snapshotId, new AnalysisResult(nodes, edges, List.of()));
+
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*) from graph_nodes where snapshot_id = ?
+                and file_id is null and line_start is null and line_end is null and area_type is null
+                """, Integer.class, snapshotId)).isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject("""
+                select name = 'final' and metadata = '{"first":1,"last":2,"state":"new"}'::jsonb
+                from graph_nodes where snapshot_id = ? and natural_key = 'java:a'
+                """, Boolean.class, snapshotId)).isTrue();
+        assertThat(jdbcTemplate.queryForObject(
+                        "select count(*) from graph_edges where snapshot_id = ?", Integer.class, snapshotId))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("""
+                select s.natural_key = 'java:a' and t.natural_key = 'java:b'
+                  and e.confidence = 'LIKELY' and e.metadata = '{"latest":true}'::jsonb
+                from graph_edges e
+                join graph_nodes s on s.id = e.source_node_id
+                join graph_nodes t on t.id = e.target_node_id
+                where e.snapshot_id = ?
+                """, Boolean.class, snapshotId)).isTrue();
     }
 }
