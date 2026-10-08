@@ -68,12 +68,15 @@ final class TsAnalyzerControlClient {
             JsonNode reason = response.get("reason");
             throw new TsAdapterIsolationException(reason == null ? null : reason.asString(null));
         }
+        if (code != null && TsAnalyzerRejectedException.ANALYSIS_LIMIT.equals(code.asString(""))) {
+            throw new TsAnalyzerRejectedException(TsAnalyzerRejectedException.ANALYSIS_LIMIT);
+        }
         JsonNode error = response.get("error");
         if (error != null && error.isObject() && error.path("status").asInt(0) == 400) {
-            TsSyntaxInputException syntax =
-                    TsSyntaxInputException.fromResponse(JSON.writeValueAsBytes(error.get("response")));
+            byte[] body = JSON.writeValueAsBytes(error.get("response"));
+            TsSyntaxInputException syntax = TsSyntaxInputException.fromResponse(body);
             if (syntax != null) throw syntax;
-            throw new TsAnalyzerException("ts-analyzer rejected input without a recognized diagnostic", null);
+            throw TsAnalyzerRejectedException.fromResponse(body);
         }
         // Neither the capability nor any response text belongs in job errors.
         throw new TsAnalyzerException(failure, null);

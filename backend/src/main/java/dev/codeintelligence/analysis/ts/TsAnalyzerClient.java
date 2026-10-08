@@ -93,8 +93,7 @@ public class TsAnalyzerClient {
                         byte[] errorBody = response.getBody().readNBytes(TsSyntaxInputException.MAX_ERROR_BYTES + 1);
                         TsSyntaxInputException syntax = TsSyntaxInputException.fromResponse(errorBody);
                         if (syntax != null) throw syntax;
-                        throw new TsAnalyzerException(
-                                "ts-analyzer rejected input without a recognized diagnostic", null);
+                        throw TsAnalyzerRejectedException.fromResponse(errorBody);
                     })
                     .body(TsAnalyzeDtos.Response.class);
             return body == null ? TsAnalyzeDtos.Response.EMPTY : body;
