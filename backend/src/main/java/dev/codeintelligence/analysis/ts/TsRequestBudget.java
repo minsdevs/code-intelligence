@@ -8,8 +8,16 @@ final class TsRequestBudget {
     static final int MAX_FILES = 20_000;
     static final int MAX_BYTES = 10 * 1024 * 1024;
     private static final JsonMapper JSON = JsonMapper.builder().build();
-    private long bytes = JSON.writeValueAsBytes(new TsAnalyzeDtos.Request(List.of())).length;
+    private long bytes;
     private int files;
+
+    TsRequestBudget() {
+        this(null);
+    }
+
+    TsRequestBudget(String cacheKey) {
+        bytes = JSON.writeValueAsBytes(new TsAnalyzeDtos.Request(List.of(), null, cacheKey)).length;
+    }
 
     void add(TsAnalyzeDtos.FilePayload file) {
         if (!tryAdd(file)) requireWithinLimit(files + 1, Long.MAX_VALUE);
@@ -25,7 +33,7 @@ final class TsRequestBudget {
     }
 
     static byte[] encode(TsAnalyzeDtos.Request request) {
-        TsRequestBudget budget = new TsRequestBudget();
+        TsRequestBudget budget = new TsRequestBudget(request.cacheKey());
         request.files().forEach(budget::add);
         byte[] encoded = JSON.writeValueAsBytes(request);
         requireWithinLimit(request.files().size(), encoded.length);

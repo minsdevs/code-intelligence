@@ -32,6 +32,28 @@ class TsParsingStepTest {
     private final List<Map<String, Object>> outcomes = new ArrayList<>();
 
     @Test
+    void refreshCarriesOwnedCacheAndCompleteChangedContextAcrossJobsButNotProjects() throws Exception {
+        var inventory = files(3, "export const value = 1;");
+        var step = step(inventory);
+        String cached = "{\"path\":\"0000.ts\",\"key\":\"" + "a".repeat(64) + "\",\"rows\":[]}";
+        when(client.analyze(any()))
+                .thenReturn(new TsAnalyzeDtos.Response(
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, List.of(cached)));
+        step.run(new TestJobContext(1, 2, 3L, root));
+        Files.writeString(root.resolve("0001.ts"), "export const value = 'changed';");
+        step.run(new TestJobContext(2, 2, 3L, root));
+        step.run(new TestJobContext(3, 9, 3L, root));
+        var requests = ArgumentCaptor.forClass(TsAnalyzeDtos.Request.class);
+        verify(client, times(3)).analyze(requests.capture());
+        var sent = requests.getAllValues();
+        assertThat(sent).allSatisfy(request -> assertThat(request.files()).hasSize(3));
+        assertThat(sent.get(0).files().getFirst().cache()).isEmpty();
+        assertThat(sent.get(1).files().getFirst().cache()).isEqualTo(cached);
+        assertThat(sent.get(1).files().get(1).content()).contains("changed");
+        assertThat(sent.get(2).files().getFirst().cache()).isEmpty();
+    }
+
+    @Test
     void acceptsExplicitTypeScriptModuleExtensionsEvenForOldUnclassifiedInventory() {
         for (String path : List.of("src/worker.mts", "src/worker.cts", "src/UPPER.MTS", "src/types.d.cts")) {
             assertThat(TsParsingStep.isAnalyzerInput(new InventoriedFile(path, null, 0, 1, "fixture")))

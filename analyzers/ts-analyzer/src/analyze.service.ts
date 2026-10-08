@@ -10,7 +10,7 @@ let extractor: Promise<typeof import('./ts-extractor')> | undefined
 
 @Injectable()
 export class AnalyzeService {
-  private readonly sessions = new AnalyzeSessions((files) => this.extract(files))
+  private readonly sessions = new AnalyzeSessions((files, cacheKey) => this.extract(files, cacheKey))
 
   async analyze(request: AnalyzeRequest): Promise<AnalyzeResponse> {
     if (request && request.session !== undefined) {
@@ -37,19 +37,26 @@ export class AnalyzeService {
       }
       const path = assertSafeRelativePath(file.path)
       assertContentSize(file.content)
-      return { path, content: file.content }
+      const cache = typeof file.cache === 'string' && Buffer.byteLength(file.cache) <= 128 * 1024 ? file.cache : undefined
+      return { path, content: file.content, ...(cache === undefined ? {} : { cache }) }
     })
-    return this.extract(files)
+    return this.extract(files, request.cacheKey)
   }
 
-  private async extract(files: AnalyzeFile[]): Promise<AnalyzeResponse> {
+  private async extract(files: AnalyzeFile[], cacheKey?: string): Promise<AnalyzeResponse> {
     // A failed load is not cached: the next request retries instead of failing until restart.
     const { extractTs } = await (extractor ??= import('./ts-extractor').catch((error: unknown) => {
       extractor = undefined
       throw error
     }))
     try {
-      return extractTs(files)
+      const incremental = typeof cacheKey === 'string' && /^[0-9a-f]{64}$/.test(cacheKey)
+      let reused = 0
+      let programFiles = 0
+      const result = extractTs(files, { incremental, cacheKey: incremental ? cacheKey : undefined,
+        onReuse: () => { reused++ }, onProgram: (program) => { programFiles += program.files } })
+      if (incremental) console.error('TS_INCREMENTAL', JSON.stringify({ files: files.length, reused, programFiles }))
+      return result
     } catch (error) {
       if (!(error instanceof ParserSyntaxError)) throw error
       throw new BadRequestException({

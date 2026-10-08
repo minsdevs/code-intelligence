@@ -82,6 +82,20 @@ describe('sliced whole-manifest TS extraction', () => {
     expect(single.imports).toEqual(expect.arrayContaining([expect.objectContaining({ fromPath: 'web/src/pages/orders/Orders.tsx', toPath: 'web/src/shared/label.ts' })]))
     // The global script shadows fetch for every file, including those in other slices.
     expect(single.apiCalls).toEqual([])
+    const coldPrograms: number[] = []
+    const first = extractTs(files, { incremental: true, onProgram: (program) => coldPrograms.push(program.files) })
+    const { cache, ...firstGraph } = first
+    expect(firstGraph).toEqual(single)
+    expect(coldPrograms).toEqual([10])
+    const previous = new Map(cache!.map((entry) => [JSON.parse(entry).path, entry]))
+    for (const changed of [null, 'web/tsconfig.json', 'web/legacy/globals.js', 'server/src/main.ts', 'server/src/app.module.ts', 'server/src/time/clock.ts']) {
+      const current = files.map((file) => ({ ...file, content: file.path === changed ? file.content.replace(/api|CLOCK|number|baseUrl|fetch/, 'changed') : file.content,
+        cache: previous.get(file.path) }))
+      const programs: number[] = []
+      const { cache: _cache, ...incremental } = extractTs(current, { incremental: true, onProgram: (program) => programs.push(program.files) })
+      expect(incremental).toEqual(extractTs(current))
+      if (changed === null) expect(programs).toEqual([])
+    }
   }, 60_000)
 
   it('rejects a syntax error in any slice with the whole-manifest diagnostics', () => {
