@@ -49,10 +49,13 @@ suite 1,992 (1,960 pass, 0 fail, 32 skip; `backend-QoRJUb`); events 19/19 (`even
   `--socket`; logs kept (`backend-docker.log`, `events-docker.log`), rerun above.
 - Desktop failure: `dependency-downloader.test.cjs` "upstream HTTP failures retain the stable builder
   server-error retry behavior" (`3 !== 2` requests). Intermittent and pre-existing: on `main`
-  `8e9a9d8` it failed 1 of 3 isolated runs, on the merged head 2 of 3. The third request comes from
-  electron-builder's `electronGet.js` fallback ("cached artifact missing from disk; retrying with
-  cache write") after the 503 retry. No desktop or builder code changed in this wave. Open (Low):
-  a flaky test, not counted as passing.
+  `8e9a9d8` it failed 1 of 3 isolated runs, on the merged head 2 of 3 and later 4 of 5. Unit
+  w12-downloader ([downloader-retry-test](downloader-retry-test-2026-10-08.md)) found the third
+  request to be a foreign `GET /` (user agent `dev-cockpit`) from another desktop app probing
+  listening loopback ports during the builder's 2 s retry backoff; electron-builder's fallback
+  download never ran. Test-only fix: the fixture server counts only fixture paths (other paths get
+  404); the assertions are unchanged. After the fix the file passed 10/10 runs (unit) and 5/5
+  (coordinator, 13/13 tests each). The original failing run is kept.
 
 ## Candidate wFroXK
 
