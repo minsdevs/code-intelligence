@@ -30,6 +30,8 @@ const TEST_ONLY_MODE = 'test-only-unsigned';
 const TEST_ONLY_ENVIRONMENT = 'CODE_INTELLIGENCE_ADAPTER_TEST_ONLY';
 const SYNTHETIC_FIXTURE_MARKER = 'codeIntelligenceSyntheticFixture';
 const ANALYSIS_TIMEOUT_MS = 10 * 60 * 1000;
+// 03 §6: an analyzer session without a command for this long is ended (the analyzer's own idle limit).
+const SESSION_IDLE_MS = 60_000;
 // The supervisor holds app-sandbox only (ADR-01): no network, user files, Keychain, automation or code-signing relaxations.
 const FORBIDDEN_ENTITLEMENT = /^(com\.apple\.security\.(network|files|temporary-exception|automation|personal-information|device|application-groups|cs|get-task-allow)\b|keychain-access-groups$)/;
 
@@ -209,26 +211,73 @@ function createWorkerSession({ command, args = [], env, preamble, spawn = spawnP
     const code = await Promise.race([exited, new Promise(resolve => setTimeout(() => resolve(null), 2000))]);
     return BRIDGE_EXIT_REASONS[code] ? unavailable(BRIDGE_EXIT_REASONS[code]) : error;
   };
-  return { client, close, refine };
+  return { client, close, refine, stop };
 }
 
-/** Production adapter: every analysis runs in its own bridge -> supervisor -> worker session. */
-function createBridgeAdapter({ bridge, spawn, timeoutMs, randomBytes = crypto.randomBytes }) {
-  const run = async (action, { signal } = {}) => {
+/**
+ * Production adapter: every analysis runs in its own bridge -> supervisor -> worker session. An
+ * analyzer session (03 §6: open -> put -> seal -> analyze -> pages -> close) is one analysis: its
+ * commands go to the worker that opened it, which ends on close, a rejected or abandoned command,
+ * `idleMs` without a command, or the analysis time limit. A command for any other session id gets a
+ * fresh worker, which does not know it.
+ */
+function createBridgeAdapter({ bridge, spawn, timeoutMs, idleMs = SESSION_IDLE_MS, randomBytes = crypto.randomBytes }) {
+  const start = signal => {
     const runToken = randomBytes(32).toString('hex');
-    const session = createWorkerSession({ command: bridge, env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' },
+    return createWorkerSession({ command: bridge, env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' },
       preamble: `open ${TS_ANALYZER_WORKER} ${runToken}\n`, spawn, signal, timeoutMs, runToken });
+  };
+  const ready = async session => { try { await session.client.ready; } catch (error) { throw await session.refine(error); } };
+  const run = async (action, { signal } = {}) => {
+    const session = start(signal);
     try {
-      try { await session.client.ready; } catch (error) { throw await session.refine(error); }
+      await ready(session);
       return await action(session.client);
     } finally { await session.close(); }
+  };
+  const held = new Map();
+  const hold = session => {
+    const entry = { session, id: null, idle: null };
+    entry.end = () => { clearTimeout(entry.idle); if (held.get(entry.id) === entry) held.delete(entry.id); return session.close(); };
+    return entry;
+  };
+  const send = async (entry, body, signal, last) => {
+    clearTimeout(entry.idle);
+    const abandon = () => { entry.session.stop(); entry.end().catch(() => {}); };
+    if (signal?.aborted) abandon();
+    signal?.addEventListener('abort', abandon, { once: true });
+    try {
+      const result = await entry.session.client.analyze(body);
+      if (last) await entry.end();
+      else entry.idle = setTimeout(() => entry.end().catch(() => {}), idleMs);
+      return result;
+    } catch (error) {
+      await entry.end();
+      throw error;
+    } finally { signal?.removeEventListener('abort', abandon); }
+  };
+  const open = async (body, signal) => {
+    const session = start();
+    try { await ready(session); } catch (error) { await session.close(); throw error; }
+    const entry = hold(session);
+    const result = await send(entry, body, signal, false);
+    const id = result?.session?.id;
+    if (typeof id === 'string' && /^[0-9a-f]{32}$/.test(id) && !held.has(id)) { entry.id = id; held.set(id, entry); }
+    else await entry.end();
+    return result;
   };
   let verified;
   return {
     isolated: true,
     /** Proves sandbox start, worker hash checks and the handshake once per runtime start. */
     verify() { verified ??= run(async () => {}).catch(error => { verified = undefined; throw error; }); return verified; },
-    analyze: (body, options) => run(client => client.analyze(body), options),
+    analyze(body, options = {}) {
+      const command = body?.session;
+      if (command?.op === 'open') return open(body, options.signal);
+      const entry = typeof command?.id === 'string' ? held.get(command.id) : undefined;
+      if (entry) return send(entry, body, options.signal, command.op === 'close');
+      return run(client => client.analyze(body), options);
+    },
   };
 }
 
