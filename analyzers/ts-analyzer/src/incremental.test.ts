@@ -39,6 +39,14 @@ describe('incremental whole-manifest extraction', () => {
     const rejected = extractTs(seed(base, { ...first, cache: forged }), { incremental: true, cacheKey: 'a'.repeat(64), onReuse: (path) => reused.push(path) })
     expect(reused).toEqual([])
     expect(canonical(rejected)).toEqual(extractTs(base))
+    const changed = base.map((file) => ({ ...file, content: file.content + '\nexport const revision = 2' }))
+    const next = extractTs(changed, { incremental: true, cacheKey: 'a'.repeat(64) })
+    const nextManifest = JSON.parse(next.cache![0]).manifest
+    const forgedManifest = first.cache!.map((text) => JSON.stringify({ ...JSON.parse(text), manifest: nextManifest }))
+    const mismatch = extractTs(seed(changed, { ...first, cache: forgedManifest }), { incremental: true,
+      cacheKey: 'a'.repeat(64), onReuse: (path) => reused.push(path) })
+    expect(reused).toEqual([])
+    expect(canonical(mismatch)).toEqual(extractTs(changed))
   })
 
   it('invalidates transitive barrels and cycles without losing independent module reuse', () => {
@@ -57,6 +65,33 @@ describe('incremental whole-manifest extraction', () => {
     ]
     refresh(cycle.map((file) => file.path === 'b.ts' ? { ...file, content: file.content + '\nexport const changed = 1' } : file), extractTs(cycle, { incremental: true }))
   })
+
+  it('keeps Nest body edits local but invalidates globally consumed provider, method and prefix facts', () => {
+    const files = [
+      { path: 'main.ts', content: "import { NestFactory } from '@nestjs/core'; import { AppModule } from './app.module'; async function start() { const app = await NestFactory.create(AppModule); app.setGlobalPrefix('api') }" },
+      { path: 'app.module.ts', content: "import { Module } from '@nestjs/common'; import { Clock } from './clock'; @Module({ providers: [{ provide: 'CLOCK', useClass: Clock }] }) export class AppModule {}" },
+      { path: 'clock.ts', content: 'export class Clock { static readonly revision = 1; now() { return 1 } }' },
+      { path: 'orders.controller.ts', content: "import { Controller, Get, Inject } from '@nestjs/common'; @Controller('orders') export class OrdersController { constructor(@Inject('CLOCK') private clock: any) {} @Get() list() { return this.clock.now() } }" },
+      base[2],
+    ]
+    const first = extractTs(files, { incremental: true })
+    const body = files.map((file) => file.path === 'clock.ts' ? { ...file, content: file.content.replace('revision = 1', 'revision = 2') } : file)
+    expect(refresh(body, first).reused).toContain('alone.ts')
+    for (const [path, before, after] of [
+      ['app.module.ts', "provide: 'CLOCK'", "provide: 'OTHER'"],
+      ['clock.ts', 'now()', 'later()'],
+      ['main.ts', "setGlobalPrefix('api')", "setGlobalPrefix('v2')"],
+    ]) {
+      const changed = files.map((file) => file.path === path ? { ...file, content: file.content.replace(before, after) } : file)
+      const result = refresh(changed, first)
+      expect(result.reused).not.toContain('alone.ts')
+      expect(canonical(result.result)).not.toEqual(canonical(first))
+    }
+    const unchanged = refresh(files, first)
+    expect(unchanged.reused).toHaveLength(files.length)
+    expect(refresh(body, unchanged.result).reused).toContain('alone.ts')
+  })
+
 
 
   it.each([

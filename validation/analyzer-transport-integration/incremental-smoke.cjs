@@ -9,7 +9,7 @@ const { once } = require('node:events');
 const root = path.resolve(__dirname, '../..');
 const { FrameDecoder, encodeFrame, ADAPTER_STDIO_PROTOCOL, ADAPTER_STDIO_VERSION } =
   require(path.join(root, 'analyzers/ts-analyzer/dist/stdio-transport.js'));
-const { planWorkload } = require('../pre-release/workload-fixture.cjs');
+const { planWorkload, generateWorkload, mutateWorkload } = require('../pre-release/workload-fixture.cjs');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 const cacheKey = crypto.randomBytes(32).toString('hex');
 
@@ -119,6 +119,39 @@ async function treeHttp(input, incremental) {
   }
 }
 
+async function tsRevisionSmoke() {
+  const fs = require('node:fs');
+  const temporary = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'adapter-revision-smoke-')));
+  try {
+    const spec = { files: 1200, bytes: 6 * 1024 * 1024, seed: 'g-perf-1' };
+    const manifest = generateWorkload({ root: temporary, ...spec });
+    // Match TsParsingStep's source/config inventory; Java belongs to its separate parser.
+    const files = planWorkload(spec).files.filter(file => /\.(?:ts|tsx|mts|cts|mjs|cjs|js|jsx|py|go)$/.test(file.path)
+      || /(?:^|\/)(?:package|(?:tsconfig|jsconfig)(?:\.[^/]+)?)\.json$/.test(file.path))
+      .map(({ path, content }) => ({ path, content }));
+    const cold = await tsSession(files, true);
+    const mutation = mutateWorkload({ root: temporary, manifest });
+    const changed = files.map(file => ({ path: file.path, content: fs.readFileSync(path.join(temporary, file.path), 'utf8') }));
+    const edited = changed.filter((file, index) => file.content !== files[index].content).map(file => file.path);
+    assert.ok(edited.some(file => file.endsWith('.service.ts')));
+    const refresh = await tsSession(withCache(changed, cold.result), true);
+    const clean = await tsSession(changed, false);
+    const { cache: _cache, ...graph } = refresh.result;
+    assert.deepEqual(graph, clean.result);
+    assert.ok(refresh.metrics[0].programFiles < cold.metrics[0].programFiles);
+    assert.ok(refresh.metrics[0].reused > 0);
+    const unchanged = await tsSession(withCache(changed, refresh.result), true);
+    const { cache: _unchangedCache, ...unchangedGraph } = unchanged.result;
+    assert.deepEqual(unchangedGraph, clean.result);
+    assert.equal(unchanged.metrics[0].programFiles, 0);
+    return { workloadFiles: manifest.files, changedFiles: mutation.changedFiles, adapterChangedFiles: edited.length,
+      cold: cold.metrics[0], refresh: refresh.metrics[0], unchanged: unchanged.metrics[0],
+      canonicalSha256: sha(JSON.stringify(graph)), fullEquality: true };
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
 
 async function main() {
   const files = planWorkload({ files: 240, bytes: 1024 * 1024, seed: 'incremental-transport' }).files
@@ -140,6 +173,7 @@ async function main() {
   assert.equal(unchanged.metrics[0].programFiles, 0);
   const { cache: _nextCache, ...unchangedGraph } = unchanged.result;
   assert.deepEqual(unchangedGraph, clean.result);
+  const revision = await tsRevisionSmoke();
 
   const treeFiles = [
     { path: 'api.py', content: 'from model import Model\ndef run():\n    return Model()\n', cache: '' },
@@ -181,6 +215,7 @@ async function main() {
   }
   console.log(JSON.stringify({ kind: 'production-stdio-incremental-smoke', packaged: false,
     ts: { cold: coldMetrics, refresh: refreshMetrics, unchanged: unchanged.metrics[0], canonicalSha256: sha(JSON.stringify(graph)), fullEquality: true },
+    seededOnePercentRevision: revision,
     tree: { cold: treeCold.metrics[0], refresh: treeRefresh.metrics[0], httpRefresh: httpRefresh.metrics[0], canonicalSha256: sha(JSON.stringify(treeGraph)), fullEquality: true },
     workersDestroyedBetweenRuns: true }, null, 2));
 }

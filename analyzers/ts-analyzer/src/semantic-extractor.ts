@@ -487,6 +487,12 @@ function collectResolvedImports(
   }
 }
 
+export function resolutionInputKind(path: string): 'config' | 'package' | null {
+  const normalizedPath = normalize(path)
+  if (/\/(?:tsconfig|jsconfig)(?:\.[^/]+)?\.json$/i.test('/' + normalizedPath)) return 'config'
+  return posix.basename(normalizedPath) === 'package.json' ? 'package' : null
+}
+
 export function createImportResolver(
   files: AnalyzeFile[], pathSet: Set<string>, { allowPackageFallback = true } = {},
 ): Resolver {
@@ -495,7 +501,8 @@ export function createImportResolver(
   const packages = new Map<string, string | null>()
   for (const file of files) {
     const normalizedPath = normalize(file.path)
-    if (/\/(?:tsconfig|jsconfig)(?:\.[^/]+)?\.json$/i.test(`/${normalizedPath}`)) {
+    const kind = resolutionInputKind(normalizedPath)
+    if (kind === 'config') {
       const parsed = ts.parseConfigFileTextToJson(normalizedPath, file.content)
       const config = parsed.config as { compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> } } | undefined
       const configDir = posix.dirname(normalizedPath)
@@ -521,7 +528,7 @@ export function createImportResolver(
       }
       configs.push({ directory, aliases: invalid ? null : aliases })
     }
-    if (posix.basename(normalizedPath) === 'package.json') {
+    if (kind === 'package') {
       try {
         const value = JSON.parse(file.content) as { name?: unknown }
         if (typeof value.name === 'string') {

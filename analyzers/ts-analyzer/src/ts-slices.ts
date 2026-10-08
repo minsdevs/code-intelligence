@@ -44,10 +44,10 @@ export function extractSliced(
   const identity = incremental ? cacheKeys(files, plan) : undefined
   const cached = new Map<string, ReturnType<typeof readCachedFile>>()
   if (identity) for (const file of tsFiles) {
-    const entry = readCachedFile(file.cache, file.path, identity.keys.get(file.path)!, identity.whole, cacheKey)
-    if (entry) { cached.set(file.path, entry); onReuse?.(file.path) }
+    const entry = readCachedFile(file.cache, file.path, undefined, identity.whole, cacheKey)
+    if (entry) cached.set(file.path, entry)
   }
-  plan.singleProgram = incremental && cached.size === 0
+  plan.singleProgram = incremental && tsFiles.every((file) => !file.cache)
     && tsFiles.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0) <= 16 * 1024 * 1024
   if (plan.singleProgram) budget = Number.POSITIVE_INFINITY
   const facts: ManifestFacts = { providers: [], providerMethods: new Map(), prefixFacts: new Map() }
@@ -65,6 +65,14 @@ export function extractSliced(
     return { outside }
   })
   facts.providers.sort((a, b) => plan.index.get(a.filePath)! - plan.index.get(b.filePath)!)
+  const keys = identity?.keys(facts)
+  if (identity && keys) for (const file of tsFiles) {
+    if (!cached.has(file.path)) {
+      const entry = readCachedFile(file.cache, file.path, keys.get(file.path), identity.whole, cacheKey)
+      if (entry) cached.set(file.path, entry)
+    }
+    if (cached.has(file.path)) onReuse?.(file.path)
+  }
 
   const diagnostics: { index: number; diagnostics: ParserSyntaxDiagnostic[] }[] = []
   let totalDiagnostics = 0
@@ -127,8 +135,8 @@ export function extractSliced(
     }
     let bytes = 0
     for (const path of plan.order) {
-      const key = escalated.has(path) || cached.get(path)?.key === identity.whole ? identity.whole : identity.keys.get(path)!
-      const encoded = encodeCachedFile(path, key, rows.get(path) ?? [], cacheKey)
+      const key = escalated.has(path) ? identity.whole : cached.get(path)?.key ?? keys!.get(path)!
+      const encoded = encodeCachedFile(path, key, identity.whole, rows.get(path) ?? [], cacheKey)
       if (!encoded) continue
       if (bytes + Buffer.byteLength(encoded) > CACHE_TOTAL_BYTES) break
       bytes += Buffer.byteLength(encoded)

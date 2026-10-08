@@ -108,3 +108,35 @@ cd backend
 - Tree는 현재 macOS 후보에 포함되지 않는 외부 HTTP 서비스다. HTTP/stdio 자체 smoke만 입증했으며 Tree packaged acceptance로 주장하지 않는다.
 - Backend/TS 전체 회귀, desktop/frontend 전체 회귀, signing/notarization/Actions/push: **NOT RUN**.
 - mapper smoke 테스트는 `ADAPTER_REFRESH_SMOKE_DIR`가 없으면 명시적으로 skip되므로 통합 시 위 실제 adapter smoke를 먼저 실행하고 같은 환경을 전달해야 한다.
+
+## 통합 전 후속 수정 — 실제 혼합 Nest 1% revision
+
+기존 Nest 후보의 dependency blob을 전역 context에 넣던 키는 module→controller/service의 단순 revision 변경도 모든 TS 결과를 무효화했다. 위 최초 완료 기록은 이 패턴까지 입증하지 못했으므로 아래 후속 결과로 보완한다.
+
+- 기존 provider/token/ref, provider method의 key/name/filePath, global-prefix facts를 정규화하여 호출당 한 번 전역 digest를 만든다. 본문·revision 상수는 해당 파일과 역의존 closure만 무효화한다. 실제 config/package 소비자 분류도 resolver와 공유하여 Java 등 비설정 원문 변경을 TS 전역 설정 변경으로 취급하지 않는다.
+- 완전 manifest가 동일한 경우만 HMAC으로 인증된 manifest/key/rows fast path를 사용한다. 다른 manifest에서는 실제 Nest facts를 다시 수집한 뒤 파일 키를 비교한다. provider/token/method/prefix가 바뀌면 전역 무효화한다. v2 토큰의 manifest까지 인증하며 위조 시 full 재계산한다. binary identity·한도·디스크 비저장 정책은 유지한다.
+- 실제 `generateWorkload` + `mutateWorkload`를 그대로 사용했다: 합성 1,200파일/6 MiB, `g-perf-1`, 기본 1%·`g-perf-change-1`. 12개 revision 변경 중 Nest service 2개를 포함하며 TS 실제 inventory에서는 8개가 변경된다. generator/selection/기본 비율/오라클은 수정하지 않았다. 이 작은 결정적 회귀는 G-PERF 크기별/20회 게이트가 아니다.
+- 신규 RED `nest-revision-red-3.log`: **1 실패**, full equality는 성립하지만 reuse=0. 앞선 `nest-revision-red.log`(macOS realpath fixture 계약)와 `nest-revision-red-2.log`(600파일 seed 선택에 Nest service 없음)는 fixture 준비 실패로 구분하여 보존했다.
+- 최종 `nest-target-final.log`: TS build 성공, **8파일 39 통과 / 0 실패**. 새 회귀는 실제 revision 선택, 독립 clean-full 정확한 전체 응답 equality, provider/token/method/prefix 의미 변경, unchanged→edit 연속 refresh, manifest 위조 거부를 검증했다. 기존 syntax/limits/session/transport 대상을 함께 실행했다.
+- 실제 production framed session smoke에서 **매 실행 새 worker**를 사용하고 전체 TS/config inventory 663개를 전달했다. cold compiler files **659**, mixed 1% refresh **465** / 결과 **569개 재사용**, 다음 무변경 refresh **0 parse / 659 reuse**. 독립 cache 없는 full 응답과 정확히 같다. SHA-256: `839b35aa0fb49c39504bbc256ef9b7cd980bfd78b1c6d4e0d64ed8cb73a1ac2a`.
+- 기존 graph 변화가 있는 fetch 본문 smoke도 **134→60→0 parse**와 동일 hash를 유지했다. Tree stdio/HTTP는 각각 **1 parse / 4 reuse**, 독립 full equality를 유지했다. 별도 증거: `nest-revision-transport-smoke.log`.
+
+후속 RED 명령 (TS 디렉터리):
+
+```sh
+./node_modules/.bin/vitest run --maxWorkers=1 src/incremental-workload.test.ts
+```
+
+후속 최종 명령 (무거운 명령 전에 공통 wait-quiet 실행):
+
+```sh
+cd analyzers/ts-analyzer
+npm run build
+./node_modules/.bin/vitest run --maxWorkers=1 src/incremental.test.ts src/incremental-workload.test.ts src/incremental-session.test.ts src/ts-scale.test.ts src/analyze-session.test.ts src/analyze.service.test.ts src/analyze.service.lazy.test.ts src/stdio-transport.test.ts
+cd ../..
+node validation/analyzer-transport-integration/incremental-smoke.cjs
+```
+
+후속 변경: `incremental-cache.ts`, `ts-slices.ts`, `semantic-extractor.ts`, `incremental.test.ts`, 신규 `incremental-workload.test.ts`, 기존 transport smoke, 이 감사. Backend/Tree 제품 코드는 후속 수정하지 않았다. Backend mapper 19개는 앞선 실행 결과이며 이번 후속에서 재실행하지 않았다. 새 mixed fixture의 equality는 adapter 전체 응답 비교이며 backend mapper를 새 fixture로 다시 실행했다고 주장하지 않는다.
+
+**NOT RUN 유지:** packaged refresh, medium/large 성능 및 large ≤600s, 20회 게이트, 전체 회귀, signing/notarization/Actions/push. 기존 커밋을 보존하고 후속 커밋으로 추가한다. shared 문서 제안의 Nest 전역 항목은 “provider/token/method/prefix 의미 facts digest”로 구체화할 수 있다.

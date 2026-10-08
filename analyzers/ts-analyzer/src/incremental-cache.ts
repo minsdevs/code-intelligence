@@ -3,11 +3,12 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { ts } from 'ts-morph'
 import type { AnalyzeFile } from './types'
+import { resolutionInputKind, type ManifestFacts } from './semantic-extractor'
 
 export const CACHE_ENTRY_BYTES = 128 * 1024
 export const CACHE_TOTAL_BYTES = 16 * 1024 * 1024
 export type CachedRow = { list: string; phase: number; items: Record<string, unknown>[] }
-export type CachedFile = { path: string; key: string; rows: CachedRow[]; checksum: string }
+export type CachedFile = { path: string; key: string; manifest: string; rows: CachedRow[]; checksum: string }
 export const CACHE_LISTS = ['routes', 'endpoints', 'components', 'hooks', 'stores', 'apiCalls', 'symbols',
   'semantic.endpoints', 'semantic.imports', 'semantic.nodes', 'semantic.edges', 'semantic.unresolvedCalls'] as const
 const localKey = randomBytes(32).toString('hex')
@@ -19,7 +20,7 @@ export function digest(value: string): string {
 let binary: string | undefined
 function binaryIdentity(): string {
   if (binary) return binary
-  const hash = createHash('sha256').update(`ts-cache-1:${ts.version}:${process.version}`)
+  const hash = createHash('sha256').update(`ts-cache-2:${ts.version}:${process.version}`)
   for (const name of readdirSync(__dirname).filter((name) => /\.(js|ts)$/.test(name) && !/\.(test|d)\.ts$/.test(name)).sort()) {
     hash.update(name).update(readFileSync(join(__dirname, name)))
   }
@@ -30,8 +31,8 @@ function binaryIdentity(): string {
 
 /** Merkle dependencies avoid quadratic closure materialization on long import chains. */
 export function cacheKeys(files: AnalyzeFile[], plan: {
-  order: string[]; targets: Map<string, string[]>; global: string[]; unknown: Set<string>; nestCandidate(path: string): boolean
-}): { keys: Map<string, string>; whole: string } {
+  order: string[]; targets: Map<string, string[]>; global: string[]; unknown: Set<string>
+}): { keys(facts: ManifestFacts): Map<string, string>; whole: string } {
   const hashes = new Map(files.map((file) => [file.path, digest(file.content)]))
   const whole = digest(JSON.stringify([binaryIdentity(), files.map((file) => [file.path, hashes.get(file.path)])]))
   const reverse = new Map(plan.order.map((path) => [path, [] as string[]]))
@@ -84,21 +85,32 @@ export function cacheKeys(files: AnalyzeFile[], plan: {
     const dependencies = [...targets].sort((a, b) => a - b).map((target) => groupHashes.get(target) ?? whole)
     groupHashes.set(index, unknown ? whole : digest(JSON.stringify([members.map((path) => [path, hashes.get(path)]), dependencies])))
   }
-  const global = [...new Set([...plan.global, ...plan.order.filter((path) => plan.nestCandidate(path))])]
-    .map((path) => [path, groupHashes.get(component.get(path)!)])
+  const global = plan.global.map((path) => [path, groupHashes.get(component.get(path)!)])
   const context = digest(JSON.stringify([binaryIdentity(), files.map((file) => file.path), global,
-    files.filter((file) => !plan.targets.has(file.path)).map((file) => [file.path, hashes.get(file.path)])]))
-  const keys = new Map(plan.order.map((path) => [path, digest(JSON.stringify([context, groupHashes.get(component.get(path)!)]))]))
-  return { keys, whole }
+    files.filter((file) => resolutionInputKind(file.path) !== null).map((file) => [file.path, hashes.get(file.path)])]))
+  return { whole, keys(facts) {
+    // Only facts consumed globally by extraction belong here. Method bodies and revision
+    // constants remain in their per-file dependency keys, not every unrelated module's key.
+    const ref = (value: { key: string; name: string; filePath: string }) => [value.key, value.name, value.filePath]
+    const nest = digest(JSON.stringify([
+      facts.providers.map((value) => [value.filePath, value.token, ref(value.ref)]),
+      [...facts.providerMethods].map(([key, value]) => [key, ref(value)]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+      [...facts.prefixFacts].sort(([a], [b]) => a.localeCompare(b)),
+    ]))
+    return new Map(plan.order.map((path) => [path, digest(JSON.stringify([context, nest, groupHashes.get(component.get(path)!)]))]))
+  } }
+
 }
 
-export function readCachedFile(encoded: unknown, path: string, key: string, whole: string, cacheKey = localKey): CachedFile | undefined {
+export function readCachedFile(encoded: unknown, path: string, key: string | undefined, whole: string, cacheKey = localKey): CachedFile | undefined {
   if (typeof encoded !== 'string' || Buffer.byteLength(encoded) > CACHE_ENTRY_BYTES) return undefined
   try {
     const value = JSON.parse(encoded) as CachedFile
-    if (!value || value.path !== path || (value.key !== key && value.key !== whole) || !Array.isArray(value.rows)
-      || value.rows.length > 64 || typeof value.checksum !== 'string') return undefined
-    if (value.checksum !== createHmac('sha256', cacheKey).update(JSON.stringify([value.path, value.key, value.rows])).digest('hex')) return undefined
+    if (!value || value.path !== path || (value.key !== key && value.key !== whole && value.manifest !== whole) || !Array.isArray(value.rows)
+      || value.rows.length > 64 || typeof value.checksum !== 'string'
+      || typeof value.key !== 'string' || !/^[a-f0-9]{64}$/.test(value.key)
+      || typeof value.manifest !== 'string' || !/^[a-f0-9]{64}$/.test(value.manifest)) return undefined
+    if (value.checksum !== createHmac('sha256', cacheKey).update(JSON.stringify([value.path, value.key, value.manifest, value.rows])).digest('hex')) return undefined
     for (const row of value.rows) {
       if (!CACHE_LISTS.includes(row.list as typeof CACHE_LISTS[number]) || !Number.isInteger(row.phase)
         || row.phase < 1 || row.phase > 7 || !Array.isArray(row.items)
@@ -110,8 +122,8 @@ export function readCachedFile(encoded: unknown, path: string, key: string, whol
   }
 }
 
-export function encodeCachedFile(path: string, key: string, rows: CachedRow[], cacheKey = localKey): string | undefined {
-  const checksum = createHmac('sha256', cacheKey).update(JSON.stringify([path, key, rows])).digest('hex')
-  const encoded = JSON.stringify({ path, key, rows, checksum })
+export function encodeCachedFile(path: string, key: string, manifest: string, rows: CachedRow[], cacheKey = localKey): string | undefined {
+  const checksum = createHmac('sha256', cacheKey).update(JSON.stringify([path, key, manifest, rows])).digest('hex')
+  const encoded = JSON.stringify({ path, key, manifest, rows, checksum })
   return Buffer.byteLength(encoded) <= CACHE_ENTRY_BYTES ? encoded : undefined
 }
