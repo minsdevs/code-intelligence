@@ -127,6 +127,13 @@ export type ManifestFacts = {
   providerMethods: Map<string, DeclarationRef>
   prefixFacts: Map<string, GlobalPrefixFacts>
 }
+export type ManifestFileFacts = {
+  providers: { token: string; ref: Pick<DeclarationRef, 'key' | 'name' | 'filePath'> }[]
+  methods: [string, Pick<DeclarationRef, 'key' | 'name' | 'filePath'>][]
+  prefix: GlobalPrefixFacts
+  reads: string[]
+}
+
 
 export type GlobalPrefixFacts = { unknown: boolean; applications: number; invalid: boolean; prefixes: string[] }
 
@@ -267,7 +274,8 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[], sco
  * First pass of a sliced extraction: the Nest provider registrations, provider class methods and
  * global-prefix facts of the owned files, which every later slice needs whole-manifest.
  */
-export function collectManifestFacts(project: Project, files: AnalyzeFile[], scope: SliceScope, facts: ManifestFacts): void {
+export function collectManifestFacts(project: Project, files: AnalyzeFile[], scope: SliceScope, facts: ManifestFacts,
+  onFile?: (path: string, facts: ManifestFileFacts) => void): void {
   const sourceFiles = project.getSourceFiles()
   const resolveImport = scopedResolver(createImportResolver(files, scope.pathSet), scope)
   const bindingsByFile = new Map(sourceFiles.map((source) => [filePathOf(source), collectImportBindings(source)]))
@@ -281,12 +289,29 @@ export function collectManifestFacts(project: Project, files: AnalyzeFile[], sco
     scope.current = filePath
     try {
       const providers = new Map<string, DeclarationRef>()
-      collectNestModules([source], bindingsByFile, resolveImport, declarationsByFileAndName, classesByName, ignore, ignore, providers,
-        (token, ref) => facts.providers.push({ filePath, token, ref: { key: ref.key, name: ref.name, filePath: ref.filePath } }))
-      for (const ref of providers.values()) {
-        for (const [key, method] of methodsByOwnerAndName) if (key.startsWith(`${ref.key}.`)) facts.providerMethods.set(key, method)
+      const reads = new Set<string>()
+      const own: ManifestFileFacts = { providers: [], methods: [], prefix: prefixFacts(source), reads: [] }
+      const resolveProvider: Resolver = (specifier, fromPath) => {
+        const resolved = resolveImport(specifier, fromPath)
+        if (resolved && resolved !== filePath) reads.add(resolved)
+        return resolved
       }
-      facts.prefixFacts.set(filePath, prefixFacts(source))
+      collectNestModules([source], bindingsByFile, resolveProvider, declarationsByFileAndName, classesByName, ignore, ignore, providers,
+        (token, ref) => {
+          const plain = { key: ref.key, name: ref.name, filePath: ref.filePath }
+          facts.providers.push({ filePath, token, ref: plain })
+          own.providers.push({ token, ref: plain })
+        }, true)
+      own.reads = [...reads].sort()
+      for (const ref of providers.values()) {
+        for (const [key, method] of methodsByOwnerAndName) if (key.startsWith(`${ref.key}.`)) {
+          const plain = { key: method.key, name: method.name, filePath: method.filePath }
+          facts.providerMethods.set(key, plain)
+          own.methods.push([key, plain])
+        }
+      }
+      facts.prefixFacts.set(filePath, own.prefix)
+      onFile?.(filePath, own)
     } finally { scope.current = null }
   }
 }
@@ -626,6 +651,7 @@ function collectNestModules(
   addEdge: (edge: SemanticEdgeHit) => void,
   providers: Map<string, DeclarationRef>,
   onProvider?: (token: string, ref: DeclarationRef) => void,
+  providersOnly = false,
 ): void {
   const register = (token: string, ref: DeclarationRef): void => {
     providers.set(token, ref)
@@ -643,6 +669,7 @@ function collectNestModules(
       if (!metadata || !Node.isObjectLiteralExpression(metadata)) continue
       const moduleKey = symbolKey(filePath, name)
       for (const propertyName of ['imports', 'controllers', 'providers', 'exports'] as const) {
+        if (providersOnly && propertyName !== 'providers') continue
         for (const expression of propertyExpressions(metadata, propertyName)) {
           if (Node.isObjectLiteralExpression(expression) && propertyName === 'providers') {
             const tokenExpression = propertyInitializer(expression, 'provide')
