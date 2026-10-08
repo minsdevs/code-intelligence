@@ -18,7 +18,8 @@ import java.util.stream.Collectors;
 public final class AnalysisInputFingerprint {
     private AnalysisInputFingerprint() {}
 
-    public record Snapshot(String complete, String environment, Map<String, String> files) {}
+    /** javaSourcesComplete describes inventory coverage, not parser success. */
+    public record Snapshot(String complete, String environment, Map<String, String> files, boolean javaSourcesComplete) {}
 
     public static Snapshot capture(AnalysisContext context) {
         if (context.clonePath() == null) return null;
@@ -40,6 +41,7 @@ public final class AnalysisInputFingerprint {
                 .map(file -> file.path())
                 .collect(Collectors.toSet());
         Map<String, String> files = new LinkedHashMap<>();
+        boolean javaSourcesComplete = true;
         Path root = context.clonePath().toAbsolutePath().normalize();
         try (var paths = Files.walk(root)) {
             byte[] buffer = new byte[8192];
@@ -66,12 +68,17 @@ public final class AnalysisInputFingerprint {
                 String hash = HexFormat.of().formatHex(content.digest());
                 update(complete, hash);
                 if (javaPaths.contains(relative)) files.put(relative, hash);
-                else if (!isForeignSource(relative)) update(environment, hash);
+                else {
+                    if (relative.regionMatches(true, relative.length() - 5, ".java", 0, 5))
+                        javaSourcesComplete = false;
+                    if (!isForeignSource(relative)) update(environment, hash);
+                }
             }
             return new Snapshot(
                     HexFormat.of().formatHex(complete.digest()),
                     HexFormat.of().formatHex(environment.digest()),
-                    Map.copyOf(files));
+                    Map.copyOf(files),
+                    javaSourcesComplete && files.size() == javaPaths.size());
         } catch (IOException | java.io.UncheckedIOException | SecurityException failure) {
             return null;
         }

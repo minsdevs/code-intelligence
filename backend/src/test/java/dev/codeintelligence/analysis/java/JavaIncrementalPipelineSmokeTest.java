@@ -107,10 +107,16 @@ class JavaIncrementalPipelineSmokeTest {
             JavaIncrementalTest.write(second, path, text.toString());
             bytes += text.toString().getBytes(StandardCharsets.UTF_8).length;
         }
+        for (Path workspace : List.of(first, second)) {
+            JavaIncrementalTest.write(workspace, "web/client.ts", "export const marker = 1;\n");
+            JavaIncrementalTest.write(workspace, "README.md", "# Mixed Java fixture\n");
+        }
         initializeRepository(first);
         initializeRepository(second);
         Run cold = run(project, first, source);
         assertThat(java.cacheStats().parserInvocations()).isEqualTo(files * 3);
+        assertThat(canonical(cold.snapshot).get("outcomes"))
+                .anySatisfy(row -> assertThat(row).containsEntry("path", "web/client.ts"));
         Run unchanged = run(project, second, source);
         JavaAnalyzer.CacheStats unchangedStats = java.cacheStats();
         assertThat(unchangedStats.parserInvocations()).isZero();
@@ -118,6 +124,7 @@ class JavaIncrementalPipelineSmokeTest {
         Path changedFile = second.resolve("src/main/java/smoke/C0.java");
         Files.writeString(
                 changedFile, Files.readString(changedFile).replaceFirst("return value\\(\\);", "return other();"));
+        JavaIncrementalTest.write(second, "web/client.ts", "export const marker = 2;\n");
         initializeRepository(second);
         Run changed = run(project, second, source);
         JavaAnalyzer.CacheStats changedStats = java.cacheStats();
