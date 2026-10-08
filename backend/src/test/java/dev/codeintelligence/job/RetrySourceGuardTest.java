@@ -5,10 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import dev.codeintelligence.analysis.core.AnalysisContext;
-import dev.codeintelligence.analysis.core.FileInventory;
-import dev.codeintelligence.analysis.core.InventoriedFile;
-import dev.codeintelligence.analysis.java.JavaAnalyzer;
 import dev.codeintelligence.common.AppProperties;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -111,31 +107,6 @@ class RetrySourceGuardTest {
         Path extra = fixture.root().resolve(".git/injected/src/main/java/demo/" + filename);
         Files.createDirectories(extra.getParent());
         Files.writeString(extra, "package demo; public class Helper { public void injected() {} }");
-        rejected(guard(), fixture.commit());
-    }
-
-    @Test
-    void sourceHiddenInGitMetadataWouldChangeResolvedCallsAndIsRejected() throws Exception {
-        String path = "src/main/java/demo/App.java";
-        String source = "package demo; public class App { public void run() { Helper.work(); } }\n";
-        Fixture fixture = repository(Map.of(path, source));
-        FileInventory inventory = FileInventory.of(
-                new InventoriedFile(path, "java", Files.size(fixture.root().resolve(path)), 1, "a".repeat(40)));
-        AnalysisContext context = new AnalysisContext(PROJECT, 1, fixture.root(), inventory);
-        assertThat(new JavaAnalyzer().analyze(context).edges())
-                .noneMatch(edge -> edge.edgeType().equals("CALLS"));
-        Path extra = fixture.root().resolve(".git/injected/src/main/java/demo/Helper.java");
-        Files.createDirectories(extra.getParent());
-        Files.writeString(extra, "package demo; public class Helper { public static void work() {} }\n");
-
-        assertThat(new JavaAnalyzer().analyze(context).edges()).anySatisfy(edge -> {
-            assertThat(edge.edgeType()).isEqualTo("CALLS");
-            assertThat(edge.confidence()).isEqualTo("CONFIRMED");
-            assertThat(edge.sourceNaturalKey()).isEqualTo("java:demo.App#run()");
-            assertThat(edge.targetNaturalKey()).isEqualTo("java:demo.Helper#work()");
-        });
-        assertThat(Files.readString(fixture.root().resolve(path))).isEqualTo(source);
-        assertThat(inventory.files()).extracting(InventoriedFile::path).containsExactly(path);
         rejected(guard(), fixture.commit());
     }
 

@@ -63,6 +63,27 @@ class JavaIncrementalTest {
     }
 
     @Test
+    void hiddenGitJavaCannotChangeColdOrWarmGraph() throws Exception {
+        write(
+                root,
+                "src/main/java/demo/App.java",
+                "package demo; public class App { public void run() { Helper.work(); } }\n");
+        JavaAnalyzer warm = new JavaAnalyzer();
+        AnalysisResult approved = warm.analyze(context(root));
+        assertThat(approved.nodes())
+                .extracting(node -> node.naturalKey())
+                .contains("java:demo.App", "java:demo.App#run()");
+        assertThat(approved.edges()).noneMatch(edge -> edge.edgeType().equals("CALLS"));
+        write(
+                root,
+                ".git/injected/src/main/java/demo/Helper.java",
+                "package demo; public class Helper { public static void work() {} }\n");
+
+        assertThat(warm.analyze(context(root))).isEqualTo(approved);
+        assertThat(new JavaAnalyzer(0).analyze(context(root))).isEqualTo(approved);
+    }
+
+    @Test
     void cacheBudgetFallbackAndUnknownFilesystemDependenciesStayCorrect() throws Exception {
         write(root, "A.java", "class A { void call() { other(); } void other() {} }");
         JavaAnalyzer bounded = new JavaAnalyzer(1);

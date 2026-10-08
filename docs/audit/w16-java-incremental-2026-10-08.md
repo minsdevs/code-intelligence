@@ -127,3 +127,10 @@ cancelledBeforeParserRelease=true interruptPreserved=true firstSucceeded=true eq
 
 NOT RUN은 앞 절과 같다. 특히 medium 진단의 Java 분석 시간/RSS만으로 packaged refresh30초 또는 공식 totalRSS4GiB 통과를 주장하지 않는다. 사용자 승인 대기 중에는 유한 시험 종료와 증거 보존만 수행했고, 재개 승인 뒤 대기 취소 수정을 완료했다.
 
+
+## 통합 전체 회귀의 숨김 입력 시험 정리
+
+- int 전체 backend 회귀에서 과거 `RetrySourceGuardTest.sourceHiddenInGitMetadataWouldChangeResolvedCallsAndIsRejected`가 실패했다. 이 시험은 `.git/injected`의 Java 소스가 CONFIRMED CALLS를 추가해야 한다는 취약 동작을 필수 전제로 삼았다. 새 source-root 탐색은 Git 메타데이터를 제외하므로 실제 출력에는 DECLARES만 남았다. 원본 실패는 `docker-integration/backend-jl6yBm`에 보존한다.
+- 그 취약 동작 전제 시험을 삭제했다. 기존 숨김 Java/JAVA 재시도 거부 2건은 유지한다. 별도로 Java 증분 시험에 승인된 그래프의 cold·warm 불변성을 추가했다: 정상 App/메서드 노드가 있는 상태에서 숨김 Helper를 넣어도 두 분석 결과 전체가 바뀌지 않아야 한다.
+- 통합 담당의 실제 private-home Gradle 재실행: RetrySourceGuardTest + JavaIncrementalTest **49/49 통과**, 실패/skip 0. `validation/local/followup-main-verification/source-boundary`. 제품 소스나 거부 정책은 이 정리에서 바꾸지 않았다.
+
