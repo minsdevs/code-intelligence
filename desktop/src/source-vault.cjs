@@ -13,6 +13,7 @@ const MAX_WRAPPED_KEYRING_BYTES = 64 * 1024;
 const MAX_KEYRING_BYTES = 32 * 1024;
 const MAX_KEYS = 64;
 const MAX_PENDING_OPERATIONS = 4;
+const MAX_RETAIN_READS = 4;
 const MAX_STORE_BYTES = 10 * 1024 * 1024 * 1024;
 const MAX_STORE_ENTRIES = 200_000;
 const MAGIC = Buffer.from('CISRCBLB');
@@ -1052,10 +1053,14 @@ async function initialize(options, fresh, restoreStage = false) {
         // Only authenticated, already durable addresses are reused. New staged bytes are flushed
         // by enqueue before verification; no metadata receipt precedes their durability barrier.
         return enqueue(async () => {
-          for (const expected of references) {
-            const stored = await readStored(expected);
-            try { if (stored.keyId !== expected.keyId) fail('SOURCE_VAULT_INTEGRITY'); }
-            finally { stored.bytes.fill(0); }
+          // Bound authenticated reads; drain a failed group before a queued mutation or close.
+          for (let offset = 0; offset < references.length; offset += MAX_RETAIN_READS) {
+            const outcomes = await Promise.allSettled(Array.from(references.slice(offset, offset + MAX_RETAIN_READS), async expected => {
+              const stored = await readStored(expected);
+              try { if (stored.keyId !== expected.keyId) fail('SOURCE_VAULT_INTEGRITY'); }
+              finally { stored.bytes.fill(0); }
+            }));
+            for (const outcome of outcomes) if (outcome.status === 'rejected') throw outcome.reason;
           }
           await verifyRoots();
           return Object.freeze({ count: references.length });

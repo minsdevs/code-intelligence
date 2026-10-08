@@ -124,6 +124,15 @@ the resulting plaintext and checks its size before returning a buffer. Unauthent
 never returned. Internal copied plaintext/key buffers are cleared when practical; this is not a claim
 of complete JavaScript heap, swap, crash-dump, or SSD secure erasure.
 
+`retain({ projectId, blobs })` reuses 1–128 already durable addresses, each with its expected
+SHA-256, byte size, and key ID. Pending staged data is flushed first. Retention performs the same
+path, ownership, identity, envelope, and plaintext authentication checks as reading; it discards
+plaintext instead of returning it and does not rewrite committed ciphertext. At most four reads
+authenticate concurrently. Every started read in a failed group finishes and clears its buffers
+before rejection, queued mutations, key rotation, or close can proceed. Failures retain request
+order within the group; missing array entries cannot be acknowledged. The final root checks and
+count acknowledgement occur only after every requested address authenticates successfully.
+
 ## Publication, filesystem checks, and recovery
 
 The supported primitive is POSIX/macOS: `O_NOFOLLOW`, directory descriptors/fsync, ownership, and mode
