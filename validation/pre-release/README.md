@@ -366,3 +366,23 @@ A passing runner is row-level evidence only, never a gate PASS.
 | G-UX | `ux-accessibility-pilot.cjs --app <candidate> [--stages …]` | Scripted U1–U6 pilot and accessibility audit (keyboard passes, contrast, landmarks, live regions) on the packaged app. Not a usability study or VoiceOver speech result. |
 | G-NATIVE | `native-signing-readiness.cjs --app <candidate> [--expect-team-id <id>]`; `native-loader-probe.cjs --app <candidate> --packaged-app` | Read-only signing/notarization readiness (inside-out plan, minimum OS, external references); single-Mac loader approximation with developer-tool folders blocked. Neither is a Developer ID, notarization or fresh-machine result. |
 | Stage 7 | `sbom-candidate.cjs --offline --app <candidate> --resolved-maven … --gradle-cache … --electron-zip … --otool-cross-check`; `licence-notices.cjs --sbom-run <run>` | Offline, read-only CycloneDX 1.5 SBOM of the exact bundle (`completeSbom` means zero unattributed files) and generated third-party notices. The licence policy is an engineering checklist, not legal advice; regenerate notices whenever dependencies change. |
+
+### Run conditions learned on 2026-10-08
+
+- Run packaged and timing runners on AC power with the lid open (wrap them in `caffeinate`).
+  A closed lid on battery sleeps the host even under `caffeinate`; when a run fails, compare its
+  window with `pmset -g log` Sleep/Wake entries, keep the failed record and rerun.
+- Local tests with loopback fixture servers must count only requests to their fixture paths:
+  other desktop software may probe listening localhost ports (observed: `GET /`, user agent
+  `dev-cockpit`).
+- When the TS analyzer lock changes, add the new tarballs to
+  `validation/local/pre-release-cache/npm` (`npm cache add <pkg>@<version> --cache <that dir>`,
+  additive) before building, and refresh the building checkout's frontend and TS analyzer
+  `node_modules` from the merged lockfiles (remove a stale `node_modules/.package-lock.json`).
+- `desktop/scripts/packaged-keychain-acceptance.cjs` imports through the product folder picker,
+  answered once through the Validation-only main-process inspector on its first launch, and refuses
+  any message box. The SEC-M-02 drop confirmation is covered by `run-product-candidate.cjs` and the
+  security probe. It uses the real Keychain and is run by a person.
+- In `xpc-required` mode one 03 §6 analyzer session runs in one supervisor worker from open to
+  close; a supervisor session relays at most 1 GiB each way. An analyzer rejection without syntax
+  diagnostics fails the job with `TS_ANALYZER_REJECTED` (or `ANALYSIS_LIMIT`).

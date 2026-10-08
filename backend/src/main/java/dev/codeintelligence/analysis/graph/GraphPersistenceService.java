@@ -6,6 +6,7 @@ import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphIdentityGuard;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
+import dev.codeintelligence.common.CustomPlans;
 import dev.codeintelligence.evidence.EvidenceService;
 import dev.codeintelligence.evidence.EvidenceSubjects;
 import dev.codeintelligence.evidence.NewEvidence;
@@ -69,30 +70,11 @@ public class GraphPersistenceService {
 
     public void persist(long projectId, long snapshotId, AnalysisResult result) {
         transactionTemplate.executeWithoutResult(tx -> {
-            List<GraphNodeDraft> candidates = new ArrayList<>();
             List<String> keys = result.nodes().stream()
                     .map(GraphNodeDraft::naturalKey)
                     .distinct()
                     .toList();
-            for (int start = 0; start < keys.size(); start += 500) {
-                candidates.addAll(jdbc.sql("""
-                        select n.node_type, n.natural_key, n.name, f.path, n.line_start, n.line_end, n.area_type, n.metadata::text as metadata
-                        from graph_nodes n left join files f on f.id = n.file_id and f.snapshot_id = n.snapshot_id
-                        where n.snapshot_id = :snapshotId and n.natural_key in (:keys)
-                        """)
-                        .param("snapshotId", snapshotId)
-                        .param("keys", keys.subList(start, Math.min(start + 500, keys.size())))
-                        .query((rs, rowNum) -> new GraphNodeDraft(
-                                rs.getString("node_type"),
-                                rs.getString("natural_key"),
-                                rs.getString("name"),
-                                rs.getString("path"),
-                                (Integer) rs.getObject("line_start"),
-                                (Integer) rs.getObject("line_end"),
-                                rs.getString("area_type"),
-                                readMetadata(rs.getString("metadata"))))
-                        .list());
-            }
+            List<GraphNodeDraft> candidates = CustomPlans.run(jdbc, () -> storedDrafts(snapshotId, keys));
             candidates.addAll(result.nodes());
             AnalysisResult safe = GraphIdentityGuard.sanitize(
                     new AnalysisResult(candidates, result.edges(), result.evidences(), result.fileOutcomes()));
@@ -102,7 +84,7 @@ public class GraphPersistenceService {
                     .map(GraphNodeDraft::naturalKey)
                     .collect(java.util.stream.Collectors.toSet());
             var clearedRoutes = new java.util.HashSet<String>();
-            Map<String, Long> fileIds = fileIds(snapshotId, safe.nodes());
+            Map<String, Long> fileIds = CustomPlans.run(jdbc, () -> fileIds(snapshotId, safe.nodes()));
             List<Long> nodeIds = upsertNodes(snapshotId, safe.nodes(), fileIds);
             Map<String, List<AnalyzerEvidence>> evidenceByKey = new HashMap<>();
             for (AnalyzerEvidence evidence : safe.evidences()) {
@@ -146,7 +128,7 @@ public class GraphPersistenceService {
                 }
             }
             evidenceService.replaceLinkedAll(projectId, EvidenceSubjects.GRAPH_NODE, replacedEvidence);
-            Map<String, Long> stored = storedNodeIds(snapshotId, ids, safe.edges());
+            Map<String, Long> stored = CustomPlans.run(jdbc, () -> storedNodeIds(snapshotId, ids, safe.edges()));
             List<SqlParameterSource> edgeRows = new ArrayList<>();
             for (GraphEdgeDraft edge : safe.edges()) {
                 Long source = ids.getOrDefault(edge.sourceNaturalKey(), stored.get(edge.sourceNaturalKey()));
@@ -162,6 +144,31 @@ public class GraphPersistenceService {
                     FileAnalysisOutcome.record(jdbc, snapshotId, outcome.path(), outcome.status(), outcome.reason());
             }
         });
+    }
+
+    /** Rows this snapshot already stores for the given keys, merged with the new drafts by the guard. */
+    private List<GraphNodeDraft> storedDrafts(long snapshotId, List<String> keys) {
+        List<GraphNodeDraft> stored = new ArrayList<>();
+        for (int start = 0; start < keys.size(); start += BATCH) {
+            stored.addAll(jdbc.sql("""
+                            select n.node_type, n.natural_key, n.name, f.path, n.line_start, n.line_end, n.area_type, n.metadata::text as metadata
+                            from graph_nodes n left join files f on f.id = n.file_id and f.snapshot_id = n.snapshot_id
+                            where n.snapshot_id = :snapshotId and n.natural_key in (:keys)
+                            """)
+                    .param("snapshotId", snapshotId)
+                    .param("keys", keys.subList(start, Math.min(start + BATCH, keys.size())))
+                    .query((rs, rowNum) -> new GraphNodeDraft(
+                            rs.getString("node_type"),
+                            rs.getString("natural_key"),
+                            rs.getString("name"),
+                            rs.getString("path"),
+                            (Integer) rs.getObject("line_start"),
+                            (Integer) rs.getObject("line_end"),
+                            rs.getString("area_type"),
+                            readMetadata(rs.getString("metadata"))))
+                    .list());
+        }
+        return stored;
     }
 
     /** Upserts in input order (later duplicates merge into earlier rows) and returns each row's id. */

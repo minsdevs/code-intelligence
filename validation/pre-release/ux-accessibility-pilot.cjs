@@ -21,6 +21,7 @@ const { descendants } = require('../backup-compatibility/owned-crash.cjs');
 const { writeFixture } = require('./ux-fixtures.cjs');
 const audit = require('./ux-page-audit.cjs');
 const { withDropConfirmation } = require('./drop-confirmation.cjs');
+const { withFolderPicker: withPickedFolder } = require('./folder-picker.cjs');
 
 const runFile = promisify(execFile);
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -372,26 +373,7 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   // Controlled single-use OS picker result. UI, IPC, folder policy, preview, approval and analysis stay real.
-  async function withFolderPicker(folder, action) {
-    const picker = await app.evaluateHandle(({ dialog }, selected) => {
-      const original = dialog.showOpenDialog;
-      let calls = 0;
-      const choose = async (...args) => {
-        const settings = args.at(-1);
-        if (calls || settings?.title !== 'Choose a source folder to analyze' || settings.properties?.length !== 1
-          || settings.properties[0] !== 'openDirectory') throw new Error('UX_PICKER_REFUSED');
-        calls++;
-        return { canceled: false, filePaths: [selected] };
-      };
-      dialog.showOpenDialog = choose;
-      return { restore() { if (dialog.showOpenDialog !== choose) throw new Error('UX_PICKER_REPLACED'); dialog.showOpenDialog = original; return calls; } };
-    }, folder);
-    let result, failure;
-    try { result = await action(); } catch (error) { failure = error; }
-    const calls = await picker.evaluate(value => value.restore()); await picker.dispose();
-    if (failure) throw failure;
-    return { result, pickerCalls: calls };
-  }
+  const withFolderPicker = (folder, action) => withPickedFolder(app, folder, action);
   async function dragFolder(folder) {
     const target = page.getByRole('button', { name: 'Choose folder', exact: true });
     await expect(target).toBeVisible();

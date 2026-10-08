@@ -155,7 +155,6 @@ class TsAnalyzerControlClientTest {
         for (String answer : List.of(
                 "{\"ok\":false,\"code\":\"CAPABILITY_REJECTED\"}",
                 "{\"ok\":false,\"code\":\"ANALYZER_FAILURE\",\"detail\":\"" + CAPABILITY + " source marker\"}",
-                "{\"ok\":false,\"error\":{\"status\":400,\"response\":{\"message\":\"source marker\"}}}",
                 "{\"ok\":true,\"result\":[]}",
                 "[]")) {
             try (var main = new FakeDesktopMain(request -> bytes(answer))) {
@@ -164,6 +163,32 @@ class TsAnalyzerControlClientTest {
                         .hasNoCause()
                         .hasMessageNotContaining(CAPABILITY)
                         .hasMessageNotContaining("source marker");
+            }
+        }
+    }
+
+    /** G-PERF medium on wFroXK: a refused session command failed the job with no code and no cause. */
+    @Test
+    void anAnalyzerRejectionWithoutSyntaxDiagnosticsFailsTheJobWithItsCode() throws Exception {
+        String rejected = "{\"ok\":false,\"error\":{\"status\":400,\"response\":{\"statusCode\":400,\"code\":\"%s\","
+                + "\"message\":\"source marker\",\"retryable\":false}}}";
+        for (var expected : List.of(
+                List.of(rejected.formatted("SESSION_UNKNOWN"), "SESSION_UNKNOWN", "TS_ANALYZER_REJECTED"),
+                List.of(rejected.formatted("ANALYSIS_LIMIT"), "ANALYSIS_LIMIT", "ANALYSIS_LIMIT"),
+                List.of(rejected.formatted("/Users/x " + CAPABILITY), "UNKNOWN", "TS_ANALYZER_REJECTED"),
+                List.of(
+                        "{\"ok\":false,\"error\":{\"status\":400,\"response\":{\"message\":\"source marker\"}}}",
+                        "UNKNOWN",
+                        "TS_ANALYZER_REJECTED"),
+                List.of("{\"ok\":false,\"code\":\"ANALYSIS_LIMIT\"}", "ANALYSIS_LIMIT", "ANALYSIS_LIMIT"))) {
+            try (var main = new FakeDesktopMain(request -> bytes(expected.get(0)))) {
+                assertThatThrownBy(() -> main.client(5).analyze(new TsAnalyzeDtos.Request(List.of())))
+                        .isInstanceOf(TsAnalyzerException.class)
+                        .isInstanceOf(RecoveryActionFailure.class)
+                        .hasNoCause()
+                        .hasMessage("ts-analyzer rejected the analysis request (" + expected.get(1) + ")")
+                        .satisfies(error -> assertThat(((RecoveryActionFailure) error).failureCode())
+                                .isEqualTo(expected.get(2)));
             }
         }
     }
@@ -180,6 +205,25 @@ class TsAnalyzerControlClientTest {
             assertThatThrownBy(() -> main.client(1).health())
                     .isExactlyInstanceOf(TsAnalyzerException.class)
                     .hasMessage("ts-analyzer control request failed");
+        }
+    }
+
+    /** The packaged path of the sealed session's analyze command, which has its own longer bound. */
+    @Test
+    void aRequestWithItsOwnTimeoutOutlastsTheConfiguredOne() throws Exception {
+        try (var main = new FakeDesktopMain(request -> {
+            try {
+                Thread.sleep(1_500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return bytes("{\"ok\":true,\"result\":{}}");
+        })) {
+            var client = main.client(1);
+            assertThatThrownBy(() -> client.analyze(new TsAnalyzeDtos.Request(List.of())))
+                    .isExactlyInstanceOf(TsAnalyzerException.class);
+            assertThat(client.analyze(new TsAnalyzeDtos.Request(List.of()), java.time.Duration.ofSeconds(3)))
+                    .isNotNull();
         }
     }
 

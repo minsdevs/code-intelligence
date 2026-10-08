@@ -44,14 +44,16 @@ final class FeatureMerger {
         if (left.isEmpty() && right.isEmpty()) {
             return 1.0;
         }
-        Set<String> intersection = new HashSet<>(left);
-        intersection.retainAll(right);
-        Set<String> union = new HashSet<>(left);
-        union.addAll(right);
-        if (union.isEmpty()) {
-            return 0.0;
+        // Counted without copying either set: seeds are compared pairwise, and one seed can hold
+        // every endpoint of the project.
+        Set<String> smaller = left.size() <= right.size() ? left : right;
+        Set<String> larger = smaller == left ? right : left;
+        int intersection = 0;
+        for (String key : smaller) {
+            if (larger.contains(key)) intersection++;
         }
-        return (double) intersection.size() / union.size();
+        int union = left.size() + right.size() - intersection;
+        return (double) intersection / union;
     }
 
     private static Seed mergeTwo(Seed left, Seed right) {

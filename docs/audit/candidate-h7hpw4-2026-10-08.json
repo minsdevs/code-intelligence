@@ -1,0 +1,236 @@
+{
+ "format": 1,
+ "date": "2026-10-08",
+ "integrationBranch": "codex/perf-medium-20261008",
+ "base": "8e9a9d8",
+ "decisions": {
+  "SEC-M-02 keychain runner": "folder-picker import",
+  "Dependabot #49-#52": "lockfile-only patch versions",
+  "verification scope": "risk-based per candidate; 20-run gates on the final RC on a quiet machine"
+ },
+ "regression": [
+  {
+   "commit": "52e007d",
+   "evidence": "validation/local/post-merge-20261008a",
+   "frontend": {
+    "tests": 480,
+    "pass": 480
+   },
+   "tsAnalyzer": {
+    "tests": 296,
+    "pass": 296
+   },
+   "runners": {
+    "tests": 414,
+    "pass": 414
+   },
+   "desktop": {
+    "tests": 3309,
+    "pass": 3263,
+    "fail": 1,
+    "skipped": 45,
+    "failure": "dependency-downloader foreign loopback probe (w12)"
+   },
+   "backendDocker": {
+    "evidence": "docker-integration/backend-QoRJUb",
+    "tests": 1992,
+    "pass": 1960,
+    "fail": 0,
+    "skipped": 32,
+    "resultSha256": "619c9e58a2dddc2b0d614a293db205bcd7c5f19e5a2cfd4936d3344e7bea43b9"
+   },
+   "events": {
+    "evidence": "docker-integration/events-X91yJq",
+    "tests": 19,
+    "pass": 19,
+    "resultSha256": "444b688d5a8a2eea9ade7b5983f8ec7df5b99207187a331ebcd9eade163b6323"
+   },
+   "refusedFirstDockerAttempt": "runner refused: --socket omitted by the coordinator script"
+  },
+  {
+   "commit": "4bd54bf",
+   "evidence": "validation/local/post-merge-20261008b",
+   "scope": "desktop + backend Docker after w11",
+   "desktop": {
+    "tests": 3311,
+    "pass": 3266,
+    "fail": 0,
+    "skipped": 45
+   },
+   "backendDocker": {
+    "evidence": "docker-integration/backend-ceqXFF",
+    "tests": 1994,
+    "pass": 1962,
+    "fail": 0,
+    "skipped": 32,
+    "resultSha256": "ec10e1cbe7ba0bf5ab760672108be239459a50d243fd930f193b3f4ef4faca5d"
+   }
+  }
+ ],
+ "candidates": [
+  {
+   "id": "wFroXK",
+   "sourceCommit": "25ab8b1",
+   "buildSequence": "1791422163000",
+   "baseline": "tZgvV7",
+   "adapterIsolation": "xpc-required",
+   "evidence": "validation/local/pre-release-candidate/build-xzbSkA",
+   "resultSha256": "5039132812586d032118008a5347a1f94dd0370e96394c79e7be757e8027b53b",
+   "formalSigning": false,
+   "notarized": false,
+   "released": false,
+   "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/build-candidate.cjs --app \"$PWD/.native-product-tZgvV7/Code Intelligence Validation.app\" --build-sequence 1791422163000 --adapter-isolation xpc-required"
+  },
+  {
+   "id": "h7hpw4",
+   "sourceCommit": "4bd54bf",
+   "buildSequence": "1791433118000",
+   "baseline": "tZgvV7",
+   "adapterIsolation": "xpc-required",
+   "evidence": "validation/local/pre-release-candidate/build-vhkAig",
+   "resultSha256": "a13a29dba52e1e420c3f821aa9b90232708611958d5546f1426c0de08696b6aa",
+   "formalSigning": false,
+   "notarized": false,
+   "released": false,
+   "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/build-candidate.cjs --app \"$PWD/.native-product-tZgvV7/Code Intelligence Validation.app\" --build-sequence 1791433118000 --adapter-isolation xpc-required"
+  }
+ ],
+ "native": {
+  "wFroXK": [
+   {
+    "check": "product",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-product-candidate.cjs --app \"$PWD/.native-product-wFroXK/Code Intelligence Validation.app\"",
+    "evidence": "pre-release-final/product-qSQ5I5",
+    "status": "PASS",
+    "resultSha256": "50682778dd57d7adea5924995fd5cf855f540095cdc3f95ed182016739fbb56a",
+    "checks": 36
+   },
+   {
+    "check": "owner-crash AFTER_SOURCE_RENAME",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/backup-compatibility/native-interruption.cjs --app \"$PWD/.native-product-wFroXK/Code Intelligence Validation.app\" --point AFTER_SOURCE_RENAME --owner-crash",
+    "evidence": "electron-crash/native-vjvyod",
+    "status": "PASS",
+    "resultSha256": "246a3931e57636da32aac2e0f318c68a312f04b66a85d7796cc021eed6a52a21",
+    "checks": 6
+   },
+   {
+    "check": "owner-crash BEFORE_COMPLETED_CLEANUP",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/backup-compatibility/native-interruption.cjs --app \"$PWD/.native-product-wFroXK/Code Intelligence Validation.app\" --point BEFORE_COMPLETED_CLEANUP --owner-crash",
+    "evidence": "electron-crash/native-UyihRx",
+    "status": "PASS",
+    "resultSha256": "ca44985ae38bccdfef98fc0b5fc55316ce575271462b598ed3c86e357fa7346a",
+    "checks": 6
+   },
+   {
+    "check": "job-race (host clamshell sleep 10:25:40-10:35:16)",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/job-race-product.cjs --app \"$PWD/.native-product-wFroXK/Code Intelligence Validation.app\"",
+    "evidence": "job-race/product-2YwMwH",
+    "status": "FAIL",
+    "resultSha256": "284b9b704abe48ff5e7678c47d6c3be6e700524d34ce29a0d84c771d93632945"
+   },
+   {
+    "check": "job-race rerun",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/job-race-product.cjs --app \"$PWD/.native-product-wFroXK/Code Intelligence Validation.app\"",
+    "evidence": "job-race/product-i8wPjJ",
+    "status": "PASS",
+    "resultSha256": "629e16b710232d80bc5bfa8c49e8b43e2bbc3a77d19e7ba36485c6b1e651a436",
+    "checks": 8
+   },
+   {
+    "check": "security-probe",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/security-packaged-probe.cjs --app \"$PWD/.native-product-wFroXK/Code Intelligence Validation.app\"",
+    "evidence": "security-internal-review/packaged-BgylVh",
+    "status": "COMPLETE",
+    "resultSha256": "df4d82e2dbac36c3adb8ed552990bfe5224c5a6cba6ca3b88d989dece08cad9b"
+   },
+   {
+    "check": "ux-pilot",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/ux-accessibility-pilot.cjs --app \"$PWD/.native-product-wFroXK/Code Intelligence Validation.app\"",
+    "evidence": "pre-release-ux/ux-ssq5mw",
+    "status": "COMPLETED",
+    "resultSha256": "846034466e46ff7ef665157ec6762585cd8bc7581eddf2810682f370b2ffc9c4",
+    "screens": 190,
+    "errors": 0,
+    "contrastFailures": 0
+   },
+   {
+    "check": "sbom-candidate",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/sbom-candidate.cjs --offline --app \"$PWD/.native-product-wFroXK/Code Intelligence Validation.app\" --resolved-maven runtime-resolved-wFroXK-20261008.json --gradle-cache $HOME/.gradle/caches/modules-2/files-2.1",
+    "evidence": "sbom/run-Kjb0f6",
+    "status": "SBOM_WRITTEN",
+    "resultSha256": "7f3d6dea6245384453a2b5f4794f25749bb7dcd0ec1fd92882530bf3dfc911f9",
+    "components": 348,
+    "unattributed": 0
+   },
+   {
+    "check": "sbom-runtime-exclusions",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/sbom-runtime-exclusions.cjs --jar \"<app>/Contents/Resources/runtime/backend/code-intelligence.jar\"",
+    "evidence": "stage5-wFroXK/sbom-runtime-exclusions.log",
+    "status": "PASS",
+    "checked": 150,
+    "excluded": 0
+   },
+   {
+    "check": "perf medium --smoke-2",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-wFroXK/Code Intelligence Validation.app\" --class medium --smoke-2",
+    "evidence": "workload-performance/run-etYDCC",
+    "status": "SMOKE_ONLY",
+    "resultSha256": "08588b05656eece0d3c638c749520243896f0dbcb56f9706c9b6a23acbe9f9d2",
+    "outcome": "both runs TS_PARSING FAILED (isolated session defect, w11)"
+   },
+   {
+    "check": "perf medium --smoke-1 --keep-work",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-wFroXK/Code Intelligence Validation.app\" --class medium --smoke-1 --keep-work",
+    "evidence": "workload-performance/run-GWEbC7",
+    "status": "SMOKE_ONLY",
+    "resultSha256": "810b970e59de42fe18118ff5b518e8f9c19b30cecc5554495583b83fb2d4ac67",
+    "outcome": "diagnosis"
+   },
+   {
+    "check": "perf large --smoke-2",
+    "status": "NOT_RUN",
+    "reason": "stopped after the medium TS failure"
+   }
+  ],
+  "h7hpw4": [
+   {
+    "check": "product",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-product-candidate.cjs --app \"$PWD/.native-product-h7hpw4/Code Intelligence Validation.app\"",
+    "evidence": "pre-release-final/product-5RY1Oz",
+    "status": "PASS",
+    "resultSha256": "f111058baac45ba99585e275ac310ac8a8897f82a60c98703ba75375548a4618",
+    "checks": 36
+   },
+   {
+    "check": "job-race",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/job-race-product.cjs --app \"$PWD/.native-product-h7hpw4/Code Intelligence Validation.app\"",
+    "evidence": "job-race/product-v5ynKu",
+    "status": "PASS",
+    "resultSha256": "128d4e33e42b7a02c082eda8d168d94331fa40a18620fe4940be9b5bfb93d661",
+    "checks": 8
+   },
+   {
+    "check": "security-probe",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/security-packaged-probe.cjs --app \"$PWD/.native-product-h7hpw4/Code Intelligence Validation.app\"",
+    "evidence": "security-internal-review/packaged-bH6316",
+    "status": "COMPLETE",
+    "resultSha256": "dd340cf9bd33081ae260ca7fb1edba528285d4206a678e9591db2d5a7c33c8a7"
+   },
+   {
+    "check": "perf medium --smoke-2",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-h7hpw4/Code Intelligence Validation.app\" --class medium --smoke-2",
+    "evidence": "workload-performance/run-Rr1JmK",
+    "status": "SMOKE_ONLY",
+    "resultSha256": "4c9437f59acada64309212b88d9a29fd9577329d632baebddf0d735808ad481d"
+   },
+   {
+    "check": "perf large --smoke-2",
+    "command": "env -i HOME=\"$HOME\" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C node validation/pre-release/run-workload-benchmark.cjs --app \"$PWD/.native-product-h7hpw4/Code Intelligence Validation.app\" --class large --smoke-2",
+    "evidence": "workload-performance/run-63Hygy",
+    "status": "SMOKE_ONLY",
+    "resultSha256": "226f29243c18837c03f2fc24c5450898df94ab1ec7fbea51695f3ee73e0de888"
+   }
+  ]
+ },
+ "releaseVerdict": "NO_GO"
+}

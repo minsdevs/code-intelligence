@@ -42,11 +42,16 @@ final class TsAnalyzerControlClient {
     }
 
     void health() {
-        accept(exchange("health", null), "ts-analyzer health failed");
+        accept(exchange("health", null, timeout), "ts-analyzer health failed");
     }
 
     TsAnalyzeDtos.Response analyze(TsAnalyzeDtos.Request request) {
-        JsonNode result = accept(exchange("analyze", TsRequestBudget.encode(request)), "ts-analyzer request failed");
+        return analyze(request, timeout);
+    }
+
+    TsAnalyzeDtos.Response analyze(TsAnalyzeDtos.Request request, Duration timeout) {
+        JsonNode result =
+                accept(exchange("analyze", TsRequestBudget.encode(request), timeout), "ts-analyzer request failed");
         if (result == null || !result.isObject()) throw new TsAnalyzerException("ts-analyzer request failed", null);
         try {
             return JSON.treeToValue(result, TsAnalyzeDtos.Response.class);
@@ -63,18 +68,21 @@ final class TsAnalyzerControlClient {
             JsonNode reason = response.get("reason");
             throw new TsAdapterIsolationException(reason == null ? null : reason.asString(null));
         }
+        if (code != null && TsAnalyzerRejectedException.ANALYSIS_LIMIT.equals(code.asString(""))) {
+            throw new TsAnalyzerRejectedException(TsAnalyzerRejectedException.ANALYSIS_LIMIT);
+        }
         JsonNode error = response.get("error");
         if (error != null && error.isObject() && error.path("status").asInt(0) == 400) {
-            TsSyntaxInputException syntax =
-                    TsSyntaxInputException.fromResponse(JSON.writeValueAsBytes(error.get("response")));
+            byte[] body = JSON.writeValueAsBytes(error.get("response"));
+            TsSyntaxInputException syntax = TsSyntaxInputException.fromResponse(body);
             if (syntax != null) throw syntax;
-            throw new TsAnalyzerException("ts-analyzer rejected input without a recognized diagnostic", null);
+            throw TsAnalyzerRejectedException.fromResponse(body);
         }
         // Neither the capability nor any response text belongs in job errors.
         throw new TsAnalyzerException(failure, null);
     }
 
-    private JsonNode exchange(String op, byte[] body) {
+    private JsonNode exchange(String op, byte[] body, Duration timeout) {
         byte[] request = envelope(op, body);
         try (SocketChannel channel = SocketChannel.open(StandardProtocolFamily.UNIX)) {
             // Closing the channel unblocks a pending read; an interrupted job thread closes it as well.

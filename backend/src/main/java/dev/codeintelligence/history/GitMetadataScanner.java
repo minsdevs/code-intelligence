@@ -44,6 +44,10 @@ public class GitMetadataScanner {
                     DiffFormatter formatter = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
                 formatter.setRepository(repo);
                 formatter.setDetectRenames(true);
+                // Full object ids in the (discarded) patch headers: an abbreviated id is checked for
+                // uniqueness by listing its loose-object directory, once per changed file, which made
+                // the snapshot commit of a large project (every file added) quadratic in its files.
+                formatter.setAbbreviationLength(Constants.OBJECT_ID_STRING_LENGTH);
                 formatter.setDiffComparator(RawTextComparator.DEFAULT);
                 walk.sort(RevSort.COMMIT_TIME_DESC, true);
                 markStarts(repo, walk);

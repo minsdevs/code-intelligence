@@ -2,6 +2,8 @@
 
 // Developer-only: launch a retained bundle directly, then attach to its renderer.
 // No Electron loader, mock keychain, profile copy, key extraction or package edits.
+// The first launch also opens the Validation-only main-process inspector, used for
+// nothing but one answer to the product's own folder picker.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -15,6 +17,7 @@ const { inheritedEnvironment } = require('../src/runtime-platform.cjs');
 const { validateRuntimeManifest } = require('../src/runtime-manifest.cjs');
 const { observeStartup, createDeadline, closeOwnedApplication } = require('./native-acceptance-electron.cjs');
 const { expectedServices } = require('../../validation/pre-release/adapter-mode.cjs');
+const { withFolderPicker } = require('../../validation/pre-release/folder-picker.cjs');
 
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -26,10 +29,15 @@ function launchEnvironment(input) {
   return { ...inheritedEnvironment(input), PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C' };
 }
 
-function launchArguments(claimFile, port) {
+const validPort = port => Number.isSafeInteger(port) && port > 1024 && port < 65536;
+
+function launchArguments(claimFile, port, inspectPort) {
   assert.ok(path.isAbsolute(claimFile) && !/[\r\n\0]/.test(claimFile));
-  assert.ok(Number.isSafeInteger(port) && port > 1024 && port < 65536);
-  return ['--isolated-run-claim=' + claimFile, '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=' + port];
+  assert.ok(validPort(port));
+  const args = ['--isolated-run-claim=' + claimFile, '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=' + port];
+  if (inspectPort === undefined) return args;
+  assert.ok(validPort(inspectPort) && inspectPort !== port);
+  return [...args, '--inspect=127.0.0.1:' + inspectPort];
 }
 
 async function unusedPort() {
@@ -56,6 +64,87 @@ async function waitFor(action, timeout, code) {
     await delay(Math.max(0, Math.min(200, expires - performance.now())));
   }
   throw new Error(code);
+}
+
+async function fetchInspectorTargets(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+  if (!response.ok) throw new Error('PACKAGED_FOLDER_PICKER_UNAVAILABLE');
+  return response.json();
+}
+
+// Validation bundles keep the --inspect fuse for _electron.launch (scripts/electron-fuses.cjs). This
+// client mirrors ElectronApplication.evaluateHandle over the owned loopback inspector, without
+// Playwright's Electron loader, so no Chromium switch such as --use-mock-keychain is appended.
+async function attachMainProcess(port, { fetchJson = fetchInspectorTargets, WebSocketClass = WebSocket, timeoutMs = 10000 } = {}) {
+  const unavailable = () => new Error('PACKAGED_FOLDER_PICKER_UNAVAILABLE');
+  let socket;
+  try {
+    const targets = await bounded(() => fetchJson('http://127.0.0.1:' + port + '/json/list'), timeoutMs, 'PACKAGED_FOLDER_PICKER_UNAVAILABLE');
+    const urls = Array.isArray(targets) ? targets.map(target => target?.webSocketDebuggerUrl) : [];
+    if (urls.length !== 1 || !new RegExp('^ws://127\\.0\\.0\\.1:' + port + '/[0-9a-f-]{36}$').test(urls[0])) throw unavailable();
+    socket = new WebSocketClass(urls[0]);
+    const opened = new Promise((resolve, reject) => {
+      socket.addEventListener('open', resolve, { once: true });
+      socket.addEventListener('error', () => reject(unavailable()), { once: true });
+    });
+    await bounded(() => opened, timeoutMs, 'PACKAGED_FOLDER_PICKER_UNAVAILABLE');
+  } catch {
+    socket?.close();
+    throw unavailable();
+  }
+  const waiting = new Map();
+  let sequence = 0;
+  socket.addEventListener('message', event => {
+    const message = JSON.parse(event.data), entry = waiting.get(message.id);
+    if (!entry) return;
+    waiting.delete(message.id);
+    if (message.error) entry.reject(new Error('MAIN_PROCESS_PROTOCOL_ERROR')); else entry.resolve(message.result);
+  });
+  socket.addEventListener('close', () => {
+    for (const entry of waiting.values()) entry.reject(new Error('MAIN_PROCESS_DISCONNECTED'));
+    waiting.clear();
+  });
+  const send = (method, params) => bounded(() => new Promise((resolve, reject) => {
+    const id = ++sequence; waiting.set(id, { resolve, reject });
+    socket.send(JSON.stringify({ id, method, params }));
+  }), timeoutMs, 'MAIN_PROCESS_PROTOCOL_TIMEOUT');
+  // Only an error code thrown in main crosses back; no main-process text or path is kept.
+  const value = result => {
+    if (result.exceptionDetails) {
+      throw new Error(/^Error: ([A-Z][A-Z0-9_]+)(\n|$)/.exec(result.exceptionDetails.exception?.description ?? '')?.[1]
+        ?? 'MAIN_PROCESS_EVALUATION_FAILED');
+    }
+    return result.result;
+  };
+  try {
+    // includeCommandLineAPI provides require() to the main-process evaluation (Electron 28+).
+    const electron = value(await send('Runtime.evaluate', { expression: "require('electron')", includeCommandLineAPI: true })).objectId;
+    return {
+      async evaluateHandle(fn, arg) {
+        const { objectId } = value(await send('Runtime.callFunctionOn', { objectId: electron, functionDeclaration: fn.toString(),
+          arguments: [{ objectId: electron }, { value: arg }], awaitPromise: true }));
+        return {
+          evaluate: async inner => value(await send('Runtime.callFunctionOn', { objectId, functionDeclaration: inner.toString(),
+            arguments: [{ objectId }], returnByValue: true, awaitPromise: true })).value,
+          dispose: () => send('Runtime.releaseObject', { objectId }),
+        };
+      },
+      close: () => socket.close(),
+    };
+  } catch (error) { socket.close(); throw error; }
+}
+
+// The SEC-M-02 drop confirmation stays covered by run-product-candidate and the security probe. Here
+// the folder comes from the product's own picker IPC, answered once in main: no drop is dispatched,
+// and a message box in that window is refused and fails the run instead of waiting on a real dialog.
+async function importThroughFolderPicker(attach, folder, choose) {
+  let main;
+  try { main = await attach(); } catch { main = null; }
+  if (!main) throw new Error('PACKAGED_FOLDER_PICKER_UNAVAILABLE');
+  try {
+    const { pickerCalls, messageBoxes } = await withFolderPicker(main, folder, choose);
+    return { importPath: 'folder-picker', pickerCalls, messageBoxes, dropDispatched: false };
+  } finally { main.close(); }
 }
 
 async function closePackagedApplication({ child, closeWindow, quitApplication, disconnect },
@@ -150,7 +239,7 @@ async function main(argv = process.argv.slice(2)) {
   const phase = value => { report.phase = value; save(); };
   const check = value => { report.checks.push(value); save(); };
   const environment = launchEnvironment(process.env);
-  let child, browser, page, stopObservation, projectId, snapshotId, originalUser, encryptedDigest;
+  let child, browser, page, stopObservation, projectId, snapshotId, originalUser, encryptedDigest, inspectPort;
   let failure, closePromise;
   const deadline = createDeadline();
   const perform = (action, timeout = 30000, code = 'PACKAGED_KEYCHAIN_OPERATION_TIMEOUT') => deadline.run(action, timeout, code);
@@ -165,17 +254,18 @@ async function main(argv = process.argv.slice(2)) {
       return response.json();
     }, route), 20000, 'OWNED_API_TIMEOUT');
   }
-  async function launch() {
+  async function launch({ mainInspector = false } = {}) {
     assert.ok(!child, 'PREVIOUS_PACKAGE_NOT_CLOSED');
     plan.assertIdentity();
     const port = await perform(unusedPort, 5000, 'DEBUG_PORT_TIMEOUT'), started = Date.now();
-    const args = launchArguments(plan.claimFile, port);
+    inspectPort = mainInspector ? await perform(unusedPort, 5000, 'DEBUG_PORT_TIMEOUT') : undefined;
+    const args = launchArguments(plan.claimFile, port, inspectPort);
     phase('direct-package-start'); delete report.startup; delete report.launchError;
     child = spawn(executable, args, { cwd: root, env: environment, stdio: ['ignore', 'ignore', 'pipe'] });
     closePromise = null;
     const launched = child;
     const launchRecord = { sequence: report.launches.length + 1, pid: child.pid ?? null,
-      readyMs: null, directPackage: true, mockKeychain: false };
+      readyMs: null, directPackage: true, mockKeychain: false, mainInspector };
     report.launches.push(launchRecord); save();
     child.on('error', () => {
       report.launchError = launched.pid ? 'PACKAGE_PROCESS_ERROR' : 'PACKAGE_SPAWN_FAILED';
@@ -192,6 +282,12 @@ async function main(argv = process.argv.slice(2)) {
     const listener = execFileSync('/usr/sbin/lsof', ['-nP', '-a', '-p', String(child.pid), '-iTCP:' + port, '-sTCP:LISTEN', '-Fn'],
       { encoding: 'utf8', timeout: 5000 });
     assert.ok(listener.split('\n').includes('n127.0.0.1:' + port), 'Owned loopback debugging listener required');
+    if (mainInspector) {
+      const inspector = execFileSync('/usr/sbin/lsof', ['-nP', '-a', '-p', String(child.pid), '-iTCP:' + inspectPort, '-sTCP:LISTEN', '-Fn'],
+        { encoding: 'utf8', timeout: 5000 });
+      assert.deepEqual(inspector.split('\n').filter(line => line.startsWith('n')), ['n127.0.0.1:' + inspectPort],
+        'Owned loopback-only main-process inspector required');
+    }
     phase('attach-existing-renderer');
     // connectOverCDP attaches only; unlike _electron.launch it cannot append
     // --use-mock-keychain or load Playwright's Electron main-process script.
@@ -210,6 +306,8 @@ async function main(argv = process.argv.slice(2)) {
     const command = execFileSync('/bin/ps', ['-p', String(child.pid), '-o', 'command='], { encoding: 'utf8', timeout: 5000 });
     assert.ok(command.includes(executable) && command.includes('--isolated-run-claim=' + plan.claimFile));
     assert.doesNotMatch(command, /--use-mock-keychain|--password-store=basic|--require|--inspect-brk/);
+    if (mainInspector) assert.ok(command.includes('--inspect=127.0.0.1:' + inspectPort));
+    else assert.doesNotMatch(command, /--inspect/);
     launchRecord.readyMs = Date.now() - started;
     check('direct-packaged-real-keychain-services-ready');
   }
@@ -250,7 +348,7 @@ async function main(argv = process.argv.slice(2)) {
   }
   save(); console.log(JSON.stringify({ status: 'RUNNING', evidence, profile: plan.paths.userData, appRebuilt: false }));
   try {
-    await launch(); phase('fresh-owned-profile');
+    await launch({ mainInspector: true }); phase('fresh-owned-profile');
     assert.deepEqual(await request('/api/projects'), []);
     originalUser = await request('/api/auth/me');
     assert.equal(originalUser.authenticated, true); assert.equal(originalUser.credentialKind, 'LOCAL');
@@ -263,14 +361,13 @@ async function main(argv = process.argv.slice(2)) {
     phase('ui-owned-folder-import');
     await perform(() => page.evaluate(() => { history.pushState(null, '', '/import'); dispatchEvent(new PopStateEvent('popstate')); }));
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true }); await perform(() => expect(picker).toBeVisible());
-    const box = await perform(() => picker.boundingBox()); assert.ok(box);
-    const cdp = await perform(() => page.context().newCDPSession(page));
-    try {
-      for (const type of ['dragEnter', 'dragOver', 'drop']) await perform(() => cdp.send('Input.dispatchDragEvent', {
-        type, x: box.x + box.width / 2, y: box.y + box.height / 2,
-        data: { items: [], files: [fixture], dragOperationsMask: 1 } }));
-    } finally { await bounded(() => cdp.detach(), 5000, 'PACKAGE_CDP_DETACH_TIMEOUT'); }
-    await perform(() => page.getByRole('button', { name: '가져올 파일 미리보기', exact: true }).click());
+    const preview = page.getByRole('button', { name: '가져올 파일 미리보기', exact: true });
+    // Keyboard-driven like the UX pilot: the focused "Choose folder" button opens folder:pick.
+    report.folderImport = await perform(() => importThroughFolderPicker(() => attachMainProcess(inspectPort), fixture, async () => {
+      await picker.focus(); await page.keyboard.press('Enter'); await expect(preview).toBeVisible();
+    }), 60000, 'OWNED_FOLDER_PICKER_TIMEOUT');
+    save();
+    await perform(() => preview.click());
     await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
     const [response] = await perform(() => Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local' && r.request().method() === 'POST'),
@@ -320,5 +417,6 @@ async function main(argv = process.argv.slice(2)) {
   if (failure) process.exitCode = 1;
 }
 
-module.exports = { launchEnvironment, launchArguments, bounded, waitFor, closePackagedApplication, allProcessesExitedZero, main };
+module.exports = { launchEnvironment, launchArguments, bounded, waitFor, attachMainProcess, importThroughFolderPicker,
+  closePackagedApplication, allProcessesExitedZero, main };
 if (require.main === module) main().catch(error => { console.error(error.code || 'PACKAGED_KEYCHAIN_PREFLIGHT_FAILED'); process.exitCode = 1; });
