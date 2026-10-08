@@ -62,13 +62,20 @@ public final class AnalysisInputFingerprint {
                 String hash = HexFormat.of().formatHex(content.digest());
                 update(complete, hash);
                 if (javaPaths.contains(relative)) files.put(relative, hash);
-                else update(environment, hash);
+                else if (!isForeignSource(relative)) update(environment, hash);
             }
             return new Snapshot(HexFormat.of().formatHex(complete.digest()),
                     HexFormat.of().formatHex(environment.digest()), Map.copyOf(files));
         } catch (IOException | java.io.UncheckedIOException | SecurityException failure) {
             return null;
         }
+    }
+
+    private static boolean isForeignSource(String relative) {
+        String name = relative.toLowerCase(java.util.Locale.ROOT);
+        return name.endsWith(".js") || name.endsWith(".jsx") || name.endsWith(".mjs")
+                || name.endsWith(".cjs") || name.endsWith(".ts") || name.endsWith(".tsx")
+                || name.endsWith(".mts") || name.endsWith(".cts");
     }
 
     public static MessageDigest digest() {

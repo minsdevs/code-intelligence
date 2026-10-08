@@ -56,6 +56,7 @@ import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.NaturalKeys;
 import dev.codeintelligence.evidence.EvidenceKind;
 import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
+import dev.codeintelligence.analysis.core.AnalysisCacheWeight;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -93,6 +94,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
     private String completedKey;
     private AnalysisResult completedResult;
     private Map<String, FilePhases> phases = Map.of();
+    private long cachedProject = Long.MIN_VALUE;
     private final java.util.concurrent.atomic.AtomicInteger parses = new java.util.concurrent.atomic.AtomicInteger();
     private int reusedPhases;
     private long retainedBytes;
@@ -106,7 +108,11 @@ public class JavaAnalyzer implements CodeAnalyzer {
     synchronized CacheStats cacheStats() { return new CacheStats(parses.get(), reusedPhases, phases.size(), retainedBytes); }
 
     private record Tape(String context, List<Event> events) {
-        void replay(Collector collector) { for (Event event : events) event.replay(collector); }
+        void replay(Collector collector) {
+            collector.replaying = true;
+            try { for (Event event : events) event.replay(collector); }
+            finally { collector.replaying = false; }
+        }
     }
     private record FilePhases(String blob, String declarations, Tape types, Tape members, Tape calls) {}
 
@@ -114,12 +120,12 @@ public class JavaAnalyzer implements CodeAnalyzer {
             Collector collector, AnalysisInputFingerprint.Snapshot input) {
         List<InventoriedFile> files = ctx.inventory().files().stream().filter(JavaAnalyzer::isJava).toList();
         Map<String, FilePhases> next = new LinkedHashMap<>();
-        List<InventoriedFile> changed = files.stream().filter(file -> reusable(file, input) == null).toList();
+        List<InventoriedFile> changed = files.stream().filter(file -> reusable(file, input, ctx.projectId()) == null).toList();
         configuration.setStoreTokens(true);
         try (ParseAhead<InventoriedFile, ParsedUnit> units = parseAhead(ctx, configuration, changed)) {
             for (InventoriedFile file : files) {
                 AnalysisInputFingerprint.checkpoint();
-                FilePhases previous = reusable(file, input);
+                FilePhases previous = reusable(file, input, ctx.projectId());
                 if (previous != null) {
                     previous.types.replay(collector);
                     reusedPhases++;
@@ -194,8 +200,8 @@ public class JavaAnalyzer implements CodeAnalyzer {
         return next;
     }
 
-    private FilePhases reusable(InventoriedFile file, AnalysisInputFingerprint.Snapshot input) {
-        if (input == null) return null;
+    private FilePhases reusable(InventoriedFile file, AnalysisInputFingerprint.Snapshot input, long project) {
+        if (input == null || project != cachedProject) return null;
         FilePhases entry = phases.get(file.path());
         return entry != null && entry.blob != null && entry.blob.equals(input.files().get(file.path())) ? entry : null;
     }
@@ -213,6 +219,17 @@ public class JavaAnalyzer implements CodeAnalyzer {
         });
         declaration.findAll(ConstructorDeclaration.class)
                 .forEach(constructor -> constructor.setBody(new com.github.javaparser.ast.stmt.BlockStmt()));
+        declaration.findAll(FieldDeclaration.class).forEach(field -> field.getVariables().forEach(variable -> {
+            // Explicit field types determine external resolution; inferred/anonymous declarations
+            // retain their initializer as a conservative dependency.
+            if (!variable.getType().isVarType() && variable.getInitializer().stream()
+                    .flatMap(value -> value.findAll(ObjectCreationExpr.class).stream())
+                    .noneMatch(value -> value.getAnonymousClassBody().isPresent())) variable.removeInitializer();
+        }));
+        declaration.findAll(com.github.javaparser.ast.body.InitializerDeclaration.class)
+                .forEach(initializer -> initializer.setBody(new com.github.javaparser.ast.stmt.BlockStmt()));
+        declaration.getAllContainedComments().forEach(comment -> comment.remove());
+        declaration.removeComment();
         return AnalysisInputFingerprint.hash(declaration.toString());
     }
 
@@ -223,8 +240,8 @@ public class JavaAnalyzer implements CodeAnalyzer {
         for (var entry : next.entrySet()) {
             long weight = 512L + entry.getKey().length() * 2L;
             for (Tape tape : List.of(entry.getValue().types, entry.getValue().members, entry.getValue().calls))
-                for (Event event : tape.events) weight += 128L + event.toString().length() * 2L;
-            if (weight > cacheBudget - bytes || bounded.size() == 4096) continue;
+                for (Event event : tape.events) weight += event.weight();
+            if (weight > cacheBudget - bytes) continue;
             bounded.put(entry.getKey(), entry.getValue());
             bytes += weight;
         }
@@ -242,10 +259,13 @@ public class JavaAnalyzer implements CodeAnalyzer {
 
     @Override
     public synchronized AnalysisResult analyze(AnalysisContext ctx) {
+        return analyze(ctx, AnalysisInputFingerprint.capture(ctx));
+    }
+
+    public synchronized AnalysisResult analyze(AnalysisContext ctx, AnalysisInputFingerprint.Snapshot input) {
         AnalysisInputFingerprint.checkpoint();
         parses.set(0);
         reusedPhases = 0;
-        AnalysisInputFingerprint.Snapshot input = AnalysisInputFingerprint.capture(ctx);
         String key = input == null ? null : input.complete();
         if (key != null && key.equals(completedKey)) {
             log.info("Java incremental reuse: parsed=0, completedHit=true, retainedBytes={}", retainedBytes);
@@ -265,8 +285,9 @@ public class JavaAnalyzer implements CodeAnalyzer {
         AnalysisResult result = collector.toResult();
         AnalysisInputFingerprint.checkpoint();
         retain(next, input != null);
+        cachedProject = ctx.projectId();
         if (key != null && phases.size() == next.size()
-                && result.nodes().size() + result.edges().size() + result.evidences().size() <= 100_000) {
+                && AnalysisCacheWeight.of(result) <= cacheBudget) {
             completedKey = key;
             completedResult = result;
         } else {
@@ -1048,10 +1069,13 @@ public class JavaAnalyzer implements CodeAnalyzer {
         private final Map<String, List<DeclaredMethod>> concreteMethods = new LinkedHashMap<>();
         private final java.security.MessageDigest context = AnalysisInputFingerprint.digest();
         private List<Event> recording;
+        private boolean replaying;
 
-        void record(Event event, boolean affectsResolution) {
+        void record(EventKind kind, Object value, Object other) {
+            if (replaying) return;
+            Event event = new Event(kind, value, other);
             if (recording != null) recording.add(event);
-            if (affectsResolution) AnalysisInputFingerprint.update(context, event.semantic());
+            if (kind.affectsResolution) AnalysisInputFingerprint.update(context, event.semantic());
         }
 
         String contextKey() {
@@ -1061,42 +1085,42 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
 
         void projectType(String type) {
-            record(new Event(0, type, null), true);
+            record(EventKind.PROJECT_TYPE, type, null);
             projectTypes.add(type);
         }
 
         void virtualType(String type) {
-            record(new Event(1, type, null), true);
+            record(EventKind.VIRTUAL_TYPE, type, null);
             virtualTypes.add(type);
         }
 
         void supertype(String type, String parent) {
-            record(new Event(2, type, parent), true);
+            record(EventKind.SUPERTYPE, type, parent);
             supertypes.computeIfAbsent(type, ignored -> new java.util.LinkedHashSet<>()).add(parent);
         }
 
         void concreteMethod(String owner, DeclaredMethod method) {
-            record(new Event(3, owner, method), true);
+            record(EventKind.CONCRETE_METHOD, owner, method);
             concreteMethods.computeIfAbsent(owner, ignored -> new ArrayList<>()).add(method);
         }
 
         void evidence(AnalyzerEvidence evidence) {
-            record(new Event(4, evidence, null), false);
+            record(EventKind.EVIDENCE, evidence, null);
             evidences.add(evidence);
         }
 
         void unresolved(String file) {
-            record(new Event(5, file, null), false);
+            record(EventKind.UNRESOLVED, file, null);
             unresolvedFiles.add(file);
         }
 
         void edgeDraft(GraphEdgeDraft edge) {
-            record(new Event(8, edge, null), false);
+            record(EventKind.EDGE, edge, null);
             edges.add(edge);
         }
 
         void put(GraphNodeDraft node) {
-            record(new Event(6, node, null), true);
+            record(EventKind.NODE, node, null);
             GraphNodeDraft existing = nodes.get(node.naturalKey());
             if (existing != null
                     && !"PACKAGE".equals(node.nodeType())
@@ -1117,7 +1141,8 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
 
         void projectMethod(String key, String name) {
-            record(new Event(7, key, name), true);
+            if (projectMethodsByName.getOrDefault(name, Set.of()).contains(key)) return;
+            record(EventKind.PROJECT_METHOD, key, name);
             projectMethodsByName
                     .computeIfAbsent(name, ignored -> new java.util.LinkedHashSet<>())
                     .add(key);
@@ -1151,7 +1176,20 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
     }
 
-    private record Event(int kind, Object value, Object other) {
+    private enum EventKind {
+        PROJECT_TYPE(true), VIRTUAL_TYPE(true), SUPERTYPE(true), CONCRETE_METHOD(true),
+        EVIDENCE(false), UNRESOLVED(false), NODE(true), PROJECT_METHOD(true), EDGE(false);
+        final boolean affectsResolution;
+        EventKind(boolean affectsResolution) { this.affectsResolution = affectsResolution; }
+    }
+
+    private record Event(EventKind kind, Object value, Object other) {
+        long weight() {
+            long additional = other instanceof DeclaredMethod method
+                    ? 96 + AnalysisCacheWeight.of(method.key) + AnalysisCacheWeight.of(method.name) + AnalysisCacheWeight.of(method.params)
+                    : AnalysisCacheWeight.of(other);
+            return 64 + AnalysisCacheWeight.of(value) + additional;
+        }
         String semantic() {
             if (value instanceof GraphNodeDraft node)
                 return kind + ":" + node.nodeType() + ":" + node.naturalKey() + ":" + node.filePath()
@@ -1160,22 +1198,24 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
 
         void replay(Collector collector) {
+            if (kind.affectsResolution) AnalysisInputFingerprint.update(collector.context, semantic());
             switch (kind) {
-                case 0 -> collector.projectType((String) value);
-                case 1 -> collector.virtualType((String) value);
-                case 2 -> collector.supertype((String) value, (String) other);
-                case 3 -> collector.concreteMethod((String) value, (DeclaredMethod) other);
-                case 4 -> collector.evidence((AnalyzerEvidence) value);
-                case 5 -> collector.unresolved((String) value);
-                case 6 -> collector.put((GraphNodeDraft) value);
-                case 7 -> collector.projectMethod((String) value, (String) other);
-                case 8 -> collector.edgeDraft((GraphEdgeDraft) value);
-                default -> throw new IllegalStateException("Unknown Java phase event");
+                case PROJECT_TYPE -> collector.projectType((String) value);
+                case VIRTUAL_TYPE -> collector.virtualType((String) value);
+                case SUPERTYPE -> collector.supertype((String) value, (String) other);
+                case CONCRETE_METHOD -> collector.concreteMethod((String) value, (DeclaredMethod) other);
+                case EVIDENCE -> collector.evidence((AnalyzerEvidence) value);
+                case UNRESOLVED -> collector.unresolved((String) value);
+                case NODE -> collector.put((GraphNodeDraft) value);
+                case PROJECT_METHOD -> collector.projectMethod((String) value, (String) other);
+                case EDGE -> collector.edgeDraft((GraphEdgeDraft) value);
             }
         }
     }
 
     private record ParsedUnit(InventoriedFile file, CompilationUnit cu, String pkg) {}
 
-    private record DeclaredMethod(String key, String name, List<String> params) {}
+    private record DeclaredMethod(String key, String name, List<String> params) {
+        DeclaredMethod { params = List.copyOf(params); }
+    }
 }

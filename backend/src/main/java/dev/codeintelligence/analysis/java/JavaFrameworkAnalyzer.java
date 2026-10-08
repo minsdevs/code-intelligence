@@ -9,6 +9,7 @@ import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
+import dev.codeintelligence.analysis.core.AnalysisCacheWeight;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -39,8 +40,11 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
 
     @Override
     public synchronized AnalysisResult analyze(AnalysisContext context) {
+        return analyze(context, AnalysisInputFingerprint.capture(context));
+    }
+
+    public synchronized AnalysisResult analyze(AnalysisContext context, AnalysisInputFingerprint.Snapshot input) {
         AnalysisInputFingerprint.checkpoint();
-        AnalysisInputFingerprint.Snapshot input = AnalysisInputFingerprint.capture(context);
         boolean known = input != null && input.environment().equals(environment);
         List<InventoriedFile> files = context.inventory().files().stream().filter(JavaParseSupport::isJava).toList();
         List<InventoriedFile> changed = files.stream().filter(file -> {
@@ -64,12 +68,7 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
                 var singleton = List.of(unit);
                 List<AnalysisResult> results = List.of(jpa.analyzeFiles(singleton), kafka.analyzeFiles(singleton),
                         layers.analyzeFiles(singleton), spring.analyzeFiles(singleton));
-                long bytes = 512;
-                for (AnalysisResult result : results) {
-                    for (GraphNodeDraft node : result.nodes()) bytes += 128L + node.toString().length() * 2L;
-                    for (GraphEdgeDraft edge : result.edges()) bytes += 128L + edge.toString().length() * 2L;
-                    for (AnalyzerEvidence evidence : result.evidences()) bytes += 128L + evidence.toString().length() * 2L;
-                }
+                long bytes = 512 + AnalysisCacheWeight.of(results);
                 current.put(file.path(), new Entry(input == null ? "" : input.files().getOrDefault(file.path(), ""), results, bytes));
             }
         }
@@ -91,7 +90,7 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
         Map<String, Entry> bounded = new LinkedHashMap<>();
         long bytes = 0;
         if (input != null) for (var entry : current.entrySet()) {
-            if (entry.getValue().bytes > MAX_BYTES - bytes || bounded.size() == 4096) continue;
+            if (entry.getValue().bytes > MAX_BYTES - bytes) continue;
             bounded.put(entry.getKey(), entry.getValue());
             bytes += entry.getValue().bytes;
         }

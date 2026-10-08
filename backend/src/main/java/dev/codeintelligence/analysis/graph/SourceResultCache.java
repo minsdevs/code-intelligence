@@ -2,6 +2,7 @@ package dev.codeintelligence.analysis.graph;
 
 import dev.codeintelligence.analysis.config.*;
 import dev.codeintelligence.analysis.core.AnalysisContext;
+import dev.codeintelligence.analysis.core.AnalysisCacheWeight;
 import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
@@ -30,11 +31,7 @@ final class SourceResultCache {
         }
         AnalysisResult result = analyzer.analyze(context);
         AnalysisInputFingerprint.checkpoint();
-        long weight = 256;
-        for (var node : result.nodes()) weight += 128L + node.toString().length() * 2L;
-        for (var edge : result.edges()) weight += 128L + edge.toString().length() * 2L;
-        for (var evidence : result.evidences()) weight += 128L + evidence.toString().length() * 2L;
-        for (var outcome : result.fileOutcomes()) weight += 128L + outcome.toString().length() * 2L;
+        long weight = AnalysisCacheWeight.of(result);
         synchronized (this) {
             Entry removed = entries.remove(analyzer.getClass());
             if (removed != null) bytes -= removed.bytes;

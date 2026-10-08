@@ -61,6 +61,14 @@ public class SourceParsingStep implements JobStep {
         this.evidenceService = evidenceService;
     }
 
+    private AnalysisResult analyze(CodeAnalyzer analyzer, AnalysisContext context, AnalysisInputFingerprint.Snapshot input) {
+        if (analyzer.getClass() == dev.codeintelligence.analysis.java.JavaAnalyzer.class)
+            return ((dev.codeintelligence.analysis.java.JavaAnalyzer) analyzer).analyze(context, input);
+        if (analyzer instanceof dev.codeintelligence.analysis.java.JavaFrameworkAnalyzer frameworks)
+            return frameworks.analyze(context, input);
+        return resultCache.analyze(analyzer, context, input == null ? null : input.complete());
+    }
+
     @Override
     public String key() {
         return KEY;
@@ -88,9 +96,10 @@ public class SourceParsingStep implements JobStep {
                 FileAnalysisOutcome.record(jdbc, snapshotId, file.path(), "TARGETED", "JAVA_PARSER_STARTED");
         }
         AnalysisContext analysis = new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory);
-        AnalysisInputFingerprint.Snapshot input = matching.stream().anyMatch(SourceResultCache::supports)
-                ? AnalysisInputFingerprint.capture(analysis) : null;
-        String fingerprint = input == null ? null : input.complete();
+        AnalysisInputFingerprint.Snapshot input = matching.stream().anyMatch(analyzer ->
+                analyzer.getClass() == dev.codeintelligence.analysis.java.JavaAnalyzer.class
+                        || analyzer instanceof dev.codeintelligence.analysis.java.JavaFrameworkAnalyzer
+                        || SourceResultCache.supports(analyzer)) ? AnalysisInputFingerprint.capture(analysis) : null;
         // No analyzer reads another's result. The Java analyzer, the longest and the one that checks
         // for a cancel per file, runs here; the others run meanwhile, in order, on one helper thread.
         // Results merge in analyzer order.
@@ -106,13 +115,13 @@ public class SourceParsingStep implements JobStep {
                 if (analyzer != inline)
                     later.put(
                             analyzer,
-                            helper.submit(() -> resultCache.analyze(analyzer, analysis, fingerprint)));
+                            helper.submit(() -> analyze(analyzer, analysis, input)));
             }
             for (CodeAnalyzer analyzer : matching) {
                 try {
                     acc.add(
                             analyzer == inline
-                                    ? resultCache.analyze(analyzer, analysis, fingerprint)
+                                    ? analyze(analyzer, analysis, input)
                                     : await(later.get(analyzer)));
                 } catch (JobCancelledException cancelled) {
                     throw cancelled;
