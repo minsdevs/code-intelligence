@@ -126,6 +126,21 @@ test('a full retention batch authenticates its last blob and preserves queued du
   assert.deepEqual(await reopened.retain({ projectId: 7, blobs: [...Array(127).fill(ref(a)), ref(b)] }), { count: 128 });
 });
 
+test('retention refuses a replaced project ancestor without touching the linked ciphertext', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const stored = await vault.put({ projectId: 8, bytes: Buffer.from('approved retained source') });
+  const original = await fs.readFile(f.blob(stored));
+  const project = path.join(f.options.sourceRoot, '8');
+  const moved = path.join(f.root, 'moved-project');
+  await fs.rename(project, moved);
+  await fs.symlink(moved, project);
+  const { sha256, byteSize, keyId } = stored;
+  await assert.rejects(vault.retain({ projectId: 8, blobs: [{ sha256, byteSize, keyId }] }),
+    code('SOURCE_VAULT_UNSAFE_PATH'));
+  assert.deepEqual(await fs.readFile(path.join(moved, sha256, 'blob.bin')), original);
+});
+
 test('staged blobs become readable and durable only through a barrier of the same vault session', async t => {
   const f = await fixture(t);
   const vault = await f.create();

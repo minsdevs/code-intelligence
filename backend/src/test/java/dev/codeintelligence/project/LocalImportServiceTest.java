@@ -211,6 +211,31 @@ class LocalImportServiceTest {
     }
 
     @Test
+    void cancelledCaptureKeepsPreviousSnapshotAndRemovesIncompleteObjects() throws Exception {
+        Path source = Files.createDirectories(tempDir.resolve("cancel-source"));
+        Files.writeString(source.resolve("value.txt"), "before");
+        Path target = tempDir.resolve("data/repos/cancel");
+        var previous = service.importFolder(source, target);
+        Files.writeString(source.resolve("value.txt"), "after");
+        var binding = service.inspect(source).binding();
+        assertThatThrownBy(() -> service.importApproved(binding, target, () -> {}, (name, oid, bytes) -> {
+            throw new dev.codeintelligence.job.JobCancelledException();
+        })).isInstanceOf(dev.codeintelligence.job.JobCancelledException.class);
+        assertThat(Files.readString(target.resolve("value.txt"))).isEqualTo("before");
+        try (var git = org.eclipse.jgit.api.Git.open(target.toFile())) {
+            assertThat(git.getRepository().resolve(org.eclipse.jgit.lib.Constants.HEAD).name())
+                    .isEqualTo(previous.headSha());
+        }
+        try (var children = Files.list(target.getParent())) {
+            assertThat(children.map(path -> path.getFileName().toString()).toList()).containsExactly("cancel");
+        }
+        service.importApproved(binding, target);
+        assertThat(Files.readString(target.resolve("value.txt"))).isEqualTo("after");
+        assertThat(new FileInventoryScanner().scan(target, 100, 1_048_576).files())
+                .extracting(file -> file.path()).containsExactly("value.txt");
+    }
+
+    @Test
     void importFolder_replacesStaleFilesAndCreatesAnalyzableGitSnapshot() throws Exception {
         Path source = tempDir.resolve("replace-source");
         Files.createDirectories(source);
