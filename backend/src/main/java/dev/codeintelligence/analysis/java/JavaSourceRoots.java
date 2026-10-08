@@ -27,7 +27,7 @@ final class JavaSourceRoots {
         Path normalized = clonePath.toAbsolutePath().normalize();
         Set<Path> inferredRoots = new LinkedHashSet<>();
         try (Stream<Path> walk = Files.walk(normalized)) {
-            walk.forEach(path -> {
+            walk.filter(path -> !dev.codeintelligence.analysis.core.AnalysisInputFingerprint.isMetadata(normalized.relativize(path))).forEach(path -> {
                 if (Files.isDirectory(path) && isStandardSourceRoot(path)) {
                     roots.add(path.toAbsolutePath().normalize());
                 }
@@ -57,7 +57,8 @@ final class JavaSourceRoots {
                 continue;
             }
             try (Stream<Path> walk = Files.walk(root)) {
-                walk.filter(Files::isRegularFile)
+                walk.filter(path -> !dev.codeintelligence.analysis.core.AnalysisInputFingerprint.isMetadata(root.relativize(path)))
+                        .filter(Files::isRegularFile)
                         .filter(path -> path.getFileName().toString().endsWith(".java"))
                         .forEach(javaFile -> {
                             String rel = root.relativize(javaFile).toString().replace('\\', '/');

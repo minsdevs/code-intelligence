@@ -8,7 +8,7 @@ import dev.codeintelligence.analysis.core.FileInventory;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
 import dev.codeintelligence.analysis.core.InventoriedFile;
-import dev.codeintelligence.job.JobCancellation;
+import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -39,8 +39,8 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
 
     @Override
     public synchronized AnalysisResult analyze(AnalysisContext context) {
-        JobCancellation.checkpoint();
-        JavaInputFingerprint.Snapshot input = JavaInputFingerprint.capture(context);
+        AnalysisInputFingerprint.checkpoint();
+        AnalysisInputFingerprint.Snapshot input = AnalysisInputFingerprint.capture(context);
         boolean known = input != null && input.environment().equals(environment);
         List<InventoriedFile> files = context.inventory().files().stream().filter(JavaParseSupport::isJava).toList();
         List<InventoriedFile> changed = files.stream().filter(file -> {
@@ -53,7 +53,7 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
             Set<String> changedPaths = new HashSet<>();
             for (InventoriedFile file : changed) changedPaths.add(file.path());
             for (InventoriedFile file : files) {
-                JobCancellation.checkpoint();
+                AnalysisInputFingerprint.checkpoint();
                 if (!changedPaths.contains(file.path())) {
                     current.put(file.path(), cache.get(file.path()));
                     reused++;
@@ -87,7 +87,7 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
                 evidences.addAll(result.evidences());
             }
         }
-        JobCancellation.checkpoint();
+        AnalysisInputFingerprint.checkpoint();
         Map<String, Entry> bounded = new LinkedHashMap<>();
         long bytes = 0;
         if (input != null) for (var entry : current.entrySet()) {

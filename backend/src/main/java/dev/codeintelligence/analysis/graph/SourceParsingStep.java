@@ -1,6 +1,7 @@
 package dev.codeintelligence.analysis.graph;
 
 import dev.codeintelligence.analysis.core.AnalysisContext;
+import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
@@ -47,6 +48,7 @@ public class SourceParsingStep implements JobStep {
     private final JdbcClient jdbc;
     private final GraphPersistenceService persistence;
     private final EvidenceService evidenceService;
+    private final SourceResultCache resultCache = new SourceResultCache();
 
     public SourceParsingStep(
             List<CodeAnalyzer> analyzers,
@@ -85,6 +87,10 @@ public class SourceParsingStep implements JobStep {
             if ("java".equalsIgnoreCase(file.language()) || file.path().endsWith(".java"))
                 FileAnalysisOutcome.record(jdbc, snapshotId, file.path(), "TARGETED", "JAVA_PARSER_STARTED");
         }
+        AnalysisContext analysis = new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory);
+        AnalysisInputFingerprint.Snapshot input = matching.stream().anyMatch(SourceResultCache::supports)
+                ? AnalysisInputFingerprint.capture(analysis) : null;
+        String fingerprint = input == null ? null : input.complete();
         // No analyzer reads another's result. The Java analyzer, the longest and the one that checks
         // for a cancel per file, runs here; the others run meanwhile, in order, on one helper thread.
         // Results merge in analyzer order.
@@ -100,15 +106,13 @@ public class SourceParsingStep implements JobStep {
                 if (analyzer != inline)
                     later.put(
                             analyzer,
-                            helper.submit(() -> analyzer.analyze(
-                                    new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory))));
+                            helper.submit(() -> resultCache.analyze(analyzer, analysis, fingerprint)));
             }
             for (CodeAnalyzer analyzer : matching) {
                 try {
                     acc.add(
                             analyzer == inline
-                                    ? analyzer.analyze(new AnalysisContext(
-                                            ctx.projectId(), snapshotId, ctx.clonePath(), inventory))
+                                    ? resultCache.analyze(analyzer, analysis, fingerprint)
                                     : await(later.get(analyzer)));
                 } catch (JobCancelledException cancelled) {
                     throw cancelled;

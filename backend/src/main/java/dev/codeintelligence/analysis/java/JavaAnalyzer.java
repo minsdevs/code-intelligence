@@ -55,7 +55,7 @@ import dev.codeintelligence.analysis.core.GraphNodeType;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.NaturalKeys;
 import dev.codeintelligence.evidence.EvidenceKind;
-import dev.codeintelligence.job.JobCancellation;
+import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -97,6 +97,11 @@ public class JavaAnalyzer implements CodeAnalyzer {
     private int reusedPhases;
     private long retainedBytes;
     static final long MAX_CACHE_BYTES = 64L * 1024 * 1024;
+    private final long cacheBudget;
+
+    public JavaAnalyzer() { this(MAX_CACHE_BYTES); }
+
+    JavaAnalyzer(long cacheBudget) { this.cacheBudget = Math.max(0, Math.min(MAX_CACHE_BYTES, cacheBudget)); }
     record CacheStats(int parserInvocations, int reusedPhases, int files, long retainedBytes) {}
     synchronized CacheStats cacheStats() { return new CacheStats(parses.get(), reusedPhases, phases.size(), retainedBytes); }
 
@@ -106,14 +111,14 @@ public class JavaAnalyzer implements CodeAnalyzer {
     private record FilePhases(String blob, String declarations, Tape types, Tape members, Tape calls) {}
 
     private Map<String, FilePhases> analyzeIncrementally(AnalysisContext ctx, ParserConfiguration configuration,
-            Collector collector, JavaInputFingerprint.Snapshot input) {
+            Collector collector, AnalysisInputFingerprint.Snapshot input) {
         List<InventoriedFile> files = ctx.inventory().files().stream().filter(JavaAnalyzer::isJava).toList();
         Map<String, FilePhases> next = new LinkedHashMap<>();
         List<InventoriedFile> changed = files.stream().filter(file -> reusable(file, input) == null).toList();
         configuration.setStoreTokens(true);
         try (ParseAhead<InventoriedFile, ParsedUnit> units = parseAhead(ctx, configuration, changed)) {
             for (InventoriedFile file : files) {
-                JobCancellation.checkpoint();
+                AnalysisInputFingerprint.checkpoint();
                 FilePhases previous = reusable(file, input);
                 if (previous != null) {
                     previous.types.replay(collector);
@@ -135,13 +140,13 @@ public class JavaAnalyzer implements CodeAnalyzer {
                 next.put(file.path(), new FilePhases(blob, declarations(unit.cu), types, null, null));
             }
         }
-        java.security.MessageDigest global = JavaInputFingerprint.digest();
-        JavaInputFingerprint.update(global, input == null ? "unknown" : input.environment());
-        if (!collector.outcomes.isEmpty() && input != null) JavaInputFingerprint.update(global, input.complete());
-        JavaInputFingerprint.update(global, collector.projectTypes.toString());
+        java.security.MessageDigest global = AnalysisInputFingerprint.digest();
+        AnalysisInputFingerprint.update(global, input == null ? "unknown" : input.environment());
+        if (!collector.outcomes.isEmpty() && input != null) AnalysisInputFingerprint.update(global, input.complete());
+        AnalysisInputFingerprint.update(global, collector.projectTypes.toString());
         for (var entry : next.entrySet()) {
-            JavaInputFingerprint.update(global, entry.getKey());
-            JavaInputFingerprint.update(global, entry.getValue().declarations);
+            AnalysisInputFingerprint.update(global, entry.getKey());
+            AnalysisInputFingerprint.update(global, entry.getValue().declarations);
         }
         String dependencies = java.util.HexFormat.of().formatHex(global.digest());
         for (int phase = 1; phase <= 2; phase++) {
@@ -162,7 +167,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
             }
             try (ParseAhead<InventoriedFile, ParsedUnit> ahead = parseAhead(ctx, configuration, missing)) {
             for (InventoriedFile file : files) {
-                JobCancellation.checkpoint();
+                AnalysisInputFingerprint.checkpoint();
                 FilePhases entry = next.get(file.path());
                 if (entry == null) continue;
                 String context = dependencies + collector.contextKey();
@@ -189,7 +194,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
         return next;
     }
 
-    private FilePhases reusable(InventoriedFile file, JavaInputFingerprint.Snapshot input) {
+    private FilePhases reusable(InventoriedFile file, AnalysisInputFingerprint.Snapshot input) {
         if (input == null) return null;
         FilePhases entry = phases.get(file.path());
         return entry != null && entry.blob != null && entry.blob.equals(input.files().get(file.path())) ? entry : null;
@@ -208,7 +213,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
         });
         declaration.findAll(ConstructorDeclaration.class)
                 .forEach(constructor -> constructor.setBody(new com.github.javaparser.ast.stmt.BlockStmt()));
-        return JavaInputFingerprint.hash(declaration.toString());
+        return AnalysisInputFingerprint.hash(declaration.toString());
     }
 
     private void retain(Map<String, FilePhases> next, boolean known) {
@@ -219,7 +224,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
             long weight = 512L + entry.getKey().length() * 2L;
             for (Tape tape : List.of(entry.getValue().types, entry.getValue().members, entry.getValue().calls))
                 for (Event event : tape.events) weight += 128L + event.toString().length() * 2L;
-            if (weight > MAX_CACHE_BYTES - bytes || bounded.size() == 4096) continue;
+            if (weight > cacheBudget - bytes || bounded.size() == 4096) continue;
             bounded.put(entry.getKey(), entry.getValue());
             bytes += weight;
         }
@@ -237,10 +242,10 @@ public class JavaAnalyzer implements CodeAnalyzer {
 
     @Override
     public synchronized AnalysisResult analyze(AnalysisContext ctx) {
-        JobCancellation.checkpoint();
+        AnalysisInputFingerprint.checkpoint();
         parses.set(0);
         reusedPhases = 0;
-        JavaInputFingerprint.Snapshot input = JavaInputFingerprint.capture(ctx);
+        AnalysisInputFingerprint.Snapshot input = AnalysisInputFingerprint.capture(ctx);
         String key = input == null ? null : input.complete();
         if (key != null && key.equals(completedKey)) {
             log.info("Java incremental reuse: parsed=0, completedHit=true, retainedBytes={}", retainedBytes);
@@ -258,7 +263,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
             releaseFacades();
         }
         AnalysisResult result = collector.toResult();
-        JobCancellation.checkpoint();
+        AnalysisInputFingerprint.checkpoint();
         retain(next, input != null);
         if (key != null && phases.size() == next.size()
                 && result.nodes().size() + result.edges().size() + result.evidences().size() <= 100_000) {
@@ -1041,12 +1046,12 @@ public class JavaAnalyzer implements CodeAnalyzer {
         private final Map<String, Set<String>> supertypes = new LinkedHashMap<>();
         /** Instance methods with a body (including interface defaults), by declaring project type. */
         private final Map<String, List<DeclaredMethod>> concreteMethods = new LinkedHashMap<>();
-        private final java.security.MessageDigest context = JavaInputFingerprint.digest();
+        private final java.security.MessageDigest context = AnalysisInputFingerprint.digest();
         private List<Event> recording;
 
         void record(Event event, boolean affectsResolution) {
             if (recording != null) recording.add(event);
-            if (affectsResolution) JavaInputFingerprint.update(context, event.semantic());
+            if (affectsResolution) AnalysisInputFingerprint.update(context, event.semantic());
         }
 
         String contextKey() {
