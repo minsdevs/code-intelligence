@@ -1,6 +1,8 @@
 package dev.codeintelligence.analysis.java;
 
+import dev.codeintelligence.analysis.core.AnalysisCacheWeight;
 import dev.codeintelligence.analysis.core.AnalysisContext;
+import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
@@ -8,8 +10,6 @@ import dev.codeintelligence.analysis.core.FileInventory;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
 import dev.codeintelligence.analysis.core.InventoriedFile;
-import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
-import dev.codeintelligence.analysis.core.AnalysisCacheWeight;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -31,6 +31,9 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
     private final SpringEndpointExtractor spring = new SpringEndpointExtractor();
     private Map<String, Entry> cache = Map.of();
     private String environment;
+    private final java.util.concurrent.locks.ReentrantLock analysisLock =
+            new java.util.concurrent.locks.ReentrantLock();
+
     private record Entry(String blob, List<AnalysisResult> results, long bytes) {}
 
     @Override
@@ -39,18 +42,36 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
     }
 
     @Override
-    public synchronized AnalysisResult analyze(AnalysisContext context) {
+    public AnalysisResult analyze(AnalysisContext context) {
         return analyze(context, AnalysisInputFingerprint.capture(context));
     }
 
-    public synchronized AnalysisResult analyze(AnalysisContext context, AnalysisInputFingerprint.Snapshot input) {
+    public AnalysisResult analyze(AnalysisContext context, AnalysisInputFingerprint.Snapshot input) {
+        try {
+            analysisLock.lockInterruptibly();
+        } catch (InterruptedException cancelled) {
+            Thread.currentThread().interrupt();
+            throw new dev.codeintelligence.job.JobCancelledException();
+        }
+        try {
+            return analyzeLocked(context, input);
+        } finally {
+            analysisLock.unlock();
+        }
+    }
+
+    private AnalysisResult analyzeLocked(AnalysisContext context, AnalysisInputFingerprint.Snapshot input) {
         AnalysisInputFingerprint.checkpoint();
         boolean known = input != null && input.environment().equals(environment);
-        List<InventoriedFile> files = context.inventory().files().stream().filter(JavaParseSupport::isJava).toList();
-        List<InventoriedFile> changed = files.stream().filter(file -> {
-            Entry old = known ? cache.get(file.path()) : null;
-            return old == null || !old.blob.equals(input.files().get(file.path()));
-        }).toList();
+        List<InventoriedFile> files = context.inventory().files().stream()
+                .filter(JavaParseSupport::isJava)
+                .toList();
+        List<InventoriedFile> changed = files.stream()
+                .filter(file -> {
+                    Entry old = known ? cache.get(file.path()) : null;
+                    return old == null || !old.blob.equals(input.files().get(file.path()));
+                })
+                .toList();
         Map<String, Entry> current = new LinkedHashMap<>();
         int reused = 0;
         try (var parsed = JavaParseSupport.parseAhead(context, changed)) {
@@ -66,10 +87,15 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
                 JavaParseSupport.ParsedJavaFile unit = parsed.next().value();
                 if (unit == null) continue;
                 var singleton = List.of(unit);
-                List<AnalysisResult> results = List.of(jpa.analyzeFiles(singleton), kafka.analyzeFiles(singleton),
-                        layers.analyzeFiles(singleton), spring.analyzeFiles(singleton));
+                List<AnalysisResult> results = List.of(
+                        jpa.analyzeFiles(singleton),
+                        kafka.analyzeFiles(singleton),
+                        layers.analyzeFiles(singleton),
+                        spring.analyzeFiles(singleton));
                 long bytes = 512 + AnalysisCacheWeight.of(results);
-                current.put(file.path(), new Entry(input == null ? "" : input.files().getOrDefault(file.path(), ""), results, bytes));
+                current.put(
+                        file.path(),
+                        new Entry(input == null ? "" : input.files().getOrDefault(file.path(), ""), results, bytes));
             }
         }
         List<GraphNodeDraft> nodes = new ArrayList<>();
@@ -89,11 +115,12 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
         AnalysisInputFingerprint.checkpoint();
         Map<String, Entry> bounded = new LinkedHashMap<>();
         long bytes = 0;
-        if (input != null) for (var entry : current.entrySet()) {
-            if (entry.getValue().bytes > MAX_BYTES - bytes) continue;
-            bounded.put(entry.getKey(), entry.getValue());
-            bytes += entry.getValue().bytes;
-        }
+        if (input != null)
+            for (var entry : current.entrySet()) {
+                if (entry.getValue().bytes > MAX_BYTES - bytes) continue;
+                bounded.put(entry.getKey(), entry.getValue());
+                bytes += entry.getValue().bytes;
+            }
         cache = Map.copyOf(bounded);
         environment = input == null ? null : input.environment();
         log.info("Java framework reuse: parsed={}, reused={}, retainedBytes={}", changed.size(), reused, bytes);
