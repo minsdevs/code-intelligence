@@ -83,3 +83,13 @@ test('a dialog replaced by someone else is reported and a relative folder is nev
   await assert.rejects(withFolderPicker(s.app, folder, async () => { s.dialog.showOpenDialog = async () => ({}); }), /^Error: FOLDER_PICKER_REPLACED$/);
   await assert.rejects(withFolderPicker(syntheticApp().app, 'relative/project', async () => {}), /^Error: FOLDER_PICKER_FOLDER_INVALID$/);
 });
+
+test('malformed main-process picker records cannot pass strict response validation', async () => {
+  for (const record of [null, {}, { calls: 1 }, { calls: 1, refused: 0, messageBoxes: '0' },
+    { calls: 1, refused: -1, messageBoxes: 0 }, { calls: 1, refused: 0, messageBoxes: 0, extra: true }]) {
+    let disposed = false;
+    const app = { evaluateHandle: async () => ({ evaluate: async () => record, dispose: async () => { disposed = true; } }) };
+    await assert.rejects(withFolderPicker(app, folder, async () => {}), /^Error: FOLDER_PICKER_RESPONSE_INVALID$/);
+    assert.equal(disposed, true);
+  }
+});
