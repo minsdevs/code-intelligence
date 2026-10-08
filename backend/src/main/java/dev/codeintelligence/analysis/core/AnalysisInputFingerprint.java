@@ -19,7 +19,8 @@ public final class AnalysisInputFingerprint {
     private AnalysisInputFingerprint() {}
 
     /** javaSourcesComplete describes inventory coverage, not parser success. */
-    public record Snapshot(String complete, String environment, Map<String, String> files, boolean javaSourcesComplete) {}
+    public record Snapshot(
+            String complete, String environment, Map<String, String> files, boolean javaSourcesComplete) {}
 
     public static Snapshot capture(AnalysisContext context) {
         if (context.clonePath() == null) return null;
@@ -69,8 +70,7 @@ public final class AnalysisInputFingerprint {
                 update(complete, hash);
                 if (javaPaths.contains(relative)) files.put(relative, hash);
                 else {
-                    if (relative.regionMatches(true, relative.length() - 5, ".java", 0, 5))
-                        javaSourcesComplete = false;
+                    if (relative.regionMatches(true, relative.length() - 5, ".java", 0, 5)) javaSourcesComplete = false;
                     if (!isForeignSource(relative)) update(environment, hash);
                 }
             }

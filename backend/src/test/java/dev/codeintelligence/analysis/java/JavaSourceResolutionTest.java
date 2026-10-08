@@ -36,8 +36,9 @@ class JavaSourceResolutionTest {
                 }
                 """);
         AnalysisResult result = checkColdAndWarm(context(root));
-        assertThat(result.edges()).anyMatch(edge -> "CALLS".equals(edge.edgeType())
-                && edge.targetNaturalKey().contains("Helper#call("));
+        assertThat(result.edges())
+                .anyMatch(edge -> "CALLS".equals(edge.edgeType())
+                        && edge.targetNaturalKey().contains("Helper#call("));
         write(root, "src/main/java/p/Definitions.java", """
                 package p;
                 @interface Ann {}
@@ -57,20 +58,26 @@ class JavaSourceResolutionTest {
         write(root, "src/main/java/p/Definitions.java", "package q; @interface Special {}");
         write(root, "src/main/java/p/Consumer.java", "package p; @Special class Consumer {}");
         AnalysisContext all = context(root);
-        AnalysisContext partial = new AnalysisContext(all.projectId(), all.snapshotId(), all.clonePath(),
+        AnalysisContext partial = new AnalysisContext(
+                all.projectId(),
+                all.snapshotId(),
+                all.clonePath(),
                 FileInventory.of(all.inventory().files().stream()
-                        .filter(file -> file.path().endsWith("Consumer.java")).toList()));
+                        .filter(file -> file.path().endsWith("Consumer.java"))
+                        .toList()));
         JavaAnalyzer analyzer = new JavaAnalyzer();
         AnalysisResult result = analyzer.analyze(partial);
         assertThat(result).isEqualTo(full(partial));
         assertThat(analyzer.analyze(partial)).isEqualTo(result);
-        assertThat(result.edges()).anyMatch(edge -> "ANNOTATED_BY".equals(edge.edgeType())
-                && "java:q.Special".equals(edge.targetNaturalKey()));
+        assertThat(result.edges())
+                .anyMatch(edge ->
+                        "ANNOTATED_BY".equals(edge.edgeType()) && "java:q.Special".equals(edge.targetNaturalKey()));
         write(root, "src/main/java/p/Definitions.java", "package r; @interface Special {}");
         AnalysisResult changed = analyzer.analyze(partial);
         assertThat(changed).isEqualTo(full(partial));
-        assertThat(changed.edges()).anyMatch(edge -> "ANNOTATED_BY".equals(edge.edgeType())
-                && "java:r.Special".equals(edge.targetNaturalKey()));
+        assertThat(changed.edges())
+                .anyMatch(edge ->
+                        "ANNOTATED_BY".equals(edge.edgeType()) && "java:r.Special".equals(edge.targetNaturalKey()));
     }
 
     @Test
@@ -82,8 +89,7 @@ class JavaSourceResolutionTest {
                 """);
         JavaAnalyzer analyzer = new JavaAnalyzer();
         assertThat(analyzer.analyze(context(root))).isEqualTo(full(context(root)));
-        write(root, "src/main/java/p/Definitions.java",
-                "package p; class Helper { int value() { return 1; } }");
+        write(root, "src/main/java/p/Definitions.java", "package p; class Helper { int value() { return 1; } }");
         assertThat(analyzer.analyze(context(root))).isEqualTo(full(context(root)));
     }
 
@@ -105,9 +111,10 @@ class JavaSourceResolutionTest {
 
     @Test
     void mismatchedPackageDirectoryKeepsUnrestrictedSolverSemantics() throws Exception {
-        write(root, "src/main/java/p/Definitions.java",
-                "package q; class Helper { static int call() { return 2; } }");
-        write(root, "src/main/java/p/Consumer.java",
+        write(root, "src/main/java/p/Definitions.java", "package q; class Helper { static int call() { return 2; } }");
+        write(
+                root,
+                "src/main/java/p/Consumer.java",
                 "package p; class Consumer { int run() { return Helper.call(); } }");
         checkColdAndWarm(context(root));
     }

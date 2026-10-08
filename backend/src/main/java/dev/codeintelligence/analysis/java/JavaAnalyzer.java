@@ -408,17 +408,20 @@ public class JavaAnalyzer implements CodeAnalyzer {
             if (Files.isDirectory(root)) {
                 // The solver only reads declarations from its own trees; without their token lists
                 // (call-site spans come from the analyzer's trees) each parse allocates and keeps less.
-                typeSolver.add(new JavaParserTypeSolver(
-                        root,
-                        new JavaParser(new ParserConfiguration().setStoreTokens(false)),
-                        cache((Path file, Optional<CompilationUnit> tree) -> tree.isPresent() ? 1 : 0),
-                        cache((Path directory, List<CompilationUnit> trees) -> trees.size()),
-                        cache(JavaAnalyzer::solvedTrees)) {
-                    @Override
-                    public SymbolReference<ResolvedReferenceTypeDeclaration> tryToSolveType(String name) {
-                        return declarations.mayDeclare(name) ? super.tryToSolveType(name) : SourceDeclarations.ABSENT;
-                    }
-                });
+                typeSolver.add(
+                        new JavaParserTypeSolver(
+                                root,
+                                new JavaParser(new ParserConfiguration().setStoreTokens(false)),
+                                cache((Path file, Optional<CompilationUnit> tree) -> tree.isPresent() ? 1 : 0),
+                                cache((Path directory, List<CompilationUnit> trees) -> trees.size()),
+                                cache(JavaAnalyzer::solvedTrees)) {
+                            @Override
+                            public SymbolReference<ResolvedReferenceTypeDeclaration> tryToSolveType(String name) {
+                                return declarations.mayDeclare(name)
+                                        ? super.tryToSolveType(name)
+                                        : SourceDeclarations.ABSENT;
+                            }
+                        });
             }
         }
         typeSolver.add(new ReflectionTypeSolver(true));
@@ -460,8 +463,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
                             && !declaredPackage.equals(root.relativize(directory)
                                     .toString()
                                     .replace('\\', '.')
-                                    .replace('/', '.')))
-                        return false;
+                                    .replace('/', '.'))) return false;
                 }
             }
             return true;
