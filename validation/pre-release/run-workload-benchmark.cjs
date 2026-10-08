@@ -419,7 +419,7 @@ async function main(argv = process.argv.slice(2)) {
     await d.markClick('refreshClick');
     const [response] = await stage('INCREMENTAL_FAILED', () => Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === `/api/projects/${projectId}/reanalyze` && r.request().method() === 'POST', { timeout: 60000 }),
-      page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click(),
+      page.getByRole('button', { name: /^(Re-analyze after reviewing changes|변경 확인 후 재분석)$/ }).click(),
     ]));
     if (!response.ok()) throw new Error('INCREMENTAL_FAILED');
     const jobId = (await response.json()).jobId;
@@ -439,10 +439,11 @@ async function main(argv = process.argv.slice(2)) {
     const strip = value => JSON.parse(JSON.stringify(value, (key, item) => ['resolvedSnapshotId', 'snapshotId', 'createdAt', 'analyzedAt'].includes(key) ? undefined : item));
     row.fullPipeline = row.job.steps.length === run.rows.analysis.job.steps.length && row.job.steps.every(step => step.status === 'DONE');
     row.countsEqual = JSON.stringify(strip(before)) === JSON.stringify(strip(after)) && JSON.stringify(coverageBefore) === JSON.stringify(coverageAfter);
-    // The product only performs full reanalysis. The change edits constants only, so a full
-    // result must have the same structure as the first full result.
-    row.checks.resultEqualsFull = row.fullPipeline && row.countsEqual;
-    row.scope = 'product refresh is always a full reanalysis (incremental reanalysis not implemented); measured as the SLO full fallback';
+    // Equal overview counts do not prove canonical facts/evidence equal a clean full analysis.
+    // Keep this timing smoke diagnostic; the formal equality gate needs its own full oracle.
+    row.checks.resultEqualsFull = null;
+    row.fullResultComparison = 'NOT_RUN';
+    row.scope = 'approved immutable-snapshot refresh with bounded reuse and conservative recomputation; overview/outcome counts are diagnostic, not clean-full equality proof';
     row.status = 'PASS';
   }
 

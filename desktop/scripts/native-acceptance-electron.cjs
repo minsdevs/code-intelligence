@@ -570,7 +570,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await perform(() => expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible());
     const [refreshed] = await perform(() => Promise.all([
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects/' + projectId + '/reanalyze' && response.request().method() === 'POST', { timeout: deadline.limit() }),
-      page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click(),
+      page.getByRole('button', { name: /^(Re-analyze after reviewing changes|변경 확인 후 재분석)$/ }).click(),
     ]));
     assert.ok(refreshed.ok());
     await awaitJob((await perform(() => refreshed.json())).jobId);

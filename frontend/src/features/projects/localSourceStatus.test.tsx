@@ -96,7 +96,7 @@ describe('local source inspection failures', () => {
     ).toBeInTheDocument()
     expect(within(panel).getByRole('button', { name: '상태 새로고침' })).toBeEnabled()
     expect(
-      within(panel).queryByRole('button', { name: '변경 확인 후 전체 재분석' }),
+      within(panel).queryByRole('button', { name: '변경 확인 후 재분석' }),
     ).not.toBeInTheDocument()
     expect(within(panel).queryByRole('button', { name: '폴더 다시 연결' })).not.toBeInTheDocument()
     expect(within(panel).queryByText('변경 파일 보기')).not.toBeInTheDocument()
@@ -120,7 +120,7 @@ describe('local source inspection failures', () => {
     fireEvent.click(await screen.findByRole('button', { name: '상태 새로고침' }))
     expect(await screen.findByRole('button', { name: '변경 사항 미리보기' })).toBeEnabled()
     expect(
-      screen.queryByRole('button', { name: '변경 확인 후 전체 재분석' }),
+      screen.queryByRole('button', { name: '변경 확인 후 재분석' }),
     ).not.toBeInTheDocument()
     await waitFor(() => expect(getLocalSourceStatus).toHaveBeenCalledTimes(2))
     expect(screen.getByText('변경됨')).toBeInTheDocument()
@@ -148,7 +148,7 @@ describe('local source inspection failures', () => {
     expect(await screen.findByText('권한 재확인 필요')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '폴더 다시 연결' })).toBeEnabled()
     expect(
-      screen.queryByRole('button', { name: '변경 확인 후 전체 재분석' }),
+      screen.queryByRole('button', { name: '변경 확인 후 재분석' }),
     ).not.toBeInTheDocument()
   })
 
@@ -162,7 +162,7 @@ describe('local source inspection failures', () => {
     })
     renderStatus()
     fireEvent.click(await screen.findByRole('button', { name: '변경 사항 미리보기' }))
-    const confirm = await screen.findByRole('button', { name: '변경 확인 후 전체 재분석' })
+    const confirm = await screen.findByRole('button', { name: '변경 확인 후 재분석' })
     expect(screen.getByText('기준 스냅샷: 없음 (처음 분석)')).toBeInTheDocument()
     expect(reanalyzeLocalProject).not.toHaveBeenCalled()
     fireEvent.click(confirm)
@@ -181,10 +181,10 @@ describe('local source inspection failures', () => {
     })
     renderStatus()
     fireEvent.click(await screen.findByRole('button', { name: '변경 사항 미리보기' }))
-    await screen.findByRole('button', { name: '변경 확인 후 전체 재분석' })
+    await screen.findByRole('button', { name: '변경 확인 후 재분석' })
     fireEvent.click(screen.getByRole('button', { name: '상태 새로고침' }))
     expect(
-      screen.queryByRole('button', { name: '변경 확인 후 전체 재분석' }),
+      screen.queryByRole('button', { name: '변경 확인 후 재분석' }),
     ).not.toBeInTheDocument()
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '변경 사항 미리보기' })).toBeEnabled(),
@@ -214,7 +214,7 @@ describe('local source inspection failures', () => {
     })
     renderStatus()
     fireEvent.click(await screen.findByRole('button', { name: '변경 사항 미리보기' }))
-    fireEvent.click(await screen.findByRole('button', { name: '변경 확인 후 전체 재분석' }))
+    fireEvent.click(await screen.findByRole('button', { name: '변경 확인 후 재분석' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '새 미리보기를 확인한 뒤 다시 승인하세요',
     )

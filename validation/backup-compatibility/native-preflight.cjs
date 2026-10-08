@@ -220,7 +220,7 @@ async function main(argv) {
     await perform(() => expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible());
     const [updated] = await perform(() => Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === `/api/projects/${projectId}/reanalyze` && r.request().method() === 'POST'),
-      page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click()]));
+      page.getByRole('button', { name: /^(Re-analyze after reviewing changes|변경 확인 후 재분석)$/ }).click()]));
     assert(updated.ok()); const nextJob = (await perform(() => updated.json())).jobId;
     await perform(() => expect.poll(async () => (await api('/api/jobs/' + nextJob)).status, { timeout: 90000 }).toBe('DONE'), 90000);
     const nextSnapshot = (await api('/api/projects/' + projectId)).currentSnapshot.id;
