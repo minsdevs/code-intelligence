@@ -131,6 +131,7 @@ export type ManifestFileFacts = {
   providers: { token: string; ref: Pick<DeclarationRef, 'key' | 'name' | 'filePath'> }[]
   methods: [string, Pick<DeclarationRef, 'key' | 'name' | 'filePath'>][]
   prefix: GlobalPrefixFacts
+  reads: string[]
 }
 
 
@@ -288,13 +289,20 @@ export function collectManifestFacts(project: Project, files: AnalyzeFile[], sco
     scope.current = filePath
     try {
       const providers = new Map<string, DeclarationRef>()
-      const own: ManifestFileFacts = { providers: [], methods: [], prefix: prefixFacts(source) }
-      collectNestModules([source], bindingsByFile, resolveImport, declarationsByFileAndName, classesByName, ignore, ignore, providers,
+      const reads = new Set<string>()
+      const own: ManifestFileFacts = { providers: [], methods: [], prefix: prefixFacts(source), reads: [] }
+      const resolveProvider: Resolver = (specifier, fromPath) => {
+        const resolved = resolveImport(specifier, fromPath)
+        if (resolved && resolved !== filePath) reads.add(resolved)
+        return resolved
+      }
+      collectNestModules([source], bindingsByFile, resolveProvider, declarationsByFileAndName, classesByName, ignore, ignore, providers,
         (token, ref) => {
           const plain = { key: ref.key, name: ref.name, filePath: ref.filePath }
           facts.providers.push({ filePath, token, ref: plain })
           own.providers.push({ token, ref: plain })
-        })
+        }, true)
+      own.reads = [...reads].sort()
       for (const ref of providers.values()) {
         for (const [key, method] of methodsByOwnerAndName) if (key.startsWith(`${ref.key}.`)) {
           const plain = { key: method.key, name: method.name, filePath: method.filePath }
@@ -643,6 +651,7 @@ function collectNestModules(
   addEdge: (edge: SemanticEdgeHit) => void,
   providers: Map<string, DeclarationRef>,
   onProvider?: (token: string, ref: DeclarationRef) => void,
+  providersOnly = false,
 ): void {
   const register = (token: string, ref: DeclarationRef): void => {
     providers.set(token, ref)
@@ -660,6 +669,7 @@ function collectNestModules(
       if (!metadata || !Node.isObjectLiteralExpression(metadata)) continue
       const moduleKey = symbolKey(filePath, name)
       for (const propertyName of ['imports', 'controllers', 'providers', 'exports'] as const) {
+        if (providersOnly && propertyName !== 'providers') continue
         for (const expression of propertyExpressions(metadata, propertyName)) {
           if (Node.isObjectLiteralExpression(expression) && propertyName === 'providers') {
             const tokenExpression = propertyInitializer(expression, 'provide')

@@ -73,9 +73,9 @@ export function extractSliced(
   const candidates = plan.order.filter((path) => plan.nestCandidate(path))
   if (identity) for (const path of candidates) {
     const envelope = envelopes.get(path)
-    if (!envelope || (envelope.dependency !== identity.dependencies.get(path) && envelope.dependency !== identity.whole)) continue
+    if (!envelope) continue
     const entry = load(path)
-    if (entry?.metadata) {
+    if (entry?.metadata && (envelope.dependency === identity.metadata(path, entry.metadata) || envelope.dependency === identity.whole)) {
       metadata.set(path, entry.metadata)
       metadataDependencies.set(path, envelope.dependency)
       onMetadataReuse?.(path)
@@ -91,7 +91,7 @@ export function extractSliced(
     for (const path of outside) metadataEscalated.add(path)
     for (const [path, value] of byFile) if (!outside.has(path)) {
       metadata.set(path, value)
-      if (identity) metadataDependencies.set(path, metadataEscalated.has(path) ? identity.whole : identity.dependencies.get(path)!)
+      if (identity) metadataDependencies.set(path, metadataEscalated.has(path) ? identity.whole : identity.metadata(path, value))
     }
     return { outside }
   })

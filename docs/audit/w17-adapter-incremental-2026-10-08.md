@@ -149,7 +149,7 @@ node validation/analyzer-transport-integration/incremental-smoke.cjs
 
 명령: 공통 wait-quiet 후 `node validation/analyzer-transport-integration/incremental-smoke.cjs`. 증거: `validation/local/w17-adapter-incremental/backend-cap-smoke.log`. 소스/토큰/키는 로그에 기록하지 않았다.
 
-**medium 5,500여 TS/JS 파일의 실제 보관량은 NOT RUN.** 이 659항목 결과를 medium에서 모두 보관된다는 증거로 사용하지 않는다. [INFERENCE] 같은 평균 항목 크기라면 16 MiB를 크게 초과하므로 medium에서는 adapter 자체 16 MiB 출력 한도와 backend UTF-16 16 MiB 한도가 각각 재사용률을 제한한다. cap 확대·threshold 변경은 하지 않았다.
+당시 medium 5,500여 TS/JS 파일의 실제 보관량은 NOT RUN이었다. 이후 실제 측정 및 해결 결과는 아래 후속 절에 기록한다. 작은 fixture의 무퇴출만으로 medium 무퇴출을 주장하지 않았고 cap/threshold 확대도 하지 않았다.
 
 ## 압축·파일별 Nest metadata 후속 — 중간 증거
 
@@ -172,3 +172,48 @@ node validation/analyzer-transport-integration/incremental-smoke.cjs
 medium 실제 source/config 입력 5,503개. cold/refresh cache 5,497항목, token UTF-8 8,528,895 bytes, JSON 배열 8,699,303 bytes, backend 비용 17,057,790 bytes. 16 MiB 정책상 5,422개 보관 / 75개 퇴출이다. 변경/무변경 모두 독립 full 전체 응답 equality는 통과했으나 **무변경 compiler 0 assertion에서 실패**했다. 이후 backend-cap refresh 단계는 **NOT RUN**이다. 사용자 확인 대기 지시에 따라 당시 진행 중이던 유한 시험만 끝내고 중단했으며, 이후 확인된 범위 재개 승인을 받았다. 실패 로그는 유지한다.
 
 남은 승인 범위: medium 16 MiB 수용 비용 개선, metadata의 실제 참조 의존성 키, 큰 결과의 안전한 bounded decode 및 0-parse 회귀 해결. Backend/build는 수정·실행하지 않았다. 상한/설계 추가 결정은 coordinator에게 먼저 문의한다.
+
+## 최종 후속 — 실제 medium 수용 및 metadata 참조 키
+
+사용자 재승인 및 coordinator의 명시 승인으로 raw inflate 상한을 **항목 4 MiB / 호출 전체 64 MiB**로 정했다. **wire/backend 항목 128 KiB·owner 16 MiB·기존 source/request/result 한도는 그대로**다. fixed schema dictionary를 포함한 새 `deflate-raw-v2` 형식으로 clean cutover하며 dictionary/형식/rule/compiler는 binary identity에 묶인다. legacy decode 분기는 없다.
+
+- HMAC 검증이 끝난 envelope만 inflate한다. `maxOutputLength`를 강제하고 성공한 실제 raw bytes 및 잘못된 JSON/shape의 bytes도 예산에서 차감한다. inflate 자체가 실패하면 예약한 최대량을 보수적으로 차감한다. 호출 내 decoded map으로 metadata와 result가 같은 토큰을 두 번 inflate하지 않는다. 검증·예산이 불확실하면 해당 결과를 다시 계산한다.
+- Nest metadata 키는 own source, 실제 resolver가 읽은 provider 선언/메서드 파일의 content, 전체 inventory, config/module/global 입력을 포함한다. metadata-only 수집은 결과에 기여하지 않는 module imports/controllers/exports 관계를 순회하지 않는다. 일반 추출 결과의 전이 dependency closure는 유지한다. unknown reference/global-prefix 또는 missing read는 whole key로 fallback한다. provider 등록 순서와 raw DTO만 보관하며 AST는 남기지 않는다.
+- 새 RED: `metadata-closure-red-2.log` **1 실패/4 통과**(무관한 module import closure 변경으로 metadata가 무효화됨), `large-result-red.log` **1 실패**(높은 연결도 파일 2개의 cache가 모두 빠짐). `metadata-closure-red.log`는 테스트 선언 위치 오류로 구분하여 보존했다.
+- 최종 `compact-target-final.log`: TS build 성공, **10파일 46 통과/0 실패**. 큰 DTO의 wire 한도/0-parse, token당 단일 inflate, 위조·압축 폭탄·잘못된 shape·누적 예산, 실제 provider read 변경, prefix/config/global, unresolved→resolved 및 unknown dependency fallback을 검증했다. 기존 syntax/limits/session/transport와 독립 full 회귀도 포함한다.
+
+### 실제 medium 진단 통과
+
+`medium-compact-2.log`: 수정 없는 실제 generator의 **10,000파일/50 MiB**, 기본 1% mutation 100개(이 중 TS 입력 83개). source/config 5,503개를 매 새 worker session에 모두 전달했다. 독립 cache 없는 새 worker의 전체 응답과 변경/무변경/backend-cap refresh 모두 정확히 일치했다.
+
+| 단계 | 진단 elapsed ms | compiler 입력 합계 | result / metadata reuse | worker peak RSS bytes |
+| --- | ---: | ---: | ---: | ---: |
+| cold | 23,006 | 9,546 | 0 / 0 | 2,090,532,864 |
+| 1% refresh | 14,135 | 5,069 | 2,330 / 581 | 2,138,783,744 |
+| 독립 full | 20,317 | 별도 계측 없음 | cache 없음 | 2,092,449,792 |
+| 무변경 | 3,882 | **0** | **5,499 / 600** | 693,600,256 |
+| backend 16 MiB 적용 refresh | **13,517** | **5,069** | **2,330 / 581** | **2,142,191,616** |
+
+compiler 입력은 metadata/추출 slice별 compiler root 수의 합계이며 unique 파일 수나 단순 변경 파일 수가 아니다. 시간은 startup·전체 session 전송을 포함한 단회 진단이며 timing gate로 사용하지 않는다. RSS는 macOS `/usr/bin/time -l`의 실제 자식 프로세스 peak이며 packaged memory gate 판정은 아니다.
+
+**전체 TS/JS 5,499개가 16 MiB 안에 보관되고 퇴출/과대 제외는 모두 0**이다. cold/refresh token UTF-8 합계 **7,885,703 bytes**, cache 배열 JSON **8,056,173 bytes**, backend 문자수×2 비용 **15,771,406 bytes**. owner cap 적용은 Java 정책과 동일한 단일-project smoke 선택을 실제 새 session에 전달한 것이며 Backend/build를 실행한 것으로 주장하지 않는다.
+
+전체 응답 SHA-256: `818f608bc22e802ab111626b38e57161ec24420a222acef57ef0b6fa40e3bd3b`. 원문/인증키/토큰은 로그에 기록하지 않았다. 이전 실패 로그는 그대로 남겼다.
+
+### 명령 및 범위
+
+```sh
+# 각 무거운 명령 전 공통 wait-quiet 실행; worktree 루트
+node validation/analyzer-transport-integration/incremental-smoke.cjs --medium
+# analyzers/ts-analyzer
+npm run build
+./node_modules/.bin/vitest run --maxWorkers=1 src/incremental.test.ts src/incremental-workload.test.ts src/incremental-metadata.test.ts src/incremental-large-result.test.ts src/incremental-session.test.ts src/ts-scale.test.ts src/analyze-session.test.ts src/analyze.service.test.ts src/analyze.service.lazy.test.ts src/stdio-transport.test.ts
+# worktree 루트
+node validation/analyzer-transport-integration/incremental-smoke.cjs
+```
+
+기본 1,200파일 smoke도 owner 1,884,382 bytes/659개 무퇴출, 569 result reuse/70 metadata reuse/259 compiler 입력으로 개선되었다. 사실 자체가 바뀌는 fetch 본문은 134→20→0 compiler 입력, Tree stdio/HTTP는 각각1 parse/4 reuse와 동일 canonical hash를 유지했다.
+
+후속 제품 변경은 TS `incremental-cache.ts`, `semantic-extractor.ts`, `ts-slices.ts`, `ts-extractor.ts`, `analyze.service.ts` 및 관련 새 회귀/기존 smoke/이 감사에 한정한다. Backend/Tree 제품 코드는 수정하지 않았다.
+
+**NOT RUN:** 최종 packaged refresh/메모리 판정, large ≤600s, 20회 게이트, 전체 회귀, signing/notarization/Actions/push. shared 문서 제안: “TS 결과/Nest DTO는 인증된 bounded 압축 토큰이며 wire/owner 예산과 별도 raw 4 MiB/항목·64 MiB/호출 예산을 적용한다. metadata 실제 참조 키와 일반 결과 전이 closure를 분리하되 config/global/unknown에는 보수적 재계산을 적용한다.”
