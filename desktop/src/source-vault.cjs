@@ -130,15 +130,16 @@ async function statOrMissing(file) {
 // These pathname checks are not native descriptor-relative ancestor-race confinement.
 async function pathChain(directory) {
   let current = path.parse(directory).root;
+  let stat;
   for (const part of directory.slice(current.length).split(path.sep).filter(Boolean)) {
     current = path.join(current, part);
-    const stat = await fs.lstat(current, { bigint: true });
+    stat = await fs.lstat(current, { bigint: true });
     if (!stat.isDirectory() || stat.isSymbolicLink()) fail('SOURCE_VAULT_UNSAFE_PATH');
   }
+  return stat || await fs.lstat(current, { bigint: true });
 }
 async function privateDirectory(directory, expected) {
-  await pathChain(directory);
-  const stat = await fs.lstat(directory, { bigint: true });
+  const stat = await pathChain(directory);
   checkPrivate(stat, true);
   if (expected && !sameIdentity(stat, expected)) fail('SOURCE_VAULT_UNSAFE_PATH');
   return stat;

@@ -188,10 +188,14 @@ class LocalImportServiceTest {
     void snapshotObjectsPreserveEmptyDuplicateAndUnicodeContent() throws Exception {
         Path source = Files.createDirectories(tempDir.resolve("object-source"));
         var contents = java.util.Map.of(
-                "empty.txt", "",
-                "a.txt", "shared source\n".repeat(1024),
-                "b.txt", "shared source\n".repeat(1024),
-                "한글.txt", "class 이름 {}\n");
+                "empty.txt",
+                "",
+                "a.txt",
+                "shared source\n".repeat(1024),
+                "b.txt",
+                "shared source\n".repeat(1024),
+                "한글.txt",
+                "class 이름 {}\n");
         for (var entry : contents.entrySet()) Files.writeString(source.resolve(entry.getKey()), entry.getValue());
         Path target = tempDir.resolve("data/repos/objects");
         var imported = service.importFolder(source, target);
@@ -199,15 +203,23 @@ class LocalImportServiceTest {
                 var walk = new org.eclipse.jgit.revwalk.RevWalk(git.getRepository())) {
             var commit = walk.parseCommit(org.eclipse.jgit.lib.ObjectId.fromString(imported.headSha()));
             for (var entry : contents.entrySet()) {
-                try (var tree = org.eclipse.jgit.treewalk.TreeWalk.forPath(git.getRepository(), entry.getKey(), commit.getTree())) {
+                try (var tree = org.eclipse.jgit.treewalk.TreeWalk.forPath(
+                        git.getRepository(), entry.getKey(), commit.getTree())) {
                     assertThat(tree).isNotNull();
+                    try (var formatter = new org.eclipse.jgit.lib.ObjectInserter.Formatter()) {
+                        assertThat(tree.getObjectId(0))
+                                .isEqualTo(formatter.idFor(
+                                        org.eclipse.jgit.lib.Constants.OBJ_BLOB,
+                                        entry.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                    }
                     assertThat(git.getRepository().open(tree.getObjectId(0)).getBytes())
                             .isEqualTo(entry.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 }
             }
         }
         assertThat(new FileInventoryScanner().scan(target, 100, 1_048_576).files())
-                .extracting(file -> file.path()).containsExactlyInAnyOrderElementsOf(contents.keySet());
+                .extracting(file -> file.path())
+                .containsExactlyInAnyOrderElementsOf(contents.keySet());
     }
 
     @Test
@@ -219,20 +231,25 @@ class LocalImportServiceTest {
         Files.writeString(source.resolve("value.txt"), "after");
         var binding = service.inspect(source).binding();
         assertThatThrownBy(() -> service.importApproved(binding, target, () -> {}, (name, oid, bytes) -> {
-            throw new dev.codeintelligence.job.JobCancelledException();
-        })).isInstanceOf(dev.codeintelligence.job.JobCancelledException.class);
+                    throw new dev.codeintelligence.job.JobCancelledException();
+                }))
+                .isInstanceOf(dev.codeintelligence.job.JobCancelledException.class);
         assertThat(Files.readString(target.resolve("value.txt"))).isEqualTo("before");
         try (var git = org.eclipse.jgit.api.Git.open(target.toFile())) {
-            assertThat(git.getRepository().resolve(org.eclipse.jgit.lib.Constants.HEAD).name())
+            assertThat(git.getRepository()
+                            .resolve(org.eclipse.jgit.lib.Constants.HEAD)
+                            .name())
                     .isEqualTo(previous.headSha());
         }
         try (var children = Files.list(target.getParent())) {
-            assertThat(children.map(path -> path.getFileName().toString()).toList()).containsExactly("cancel");
+            assertThat(children.map(path -> path.getFileName().toString()).toList())
+                    .containsExactly("cancel");
         }
         service.importApproved(binding, target);
         assertThat(Files.readString(target.resolve("value.txt"))).isEqualTo("after");
         assertThat(new FileInventoryScanner().scan(target, 100, 1_048_576).files())
-                .extracting(file -> file.path()).containsExactly("value.txt");
+                .extracting(file -> file.path())
+                .containsExactly("value.txt");
     }
 
     @Test
