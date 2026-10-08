@@ -101,7 +101,8 @@ async function main(argv = process.argv.slice(2)) {
       assert(/^http:\/\/127\.0\.0\.1:[0-9]+$/.test(analyzerUrl || ''), 'LOCAL_ANALYZER_NOT_READY');
     }
     const args = ['--offline', '--no-daemon', '--console=plain', '--max-workers=2', '-I', path.join(__dirname, 'docker-integration.init.gradle'),
-      'spotlessCheck', ...suites[suite], ...(analyzerUrl ? ['-PaccuracyTsUrl=' + analyzerUrl] : [])];
+      'spotlessCheck', suite === 'accuracy' ? 'cleanAccuracyTest' : 'cleanTest',
+      ...suites[suite], ...(analyzerUrl ? ['-PaccuracyTsUrl=' + analyzerUrl] : [])];
     const started = performance.now();
     const executable = path.join(repo, 'backend/gradlew');
     const execution = suite === 'corpus'

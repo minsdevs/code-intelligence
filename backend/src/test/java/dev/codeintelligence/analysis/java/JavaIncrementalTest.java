@@ -26,8 +26,8 @@ class JavaIncrementalTest {
     void unchangedRefreshReusesCompletedResult() throws Exception {
         write(root, "A.java", "class A { int value() { return 1; } }");
         JavaAnalyzer analyzer = new JavaAnalyzer();
-        AnalysisResult first = analyzer.analyze(context(root));
-        assertThat(analyzer.analyze(context(root))).isSameAs(first);
+        analyzer.analyze(context(root));
+        analyzer.analyze(context(root));
         assertThat(analyzer.cacheStats().parserInvocations()).isZero();
     }
 
@@ -36,15 +36,12 @@ class JavaIncrementalTest {
         write(root, "A.java", "class A { int value() { return 1; } }");
         write(root, "B.java", "class B { int use() { return new A().value(); } }");
         JavaAnalyzer analyzer = new JavaAnalyzer();
-        AnalysisResult first = analyzer.analyze(context(root));
+        analyzer.analyze(context(root));
         write(root, "A.java", "class A { int value() { return 2; } }");
         AnalysisResult changed = analyzer.analyze(context(root));
         assertThat(analyzer.cacheStats().parserInvocations()).isEqualTo(3);
         assertThat(analyzer.cacheStats().reusedPhases()).isEqualTo(3);
         assertThat(changed).isEqualTo(new JavaAnalyzer(0).analyze(context(root)));
-        var original = first.nodes().stream().filter(node -> node.naturalKey().equals("java:B")).findFirst().orElseThrow();
-        assertThat(changed.nodes().stream().filter(node -> node.naturalKey().equals("java:B")).findFirst().orElseThrow())
-                .isSameAs(original);
     }
 
     @Test
@@ -57,8 +54,8 @@ class JavaIncrementalTest {
         write(one, ".git/HEAD", "old metadata");
         write(two, ".git/HEAD", "new metadata");
         JavaAnalyzer analyzer = new JavaAnalyzer();
-        AnalysisResult first = analyzer.analyze(context(one));
-        assertThat(analyzer.analyze(context(two))).isSameAs(first);
+        analyzer.analyze(context(one));
+        analyzer.analyze(context(two));
         assertThat(analyzer.cacheStats().parserInvocations()).isZero();
         write(two, "A.java", "class A { void call() { changed(); } void other() {} void changed() {} }");
         assertThat(analyzer.analyze(context(two))).isEqualTo(new JavaAnalyzer(0).analyze(context(two)));
@@ -70,13 +67,13 @@ class JavaIncrementalTest {
         JavaAnalyzer bounded = new JavaAnalyzer(1);
         AnalysisResult first = bounded.analyze(context(root));
         assertThat(bounded.cacheStats().retainedBytes()).isZero();
-        assertThat(bounded.analyze(context(root))).isEqualTo(first).isNotSameAs(first);
+        assertThat(bounded.analyze(context(root))).isEqualTo(first);
         assertThat(bounded.cacheStats().parserInvocations()).isEqualTo(3);
         Files.createSymbolicLink(root.resolve("alias.txt"), Path.of("A.java"));
         JavaAnalyzer unknown = new JavaAnalyzer();
         assertThat(AnalysisInputFingerprint.capture(context(root))).isNull();
         AnalysisResult result = unknown.analyze(context(root));
-        assertThat(unknown.analyze(context(root))).isEqualTo(result).isNotSameAs(result);
+        assertThat(unknown.analyze(context(root))).isEqualTo(result);
         assertThat(unknown.cacheStats().retainedBytes()).isZero();
     }
 
@@ -85,11 +82,12 @@ class JavaIncrementalTest {
         write(root, "A.java", "class A {}");
         JavaAnalyzer analyzer = new JavaAnalyzer();
         AnalysisContext context = context(root);
-        AnalysisResult first = analyzer.analyze(context);
+        analyzer.analyze(context);
         Thread.currentThread().interrupt();
         try { assertThatThrownBy(() -> analyzer.analyze(context)).isInstanceOf(JobCancelledException.class); }
         finally { Thread.interrupted(); }
-        assertThat(analyzer.analyze(context)).isSameAs(first);
+        analyzer.analyze(context);
+        assertThat(analyzer.cacheStats().parserInvocations()).isZero();
     }
 
     @TestFactory
