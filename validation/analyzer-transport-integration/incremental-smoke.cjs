@@ -85,6 +85,33 @@ function withCache(files, result) {
   return files.map(file => ({ ...file, cache: entries.get(file.path) || '' }));
 }
 
+function backendBudget(result) {
+  const entries = result.cache || [];
+  const retained = new Map();
+  let chargedBytes = 0, evicted = 0, oversized = 0;
+  for (const token of entries) {
+    const bytes = token.length * 2;
+    if (bytes > 128 * 1024) { oversized++; continue; }
+    const key = JSON.parse(token).path;
+    chargedBytes += bytes - (retained.get(key)?.length || 0) * 2;
+    retained.set(key, token);
+    while (chargedBytes > 16 * 1024 * 1024 || retained.size > 50_000) {
+      const oldest = retained.keys().next().value;
+      chargedBytes -= retained.get(oldest).length * 2;
+      retained.delete(oldest);
+      evicted++;
+    }
+  }
+  return { result: { ...result, cache: [...retained.values()] }, stats: {
+    entries: entries.length,
+    tokenUtf8Bytes: entries.reduce((sum, token) => sum + Buffer.byteLength(token), 0),
+    serializedArrayUtf8Bytes: Buffer.byteLength(JSON.stringify(entries)),
+    offeredOwnerChargedBytes: entries.reduce((sum, token) => sum + token.length * 2, 0),
+    retained: retained.size, retainedOwnerChargedBytes: chargedBytes, evicted, oversized,
+  } };
+}
+
+
 async function treeHttp(input, incremental) {
   const net = require('node:net');
   const reservation = net.createServer();
@@ -144,8 +171,15 @@ async function tsRevisionSmoke() {
     const { cache: _unchangedCache, ...unchangedGraph } = unchanged.result;
     assert.deepEqual(unchangedGraph, clean.result);
     assert.equal(unchanged.metrics[0].programFiles, 0);
+    const boundedCold = backendBudget(cold.result);
+    const boundedRefresh = await tsSession(withCache(changed, boundedCold.result), true);
+    const { cache: _boundedCache, ...boundedGraph } = boundedRefresh.result;
+    assert.deepEqual(boundedGraph, clean.result);
+    assert.ok(boundedRefresh.metrics[0].reused > 0);
     return { workloadFiles: manifest.files, changedFiles: mutation.changedFiles, adapterChangedFiles: edited.length,
       cold: cold.metrics[0], refresh: refresh.metrics[0], unchanged: unchanged.metrics[0],
+      backendBudget: { cold: boundedCold.stats, refresh: backendBudget(boundedRefresh.result).stats,
+        refreshMetrics: boundedRefresh.metrics[0], fullEquality: true },
       canonicalSha256: sha(JSON.stringify(graph)), fullEquality: true };
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });

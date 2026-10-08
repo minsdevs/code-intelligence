@@ -140,3 +140,13 @@ node validation/analyzer-transport-integration/incremental-smoke.cjs
 후속 변경: `incremental-cache.ts`, `ts-slices.ts`, `semantic-extractor.ts`, `incremental.test.ts`, 신규 `incremental-workload.test.ts`, 기존 transport smoke, 이 감사. Backend/Tree 제품 코드는 후속 수정하지 않았다. Backend mapper 19개는 앞선 실행 결과이며 이번 후속에서 재실행하지 않았다. 새 mixed fixture의 equality는 adapter 전체 응답 비교이며 backend mapper를 새 fixture로 다시 실행했다고 주장하지 않는다.
 
 **NOT RUN 유지:** packaged refresh, medium/large 성능 및 large ≤600s, 20회 게이트, 전체 회귀, signing/notarization/Actions/push. 기존 커밋을 보존하고 후속 커밋으로 추가한다. shared 문서 제안의 Nest 전역 항목은 “provider/token/method/prefix 의미 facts digest”로 구체화할 수 있다.
+
+## backend 16 MiB 보관 한도 계측
+
+추가 요청에 따라 실제 인증 토큰의 직렬화 크기를 측정하고, AdapterResultCache의 UTF-16 문자수×2·항목 128 KiB·총 16 MiB·50,000개 및 오래된 항목 우선 퇴출 정책을 smoke에서 동일하게 적용한 뒤 새 production session에 전달했다. Backend/build는 수정하거나 실행하지 않았다. 정책 적용은 단일 프로젝트 입력에 대한 smoke 계산이며 Java cache 객체의 새 실행으로 주장하지 않는다.
+
+1,200파일/6 MiB 실제 mixed fixture의 cold/refresh는 모두 **659항목**, token UTF-8 합계 **6,106,681 bytes**, cache 배열 JSON 직렬화 **6,858,159 bytes**, backend 계산 보관 비용 **12,213,362 bytes**였다. 16 MiB 적용 시 **659개 보관 / 0개 퇴출 / 0개 과대 항목 제외**. 정책 적용 후 실제 새 worker refresh도 **569 reuse / 465 compiler files**, 독립 full 전체 응답 equality를 유지했다.
+
+명령: 공통 wait-quiet 후 `node validation/analyzer-transport-integration/incremental-smoke.cjs`. 증거: `validation/local/w17-adapter-incremental/backend-cap-smoke.log`. 소스/토큰/키는 로그에 기록하지 않았다.
+
+**medium 5,500여 TS/JS 파일의 실제 보관량은 NOT RUN.** 이 659항목 결과를 medium에서 모두 보관된다는 증거로 사용하지 않는다. [INFERENCE] 같은 평균 항목 크기라면 16 MiB를 크게 초과하므로 medium에서는 adapter 자체 16 MiB 출력 한도와 backend UTF-16 16 MiB 한도가 각각 재사용률을 제한한다. cap 확대·threshold 변경은 하지 않았다.
