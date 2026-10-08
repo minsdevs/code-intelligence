@@ -282,6 +282,7 @@ export function collectManifestFacts(project: Project, files: AnalyzeFile[], sco
   const ignore = (): void => {}
   const { classesByName, declarationsByFileAndName, methodsByOwnerAndName } =
     collectDeclarations(sourceFiles, bindingsByFile, (_phase, _file, run) => run(), ignore, ignore)
+  let methodsByOwner: Map<string, [string, DeclarationRef][]> | undefined
   const prefixFacts = globalPrefixFacts(new Map())
   for (const source of sourceFiles) {
     const filePath = filePathOf(source)
@@ -304,7 +305,20 @@ export function collectManifestFacts(project: Project, files: AnalyzeFile[], sco
         }, true)
       own.reads = [...reads].sort()
       for (const ref of providers.values()) {
-        for (const [key, method] of methodsByOwnerAndName) if (key.startsWith(`${ref.key}.`)) {
+        // Build only when a provider needs metadata, then reuse across registrations.
+        if (!methodsByOwner) {
+          methodsByOwner = new Map()
+          for (const [key, method] of methodsByOwnerAndName) {
+            // Quoted/computed method names can contain dots; do not split the key.
+            const owner = key.slice(0, -method.name.length - 1)
+            const methods = methodsByOwner.get(owner)
+            if (methods) methods.push([key, method])
+            else methodsByOwner.set(owner, [[key, method]])
+          }
+        }
+        const methods = methodsByOwner.get(ref.key)
+        if (!methods) continue
+        for (const [key, method] of methods) {
           const plain = { key: method.key, name: method.name, filePath: method.filePath }
           facts.providerMethods.set(key, plain)
           own.methods.push([key, plain])
