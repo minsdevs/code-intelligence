@@ -74,3 +74,9 @@ env -i HOME="$HOME" PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin LANG=C 
 WORKLOAD row PASS나 이 유닛의 타깃 시험 통과는 SLO 통과가 아니다. `resultEqualsFull=null/NOT_RUN`을 유지한다. 이 변경은 성능 최적화이며 기존 의미적 버그의 RED→GREEN을 조작하지 않는다. 새 회귀는 소비자 byte/OID·취소/회수·retention 안전 경계를 검사한다.
 
 전체 suite, 새 packaged 후보, large 성능 비교, medium 전체 refresh 30초 목표, 최종20회, 실제 Windows native boundary, 실제 Keychain/사용자 프로필, 실계정, signing/notary, paid AI, Actions/push는 이 유닛에서 NOT_RUN이다.
+
+## 통합 담당자 재검증
+
+`main-core`의 desktop 최초 재검증은 155 PASS / 2 FAIL이다. private 실행의 `umask 077`이 기존 unsafe-permission fixture의 `mkdir(mode: 0755)`를 0700으로 제한해, 의도한 거부 조건이 만들어지지 않았다. 두 fixture에 명시적 `chmod(0755)`를 추가했으며 제품 권한 정책이나 기대하는 거부 결과는 바꾸지 않았다. 원본 실패와 후속 FileHandle 경고를 보존했다.
+
+`main-core-green`에서 통합 담당자가 desktop **157/157**, backend 핵심 **132/132**를 다시 확인했다(실패/skip 0). 실제 Node broker/retention과 scoped HTTP 승인·import도 포함한다. 실행 명령은 calm-meadow의 `validation/local/followup-main-verification/recheck-w19.sh main-core-green`, 수치는 이 유닛의 `main-core-green/main-verification-totals.json`과 원본 TAP/XML에 있다. 이 재검증 역시 전체 packaged 성능 측정은 아니다.

@@ -490,6 +490,7 @@ test('requires disjoint private canonical roots and rejects symlink ancestors wi
   await fs.symlink(f.root, alias);
   await assert.rejects(f.create({ safetyRoot: path.join(alias, 'safety') }), code('SOURCE_VAULT_UNSAFE_PATH'));
   await fs.mkdir(f.options.safetyRoot, { mode: 0o755 });
+  await fs.chmod(f.options.safetyRoot, 0o755);
   await assert.rejects(f.create(), code('SOURCE_VAULT_UNSAFE_PATH'));
   await assert.rejects(f.create({ sourceRoot: path.join(f.root, 'x', '..', 'sources') + '/..' }), code('SOURCE_VAULT_ARGUMENT'));
 });
