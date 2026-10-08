@@ -10,6 +10,7 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicBoolean;
 import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.json.JsonFactory;
 import tools.jackson.databind.JsonNode;
@@ -84,11 +85,13 @@ final class TsAnalyzerControlClient {
 
     private JsonNode exchange(String op, byte[] body, Duration timeout) {
         byte[] request = envelope(op, body);
+        AtomicBoolean timedOut = new AtomicBoolean();
         try (SocketChannel channel = SocketChannel.open(StandardProtocolFamily.UNIX)) {
             // Closing the channel unblocks a pending read; an interrupted job thread closes it as well.
             Thread watchdog = Thread.ofVirtual().start(() -> {
                 try {
                     Thread.sleep(timeout);
+                    timedOut.set(true);
                     channel.close();
                 } catch (InterruptedException | IOException ignored) {
                     // The exchange finished first.
@@ -113,6 +116,7 @@ final class TsAnalyzerControlClient {
             throw new TsAnalyzerException("ts-analyzer request interrupted", null);
         } catch (IOException | RuntimeException e) {
             if (e instanceof TsAnalyzerException analyzer) throw analyzer;
+            if (timedOut.get()) throw TsAnalyzerException.timeout("ts-analyzer control request failed");
             throw new TsAnalyzerException("ts-analyzer control request failed", null);
         }
     }
