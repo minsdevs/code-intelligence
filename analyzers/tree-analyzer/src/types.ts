@@ -1,10 +1,13 @@
 export type AnalyzeFile = {
   path: string
   content: string
+  cache?: string
 }
 
 export type AnalyzeRequest = {
   files: AnalyzeFile[]
+  localPaths?: string[]
+  cacheKey?: string
 }
 
 export type RouteHit = {
@@ -56,6 +59,7 @@ export type EntityHit = {
 }
 
 export type AnalyzeResponse = {
+  cache?: string[]
   fileOutcomes?: { path: string; status: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'UNSUPPORTED'; reason: string }[]
   routes: RouteHit[]
   components: SymbolHit[]

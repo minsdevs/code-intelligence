@@ -38,18 +38,21 @@ type SliceRun = { output: ProgramOutput; ranges: Map<unknown[], Range[]>; outsid
 export function extractSliced(
   files: AnalyzeFile[], tsFiles: AnalyzeFile[], budget = SLICE_PROGRAM_BYTES,
   onProgram?: (program: { files: number; bytes: number }) => void,
-  incremental = false, onReuse?: (path: string) => void,
+  incremental = false, onReuse?: (path: string) => void, cacheKey?: string,
 ): AnalyzeResponse {
-  const plan = { ...planManifest(files, tsFiles), onProgram }
+  const plan: Plan = { ...planManifest(files, tsFiles), onProgram }
   const identity = incremental ? cacheKeys(files, plan) : undefined
   const cached = new Map<string, ReturnType<typeof readCachedFile>>()
   if (identity) for (const file of tsFiles) {
-    const entry = readCachedFile(file.cache, file.path, identity.keys.get(file.path)!, identity.whole)
+    const entry = readCachedFile(file.cache, file.path, identity.keys.get(file.path)!, identity.whole, cacheKey)
     if (entry) { cached.set(file.path, entry); onReuse?.(file.path) }
   }
+  plan.singleProgram = incremental && cached.size === 0
+    && tsFiles.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0) <= 16 * 1024 * 1024
+  if (plan.singleProgram) budget = Number.POSITIVE_INFINITY
   const facts: ManifestFacts = { providers: [], providerMethods: new Map(), prefixFacts: new Map() }
   // First pass: manifest-wide Nest facts, from the only files that can declare them.
-  const nestFiles = plan.order.filter((path) => plan.nestCandidate(path))
+  const nestFiles = cached.size === plan.order.length ? [] : plan.order.filter((path) => plan.nestCandidate(path))
   runSlices(plan, nestFiles, budget, (project, scope) => {
     const run: ManifestFacts = { providers: [], providerMethods: new Map(), prefixFacts: new Map() }
     const outside = new Set<string>()
@@ -125,11 +128,11 @@ export function extractSliced(
     let bytes = 0
     for (const path of plan.order) {
       const key = escalated.has(path) || cached.get(path)?.key === identity.whole ? identity.whole : identity.keys.get(path)!
-      const encoded = encodeCachedFile(path, key, rows.get(path) ?? [])
-      if (encoded && bytes + Buffer.byteLength(encoded) <= CACHE_TOTAL_BYTES) {
-        bytes += Buffer.byteLength(encoded)
-        cache.push(encoded)
-      }
+      const encoded = encodeCachedFile(path, key, rows.get(path) ?? [], cacheKey)
+      if (!encoded) continue
+      if (bytes + Buffer.byteLength(encoded) > CACHE_TOTAL_BYTES) break
+      bytes += Buffer.byteLength(encoded)
+      cache.push(encoded)
     }
   }
   const response = merge(plan, tsFiles, files, results)
@@ -158,6 +161,9 @@ type Plan = {
   pathSet: Set<string>
   nestCandidate(path: string): boolean
   onProgram?: (program: { files: number; bytes: number }) => void
+  singleProgram?: boolean
+  transientProject?: Project
+  unknown: Set<string>
 }
 
 function planManifest(files: AnalyzeFile[], tsFiles: AnalyzeFile[]): Plan {
@@ -170,11 +176,14 @@ function planManifest(files: AnalyzeFile[], tsFiles: AnalyzeFile[]): Plan {
   const bytes = new Map<string, number>()
   const global: string[] = []
   let globalNest = false
+  const unknown = new Set<string>()
   for (const path of order) {
     const file = byPath.get(path)!
     bytes.set(path, Buffer.byteLength(file.content))
     // A superset of what the extractors resolve: every module specifier the scanner finds.
     const scanned = ts.preProcessFile(file.content, true, true)
+    if (scanned.typeReferenceDirectives.length || scanned.libReferenceDirectives.length
+      || /(?:import|require)\s*\(\s*[^'"\s]/.test(file.content)) unknown.add(path)
     const resolved = new Set<string>()
     for (const reference of [...scanned.importedFiles, ...scanned.referencedFiles]) {
       const target = resolve(reference.fileName, path)
@@ -187,7 +196,7 @@ function planManifest(files: AnalyzeFile[], tsFiles: AnalyzeFile[]): Plan {
     }
   }
   return {
-    order, index, files: byPath, bytes, targets, global, pathSet,
+    order, index, files: byPath, bytes, targets, global, pathSet, unknown,
     nestCandidate: (path) => {
       const content = byPath.get(path)!.content
       // Provider registrations need an @nestjs/common Module import; application and prefix facts
@@ -246,17 +255,19 @@ function runSlices(plan: Plan, owned: string[], budget: number, visit: SliceVisi
 
   while (slices.length > 0) {
     const slice = slices.shift()!
-    const programPaths = neighbourhood(plan, slice.owned, slice.depth)
+    const programPaths = plan.singleProgram || slice.owned.some((path) => plan.unknown.has(path))
+      ? new Set(plan.order) : neighbourhood(plan, slice.owned, slice.depth)
     const ownedSet = new Set(slice.owned)
     const programFiles = plan.order.filter((path) => programPaths.has(path)).map((path) => plan.files.get(path)!)
-    plan.onProgram?.({ files: programFiles.length, bytes: programFiles.reduce((sum, file) => sum + plan.bytes.get(file.path)!, 0) })
-    const project = createProgramProject(programFiles)
+    if (!plan.transientProject) plan.onProgram?.({ files: programFiles.length, bytes: programFiles.reduce((sum, file) => sum + plan.bytes.get(file.path)!, 0) })
+    const project = plan.transientProject ?? createProgramProject(programFiles)
+    if (plan.singleProgram) plan.transientProject = project
     const scope: SliceScope = {
       owned: ownedSet, pathSet: plan.pathSet, inProgram: programPaths, current: null,
       outside: () => {}, mark: () => {},
     }
     const { outside } = visit(project, scope, ownedSet)
-    releasePrograms()
+    if (!plan.singleProgram) releasePrograms()
     if (outside.size === 0) continue
     if (slice.depth === Number.POSITIVE_INFINITY) throw new Error('A TS slice of the whole manifest cannot leave it')
     // Re-run only the files whose facts left the program, with twice the import depth; a resolution

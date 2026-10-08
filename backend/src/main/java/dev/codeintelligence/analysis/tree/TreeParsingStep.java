@@ -43,6 +43,10 @@ public class TreeParsingStep implements JobStep {
     private final JdbcClient jdbc;
     private final GraphPersistenceService persistence;
     private final AnalysisProperties analysisProperties;
+    private static final tools.jackson.databind.json.JsonMapper JSON =
+            tools.jackson.databind.json.JsonMapper.builder().build();
+    private final dev.codeintelligence.analysis.core.AdapterResultCache cache =
+            new dev.codeintelligence.analysis.core.AdapterResultCache();
 
     public TreeParsingStep(
             TreeAnalyzerClient client,
@@ -88,17 +92,34 @@ public class TreeParsingStep implements JobStep {
             throw failure;
         }
         ctx.updateProgress(20);
-        List<TreeAnalyzeDtos.FilePayload> payloads = readPayloads(ctx.clonePath(), files, snapshotId);
+        var previous = cache.snapshot(
+                ctx.projectId(), files.stream().map(InventoriedFile::path).toList());
+        List<TreeAnalyzeDtos.FilePayload> payloads = readPayloads(ctx.clonePath(), files, snapshotId, previous);
         if (payloads.isEmpty()) {
             ctx.updateProgress(100);
             return;
         }
-        for (int start = 0; start < payloads.size(); start += BATCH_SIZE) {
-            int end = Math.min(payloads.size(), start + BATCH_SIZE);
+        var localPaths =
+                payloads.stream().map(TreeAnalyzeDtos.FilePayload::path).toList();
+        List<String> nextCache = new ArrayList<>();
+        int cacheBytes = 0;
+        int envelopeBytes =
+                JSON.writeValueAsBytes(new TreeAnalyzeDtos.Request(List.of(), localPaths, cache.signingKey())).length;
+        for (int start = 0; start < payloads.size(); ) {
+            int end = start;
+            int bytes = envelopeBytes;
+            while (end < payloads.size() && end - start < BATCH_SIZE) {
+                int size = JSON.writeValueAsBytes(payloads.get(end)).length + 1;
+                if (bytes + size > 10 * 1024 * 1024) break;
+                bytes += size;
+                end++;
+            }
+            if (end == start) throw new TreeAnalyzerException("Tree analysis request exceeds 10 MiB", null);
             List<TreeAnalyzeDtos.FilePayload> batch = payloads.subList(start, end);
             TreeAnalyzeDtos.Response response;
             try {
-                response = JobCancellation.interruptibly(() -> client.analyze(new TreeAnalyzeDtos.Request(batch)));
+                response = JobCancellation.interruptibly(
+                        () -> client.analyze(new TreeAnalyzeDtos.Request(batch, localPaths, cache.signingKey())));
             } catch (JobCancelledException cancelled) {
                 throw cancelled;
             } catch (RuntimeException failure) {
@@ -108,13 +129,23 @@ public class TreeParsingStep implements JobStep {
             }
             AnalysisResult result = TreeGraphMapper.toGraph(response);
             persistence.persist(ctx.projectId(), snapshotId, result);
+            for (String entry : response.cache()) {
+                int size = entry.length() * 2;
+                if (size <= dev.codeintelligence.analysis.core.AdapterResultCache.MAX_ENTRY_BYTES
+                        && cacheBytes + size <= dev.codeintelligence.analysis.core.AdapterResultCache.MAX_BYTES) {
+                    nextCache.add(entry);
+                    cacheBytes += size;
+                }
+            }
             FileAnalysisOutcome.recordResponse(
                     jdbc,
                     snapshotId,
                     batch.stream().map(TreeAnalyzeDtos.FilePayload::path).toList(),
                     response.fileOutcomes());
             ctx.updateProgress(20 + Math.min(75, (75 * end) / payloads.size()));
+            start = end;
         }
+        cache.replace(ctx.projectId(), localPaths, nextCache);
         ctx.updateProgress(100);
     }
 
@@ -147,7 +178,7 @@ public class TreeParsingStep implements JobStep {
     }
 
     private List<TreeAnalyzeDtos.FilePayload> readPayloads(
-            Path clonePath, List<InventoriedFile> files, long snapshotId) {
+            Path clonePath, List<InventoriedFile> files, long snapshotId, java.util.Map<String, String> previous) {
         List<TreeAnalyzeDtos.FilePayload> payloads = new ArrayList<>();
         for (InventoriedFile file : files) {
             JobCancellation.checkpoint();
@@ -162,7 +193,8 @@ public class TreeParsingStep implements JobStep {
                     continue;
                 }
                 String content = Files.readString(resolved, StandardCharsets.UTF_8);
-                payloads.add(new TreeAnalyzeDtos.FilePayload(file.path(), content));
+                payloads.add(
+                        new TreeAnalyzeDtos.FilePayload(file.path(), content, previous.getOrDefault(file.path(), "")));
             } catch (InvalidFilePathException | IOException e) {
                 recordOne(snapshotId, file, "FAILED", "SOURCE_READ_FAILED");
                 log.warn("Skipping source file {}: {}", file.path(), e.toString());

@@ -17,6 +17,7 @@ export const SESSION_MAX_OPEN = 2
 const RESULT_KEYS = [
   'fileOutcomes', 'routes', 'components', 'hooks', 'stores', 'apiCalls',
   'imports', 'symbols', 'endpoints', 'nodes', 'edges', 'unresolvedCalls',
+  'cache',
 ] as const
 type ResultKey = (typeof RESULT_KEYS)[number]
 export type ResultPage = Pick<AnalyzeResponse, ResultKey>
@@ -32,6 +33,8 @@ type Session = {
   sealed: boolean
   pages: ResultPage[] | undefined
   lastUsed: number
+  cacheBytes: number
+  cacheKey?: string
 }
 
 const reject = (code: string, message: string): never => {
@@ -47,7 +50,7 @@ export class AnalyzeSessions {
   private readonly sessions = new Map<string, Session>()
 
   constructor(
-    private readonly extract: (files: AnalyzeFile[]) => Promise<AnalyzeResponse>,
+    private readonly extract: (files: AnalyzeFile[], cacheKey?: string) => Promise<AnalyzeResponse>,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -78,7 +81,8 @@ export class AnalyzeSessions {
     const id = randomBytes(16).toString('hex')
     this.sessions.set(id, {
       manifest, files: [], paths: new Set(), bytes: 0, digest: createHash('sha256'),
-      nextSeq: 0, sealed: false, pages: undefined, lastUsed: this.now(),
+      nextSeq: 0, sealed: false, pages: undefined, lastUsed: this.now(), cacheBytes: 0,
+      cacheKey: typeof command.cacheKey === 'string' && /^[0-9a-f]{64}$/.test(command.cacheKey) ? command.cacheKey : undefined,
     })
     return { id, op: 'open' }
   }
@@ -116,7 +120,15 @@ export class AnalyzeSessions {
       }
       session.paths.add(path)
       session.digest.update(manifestLine(path, file.content), 'utf8')
-      files.push({ path, content: file.content })
+      let cache: string | undefined
+      if (typeof file.cache === 'string') {
+        const cacheBytes = Buffer.byteLength(file.cache)
+        if (cacheBytes <= 128 * 1024 && session.cacheBytes + cacheBytes <= 16 * 1024 * 1024) {
+          cache = file.cache
+          session.cacheBytes += cacheBytes
+        }
+      }
+      files.push({ path, content: file.content, ...(cache === undefined ? {} : { cache }) })
     }
     session.nextSeq++
     return { id, op: 'put', seq: command.seq }
@@ -145,7 +157,7 @@ export class AnalyzeSessions {
     session.files = undefined
     let result: AnalyzeResponse
     try {
-      result = await this.extract(files)
+      result = await this.extract(files, session.cacheKey)
     } catch (error) {
       this.sessions.delete(id)
       throw error
@@ -205,7 +217,7 @@ function manifestOf(command: SessionCommand): Manifest {
 
 /** Splits a result into pages of at most 1 MiB JSON; concatenating the pages restores it in order. */
 export function paginate(result: AnalyzeResponse, limit = SESSION_PAGE_BYTES): ResultPage[] {
-  const empty = (): ResultPage => Object.fromEntries(RESULT_KEYS.map((key) => [key, []])) as unknown as ResultPage
+  const empty = (): ResultPage => Object.fromEntries(RESULT_KEYS.filter((key) => key !== 'cache' || result.cache !== undefined).map((key) => [key, []])) as unknown as ResultPage
   const overhead = Buffer.byteLength(JSON.stringify({ session: { id: '0'.repeat(32), op: 'analyze', page: 0, pages: 0 }, ...empty() }))
     + 64
   const pages: ResultPage[] = []

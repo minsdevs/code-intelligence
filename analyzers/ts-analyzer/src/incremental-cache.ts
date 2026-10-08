@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { ts } from 'ts-morph'
@@ -10,6 +10,7 @@ export type CachedRow = { list: string; phase: number; items: Record<string, unk
 export type CachedFile = { path: string; key: string; rows: CachedRow[]; checksum: string }
 export const CACHE_LISTS = ['routes', 'endpoints', 'components', 'hooks', 'stores', 'apiCalls', 'symbols',
   'semantic.endpoints', 'semantic.imports', 'semantic.nodes', 'semantic.edges', 'semantic.unresolvedCalls'] as const
+const localKey = randomBytes(32).toString('hex')
 
 export function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex')
@@ -29,53 +30,75 @@ function binaryIdentity(): string {
 
 /** Merkle dependencies avoid quadratic closure materialization on long import chains. */
 export function cacheKeys(files: AnalyzeFile[], plan: {
-  order: string[]; targets: Map<string, string[]>; global: string[]; nestCandidate(path: string): boolean
+  order: string[]; targets: Map<string, string[]>; global: string[]; unknown: Set<string>; nestCandidate(path: string): boolean
 }): { keys: Map<string, string>; whole: string } {
   const hashes = new Map(files.map((file) => [file.path, digest(file.content)]))
-  const manifest = files.map((file) => [file.path, hashes.get(file.path)])
-  const whole = digest(JSON.stringify([binaryIdentity(), manifest]))
-  const byPath = new Map(files.map((file) => [file.path, file]))
-  const modules = new Map<string, string>()
-  const visiting = new Set<string>()
-  // Computed imports, script globals and Nest provider/prefix facts have nonlocal dependencies.
-  // They intentionally invalidate against the complete manifest, never a guessed closure.
-  const nonlocal = plan.global.length > 0 || plan.order.some((path) => plan.nestCandidate(path))
-  const context = digest(JSON.stringify([binaryIdentity(), files.map((file) => file.path),
-    files.filter((file) => !plan.targets.has(file.path)).map((file) => [file.path, hashes.get(file.path)])]))
-  const keys = new Map<string, string>()
+  const whole = digest(JSON.stringify([binaryIdentity(), files.map((file) => [file.path, hashes.get(file.path)])]))
+  const reverse = new Map(plan.order.map((path) => [path, [] as string[]]))
+  for (const [path, targets] of plan.targets) for (const target of targets) reverse.get(target)?.push(path)
+  const visited = new Set<string>()
+  const finish: string[] = []
   for (const start of plan.order) {
     const stack: { path: string; exit: boolean }[] = [{ path: start, exit: false }]
     while (stack.length) {
       const { path, exit } = stack.pop()!
-      if (modules.has(path)) continue
-      const targets = plan.targets.get(path)
-      if (!targets || nonlocal || /(?:import|require)\s*\(\s*[^'"\s]/.test(byPath.get(path)!.content)) {
-        modules.set(path, whole)
-        continue
-      }
-      if (exit) {
-        visiting.delete(path)
-        modules.set(path, digest(JSON.stringify([path, hashes.get(path), targets.map((target) => modules.get(target) ?? whole)])))
-      } else if (visiting.has(path)) {
-        modules.set(path, whole)
-      } else {
-        visiting.add(path)
-        stack.push({ path, exit: true })
-        for (const target of targets) if (!modules.has(target)) stack.push({ path: target, exit: false })
+      if (exit) { finish.push(path); continue }
+      if (visited.has(path)) continue
+      visited.add(path)
+      stack.push({ path, exit: true })
+      for (const target of plan.targets.get(path) ?? []) if (!visited.has(target)) stack.push({ path: target, exit: false })
+    }
+  }
+  // Collapse known dependency cycles instead of expanding each file's closure or invalidating
+  // unrelated modules. The condensed graph is acyclic and can be hashed once bottom-up.
+  const component = new Map<string, number>()
+  const groups: string[][] = []
+  for (const start of finish.reverse()) {
+    if (component.has(start)) continue
+    const group: string[] = []
+    const stack = [start]
+    component.set(start, groups.length)
+    while (stack.length) {
+      const path = stack.pop()!
+      group.push(path)
+      for (const target of reverse.get(path) ?? []) if (!component.has(target)) {
+        component.set(target, groups.length)
+        stack.push(target)
       }
     }
-    keys.set(start, digest(JSON.stringify([context, modules.get(start)])))
+    groups.push(group.sort())
   }
+  const groupHashes = new Map<number, string>()
+  for (let index = groups.length - 1; index >= 0; index--) {
+    const members = groups[index]
+    const targets = new Set<number>()
+    let unknown = false
+    for (const path of members) {
+      unknown ||= !plan.targets.has(path) || plan.unknown.has(path)
+      for (const target of plan.targets.get(path) ?? []) {
+        const targetGroup = component.get(target)
+        if (targetGroup === undefined) unknown = true
+        else if (targetGroup !== index) targets.add(targetGroup)
+      }
+    }
+    const dependencies = [...targets].sort((a, b) => a - b).map((target) => groupHashes.get(target) ?? whole)
+    groupHashes.set(index, unknown ? whole : digest(JSON.stringify([members.map((path) => [path, hashes.get(path)]), dependencies])))
+  }
+  const global = [...new Set([...plan.global, ...plan.order.filter((path) => plan.nestCandidate(path))])]
+    .map((path) => [path, groupHashes.get(component.get(path)!)])
+  const context = digest(JSON.stringify([binaryIdentity(), files.map((file) => file.path), global,
+    files.filter((file) => !plan.targets.has(file.path)).map((file) => [file.path, hashes.get(file.path)])]))
+  const keys = new Map(plan.order.map((path) => [path, digest(JSON.stringify([context, groupHashes.get(component.get(path)!)]))]))
   return { keys, whole }
 }
 
-export function readCachedFile(encoded: unknown, path: string, key: string, whole: string): CachedFile | undefined {
+export function readCachedFile(encoded: unknown, path: string, key: string, whole: string, cacheKey = localKey): CachedFile | undefined {
   if (typeof encoded !== 'string' || Buffer.byteLength(encoded) > CACHE_ENTRY_BYTES) return undefined
   try {
     const value = JSON.parse(encoded) as CachedFile
     if (!value || value.path !== path || (value.key !== key && value.key !== whole) || !Array.isArray(value.rows)
       || value.rows.length > 64 || typeof value.checksum !== 'string') return undefined
-    if (value.checksum !== digest(JSON.stringify([value.path, value.key, value.rows]))) return undefined
+    if (value.checksum !== createHmac('sha256', cacheKey).update(JSON.stringify([value.path, value.key, value.rows])).digest('hex')) return undefined
     for (const row of value.rows) {
       if (!CACHE_LISTS.includes(row.list as typeof CACHE_LISTS[number]) || !Number.isInteger(row.phase)
         || row.phase < 1 || row.phase > 7 || !Array.isArray(row.items)
@@ -87,8 +110,8 @@ export function readCachedFile(encoded: unknown, path: string, key: string, whol
   }
 }
 
-export function encodeCachedFile(path: string, key: string, rows: CachedRow[]): string | undefined {
-  const checksum = digest(JSON.stringify([path, key, rows]))
+export function encodeCachedFile(path: string, key: string, rows: CachedRow[], cacheKey = localKey): string | undefined {
+  const checksum = createHmac('sha256', cacheKey).update(JSON.stringify([path, key, rows])).digest('hex')
   const encoded = JSON.stringify({ path, key, rows, checksum })
   return Buffer.byteLength(encoded) <= CACHE_ENTRY_BYTES ? encoded : undefined
 }

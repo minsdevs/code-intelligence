@@ -27,12 +27,24 @@ public final class TsAnalyzeDtos {
         return Map.copyOf(copy);
     }
 
-    public record FilePayload(String path, String content) {}
+    public record FilePayload(
+            String path,
+            String content,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String cache) {
+        public FilePayload(String path, String content) {
+            this(path, content, null);
+        }
+    }
 
     /** One whole-project request, or a session command (03 §6) whose files travel inside it. */
     public record Request(
             List<FilePayload> files,
-            @JsonInclude(JsonInclude.Include.NON_NULL) SessionCommand session) {
+            @JsonInclude(JsonInclude.Include.NON_NULL) SessionCommand session,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String cacheKey) {
+        public Request(List<FilePayload> files, SessionCommand session) {
+            this(files, session, null);
+        }
+
         public Request(List<FilePayload> files) {
             this(files, null);
         }
@@ -52,7 +64,20 @@ public final class TsAnalyzeDtos {
             List<FilePayload> files,
             Integer fileCount,
             Long bytes,
-            String digest) {}
+            String digest,
+            String cacheKey) {
+        public SessionCommand(
+                String op,
+                String id,
+                Integer seq,
+                Integer page,
+                List<FilePayload> files,
+                Integer fileCount,
+                Long bytes,
+                String digest) {
+            this(op, id, seq, page, files, fileCount, bytes, digest, null);
+        }
+    }
 
     public record SessionReply(String id, String op, Integer seq, Integer page, Integer pages) {}
 
@@ -175,7 +200,39 @@ public final class TsAnalyzeDtos {
             List<SemanticEdgeHit> edges,
             List<UnresolvedCallHit> unresolvedCalls,
             List<FileAnalysisOutcome> fileOutcomes,
-            SessionReply session) {
+            SessionReply session,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> cache) {
+        public Response(
+                List<RouteHit> routes,
+                List<SymbolHit> components,
+                List<SymbolHit> hooks,
+                List<SymbolHit> stores,
+                List<ApiCallHit> apiCalls,
+                List<ImportHit> imports,
+                List<SymbolHit> symbols,
+                List<EndpointHit> endpoints,
+                List<SemanticNodeHit> nodes,
+                List<SemanticEdgeHit> edges,
+                List<UnresolvedCallHit> unresolvedCalls,
+                List<FileAnalysisOutcome> fileOutcomes,
+                SessionReply session) {
+            this(
+                    routes,
+                    components,
+                    hooks,
+                    stores,
+                    apiCalls,
+                    imports,
+                    symbols,
+                    endpoints,
+                    nodes,
+                    edges,
+                    unresolvedCalls,
+                    fileOutcomes,
+                    session,
+                    List.of());
+        }
+
         public Response(
                 List<RouteHit> routes,
                 List<SymbolHit> components,
@@ -237,6 +294,7 @@ public final class TsAnalyzeDtos {
                 List.of(), List.of());
 
         public Response {
+            cache = cache == null ? List.of() : List.copyOf(cache);
             fileOutcomes = fileOutcomes == null ? List.of() : List.copyOf(fileOutcomes);
             routes = routes == null ? List.of() : List.copyOf(routes);
             components = components == null ? List.of() : List.copyOf(components);
@@ -265,7 +323,9 @@ public final class TsAnalyzeDtos {
                     flatten(pages, Response::nodes),
                     flatten(pages, Response::edges),
                     flatten(pages, Response::unresolvedCalls),
-                    flatten(pages, Response::fileOutcomes));
+                    flatten(pages, Response::fileOutcomes),
+                    null,
+                    flatten(pages, Response::cache));
         }
 
         private static <T> List<T> flatten(List<Response> pages, java.util.function.Function<Response, List<T>> part) {

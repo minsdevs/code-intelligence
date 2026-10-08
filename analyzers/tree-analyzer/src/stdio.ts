@@ -1,4 +1,4 @@
-import { parseAnalyzeRequest } from './request'
+import { parseAnalyzeRequest, parseLocalPaths, parseCacheKey } from './request'
 import { serveStdio } from './stdio-transport'
 import { extract } from './tree'
 
@@ -12,7 +12,14 @@ void serveStdio({
   input: process.stdin,
   output: process.stdout,
   runToken,
-  analyze: async (body) => extract(parseAnalyzeRequest(body)),
+  analyze: async (body) => {
+    const files = parseAnalyzeRequest(body)
+    const cacheKey = parseCacheKey(body)
+    let reused = 0
+    const result = extract(files, parseLocalPaths(body), () => { reused++ }, cacheKey)
+    if (cacheKey) console.error('TREE_INCREMENTAL', JSON.stringify({ files: files.length, reused, parsed: files.length - reused }))
+    return result
+  },
 }).then(
   (code) => { process.exitCode = code },
   () => {

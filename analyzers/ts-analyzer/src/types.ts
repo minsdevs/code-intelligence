@@ -7,12 +7,14 @@ export type AnalyzeFile = {
 
 export type AnalyzeRequest = {
   files: AnalyzeFile[]
+  cacheKey?: string
   /** Chunked whole-project analysis (03 §6); `files` stays empty on session commands. */
   session?: SessionCommand
 }
 
 export type SessionCommand = {
   op: 'open' | 'put' | 'seal' | 'analyze' | 'page' | 'close'
+  cacheKey?: string
   id?: string
   seq?: number
   page?: number

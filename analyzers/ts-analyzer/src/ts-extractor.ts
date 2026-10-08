@@ -38,6 +38,7 @@ export const SINGLE_PROGRAM_BYTES = 16 * 1024 * 1024
 
 export type ExtractOptions = {
   incremental?: boolean
+  cacheKey?: string
   onReuse?: (path: string) => void
   singleProgramBytes?: number
   sliceProgramBytes?: number
@@ -49,7 +50,7 @@ export function extractTs(files: AnalyzeFile[], options: ExtractOptions = {}): A
   const tsFiles = files.filter((file) => isTsJs(file.path))
   const bytes = tsFiles.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0)
   if (options.incremental || bytes > (options.singleProgramBytes ?? SINGLE_PROGRAM_BYTES)) {
-    return extractSliced(files, tsFiles, options.sliceProgramBytes, options.onProgram, options.incremental, options.onReuse)
+    return extractSliced(files, tsFiles, options.sliceProgramBytes, options.onProgram, options.incremental, options.onReuse, options.cacheKey)
   }
   const project = createProgramProject(tsFiles)
   assertParseable(project, project.getSourceFiles())

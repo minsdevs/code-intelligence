@@ -23,6 +23,8 @@ final class TsProjectSession {
     static final int MAX_FILES = 50_000;
     static final long MAX_BYTES = 512L * 1024 * 1024;
     static final int CHUNK_BYTES = 1024 * 1024;
+    private static final tools.jackson.databind.json.JsonMapper JSON =
+            tools.jackson.databind.json.JsonMapper.builder().build();
 
     record Manifest(int fileCount, long bytes, String digest) {}
 
@@ -60,10 +62,26 @@ final class TsProjectSession {
     }
 
     static TsAnalyzeDtos.Response analyze(
-            TsAnalyzerClient client, List<String> paths, Manifest manifest, SourceReader reader) {
+            TsAnalyzerClient client,
+            List<String> paths,
+            Manifest manifest,
+            SourceReader reader,
+            java.util.Map<String, String> previous,
+            String cacheKey) {
         requireWithinLimit(manifest.fileCount(), manifest.bytes());
-        String id =
-                call(client, command("open", null, null, null, null, manifest)).id();
+        String id = call(
+                        client,
+                        new TsAnalyzeDtos.SessionCommand(
+                                "open",
+                                null,
+                                null,
+                                null,
+                                null,
+                                manifest.fileCount(),
+                                manifest.bytes(),
+                                manifest.digest(),
+                                cacheKey))
+                .id();
         boolean cancelled = false;
         try {
             ManifestBuilder resent = new ManifestBuilder();
@@ -78,14 +96,15 @@ final class TsProjectSession {
                 } catch (IOException e) {
                     throw new TsAnalyzerException("TS source became unreadable during analysis", null);
                 }
-                long size = content.getBytes(StandardCharsets.UTF_8).length;
+                var payload = new TsAnalyzeDtos.FilePayload(path, content, previous.getOrDefault(path, ""));
+                long size = JSON.writeValueAsBytes(payload).length;
                 if (!chunk.isEmpty() && chunkBytes + size > CHUNK_BYTES) {
                     call(client, command("put", id, seq++, null, chunk, null));
                     chunk = new ArrayList<>();
                     chunkBytes = 0;
                 }
                 resent.add(path, content);
-                chunk.add(new TsAnalyzeDtos.FilePayload(path, content));
+                chunk.add(payload);
                 chunkBytes += size;
             }
             if (!chunk.isEmpty()) call(client, command("put", id, seq, null, chunk, null));

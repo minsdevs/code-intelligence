@@ -1,5 +1,6 @@
 package dev.codeintelligence.analysis.tree;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import java.util.List;
 
@@ -7,9 +8,23 @@ public final class TreeAnalyzeDtos {
 
     private TreeAnalyzeDtos() {}
 
-    public record FilePayload(String path, String content) {}
+    public record FilePayload(
+            String path,
+            String content,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String cache) {
+        public FilePayload(String path, String content) {
+            this(path, content, null);
+        }
+    }
 
-    public record Request(List<FilePayload> files) {}
+    public record Request(
+            List<FilePayload> files,
+            @JsonInclude(JsonInclude.Include.NON_NULL) List<String> localPaths,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String cacheKey) {
+        public Request(List<FilePayload> files) {
+            this(files, null, null);
+        }
+    }
 
     public record RouteHit(String path, String component, String filePath, Integer lineStart, Integer lineEnd) {}
 
@@ -40,7 +55,33 @@ public final class TreeAnalyzeDtos {
             List<SymbolHit> symbols,
             List<EndpointHit> endpoints,
             List<EntityHit> entities,
-            List<FileAnalysisOutcome> fileOutcomes) {
+            List<FileAnalysisOutcome> fileOutcomes,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> cache) {
+        public Response(
+                List<RouteHit> routes,
+                List<SymbolHit> components,
+                List<SymbolHit> hooks,
+                List<SymbolHit> stores,
+                List<ApiCallHit> apiCalls,
+                List<ImportHit> imports,
+                List<SymbolHit> symbols,
+                List<EndpointHit> endpoints,
+                List<EntityHit> entities,
+                List<FileAnalysisOutcome> fileOutcomes) {
+            this(
+                    routes,
+                    components,
+                    hooks,
+                    stores,
+                    apiCalls,
+                    imports,
+                    symbols,
+                    endpoints,
+                    entities,
+                    fileOutcomes,
+                    List.of());
+        }
+
         public Response(
                 List<RouteHit> routes,
                 List<SymbolHit> components,
@@ -58,6 +99,7 @@ public final class TreeAnalyzeDtos {
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
 
         public Response {
+            cache = cache == null ? List.of() : List.copyOf(cache);
             fileOutcomes = fileOutcomes == null ? List.of() : List.copyOf(fileOutcomes);
             routes = routes == null ? List.of() : List.copyOf(routes);
             components = components == null ? List.of() : List.copyOf(components);

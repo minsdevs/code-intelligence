@@ -47,8 +47,8 @@ class TsProjectSessionTimeoutTest {
             manifest.add(paths.getLast(), "x".repeat(1_000_000));
         }
 
-        TsAnalyzeDtos.Response response =
-                TsProjectSession.analyze(client, paths, manifest.build(), path -> "x".repeat(1_000_000));
+        TsAnalyzeDtos.Response response = TsProjectSession.analyze(
+                client, paths, manifest.build(), path -> "x".repeat(1_000_000), java.util.Map.of(), null);
 
         assertThat(response).isNotNull();
         assertThat(ops).containsSubsequence("open", "seal", "analyze", "close");

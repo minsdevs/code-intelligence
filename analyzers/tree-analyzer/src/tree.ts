@@ -6,6 +6,7 @@ import type { AnalyzeFile, AnalyzeResponse } from './types'
 import { extractPython, isPython } from './python'
 import { extractGo, isGo } from './go'
 import { extractSvelte, extractVue, isSvelte, isVue } from './vue-svelte'
+import { treeContext, treeFile } from './incremental-cache'
 
 const python = new Parser()
 python.setLanguage(Python)
@@ -26,8 +27,28 @@ export function javascriptParser(): Parser {
   return javascript
 }
 
-export function extract(files: AnalyzeFile[]): AnalyzeResponse {
-  const localPaths = new Set(files.map((file) => file.path))
+export function extract(files: AnalyzeFile[], paths?: string[], onReuse?: (path: string) => void, cacheKey?: string): AnalyzeResponse {
+  const localPaths = new Set(paths ?? files.map((file) => file.path))
+  if (!files.some((file) => file.cache !== undefined)) return extractUncached(files, localPaths)
+  const context = treeContext(localPaths)
+  const response = extractUncached([], localPaths)
+  const cache: string[] = []
+  let bytes = 0
+  for (const file of files) {
+    const entry = treeFile(file, context, () => extractUncached([file], localPaths), onReuse, cacheKey)
+    for (const key of Object.keys(response) as (keyof AnalyzeResponse)[]) {
+      (response[key] as unknown[]).push(...(entry.result[key] ?? []))
+    }
+    if (entry.cache && bytes + Buffer.byteLength(entry.cache) <= 16 * 1024 * 1024) {
+      bytes += Buffer.byteLength(entry.cache)
+      cache.push(entry.cache)
+    }
+  }
+  response.cache = cache
+  return response
+}
+
+function extractUncached(files: AnalyzeFile[], localPaths: Set<string>): AnalyzeResponse {
   const response: AnalyzeResponse = {
     fileOutcomes: [],
     routes: [],
