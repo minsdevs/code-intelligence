@@ -158,9 +158,13 @@ it('keeps provider method identity and registration order with dotted names, ove
   expect(cold.edges.filter((edge) => edge.type === 'CALLS').map((edge) => edge.targetKey)).toEqual([
     'ts:clock.v2.ts#Clock.read', 'ts:other/clock.ts#Clock.read',
   ])
-  const changed = input.map((file) => file.path === 'alone.ts' ? { ...file, content: 'export const unrelated = 2' } : file)
+  const changed = input.map((file) => file.path === 'controller.ts' ? { ...file,
+    content: file.content.replace('@Get() read()', "@Get('extra') extra() { return this.clock.read('extra') }; @Get() read()"),
+  } : file)
   const reused: string[] = []
   const warm = extractTs(seed(changed, cold), { incremental: true, onMetadataReuse: (path) => reused.push(path) })
   expect(canonical(warm)).toEqual(extractTs(changed))
+  expect(warm.edges.filter((edge) => edge.type === 'CALLS' && edge.sourceKey === 'ts:controller.ts#Api.extra')
+    .map((edge) => edge.targetKey)).toEqual(['ts:clock.v2.ts#Clock.read'])
   expect(reused).toEqual(['module.ts'])
 })

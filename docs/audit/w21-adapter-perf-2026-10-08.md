@@ -57,3 +57,51 @@ coordinator 승인으로 원본 p6 app의 `adapter-bridge`만 직접 실행했�
 - 이는 성능상 불필요 반복의 재현→제거와 의미 보존 증거다. 기존 의미 오류를 재현한 semantic RED라고 주장하지 않는다.
 
 large 최초 worker 진입 전 low-load admission만 21분 지속돼 중단했다. `large-admission-cancelled.log`와 원본 `baseline-quiet-large.log` 보존. main 승인으로 반복하지 않았으며 large cache eviction/재사용 원인 및 quiet 전후 시간 비교는 **NOT_RUN**이다. 원래50k/200MiB fixture, limits, SLO는 변경하지 않았다.
+
+## 부가 실행 경계와 backend 검증
+
+Java20이 나중에 공개한 JFR 후처리(Java source-file mode, 21:10:40+09부터0.72초)는 quiet admission 중이었다. 보존 worker.log mtime에서 elapsed를 뺀 보수적 phase 시작 추정은 cold21:11:40.926, refresh21:13:58.183, full21:15:09.196(+09)이다. 첫 실제 worker보다60초 이전으로 분석 phase와 겹치지 않았다. 원시 mtime는 각각12:11:57.554Z /12:14:09.094Z /12:15:25.086Z다.
+
+backend bridge/owner cache/tree 대상 **35/35 PASS, skip0**. `backend-target.log`, `backend/test-totals.json`, JUnit XML 보존. backend/core/tree 코드는 변경하지 않았으므로 공용 cache의 tree 소비 경로를 그대로 확인했다. Gradle loopback handshake/deprecation 경고는 로그에 보존했고 억제하지 않았다.
+
+실행은 공통 quiet 후 native lock 안에서 아래 명령이다. `T`는 이번 유닛에서 만든 저장소 직하위 private `.citd-XXXXXX` 경로다.
+
+```sh
+CI_DOCKER_TEST_ROOT="$PWD/validation/local/w21-adapter-perf/backend" CI_DOCKER_TEST_TMP="$T" backend/gradlew -p backend --offline --no-daemon --max-workers=2 -I "$PWD/validation/pre-release/docker-integration.init.gradle" cleanTest test \
+  --tests dev.codeintelligence.analysis.core.AdapterResultCacheTest --tests dev.codeintelligence.analysis.ts.TsAnalyzerControlClientTest \
+  --tests dev.codeintelligence.analysis.ts.TsParsingStepTest --tests dev.codeintelligence.analysis.ts.TsGraphMapperTest \
+  --tests dev.codeintelligence.analysis.ts.TsRequestBudgetTest --tests dev.codeintelligence.analysis.ts.TsProjectSessionTimeoutTest \
+  --tests dev.codeintelligence.analysis.ts.TsAnalyzeDtosTest --tests dev.codeintelligence.analysis.tree.TreeParsingStepTest
+```
+
+최초 green build의120초 외부 deadline은 quiet admission 중 만료돼 build 자체는 NOT_RUN이었다. `build-admission-timeout.log` 보존 후 admission/build만 deadline 없이 재실행했다. threshold나 gate를 완화하지 않았다.
+
+medium cold/refresh 차이는 별도 baseline stdio profiler의 **호출수**로도 설명된다. cold compiler project4회(누적 root9,546), extract3회; refresh project3회(누적 root5,069), extract2회였다. 누적 root 수를 고유 파일 수로 해석하지 않는다. 결과2,330개·metadata581개를 재사용했지만 slice/dependency context의 compiler 작업은 남는다.
+
+refresh envelope5,499개 전부 인증됐고 decode2,930개 모두 성공,64MiB call budget은40,272,018 bytes 남았다. owner eviction/oversize0이므로 이 medium의 남은 비용을 인증/eviction/인플레이트 cap 실패로 설명할 근거는 없다. 이 계수는 high-load standalone 진단이며 p6 native가 출력하지 않은 내부 계수를 추정해 채운 것이 아니다.
+
+## 최종 retained 코드 검증
+
+제품 코드 `a81f1b2`에서 TS 대상10파일 **142/142 PASS**, `npm run build` PASS. 새 consumer 회귀는 controller에 새 endpoint/method를 추가하여 unchanged provider metadata를 재사용한 **새 CALLS edge**와 clean full equality를 확인한다. 단순 unchanged graph/cache echo가 아니다. `final-checks.log`와 `final-summary.json`에 기록했다.
+
+```sh
+cd analyzers/ts-analyzer
+./node_modules/.bin/vitest run --maxWorkers=1 src/incremental-metadata.test.ts src/react-component-binding.test.ts src/incremental.test.ts src/incremental-workload.test.ts src/incremental-large-result.test.ts src/ts-scale.test.ts src/analyze-session.test.ts src/incremental-session.test.ts src/stdio-transport.test.ts src/http-boundary.test.ts
+npm run build
+```
+
+실제 stdio와 loopback HTTP 각각 새 cold/refresh/clean-full worker/session을 실행했다. synthetic1000-file fixture 중 완전한 TS/config553개를 전송하고, refresh에서는 fixture1% revision 외에 실제 `fetch` body를 추가했다. 두 transport 모두 API call0→1·canonical 변경을 관측했으며 refresh=clean full, stdio=HTTP의 **전체 graph 응답** SHA가 `0a7cc79abb849fd935ec8ac141261f5211bcf211e2fc74a20f8db068545e5ce5`로 같았다. cold SHA는 `e94bf1b264825689fdcbf2a096ebd7d341cebd2c877f231511eb1403b9296fbb`로 별도다. count-only 비교가 아니다.
+
+실행은 `wait-quiet.sh → with-native-lock.sh → caffeinate`; smoke parent/worker는 clean env였다. `PROFILE_LABEL=final-stdio PROFILE_COVERAGE=1 node validation/local/w21-adapter-perf/session-profile.cjs small`와 `PROFILE_LABEL=final-http PROFILE_HTTP=1 node validation/local/w21-adapter-perf/session-profile.cjs small`를 사용했다. 원본로그와 CPU/coverage 자료는 보존한다. high load 및 precise coverage 영향이 있으므로 시간비교/SLO 증거로 사용하지 않는다. 최종 cold coverage도 index생성1회, index1,345회+owner664회를 확인했다.
+
+중간커밋: `46b2402`, `00d7b40`, `a81f1b2`. 최종 net 변경은 `semantic-extractor.ts`, `incremental-metadata.test.ts`, 이 감사이며 React/core/backend/transport/후보 바이트는 원래대로다. 메인의 통합 재검증과 fresh packaged pipeline 성능 확인 전에는 성능/SLO 통과나 release GO를 선언하지 않는다.
+
+### 소비자 회귀의 mutation guard
+
+새 시험이 잘못된 owner grouping을 실제로 거부하는지, 일시적으로 `key.split('.')[0]`를 주입해 동일한 시험 하나를 실행했다. **RED1/1**: warm controller의 새/기존 CALLS edge3개가 사라지고 SUCCESS가 PARTIAL/UNRESOLVED_CALLS로 바뀌어 clean-full equality가 실패했다(`owner-index-mutant-red.log`). 올바른 suffix-length 식을 즉시 복원하여 원래 제품 file hash `E7D1`로 돌아온 뒤 같은 명령에서 **GREEN1/1**, 나머지6개는 name filter로 skipped였다(`owner-index-green.log`). 이것은 의도적 mutation guard이며 baseline의 기존 semantic 결함이라고 주장하지 않는다.
+
+```sh
+./node_modules/.bin/vitest run --maxWorkers=1 src/incremental-metadata.test.ts -t "keeps provider method identity"
+```
+
+임시 profiler/stdio·HTTP harness/quiet wrapper, 보존용 baseline dist 및 취소된 synthetic fixture는 제거했다. 실패·취소·coverage·CPU profile·JUnit·canonical 증거는 `validation/local/w21-adapter-perf`에 그대로 보존한다. 영구 telemetry나 새로운 runtime abstraction은 남기지 않았다.
