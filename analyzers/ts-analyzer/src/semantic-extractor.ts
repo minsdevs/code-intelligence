@@ -282,6 +282,16 @@ export function collectManifestFacts(project: Project, files: AnalyzeFile[], sco
   const ignore = (): void => {}
   const { classesByName, declarationsByFileAndName, methodsByOwnerAndName } =
     collectDeclarations(sourceFiles, bindingsByFile, (_phase, _file, run) => run(), ignore, ignore)
+  // A provider only consumes methods of its exact owner. Index once rather than scanning
+  // every method in the program for every registration (large manifests have thousands).
+  const methodsByOwner = new Map<string, [string, DeclarationRef][]>()
+  for (const [key, method] of methodsByOwnerAndName) {
+    // Method names may be quoted/computed and contain dots; do not split the key on dots.
+    const owner = key.slice(0, -method.name.length - 1)
+    const methods = methodsByOwner.get(owner)
+    if (methods) methods.push([key, method])
+    else methodsByOwner.set(owner, [[key, method]])
+  }
   const prefixFacts = globalPrefixFacts(new Map())
   for (const source of sourceFiles) {
     const filePath = filePathOf(source)
@@ -304,7 +314,7 @@ export function collectManifestFacts(project: Project, files: AnalyzeFile[], sco
         }, true)
       own.reads = [...reads].sort()
       for (const ref of providers.values()) {
-        for (const [key, method] of methodsByOwnerAndName) if (key.startsWith(`${ref.key}.`)) {
+        for (const [key, method] of methodsByOwner.get(ref.key) ?? []) {
           const plain = { key: method.key, name: method.name, filePath: method.filePath }
           facts.providerMethods.set(key, plain)
           own.methods.push([key, plain])

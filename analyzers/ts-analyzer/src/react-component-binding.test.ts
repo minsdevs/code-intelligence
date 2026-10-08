@@ -195,4 +195,18 @@ describe('React component declaration binding', () => {
     expect(result.routes).toHaveLength(2)
     expect(result.routes.every(route => route.componentResolution?.status === 'UNRESOLVED')).toBe(true)
   })
+
+  it('checks all writes when a valid route follows unsupported elements and when later routes reuse the resolver', () => {
+    const files = [
+      { path: 'a-routes.tsx', content: "import { Route } from 'react-router-dom'; import { Page, Stable } from './pages'; export const routes = [<Route path='/skip' element={wrap(<Page/>)} />, <Route path='/changed' element={<Page/>} />, <Route path='/stable' element={<Stable/>} />]" },
+      { path: 'pages.tsx', content: 'export function Page() { return <h1/> }; export function Stable() { return <h2/> }; function mutate() { Page = Stable }' },
+    ]
+    const full = extractTs(files)
+    expect(full.routes.map((route) => route.componentResolution?.status)).toEqual(['UNRESOLVED', 'UNRESOLVED', 'RESOLVED'])
+    const { cache, ...cold } = extractTs(files, { incremental: true })
+    expect(cold).toEqual(full)
+    const previous = new Map(cache!.map((token) => [JSON.parse(token).path, token]))
+    const { cache: _cache, ...warm } = extractTs(files.map((file) => ({ ...file, cache: previous.get(file.path) })), { incremental: true })
+    expect(warm).toEqual(full)
+  })
 })

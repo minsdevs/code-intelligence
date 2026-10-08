@@ -31,7 +31,9 @@ export function createReactComponentResolver(
   }
   const occurrences = new Map<string, number>()
   for (const hit of declarations.values()) occurrences.set(keyOf(hit), (occurrences.get(keyOf(hit)) ?? 0) + 1)
-  const written = writtenBindings(sources)
+  // Most slice programs contain no React route. Keep the whole-program write check,
+  // but only construct it when a JSX component actually needs resolution.
+  let written: Set<Node> | undefined
 
   return initializer => {
     let value = initializer
@@ -41,6 +43,7 @@ export function createReactComponentResolver(
     const tag = Node.isJsxSelfClosingElement(value) ? value.getTagNameNode()
       : Node.isJsxElement(value) ? value.getOpeningElement().getTagNameNode() : undefined
     if (!tag) return unresolved
+    const writtenInProgram = written ??= writtenBindings(sources)
     let steps = 0
     const visiting = new Set<Node | string>()
     const visit = (key: Node | string, action: () => Node | null): Node | null => {
@@ -75,7 +78,7 @@ export function createReactComponentResolver(
     }
     const declaration = (node: Node): Node | null => visit(node, () => {
       const module = modules.get(filePath(node.getSourceFile()))
-      if (!module || written.has(node)) return null
+      if (!module || writtenInProgram.has(node)) return null
       if (Node.isImportSpecifier(node)) return node.isTypeOnly() ? null : imported(node, node.getName())
       if (Node.isImportClause(node)) return imported(node, 'default')
       if (Node.isVariableDeclaration(node)) {

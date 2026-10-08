@@ -144,3 +144,23 @@ it('recomputes metadata for newly resolved declarations and unknown dependency o
     expect(observed).toEqual([])
   }
 })
+
+it('keeps provider method identity and registration order with dotted names, overloads and duplicate aliases', () => {
+  const input = [
+    { path: 'clock.v2.ts', content: "export class Clock { read(value: string): string; read(value: number): number; read(value: any) { return value }; 'dotted.name'() { return 1 } } export class ClockExtra { read() { return 2 } }" },
+    { path: 'other/clock.ts', content: 'export class Clock { read() { return 3 } }' },
+    { path: 'module.ts', content: "import { Module } from '@nestjs/common'; import { Clock, ClockExtra } from './clock.v2'; import { Clock as OtherClock } from './other/clock'; @Module({providers: [{provide:'FIRST',useClass:Clock},{provide:'SECOND',useClass:Clock},ClockExtra,{provide:'OTHER',useClass:OtherClock}]}) export class AppModule {}" },
+    { path: 'controller.ts', content: "import { Controller, Get, Inject } from '@nestjs/common'; @Controller('clock') export class Api { constructor(@Inject('FIRST') private clock: any, @Inject('OTHER') private other: any) {} @Get() read() { return this.clock.read(1) + this.other.read() } }" },
+    { path: 'alone.ts', content: 'export const unrelated = 1' },
+  ]
+  const cold = extractTs(input, { incremental: true })
+  expect(canonical(cold)).toEqual(extractTs(input))
+  expect(cold.edges.filter((edge) => edge.type === 'CALLS').map((edge) => edge.targetKey)).toEqual([
+    'ts:clock.v2.ts#Clock.read', 'ts:other/clock.ts#Clock.read',
+  ])
+  const changed = input.map((file) => file.path === 'alone.ts' ? { ...file, content: 'export const unrelated = 2' } : file)
+  const reused: string[] = []
+  const warm = extractTs(seed(changed, cold), { incremental: true, onMetadataReuse: (path) => reused.push(path) })
+  expect(canonical(warm)).toEqual(extractTs(changed))
+  expect(reused).toEqual(['module.ts'])
+})
