@@ -31,10 +31,12 @@ extern int sandbox_check(pid_t pid, const char *operation, int type, ...);
 
 #define MAX_SESSIONS 2
 #define MAX_ENVIRONMENT 16
-// One analysis per session (03 §6): the handshake and one 10 MiB request frame in, one 64 MiB
-// response frame out. The host enforces the exact frame bounds; these cap what is relayed.
-#define MAX_INPUT_BYTES ((size_t)(10u << 20) + 16384u)
-#define MAX_OUTPUT_BYTES ((size_t)(64u << 20) + 16384u)
+// One analysis per session: a single request (one 10 MiB frame in, one 64 MiB frame out) or one 03 §6
+// analyzer session (chunks of at most 512 MiB of source in, 1 MiB result pages out). The host enforces
+// the exact frame bounds and the analysis time limit; these cap what one session relays: twice the
+// session source bound in, and the same out (a 25 MiB project returns about 47 MiB of pages).
+#define MAX_INPUT_BYTES ((size_t)1 << 30)
+#define MAX_OUTPUT_BYTES ((size_t)1 << 30)
 #define SCRATCH_PREFIX "adapter-run-"
 
 static char contents[PATH_MAX];
