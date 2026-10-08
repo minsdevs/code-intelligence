@@ -138,9 +138,9 @@ async function transport(request) {
 
 // PK-08 seam-free mode: a real loopback HTTP fake provider behind the production transport composition
 // (gateway default -> createProviderTransport(validation build metadata) -> node:http). It records what
-// arrived on the wire; it cannot see request IDs, so it writes its own file. Anything that is not the
-// provider call (for example a stray local port probe on this shared host) is answered 404 and recorded
-// separately, never counted as a provider request.
+// arrived on the wire; it cannot see request IDs, so it writes its own file. Unauthenticated
+// GET/HEAD probes outside the provider path are recorded separately and answered 404. Requests
+// with credentials, a provider path, or a non-probe method remain visible even when malformed.
 async function startHttpProvider() {
   let count = 0;
   const server = http.createServer((incoming, response) => {
@@ -148,7 +148,8 @@ async function startHttpProvider() {
     incoming.on('data', chunk => chunks.push(chunk));
     incoming.on('end', () => {
       const body = Buffer.concat(chunks);
-      if (incoming.method !== 'POST' || incoming.url !== '/v1/chat/completions') {
+      if (['GET', 'HEAD'].includes(incoming.method) && incoming.headers.authorization === undefined
+        && incoming.url !== '/v1/chat/completions') {
         record('http-stray.jsonl', { method: incoming.method, path: incoming.url, bytes: body.length,
           authorizationPresent: incoming.headers.authorization !== undefined })
           .finally(() => { response.writeHead(404); response.end(); });

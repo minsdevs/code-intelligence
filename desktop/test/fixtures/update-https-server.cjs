@@ -31,6 +31,8 @@ async function certificate() {
 async function startUpdateServer(t) {
   const tls = await certificate(), routes = new Map(), requests = [];
   const server = https.createServer({ key: tls.key, cert: tls.cert }, (request, response) => {
+    // Route misses from the fixture host must still count.
+    if (request.headers.host !== HOST) { response.writeHead(404).end(); request.resume(); return; }
     requests.push(request.url);
     const route = routes.get(request.url);
     if (typeof route === 'function') return route(request, response);
