@@ -123,8 +123,12 @@ public class TreeParsingStep implements JobStep {
             } catch (JobCancelledException cancelled) {
                 throw cancelled;
             } catch (RuntimeException failure) {
-                for (var payload : batch)
-                    FileAnalysisOutcome.record(jdbc, snapshotId, payload.path(), "FAILED", "ANALYZER_REQUEST_FAILED");
+                FileAnalysisOutcome.recordFiles(
+                        jdbc,
+                        snapshotId,
+                        batch.stream().map(TreeAnalyzeDtos.FilePayload::path)::iterator,
+                        "FAILED",
+                        "ANALYZER_REQUEST_FAILED");
                 throw failure;
             }
             AnalysisResult result = TreeGraphMapper.toGraph(response);
@@ -140,7 +144,7 @@ public class TreeParsingStep implements JobStep {
             FileAnalysisOutcome.recordResponse(
                     jdbc,
                     snapshotId,
-                    batch.stream().map(TreeAnalyzeDtos.FilePayload::path).toList(),
+                    batch.stream().map(TreeAnalyzeDtos.FilePayload::path)::iterator,
                     response.fileOutcomes());
             ctx.updateProgress(20 + Math.min(75, (75 * end) / payloads.size()));
             start = end;
@@ -150,7 +154,8 @@ public class TreeParsingStep implements JobStep {
     }
 
     private void recordAll(long snapshotId, List<InventoriedFile> files, String status, String reason) {
-        for (InventoriedFile file : files) recordOne(snapshotId, file, status, reason);
+        FileAnalysisOutcome.recordFiles(
+                jdbc, snapshotId, files.stream().map(InventoriedFile::path)::iterator, status, reason);
     }
 
     private void recordOne(long snapshotId, InventoriedFile file, String status, String reason) {

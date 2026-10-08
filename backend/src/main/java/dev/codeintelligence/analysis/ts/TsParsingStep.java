@@ -129,7 +129,7 @@ public class TsParsingStep implements JobStep {
         FileAnalysisOutcome.recordResponse(
                 jdbc,
                 snapshotId,
-                input.paths().stream().filter(TsParsingStep::isPrimarySource).toList(),
+                input.paths().stream().filter(TsParsingStep::isPrimarySource)::iterator,
                 result.fileOutcomes());
         ctx.updateProgress(100);
     }
@@ -139,7 +139,12 @@ public class TsParsingStep implements JobStep {
     }
 
     private void recordAll(long snapshotId, List<InventoriedFile> files, String status, String reason) {
-        for (InventoriedFile file : files) recordOne(snapshotId, file, status, reason);
+        FileAnalysisOutcome.recordFiles(
+                jdbc,
+                snapshotId,
+                files.stream().map(InventoriedFile::path).filter(TsParsingStep::isPrimarySource)::iterator,
+                status,
+                reason);
     }
 
     private void recordOne(long snapshotId, InventoriedFile file, String status, String reason) {

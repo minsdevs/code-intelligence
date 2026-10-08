@@ -139,10 +139,11 @@ public class GraphPersistenceService {
                 edgeRows.add(edgeRow(snapshotId, source, target, edge));
             }
             upsertEdges(edgeRows);
-            for (FileAnalysisOutcome outcome : safe.fileOutcomes()) {
-                if (GraphIdentityGuard.REASON.equals(outcome.reason()))
-                    FileAnalysisOutcome.record(jdbc, snapshotId, outcome.path(), outcome.status(), outcome.reason());
-            }
+            FileAnalysisOutcome.recordAll(
+                    jdbc,
+                    snapshotId,
+                    safe.fileOutcomes().stream().filter(outcome -> GraphIdentityGuard.REASON.equals(outcome.reason()))
+                            ::iterator);
         });
     }
 

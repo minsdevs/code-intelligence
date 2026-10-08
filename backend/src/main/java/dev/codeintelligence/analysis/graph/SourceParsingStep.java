@@ -92,10 +92,15 @@ public class SourceParsingStep implements JobStep {
             ctx.updateProgress(100);
             return;
         }
-        for (InventoriedFile file : inventory.files()) {
-            if ("java".equalsIgnoreCase(file.language()) || file.path().endsWith(".java"))
-                FileAnalysisOutcome.record(jdbc, snapshotId, file.path(), "TARGETED", "JAVA_PARSER_STARTED");
-        }
+        FileAnalysisOutcome.recordFiles(
+                jdbc,
+                snapshotId,
+                inventory.files().stream()
+                        .filter(file -> "java".equalsIgnoreCase(file.language())
+                                || file.path().endsWith(".java"))
+                        .map(InventoriedFile::path)::iterator,
+                "TARGETED",
+                "JAVA_PARSER_STARTED");
         AnalysisContext analysis = new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory);
         AnalysisInputFingerprint.Snapshot input = matching.stream()
                         .anyMatch(
@@ -137,9 +142,7 @@ public class SourceParsingStep implements JobStep {
         }
         ctx.updateProgress(70);
         persistence.persist(ctx.projectId(), snapshotId, acc.toResult());
-        for (FileAnalysisOutcome outcome : acc.outcomes.values()) {
-            FileAnalysisOutcome.record(jdbc, snapshotId, outcome.path(), outcome.status(), outcome.reason());
-        }
+        FileAnalysisOutcome.recordAll(jdbc, snapshotId, acc.outcomes.values());
         failures.addAll(acc.snapshotFailures());
         persistFailures(ctx.projectId(), snapshotId, failures);
         ctx.updateProgress(100);
