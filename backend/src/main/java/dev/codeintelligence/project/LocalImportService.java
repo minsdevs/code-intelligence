@@ -29,9 +29,7 @@ import org.eclipse.jgit.lib.CommitBuilder;
 import org.eclipse.jgit.lib.Config;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.FileMode;
-import org.eclipse.jgit.lib.ObjectDatabase;
 import org.eclipse.jgit.lib.ObjectId;
-import org.eclipse.jgit.lib.ObjectInserter;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.util.FS;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -373,14 +371,17 @@ public class LocalImportService {
                 git.resolve("HEAD"), "ref: refs/heads/snapshot\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         // ObjectDirectory accepts a plain, parentless Config. Unlike Git.init/open/add/commit,
         // it does not load ambient user/system config or execute hooks, clean filters or attributes.
-        try (ObjectDatabase objects = new ObjectDirectory(
+        try (ObjectDirectory objects = new ObjectDirectory(
                 new Config(),
                 git.resolve("objects").toFile(),
                 null,
                 FS.DETECTED,
                 git.resolve("shallow").toFile())) {
             objects.create();
-            try (ObjectInserter inserter = objects.newInserter()) {
+            // A fresh database has no earlier objects to probe; flush one pack before publishing HEAD.
+            try (var inserter = objects.newPackInserter()) {
+                inserter.checkExisting(false);
+                inserter.setCompressionLevel(java.util.zip.Deflater.DEFAULT_COMPRESSION);
                 List<DirCacheEntry> entries = new ArrayList<>();
                 try {
                     verifier.verifyAndConsume(selection.binding(), (file, bytes) -> {

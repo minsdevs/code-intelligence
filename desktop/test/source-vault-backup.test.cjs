@@ -371,6 +371,7 @@ test('stage creation refuses symlink roots and unsafe permissions without traver
   assert.deepEqual(await fs.readdir(target), []);
   await fs.unlink(f.stageRoot);
   await fs.mkdir(f.stageRoot, { mode: 0o755 });
+  await fs.chmod(f.stageRoot, 0o755);
   await assert.rejects(openSourceVaultRestoreStage({ ...f.options, sourceRoot: f.stageRoot }), code('SOURCE_VAULT_UNSAFE_PATH'));
 });
 
