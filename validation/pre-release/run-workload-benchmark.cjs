@@ -20,7 +20,7 @@ const { captureOwnedApplication } = require('../backup-compatibility/interruptio
 const { readOwnerMemory } = require('./process-memory.cjs');
 const { observePowerSource, acObservedAtRunBoundaries, confirmObservedGone } = require('./run-startup-benchmark.cjs');
 const { SIZE_CLASSES, generateWorkload, hashTree, mutateWorkload } = require('./workload-fixture.cjs');
-const { SLO, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplete } = require('./workload-metrics.cjs');
+const { SLO, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplete, installWorkloadWatch, installWorkloadClick } = require('./workload-metrics.cjs');
 const { expectedServices } = require('./adapter-mode.cjs');
 const { withDropConfirmation } = require('./drop-confirmation.cjs');
 // The analysis results table in either UI language (English is the product default).
@@ -250,26 +250,8 @@ async function main(argv = process.argv.slice(2)) {
     }, routes), 120000, 'GRAPH_API_FAILED');
     const navigate = route => page.evaluate(route => { history.pushState(null, '', route); window.dispatchEvent(new PopStateEvent('popstate')); }, route);
     // In-renderer marks: a capture-phase click time and the first DOM time a condition holds.
-    const watch = (name, condition) => page.evaluate(({ name, condition }) => {
-      window.__workload ??= { marks: {} };
-      const marks = window.__workload.marks; delete marks[name];
-      const holds = () => {
-        // Texts and labels are given in every UI language (English is the product default).
-        if (condition.kind === 'button') return [...document.querySelectorAll('button')].some(button => condition.text.includes(button.textContent.trim()));
-        if (condition.kind === 'region') return condition.label.some(label => document.querySelector(`section[aria-label="${label}"]`));
-        if (condition.kind === 'rows') return new RegExp(condition.path).test(location.pathname)
-          && document.querySelectorAll(condition.RESULT_ROWS).length >= condition.minimum;
-        return false;
-      };
-      const observer = new MutationObserver(() => { if (holds()) { marks[name] ??= performance.now(); observer.disconnect(); } });
-      observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
-      if (holds()) { marks[name] = performance.now(); observer.disconnect(); }
-    }, { name, condition: { ...condition, RESULT_ROWS } });
-    const markClick = name => page.evaluate(name => {
-      window.__workload ??= { marks: {} };
-      delete window.__workload.marks[name];
-      document.addEventListener('click', () => { window.__workload.marks[name] ??= performance.now(); }, { capture: true, once: true });
-    }, name);
+    const watch = (name, condition) => page.evaluate(installWorkloadWatch, { name, condition: { ...condition, RESULT_ROWS } });
+    const markClick = name => page.evaluate(installWorkloadClick, name);
     const marks = () => page.evaluate(() => ({ ...(window.__workload?.marks ?? {}), now: performance.now() }));
     const waitMark = async (name, timeoutMs, code) => {
       const expires = performance.now() + timeoutMs;
@@ -320,9 +302,9 @@ async function main(argv = process.argv.slice(2)) {
       await expect(button).toBeVisible();
     });
     (report.dropConfirmations ??= []).push(confirmation);
-    await d.watch('previewAck', { kind: 'button', text: ['Inspecting…', '검사 중…'] });
-    await d.watch('previewShown', { kind: 'region', label: ['Import preview to review', '확인할 가져오기 미리보기'] });
     await d.markClick('previewClick');
+    await d.watch('previewAck', { kind: 'button', text: ['Inspecting…', '검사 중…'], after: 'previewClick' });
+    await d.watch('previewShown', { kind: 'region', label: ['Import preview to review', '확인할 가져오기 미리보기'], after: 'previewClick' });
     const [response] = await Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local/preview' && r.request().method() === 'POST', { timeout: 120000 }),
       button.click(),
@@ -428,8 +410,8 @@ async function main(argv = process.argv.slice(2)) {
       await expect(previewButton).toBeVisible({ timeout: 120000 });
       const status = await d.marks();
       row.metrics.statusCheckMs = Math.round(status.now - status.statusClick);
-      await d.watch('refreshShown', { kind: 'region', label: ['Import preview to review', '확인할 가져오기 미리보기'] });
       await d.markClick('refreshPreviewClick');
+      await d.watch('refreshShown', { kind: 'region', label: ['Import preview to review', '확인할 가져오기 미리보기'], after: 'refreshPreviewClick' });
       await previewButton.click();
       const shown = await d.waitMark('refreshShown', 120000, 'INCREMENTAL_FAILED');
       row.metrics.refreshPreviewMs = Math.round(shown.refreshShown - shown.refreshPreviewClick);
@@ -484,8 +466,8 @@ async function main(argv = process.argv.slice(2)) {
       throw new Error('CANCEL_TRIGGER_MISSED');
     }
     row.runningStepAtCancel = trigger.key;
-    await d.watch('cancelAck', { kind: 'button', text: 'Cancelling…' });
     await d.markClick('cancelClick');
+    await d.watch('cancelAck', { kind: 'button', text: ['Cancelling…'], after: 'cancelClick' });
     await stage('CANCEL_FAILED', () => cancel.click());
     const released = await stage('CANCEL_FAILED', () => d.pollJob(started.jobId, { intervalMs: 100, timeoutMs: settings.analysisTimeoutMs }));
     row.job = jobTimings(released.job);
