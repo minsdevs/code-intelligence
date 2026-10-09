@@ -76,8 +76,9 @@ public class GraphPersistenceService {
                     .filter(node -> "FE_ROUTE".equals(node.nodeType())
                             && node.metadata().containsKey("componentResolution"))
                     .map(GraphNodeDraft::naturalKey)
-                    .collect(java.util.stream.Collectors.toSet());
-            var clearedRoutes = new java.util.HashSet<String>();
+                    .collect(java.util.stream.Collectors.toCollection(java.util.HashSet::new));
+            List<Long> clearedRouteIds =
+                    refreshedRoutes.isEmpty() ? List.of() : new ArrayList<>(Math.min(BATCH, refreshedRoutes.size()));
             Map<String, Long> fileIds = CustomPlans.run(jdbc, () -> fileIds(snapshotId, safe.nodes()));
             List<Long> nodeIds = upsertNodes(snapshotId, safe.nodes(), fileIds);
             Map<String, List<AnalyzerEvidence>> evidenceByKey = new HashMap<>();
@@ -91,22 +92,10 @@ public class GraphPersistenceService {
             Map<Long, List<NewEvidence>> replacedEvidence = new LinkedHashMap<>();
             for (int index = 0; index < safe.nodes().size(); index++) {
                 GraphNodeDraft node = safe.nodes().get(index);
-                long id = nodeIds.get(index);
-                if (refreshedRoutes.contains(node.naturalKey()) && clearedRoutes.add(node.naturalKey())) {
-                    // An explicit re-analysis is authoritative for this route's binding.
-                    // Remove stale structural/API propagation in the same transaction,
-                    // including when the new result is UNRESOLVED. Other snapshots and
-                    // incoming file provenance are not part of this replacement.
-                    jdbc.sql("""
-                            delete from graph_edges e using graph_nodes t
-                            where e.snapshot_id=:snapshot and e.source_node_id=:route
-                              and t.id=e.target_node_id and t.snapshot_id=:snapshot
-                              and ((e.edge_type='CONTAINS' and t.node_type='COMPONENT')
-                                or (e.edge_type='CONSUMES' and t.node_type='API_ENDPOINT'))
-                            """)
-                            .param("snapshot", snapshotId)
-                            .param("route", id)
-                            .update();
+                Long id = nodeIds.get(index);
+                if (refreshedRoutes.remove(node.naturalKey())) {
+                    clearedRouteIds.add(id);
+                    if (clearedRouteIds.size() == BATCH) clearRouteBindings(snapshotId, clearedRouteIds);
                 }
                 if (GraphIdentityGuard.ambiguous(node)) {
                     jdbc.sql(
@@ -121,6 +110,7 @@ public class GraphPersistenceService {
                     if (!linked.isEmpty()) replacedEvidence.put(id, linked);
                 }
             }
+            clearRouteBindings(snapshotId, clearedRouteIds);
             evidenceService.replaceLinkedAll(projectId, EvidenceSubjects.GRAPH_NODE, replacedEvidence);
             Map<String, Long> stored = CustomPlans.run(jdbc, () -> storedNodeIds(snapshotId, ids, safe.edges()));
             Map<EdgeKey, Object[]> edgeRows = new LinkedHashMap<>();
@@ -144,6 +134,27 @@ public class GraphPersistenceService {
                     safe.fileOutcomes().stream().filter(outcome -> GraphIdentityGuard.REASON.equals(outcome.reason()))
                             ::iterator);
         });
+    }
+
+    private void clearRouteBindings(long snapshotId, List<Long> routeIds) {
+        if (routeIds.isEmpty()) return;
+        // Explicit re-analysis is authoritative, including UNRESOLVED results. Delete only
+        // this snapshot's outgoing component/API bindings, before inserting any replacement
+        // edges. Incoming file provenance and other target types must survive.
+        CustomPlans.run(jdbc, () -> {
+            jdbc.sql("""
+                        delete from graph_edges e using graph_nodes t
+                        where e.snapshot_id=:snapshot and e.source_node_id in (:routes)
+                          and t.id=e.target_node_id and t.snapshot_id=:snapshot
+                          and ((e.edge_type='CONTAINS' and t.node_type='COMPONENT')
+                            or (e.edge_type='CONSUMES' and t.node_type='API_ENDPOINT'))
+                        """)
+                    .param("snapshot", snapshotId)
+                    .param("routes", routeIds)
+                    .update();
+            return null;
+        });
+        routeIds.clear();
     }
 
     /** Rows this snapshot already stores for the given keys, merged with the new drafts by the guard. */
