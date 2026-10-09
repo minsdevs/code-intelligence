@@ -234,3 +234,50 @@ test('unobservable host conditions never admit a performance run', async () => {
   }
   await assert.rejects(waitForQuietHost({ observe: () => { throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED'); } }), /WORKLOAD_HOST_OBSERVATION_FAILED/);
 });
+
+test('unsampled leading and trailing phase windows cannot pass the RSS gate', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'workload-gap-test-'));
+  const fd = fs.openSync(path.join(root, 'samples.csv'), 'wx', 0o600);
+  t.after(() => { fs.closeSync(fd); fs.rmSync(root, { recursive: true, force: true }); });
+  for (const boundary of ['leading', 'trailing']) {
+    let clock = 0;
+    const sampler = startPhaseSampler(10, fd, 1, 0, { initialPhase: 'ANALYSIS', intervalMs: 1000,
+      now: () => clock, read: async () => { if (boundary === 'leading') clock = 600; return [{ pid: 10, ppid: 1, rssKiB: 50 }]; } });
+    await new Promise(setImmediate);
+    clock = 600; sampler.phase('IDLE');
+    const memory = await sampler.stop();
+    assert.equal(memory.failure, null);
+    assert.equal(memory.phases.ANALYSIS.maximumGapMs, 600);
+    assert.equal(phaseSamplingComplete(memory, 'ANALYSIS'), false);
+  }
+});
+
+test('RSS read and write failures retain safe cause and never count unwritten samples', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'workload-io-test-'));
+  const fd = fs.openSync(path.join(root, 'samples.csv'), 'wx', 0o600);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const readFailure = startPhaseSampler(10, fd, 1, 0, { now: () => 1,
+    read: async () => { throw Object.assign(new Error('/private/sentinel'), { code: 'ENOMEM' }); } });
+  await new Promise(setImmediate);
+  const read = await readFailure.stop();
+  assert.deepEqual(read.failureDetail, { operation: 'READ', reason: 'ENOMEM', phase: 'STARTUP', elapsedMs: 1 });
+  fs.closeSync(fd);
+  const writeFailure = startPhaseSampler(10, fd, 1, 0, { now: () => 1,
+    read: async () => [{ pid: 10, ppid: 1, rssKiB: 50 }] });
+  await new Promise(setImmediate);
+  const write = await writeFailure.stop();
+  assert.deepEqual(write.failureDetail, { operation: 'WRITE', reason: 'EBADF', phase: 'STARTUP', elapsedMs: 1 });
+  assert.equal(write.samples, 0);
+  assert.equal(phaseSamplingComplete(write, 'STARTUP'), false);
+  assert.doesNotMatch(JSON.stringify({ read, write }), /private|sentinel/);
+});
+
+test('quiet admission rejects space lost during the wait, at the actual launch boundary', async () => {
+  const actions = []; let free = 4000;
+  await assert.rejects(waitForQuietHost({ requiredFreeBytes: 3500,
+    observe: () => { actions.push('observe'); return { loadAverage: [1, 1, 1], mdworkers: 0 }; },
+    pause: async () => { free = 3400; actions.push('wait'); },
+    readFreeBytes: () => { actions.push('disk'); return free; } }), /DISK_SPACE_LOW/);
+  assert.deepEqual(actions, ['observe', 'wait', 'observe', 'wait', 'observe', 'disk']);
+});
+
