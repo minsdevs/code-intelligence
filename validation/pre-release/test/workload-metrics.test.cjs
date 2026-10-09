@@ -137,7 +137,7 @@ test('phase sampler keeps per-phase peaks, only the owner tree, and a gap rule',
     [{ pid: 10, ppid: 1, rssKiB: 300 }, { pid: 12, ppid: 10, rssKiB: 400 }]];
   let release;
   const gate = new Promise(resolve => { release = resolve; });
-  // A sample belongs to the phase that was active when its read began.
+  // Complete the first observation before starting the analysis phase.
   const sampler = startPhaseSampler(10, fd, 1, 0, { intervalMs: 30, now: () => now, stopTimeoutMs: 20, read: async () => {
     reads++;
     if (reads === 1) return tables[0];
@@ -280,4 +280,23 @@ test('quiet admission rejects space lost during the wait, at the actual launch b
     readFreeBytes: () => { actions.push('disk'); return free; } }), /DISK_SPACE_LOW/);
   assert.deepEqual(actions, ['observe', 'wait', 'observe', 'wait', 'observe', 'disk']);
 });
-
+test('an RSS read completing after a phase transition is not counted outside the closed phase', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'workload-phase-transition-'));
+  const fd = fs.openSync(path.join(root, 'samples.csv'), 'wx', 0o600);
+  t.after(() => { fs.closeSync(fd); fs.rmSync(root, { recursive: true, force: true }); });
+  let clock = 0, completeRead;
+  const reading = new Promise(resolve => { completeRead = resolve; });
+  const sampler = startPhaseSampler(10, fd, 1, 0, { intervalMs: 1000, now: () => clock, read: () => reading });
+  clock = 20; sampler.phase('ANALYSIS');
+  clock = 100; completeRead([{ pid: 10, ppid: 1, rssKiB: 50 }]);
+  await new Promise(setImmediate);
+  clock = 120; const memory = await sampler.stop();
+  assert.equal(memory.phases.STARTUP.samples, 0);
+  assert.equal(phaseSamplingComplete(memory, 'STARTUP'), false);
+  assert.equal(memory.phases.ANALYSIS.samples, 1);
+  assert.equal(memory.phases.ANALYSIS.firstAtMs, 100);
+  assert.equal(memory.phases.ANALYSIS.endedAtMs, 120);
+  assert.equal(memory.phases.ANALYSIS.maximumGapMs, 80);
+  assert.equal(phaseSamplingComplete(memory, 'ANALYSIS'), true);
+  assert.match(fs.readFileSync(path.join(root, 'samples.csv'), 'utf8'), /^1,100,ANALYSIS,10,1,50$/m);
+});

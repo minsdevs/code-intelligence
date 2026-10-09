@@ -135,14 +135,17 @@ function startPhaseSampler(ownerPid, fd, sequence, started, { read, now = () => 
   enter(phase);
   const task = (async () => {
     while (!stopped) {
-      const begin = now(), sampledPhase = phase;
-      const entry = phases[sampledPhase];
-      entry.maximumSchedulingDelayMs = Math.max(entry.maximumSchedulingDelayMs, begin - scheduledAt);
+      const begin = now();
+      let sampledPhase = phase;
       let operation = 'READ';
       try {
         const table = await read();
         if (stopped) break;
         const at = now(), value = memoryForOwner(table, ownerPid);
+        // CSV timestamps represent completed observations; never add them to an already closed phase.
+        sampledPhase = phase;
+        const entry = phases[sampledPhase];
+        entry.maximumSchedulingDelayMs = Math.max(entry.maximumSchedulingDelayMs, begin - scheduledAt);
         result.maximumReadMs = Math.max(result.maximumReadMs, at - begin);
         entry.maximumReadMs = Math.max(entry.maximumReadMs, at - begin);
         if (!value || value.rssKiB <= 0) { result.missingOwnerSamples++; throw new Error('MEMORY_SAMPLE_FAILED'); }

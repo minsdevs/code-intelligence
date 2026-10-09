@@ -398,6 +398,7 @@ A passing runner is row-level evidence only, never a gate PASS.
   smoke series exits nonzero; exit zero still does not certify an SLO or release gate.
 - RSS sampling runs in a dedicated worker, independent of synchronous driver fixture
   hashing and mutation. Phase entry/exit acknowledgements precede the associated action.
+  Samples belong to the phase active when the observation completes, matching their CSV timestamp.
   Completeness includes unsampled phase-entry and phase-exit windows. Per-phase read
   and scheduler delays distinguish collector delay from product RSS. Safe I/O categories
   distinguish reads from CSV writes; null failure does not imply complete sampling.
