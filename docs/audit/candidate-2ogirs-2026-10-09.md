@@ -1,6 +1,6 @@
 # 2ogirS route 저장 개선 후보 — 2026-10-09
 
-**현재 판정: NO_GO.** 통합 회귀와 변경 영역 패키지 검증은 완료했지만 medium은 첫 회차 refresh 목표 미달·둘째 회차 분석 실패로 INCOMPLETE다. large는 디스크 공간 부족으로 시작 전 중단했으며 사용자 공간 확보를 기다린다. 최종 20회·packaged clean-full canonical 동등성·독립 평가·사람 수용도 미완료다. [KOwFxr 감사](candidate-kowfxr-2026-10-09.md)의 목표 미달과 이전 실패·INVALID_LOAD는 유지한다.
+**현재 판정: NO_GO.** 통합 회귀와 변경 영역 패키지 검증은 완료했지만 medium은 첫 회차 refresh 목표 미달·둘째 회차 분석 실패로 INCOMPLETE다. 공간 확보 뒤 large-only 진단 절차를 재개했으며 완료 결과는 아직 수집 전이다. 최종 20회·packaged clean-full canonical 동등성·독립 평가·사람 수용도 미완료다. [KOwFxr 감사](candidate-kowfxr-2026-10-09.md)의 목표 미달과 이전 실패·INVALID_LOAD는 유지한다.
 
 ## 1. 기준과 경계
 
@@ -52,7 +52,7 @@
 
 ## 4. 성능 진단 상태
 
-기존 `coordination-2026-10-08/stage5-timing.sh 2ogirS`의 medium 구간은 13:36:13–15:54:26 KST에 실행됐다. `workload-performance/run-VsTTVE/result.json`은 SMOKE_ONLY / INCOMPLETE, 명령 exit 0이다. 둘째 회차가 ANALYSIS_FAILED로 끝났으므로 이 종료값을 검증 통과로 해석하지 않는다. 첫 회차에서 확보한 시간만 아래에 기록한다. large는 NOT RUN이며 전체 ledger는 아직 확정하지 않았다.
+기존 `coordination-2026-10-08/stage5-timing.sh 2ogirS`의 medium 구간은 13:36:13–15:54:26 KST에 실행됐다. `workload-performance/run-VsTTVE/result.json`은 SMOKE_ONLY / INCOMPLETE, 명령 exit 0이다. 둘째 회차가 ANALYSIS_FAILED로 끝났으므로 이 종료값을 검증 통과로 해석하지 않는다. 첫 회차에서 확보한 시간만 아래에 기록한다. large 결과와 전체 ledger는 아직 확정하지 않았다.
 
 | 완료 관측 | 초기 분석(초) | 1% refresh(초) | 실행 직전 load1 |
 | --- | ---: | ---: | ---: |
@@ -64,7 +64,9 @@ refresh 목표는 30초이며 이 관측은 미달이다. 사용자는 이번 �
 
 `stage5-2ogirS/medium-failure-sleep.json`은 보존한 pmset 원본과 대조한 기록이다. medium 전체 구간에는 timestamped record 581개와 정확한 Sleep/Wake/DarkWake 전환0건이 있었다. 실제 실패 회차의 마지막 admission 관측부터 종료까지는 timestamped record가 없어 NO_RECORDS_IN_WINDOW다. 이 자료만으로 실패를 절전·부하 또는 특정 제품 코드 탓으로 확정하지 않는다.
 
-medium 종료 뒤 large의 저부하 대기 중 디스크 가용량 472,965,120B를 관측했다. 이전 large 실행의 프로필은 3,922,182,144B·3,918,684,160B였으므로 검증 작업을 중단했다. timing summary에 large 시작이 없고 large 로그도 생성되지 않아 NOT RUN으로 기록한다. `stage5-2ogirS/timing-cancellation.json`에 중단과 원본 medium 해시를 보존했다. 사용자는 공간 확보 후 large 재개를 선택했다. 기존 medium 실패를 재실행으로 대체하지 않으며, 뒤늦게 관측한 공간 부족만으로 앞선 분석 실패의 원인을 확정하지 않는다.
+medium 종료 뒤 large의 저부하 대기 중 디스크 가용량 472,965,120B를 관측했다. 이전 large 실행의 프로필은 3,922,182,144B·3,918,684,160B였으므로 검증 작업을 중단했다. 중단 시점에는 timing summary에 large 시작이 없고 large 로그도 없어 NOT RUN으로 기록했다. `stage5-2ogirS/timing-cancellation.json`에 중단과 원본 medium 해시를 보존했다. 이후 공간을 확보하여 같은 후보의 large만 재개했다. 기존 medium 실패를 재실행으로 대체하지 않으며, 뒤늦게 관측한 공간 부족만으로 앞선 분석 실패의 원인을 확정하지 않는다.
+
+large-only driver는 2026-10-09T10:16:01.172Z에 재개했다. 기존 timing driver에서 medium 실행 행만 제외했고 quiet admission·공통 native lock·caffeinate·깨끗한 환경과 large smoke-2 명령은 유지했다. `stage5-2ogirS/timing-large-resume-start.json`에 원본/파생 driver·medium 결과 해시와 시작 상태를 기록했다. 이는 실행 절차의 시작 기록이며 실제 앱 시작 또는 진단 완료 증거가 아니다.
 
 실행 직전 quiet admission은 load1<4·mdworker_shared≤6을 30초 간격으로 세 번 확인한다. 사용자가 승인한 AC·외부 화면·덮개 닫힘 예외는 진단 smoke에만 적용한다. 최종 20회에는 조용한 AC·덮개 열린 기기가 필요하며 현재 NOT RUN이다. 시작 직전 부하·전원 경계 관측을 실행 전체의 연속 보증으로 해석하지 않는다.
 
@@ -95,7 +97,19 @@ medium 종료 뒤 large의 저부하 대기 중 디스크 가용량 472,965,120B
 
 근거는 calm-meadow의 `validation/local/w24-ts-refresh/runtime-dedup-1/result.json`·`dependency-dedup-1/result.json`과 각 단계의 사전 비교·개별 retirement 기록이다. 다섯 합성 안전장치 smoke에서 실제 동일 복제본 제거와 불일치·열린 파일·identity 교체·원본 자체 지정 거부를 확인한 동일 제거 함수를 재사용했다. 두 실제 정리 모두 보존 원본의 전체 inventory와 작업자 소스 clean 상태를 종료 시 재확인했다.
 
-논리 크기가 큰 복제본이라도 APFS 공유 블록 때문에 실제 공간 증가는 작았다. 두 구간 사이의 공간 변화에는 다른 호스트 작업도 포함될 수 있으므로 관측 차이를 이 정리의 독점 회수량으로 단정하지 않는다. large 재개에 필요한 공간은 아직 확보하지 못했다. 열린 파일 확인은 현재 사용자 권한의 시점 관측이며 동일 UID 동시 변경을 원자적으로 배제하거나 모든 확장 속성을 보존했다는 보장은 아니다.
+논리 크기가 큰 복제본이라도 실제 가용량 증가는 작았다. APFS 공유 블록이 있는 복제본의 논리 용량을 회수량으로 간주하지 않는다. 두 구간 사이의 공간 변화에는 다른 호스트 작업도 포함될 수 있으므로 관측 차이를 이 정리의 독점 회수량으로 단정하지 않는다. 이 두 단계만으로는 large 재개 공간을 확보하지 못했다. 열린 파일 확인은 현재 사용자 권한의 시점 관측이며 동일 UID 동시 변경을 원자적으로 배제하거나 모든 확장 속성을 보존했다는 보장은 아니다.
+
+### 사용자 승인 산출물 정리와 재개
+
+추가 승인된 외부 프로젝트의 debug 산출물 한 경로만 Cargo 1.97.1의 dev-profile clean으로 정리했다. 실제 소형 빌드에서 debug만 제거되고 release·검증 자료·소스·lockfile이 보존되는 것을 먼저 실행 확인했다. 첫 합성 smoke의 CACHEDIR.TAG 안전 거부는 보존했으며, 실제 대상에 표식을 새로 쓰거나 안전 검사를 우회하지 않았다.
+
+실제 dry-run의 28,306개 경로가 승인된 debug 트리와 정확히 같음을 확인하고 소유권·Git 미추적·미사용·외부 링크 경계를 검증했다. 정리 명령은 exit 0이며 보호 경로 메타데이터 20,475개와 보호 파일 8개의 해시는 전후 동일했다. 원래 있던 미커밋 수정도 유지했다. 다른 프로젝트의 구체 경로·수정 내용은 공개 문서에 옮기지 않는다. 상세 근거는 calm-meadow의 `validation/local/w24-ts-refresh/approved-debug-clean-1/result.json` 및 동반 검사 기록이다.
+
+| debug 정리 전 가용량(바이트) | 정리 후 가용량(바이트) |
+| ---: | ---: |
+| 3,224,657,920 | 9,912,082,432 |
+
+이후 같은 2ogirS의 large-only driver를 시작했다. medium 원본은 보존하고 추가 최적화·재빌드 없이 이번 진단 결과 수집과 마감만 진행한다.
 
 원본 저장소로의 증거 복제는 측정·PR 병합·main fast-forward 뒤 마지막 한 번의 `/bin/cp -cRp` 보관 단계에서 수행한다. 계획한 새 위치는 `validation/local/release-gate-followup-20261009-2ogirS/`이며, `calm-meadow-validation/`과 `integration-validation/` 아래에 각 출처 경로를 유지한다. 이 문서 커밋 시점에는 미실행이며, 완료 여부는 해당 위치의 `archive-result.json`으로 확인한다. 기존 목적지는 덮어쓰지 않는다.
 
