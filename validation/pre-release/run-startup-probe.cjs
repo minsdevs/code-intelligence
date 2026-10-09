@@ -92,7 +92,9 @@ function mergeRoleSnapshot(processes, commandRows, appMetrics, ownerPid, expecte
     let role = row.pid === ownerPid ? 'MAIN' : electron.get(row.pid);
     if (!role) role = commands.has(row.pid) ? classifyCommand(commands.get(row.pid), expected) : 'UNOBSERVED';
     if (!FIXED_ROLES.has(role)) role = 'UNKNOWN';
-    return { pid: row.pid, ppid: row.ppid, rssKiB: row.rssKiB, role };
+    const result = { pid: row.pid, ppid: row.ppid, rssKiB: row.rssKiB, role };
+        if (row.scopeOwnerPid !== undefined) result.scopeOwnerPid = row.scopeOwnerPid;
+        return result;
   });
 }
 
@@ -131,7 +133,7 @@ async function main(argv = process.argv.slice(2)) {
     path.join(repo, 'desktop/src/isolated-run.cjs')];
   const sourceHashes = Object.fromEntries(sourceFiles.map(file => [path.relative(repo, file), hash(file)]));
   const power = observePowerSource();
-  const report = { format: 1, status: 'RUNNING', scope: 'diagnostic-startup-probe-only', acceptanceGate: false,
+  const report = { format: 1, status: 'RUNNING', scope: 'diagnostic-startup-probe-only', acceptanceGate: false, resourceSamplesFormat: 2,
     requestedWarmRuns: RUNS, warmup: null, samples: Array.from({ length: RUNS }, (_, i) => ({ sequence: i + 1, status: 'NOT_RUN' })),
     claim: plan.claimFile, profile: plan.paths.userData, mockKeychain: true, realAccount: false, originalProfileAccessed: false,
     app, buildSequence: manifest.buildSequence, evidence,
@@ -140,7 +142,7 @@ async function main(argv = process.argv.slice(2)) {
     appAsarSha256: hash(path.join(app, 'Contents/Resources/app.asar')), manifestSha256: hash(manifestFile), sourceHashes,
     roleVocabulary: [...FIXED_ROLES].sort(), executablePathsPersisted: false };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
-  const csv = path.join(evidence, 'resource-samples.csv'), fd = fs.openSync(csv, 'wx', 0o600); fs.writeSync(fd, 'sequence,elapsed_ms,phase,pid,ppid,rss_kib\n');
+  const csv = path.join(evidence, 'resource-samples.csv'), fd = fs.openSync(csv, 'wx', 0o600); fs.writeSync(fd, 'sequence,elapsed_ms,phase,pid,ppid,rss_kib,scope_owner_pid\n');
   save();
   console.log(JSON.stringify({ status: report.status, evidence, requestedWarmRuns: RUNS }));
 

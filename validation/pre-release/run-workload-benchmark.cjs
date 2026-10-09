@@ -227,7 +227,7 @@ async function main(argv = process.argv.slice(2)) {
   const sources = Object.fromEntries(inputs.map(file => [path.relative(repo, file), hash(file)]));
   const report = { format: 1, status: 'RUNNING', scope: 'synthetic-workload-import-through-packaged-ui',
     mode: options.diagnosticOnly ? 'DIAGNOSTIC' : options.series ? 'SERIES' : 'SMOKE', sizeClass: options.sizeClass, requestedRuns: options.runs, rows: options.rows,
-    performanceAcceptanceEligible: options.series && !options.diagnosticOnly,
+    performanceAcceptanceEligible: options.series && !options.diagnosticOnly, resourceSamplesFormat: 2,
     slo: Object.fromEntries(Object.entries(SLO).filter(([, value]) => value.sizeClass === options.sizeClass)),
     analysisTimeoutMs: settings.analysisTimeoutMs, sampleIntervalMs: 100, graphRepeats: GRAPH_REPEATS, cancelTrigger: CANCEL_TRIGGER,
     cachePolicy: 'warm: OS cache not flushed; one warm-up launch; each run starts a new synthetic profile (initialized before the measured rows) and digests its fixture clone immediately before import',
@@ -251,7 +251,7 @@ async function main(argv = process.argv.slice(2)) {
     warmup: null, runs: [] };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   const sampleFile = path.join(evidence, 'resource-samples.csv'), fd = fs.openSync(sampleFile, 'wx', 0o600);
-  fs.writeSync(fd, 'sequence,elapsed_ms,phase,pid,ppid,rss_kib\n');
+  fs.writeSync(fd, 'sequence,elapsed_ms,phase,pid,ppid,rss_kib,scope_owner_pid\n');
   save(); console.log(JSON.stringify({ status: 'RUNNING', evidence, sizeClass: options.sizeClass, runs: options.runs, treeSha256: fixture.treeSha256 }));
 
   async function launch(sample, started) {

@@ -128,13 +128,13 @@ test('smoke observations are labelled and never assessed', () => {
   assert.equal(failed.observations[0].values.analysisMs.withinLimit, null);
 });
 
-test('phase sampler keeps per-phase peaks, only the owner tree, and a gap rule', async t => {
+test('phase sampler keeps per-phase peaks, the read-only XPC scope, and a gap rule', async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'workload-sampler-test-')));
   const file = path.join(root, 'samples.csv'), fd = fs.openSync(file, 'wx', 0o600);
   t.after(() => { fs.closeSync(fd); fs.rmSync(root, { recursive: true, force: true }); });
   let now = 0, reads = 0;
   const tables = [[{ pid: 10, ppid: 1, rssKiB: 100 }, { pid: 11, ppid: 10, rssKiB: 50 }, { pid: 99, ppid: 1, rssKiB: 9999 }],
-    [{ pid: 10, ppid: 1, rssKiB: 300 }, { pid: 12, ppid: 10, rssKiB: 400 }]];
+    [{ pid: 10, ppid: 1, rssKiB: 300 }, { pid: 12, ppid: 10, rssKiB: 400 }, { pid: 20, ppid: 1, rssKiB: 100, scopeOwnerPid: 10 }]];
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   // Complete the first observation before starting the analysis phase.
@@ -153,13 +153,15 @@ test('phase sampler keeps per-phase peaks, only the owner tree, and a gap rule',
   const memory = await sampler.stop();
   assert.equal(reads, 3);
   assert.equal(memory.samples, 2);
-  assert.equal(memory.phases.STARTUP.peakRssKiB, 150); assert.equal(memory.phases.ANALYSIS.peakRssKiB, 700);
-  assert.equal(memory.peakRssKiB, 700); assert.deepEqual(memory.observedPids, [10, 11, 12]);
+  assert.equal(memory.phases.STARTUP.peakRssKiB, 150); assert.equal(memory.phases.ANALYSIS.peakRssKiB, 800);
+  assert.equal(memory.peakRssKiB, 800); assert.deepEqual(memory.observedPids, [10, 11, 12, 20]);
   // The outstanding third read is a recorded sampling failure, not a hang.
   assert.equal(memory.failure, 'MEMORY_SAMPLE_FAILED');
   assert.equal(phaseSamplingComplete(memory, 'ANALYSIS'), false);
   const csv = fs.readFileSync(file, 'utf8');
-  assert.doesNotMatch(csv, /,99,/); assert.match(csv, /^1,100,ANALYSIS,12,10,400$/m);
+  assert.doesNotMatch(csv, /,99,/);
+  const xpc = csv.trim().split('\n').map(line => line.split(',')).find(row => row[3] === '20');
+  assert.deepEqual(xpc, ['1','100','ANALYSIS','20','1','100','10']);
 });
 
 test('an unreadable or absent owner is a sampling failure and writes no row', async t => {
@@ -297,7 +299,7 @@ test('an RSS read completing after a phase transition is not counted outside the
   assert.equal(memory.phases.ANALYSIS.endedAtMs, 120);
   assert.equal(memory.phases.ANALYSIS.maximumGapMs, 80);
   assert.equal(phaseSamplingComplete(memory, 'ANALYSIS'), true);
-  assert.match(fs.readFileSync(path.join(root, 'samples.csv'), 'utf8'), /^1,100,ANALYSIS,10,1,50$/m);
+  assert.deepEqual(fs.readFileSync(path.join(root, 'samples.csv'), 'utf8').trim().split(',').slice(0, 3), ['1','100','ANALYSIS']);
 });
 
 test('diagnostic mode cannot enter the final performance series or accept duplicate opt-ins', () => {

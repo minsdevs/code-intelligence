@@ -87,5 +87,9 @@ EvidenceService.replaceLinkedAll은 생성 ID를 JDBC로 돌려받아 다시 연
 
 두 값은 단일 격리 PostgreSQL 진단이며 제품 전체 refresh SLO가 아니다. 신규 null·중복 근거 소유자·후반 오류 rollback 경계와 기존 경계5시험 PASS, 별도 근거/graph round-trip 대상7시험 PASS(evidence-target-IHV1Ts). 첫 준비 실패 evidence-baseline-pPuQyk는 임시 경로 명명 보호 조건 위반으로 보존했고, 보호 조건을 낮추지 않고 경로를 고쳤다. source-store 복호화·주소·키·경로 검증은 변경하지 않았다.
 
-추가 RSS 범위 확인은 진행 중이다. PPID 기반 collector가 활성 XPC worker를 포함하는지는 실제 동시 관측으로 확인해야 하며, medium의 표본 간격 COMPLETE만으로 전체 프로세스 범위나 large 수용을 확정하지 않는다. ledger-v8/v9에 연결했다.
+실제2ogirS small 분석의 rss-scope-8GPYpr/run-g5yiRY 동시 관측에서 앱3465의 bridge5079와 별개로 XPC supervisor5081(PPID1)·worker5086이 나타났다. 기존 PPID-only collector는 둘 다 제외했다. 실제 RSS 누락은 측정 범위 결함이며 제품 메모리 고장으로 보지 않는다. 과거 COMPLETE는 표본 간격에 한정되며 전체 앱 RSS 수용 증거가 아니다.
+
+수집기는 전체 호스트의 PID/PPID/실행파일만 조회한 뒤, 소유 트리와 정확히 같은 독립 Validation 번들의 XPC 범위만 대상으로 RSS를 조회한다. 같은 앱 main이 둘 이상이면 모호성 오류로 거부하고 조회 중 실행파일 변경도 거부한다. 실제 PPID는 보존하고 읽기 전용 scopeOwnerPid를 별도 기록한다. 종료 권한이나 cleanup의 소유 범위는 확대하지 않는다. CSV 형식2는 scope_owner_pid를 추가한다. 100ms 주기·250ms 공백 기준은 유지한다.
+
+누락/귀속 경계 시험은 수정 전2 FAIL, 변경 영향 sampler 시험68 PASS·0 FAIL이며 실제 OS reader smoke도 확인했다(rss-scope-fix-i9Fmt4). 수정 후 실제 XPC 앱 동시 수집·새 후보 검증은 다음 단계이며 아직 PASS로 기록하지 않는다. ledger-v8/v9의 과거 관측은 보존한다.
 

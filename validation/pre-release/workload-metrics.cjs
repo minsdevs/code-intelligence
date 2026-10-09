@@ -123,7 +123,7 @@ function startPhaseSampler(ownerPid, fd, sequence, started, { read, now = () => 
   const phases = {};
   const result = { samples: 0, peakRssKiB: 0, maximumGapMs: 0, maximumReadMs: 0, missingOwnerSamples: 0,
     requestedIntervalMs: intervalMs, failure: null, failureDetail: null, phases,
-    scope: 'PID/PPID discovery then targeted owner-tree RSS; processes born and gone between two samples are not observed' };
+    scope: 'Read-only owner tree plus exclusive packaged-bundle XPC scope; processes born and gone between samples are not observed' };
   const enter = name => { phases[name] ??= { samples: 0, peakRssKiB: 0, maximumGapMs: 0, maximumReadMs: 0,
     maximumSchedulingDelayMs: 0, startedAtMs: now() - started, endedAtMs: null, firstAtMs: null, lastAtMs: null }; };
   const finishPhase = at => {
@@ -149,7 +149,7 @@ function startPhaseSampler(ownerPid, fd, sequence, started, { read, now = () => 
         result.maximumReadMs = Math.max(result.maximumReadMs, at - begin);
         entry.maximumReadMs = Math.max(entry.maximumReadMs, at - begin);
         if (!value || value.rssKiB <= 0) { result.missingOwnerSamples++; throw new Error('MEMORY_SAMPLE_FAILED'); }
-        const text = value.processes.map(row => [sequence, Math.round(at - started), sampledPhase, row.pid, row.ppid, row.rssKiB].join(',') + '\n').join('');
+        const text = value.processes.map(row => [sequence, Math.round(at - started), sampledPhase, row.pid, row.ppid, row.rssKiB, row.scopeOwnerPid ?? ''].join(',') + '\n').join('');
         if (result.samples >= maxSamples || csvBytes + Buffer.byteLength(text) > maxCsvBytes) { result.failure = 'MEMORY_EVIDENCE_LIMIT'; break; }
         operation = 'WRITE';
         fs.writeSync(fd, text); csvBytes += Buffer.byteLength(text);
@@ -164,7 +164,8 @@ function startPhaseSampler(ownerPid, fd, sequence, started, { read, now = () => 
       } catch (error) {
         const reasons = new Set(['ENOSPC', 'EIO', 'EBADF', 'EMFILE', 'ENFILE', 'ENOMEM', 'EAGAIN', 'ETIMEDOUT',
           'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', 'OWNED_PROCESS_NOT_OBSERVED', 'PROCESS_TABLE_INVALID',
-          'PROCESS_TABLE_LIMIT', 'MEMORY_TABLE_INVALID', 'MEMORY_TABLE_UNEXPECTED_PID', 'OBSERVED_TREE_LIMIT']);
+          'PROCESS_TABLE_LIMIT', 'MEMORY_TABLE_INVALID', 'MEMORY_TABLE_UNEXPECTED_PID', 'OBSERVED_TREE_LIMIT',
+          'MEMORY_SCOPE_AMBIGUOUS', 'MEMORY_SCOPE_OWNER_MISMATCH', 'MEMORY_PROCESS_IDENTITY_CHANGED']);
         let reason = 'UNCLASSIFIED';
         try {
           if (reasons.has(error?.code)) reason = error.code;
