@@ -406,3 +406,12 @@ A passing runner is row-level evidence only, never a gate PASS.
   and scheduler delays distinguish collector delay from product RSS. Safe I/O categories
   distinguish reads from CSV writes; null failure does not imply complete sampling.
   The 100 ms cadence and 250 ms maximum gap are unchanged.
+- An explicitly authorized `--diagnostic-only` smoke run uses one actual launch-boundary
+  observation instead of waiting for quiet/open-lid conditions. AC, an observable lid,
+  the full disk reserve, process ownership and cleanup remain required. The operator
+  must confirm the external display when authorizing closed-lid diagnostics.
+  It cannot be combined with `--series-20`; the default admission rules are unchanged.
+- Diagnostic reports are `DIAGNOSTIC_ONLY`, are not eligible for performance/RSS release
+  acceptance, and omit both SLO assessments and smoke SLO observations. Raw observations
+  remain intact; load/indexer violations are `INVALID_LOAD`, not a pass. Functional
+  failures and incomplete collection still exit nonzero and preserve their evidence.

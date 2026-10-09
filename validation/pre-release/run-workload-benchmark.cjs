@@ -53,7 +53,8 @@ const codes = new Set(['API_TIMEOUT', 'API_STATUS', 'API_TRANSPORT_FAILED', 'API
   'PROJECT_DELETE_FAILED', 'CANCEL_LOCK_NOT_RELEASED', 'CANCEL_ENDED_WITHOUT_CANCELLED', 'MEMORY_SAMPLE_FAILED', 'MEMORY_EVIDENCE_LIMIT', 'MEMORY_SAMPLING_INCOMPLETE',
   'OBSERVED_PROCESSES_REMAIN', 'WORKLOAD_FIXTURE_CHANGED', 'DISK_SPACE_LOW', 'NATIVE_ELECTRON_CLOSE_TIMEOUT',
   'NATIVE_ELECTRON_EXIT_TIMEOUT', 'NATIVE_ELECTRON_UNCLEAN_EXIT', 'NATIVE_SHUTDOWN_RECOVERY_REQUIRED',
-  'NATIVE_SHUTDOWN_UNCONFIRMED', 'NATIVE_SHUTDOWN_DIAGNOSTIC_TIMEOUT', 'NOT_RUN_AFTER_ANALYSIS_FAILURE', 'WORKLOAD_HOST_OBSERVATION_FAILED']);
+  'NATIVE_SHUTDOWN_UNCONFIRMED', 'NATIVE_SHUTDOWN_DIAGNOSTIC_TIMEOUT', 'NOT_RUN_AFTER_ANALYSIS_FAILURE', 'WORKLOAD_HOST_OBSERVATION_FAILED',
+  'WORKLOAD_DIAGNOSTIC_ENVIRONMENT_UNSAFE']);
 function failureCode(error, fallback = 'WORKLOAD_BENCHMARK_CHECK_FAILED') {
   let message; try { message = error?.message; } catch { /* Do not inspect thrown details. */ }
   return codes.has(message) ? message : fallback;
@@ -69,16 +70,17 @@ async function stage(code, action) {
 }
 
 function argumentsFor(argv) {
-  assert(Array.isArray(argv) && argv.length >= 5 && argv.length <= 8);
+  assert(Array.isArray(argv) && argv.length >= 5 && argv.length <= 9);
   assert(argv[0] === '--app' && typeof argv[1] === 'string' && path.isAbsolute(argv[1]) && !/[\x00-\x1f\x7f]/.test(argv[1]));
   assert(argv[2] === '--class' && Object.hasOwn(SIZE_CLASSES, argv[3]));
   const mode = argv[4];
   assert(['--smoke-1', '--smoke-2', '--series-20'].includes(mode));
   const options = { app: argv[1], sizeClass: argv[3], runs: Number(mode.slice(mode.lastIndexOf('-') + 1)),
-    series: mode === '--series-20', rows: [...DEFAULT_ROWS], keepWork: false };
+    series: mode === '--series-20', rows: [...DEFAULT_ROWS], keepWork: false, diagnosticOnly: false };
   let rowsGiven = false;
   for (let index = 5; index < argv.length; index++) {
     if (argv[index] === '--keep-work') { assert(!options.keepWork && !options.series); options.keepWork = true; continue; }
+    if (argv[index] === '--diagnostic-only') { assert(!options.diagnosticOnly && !options.series); options.diagnosticOnly = true; continue; }
     assert(argv[index] === '--rows' && index + 1 < argv.length && !rowsGiven);
     rowsGiven = true;
     const rows = argv[++index].split(',');
@@ -137,7 +139,7 @@ function observeQuietHost() {
 }
 
 async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new Promise(resolve => setTimeout(resolve, ms)),
-  requiredFreeBytes = 0, readFreeBytes = () => freeBytes('/private/tmp') } = {}) {
+  requiredFreeBytes = 0, readFreeBytes = () => freeBytes('/private/tmp'), diagnosticOnly = false } = {}) {
   const started = performance.now();
   let observations = [], rejectedObservations = 0;
   for (;;) {
@@ -145,14 +147,18 @@ async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new 
     if (!Array.isArray(sample.loadAverage) || sample.loadAverage.length !== 3
       || !sample.loadAverage.every(value => Number.isFinite(value) && value >= 0)
       || !Number.isSafeInteger(sample.mdworkers) || sample.mdworkers < 0) throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED');
-    if (sample.loadAverage[0] < 4 && sample.mdworkers <= 6 && sample.powerSource === 'AC' && sample.lidState === 'OPEN') observations.push(sample);
+    if (diagnosticOnly && (sample.powerSource !== 'AC' || !['OPEN', 'CLOSED'].includes(sample.lidState))) {
+      throw new Error('WORKLOAD_DIAGNOSTIC_ENVIRONMENT_UNSAFE');
+    }
+    if (diagnosticOnly || (sample.loadAverage[0] < 4 && sample.mdworkers <= 6 && sample.powerSource === 'AC' && sample.lidState === 'OPEN')) observations.push(sample);
     else { observations = []; rejectedObservations++; }
-    // No final sleep: the third observation is the one immediately preceding launch.
-    if (observations.length === 3) {
+    // No final sleep: the admitting observation immediately precedes launch.
+    if (diagnosticOnly || observations.length === 3) {
       const availableBytes = readFreeBytes();
       if (!Number.isSafeInteger(availableBytes) || availableBytes < requiredFreeBytes) throw new Error('DISK_SPACE_LOW');
-      return { status: 'ADMITTED', loadAverageLimit: 4, mdworkerLimit: 6, freeBytes: availableBytes, requiredFreeBytes,
-        sampleIntervalMs: 30000, waitedMs: Math.round(performance.now() - started), rejectedObservations, observations };
+      return { status: diagnosticOnly ? 'DIAGNOSTIC_ONLY' : 'ADMITTED', loadAverageLimit: 4, mdworkerLimit: 6, freeBytes: availableBytes, requiredFreeBytes,
+        sampleIntervalMs: diagnosticOnly ? null : 30000, waitedMs: Math.round(performance.now() - started), rejectedObservations, observations,
+        timingValidity: diagnosticOnly ? (sample.loadAverage[0] >= 4 || sample.mdworkers > 6 ? 'INVALID_LOAD' : 'NOT_APPLICABLE_DIAGNOSTIC') : 'QUIET_HOST_OBSERVED_AT_LAUNCH' };
     }
     await pause(30000);
   }
@@ -220,7 +226,8 @@ async function main(argv = process.argv.slice(2)) {
     path.join(repo, 'desktop/src/isolated-run.cjs')];
   const sources = Object.fromEntries(inputs.map(file => [path.relative(repo, file), hash(file)]));
   const report = { format: 1, status: 'RUNNING', scope: 'synthetic-workload-import-through-packaged-ui',
-    mode: options.series ? 'SERIES' : 'SMOKE', sizeClass: options.sizeClass, requestedRuns: options.runs, rows: options.rows,
+    mode: options.diagnosticOnly ? 'DIAGNOSTIC' : options.series ? 'SERIES' : 'SMOKE', sizeClass: options.sizeClass, requestedRuns: options.runs, rows: options.rows,
+    performanceAcceptanceEligible: options.series && !options.diagnosticOnly,
     slo: Object.fromEntries(Object.entries(SLO).filter(([, value]) => value.sizeClass === options.sizeClass)),
     analysisTimeoutMs: settings.analysisTimeoutMs, sampleIntervalMs: 100, graphRepeats: GRAPH_REPEATS, cancelTrigger: CANCEL_TRIGGER,
     cachePolicy: 'warm: OS cache not flushed; one warm-up launch; each run starts a new synthetic profile (initialized before the measured rows) and digests its fixture clone immediately before import',
@@ -238,7 +245,9 @@ async function main(argv = process.argv.slice(2)) {
       logicalCpus: os.cpus().length, memoryBytes: os.totalmem(), loadAverageAfterFixturePreparation: os.loadavg(), loadAverageBefore: null, freeBytesAtStart: freeAtStart,
       power: observePowerSource(), backgroundState: 'shared development machine; other agents may run builds/tests; packaged-app launches serialized by the caller-held native lock',
       powerObservationScope: 'Series start, quiet-admission samples and both boundaries of each run; not continuous monitoring',
-      loadObservationScope: 'Three AC/open-lid/quiet observations 30 seconds apart after fixture preparation and before every app launch; not continuous monitoring' },
+      loadObservationScope: options.diagnosticOnly
+        ? 'Diagnostic opt-in: one actual AC/lid/load observation before every launch; no performance or RSS release acceptance'
+        : 'Three AC/open-lid/quiet observations 30 seconds apart after fixture preparation and before every app launch; not continuous monitoring' },
     warmup: null, runs: [] };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   const sampleFile = path.join(evidence, 'resource-samples.csv'), fd = fs.openSync(sampleFile, 'wx', 0o600);
@@ -579,7 +588,7 @@ async function main(argv = process.argv.slice(2)) {
         if (hashTree(folder).treeSha256 !== fixture.treeSha256) throw new Error('WORKLOAD_FIXTURE_CHANGED');
         if (options.rows.includes('cancel')) cloneTree(pristine, folder + '-cancel');
       }
-      run.quietAdmission = await waitForQuietHost({ requiredFreeBytes: MINIMUM_FREE_BYTES + settings.diskReserveBytes });
+      run.quietAdmission = await waitForQuietHost({ requiredFreeBytes: MINIMUM_FREE_BYTES + settings.diskReserveBytes, diagnosticOnly: options.diagnosticOnly });
       run.freeBytesAtStart = run.quietAdmission.freeBytes;
       run.loadAverageAtStart = run.quietAdmission.observations.at(-1).loadAverage;
       if (sequence === 0) report.environment.loadAverageBefore = run.loadAverageAtStart;
@@ -707,7 +716,7 @@ async function main(argv = process.argv.slice(2)) {
     const assessed = {}, observed = {};
     const rowKeys = { preview: [`preview.${options.sizeClass}`], analysis: [`analysis.${options.sizeClass}`, `preview.${options.sizeClass}`], graph: [`graph.${options.sizeClass}`],
       incremental: [`incremental.${options.sizeClass}`], cancel: [`cancel.${options.sizeClass}`] };
-    for (const name of options.rows) {
+    for (const name of options.diagnosticOnly ? [] : options.rows) {
       for (const key of rowKeys[name] ?? []) {
         if (!Object.hasOwn(SLO, key)) continue;
         const samples = rowSamples(name);
@@ -716,15 +725,16 @@ async function main(argv = process.argv.slice(2)) {
       }
     }
     report.assessment = options.series ? assessed : null;
-    report.smokeObservations = options.series ? null : observed;
+    report.smokeObservations = options.series || options.diagnosticOnly ? null : observed;
     report.measurementStatus = report.runs.length === options.runs && report.runs.every(run => run.status === 'PASS') ? 'COMPLETE' : 'INCOMPLETE';
     report.environmentGate = acObservedAtRunBoundaries(report.environment.power, [report.warmup, ...report.runs])
       ? 'AC_OBSERVED_AT_RUN_BOUNDARIES' : 'AC_POWER_NOT_CONFIRMED';
     report.loadGate = report.runs.length === options.runs && [report.warmup, ...report.runs].every(run => run?.quietAdmission?.status === 'ADMITTED')
       ? 'QUIET_HOST_OBSERVED_AT_LAUNCH' : 'QUIET_HOST_NOT_CONFIRMED';
+    if (options.diagnosticOnly && [report.warmup, ...report.runs].some(run => run?.quietAdmission?.timingValidity === 'INVALID_LOAD')) report.loadGate = 'INVALID_LOAD';
     report.status = options.series
       ? (Object.values(assessed).length && Object.values(assessed).every(row => row.status === 'PASS') && report.environmentGate === 'AC_OBSERVED_AT_RUN_BOUNDARIES' && report.loadGate === 'QUIET_HOST_OBSERVED_AT_LAUNCH' ? 'PASS' : 'FAIL')
-      : 'SMOKE_ONLY';
+      : options.diagnosticOnly ? 'DIAGNOSTIC_ONLY' : 'SMOKE_ONLY';
     for (const [name, expected] of Object.entries(sources)) assert.equal(hash(path.join(repo, name)), expected);
     assert.equal(hash(path.join(app, 'Contents/Resources/app.asar')), report.appAsarSha256);
     assert.equal(hash(manifestFile), report.manifestSha256);
@@ -747,7 +757,7 @@ async function main(argv = process.argv.slice(2)) {
   }
   console.log(JSON.stringify({ status: report.status, evidence, measurementStatus: report.measurementStatus,
     assessment: report.assessment, retainedWork: report.retainedWork }));
-  if (!['PASS', 'SMOKE_ONLY'].includes(report.status) || report.measurementStatus !== 'COMPLETE') process.exitCode = 1;
+  if (!['PASS', 'SMOKE_ONLY', 'DIAGNOSTIC_ONLY'].includes(report.status) || report.measurementStatus !== 'COMPLETE') process.exitCode = 1;
   return report;
 }
 
