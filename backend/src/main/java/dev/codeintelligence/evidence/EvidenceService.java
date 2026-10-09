@@ -4,26 +4,36 @@ import dev.codeintelligence.common.CustomPlans;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EvidenceService {
 
-    /** Rows per JDBC batch or IN list. */
+    /** Rows per SQL VALUES batch or IN list. */
     private static final int BATCH = 500;
 
-    private final JdbcClient jdbc;
-    private final NamedParameterJdbcTemplate batches;
+    private static final String INSERT_LINKED_ROWS = """
+            with batch as materialized (
+                select nextval(pg_get_serial_sequence('evidences', 'id')) as id,
+                    cast(v.subject_id as bigint) as subject_id, v.kind, v.file_path,
+                    cast(v.line_start as integer) as line_start, cast(v.line_end as integer) as line_end,
+                    v.excerpt
+                from (values :rows) as v(subject_id, kind, file_path, line_start, line_end, excerpt)
+            ), inserted as (
+                insert into evidences (id, project_id, kind, file_path, line_start, line_end, excerpt, created_by)
+                select id, :projectId, kind, file_path, line_start, line_end, excerpt, 'STATIC' from batch
+                returning id
+            )
+            insert into evidence_links (evidence_id, subject_type, subject_id)
+            select inserted.id, :subjectType, batch.subject_id from inserted join batch using (id)
+            """;
 
-    public EvidenceService(JdbcClient jdbc, NamedParameterJdbcTemplate batches) {
+    private final JdbcClient jdbc;
+
+    public EvidenceService(JdbcClient jdbc) {
         this.jdbc = jdbc;
-        this.batches = batches;
     }
 
     @Transactional
@@ -114,46 +124,28 @@ public class EvidenceService {
                 return null;
             });
         }
-        List<Long> owners = new ArrayList<>();
-        List<SqlParameterSource> rows = new ArrayList<>();
-        bySubject.forEach((subjectId, evidences) -> {
-            for (NewEvidence evidence : evidences) {
-                owners.add(subjectId);
-                rows.add(new MapSqlParameterSource()
-                        .addValue("projectId", projectId)
-                        .addValue("kind", evidence.kind().name())
-                        .addValue("filePath", evidence.filePath())
-                        .addValue("lineStart", evidence.lineStart())
-                        .addValue("lineEnd", evidence.lineEnd())
-                        .addValue("excerpt", SecretMask.redact(evidence.excerpt()))
-                        .addValue("createdBy", "STATIC"));
+        List<Object[]> rows = new ArrayList<>(BATCH);
+        for (Map.Entry<Long, List<NewEvidence>> entry : bySubject.entrySet()) {
+            for (NewEvidence evidence : entry.getValue()) {
+                rows.add(new Object[] {
+                    entry.getKey(), evidence.kind().name(), evidence.filePath(),
+                    evidence.lineStart(), evidence.lineEnd(), SecretMask.redact(evidence.excerpt())
+                });
+                if (rows.size() == BATCH) insertLinkedRows(projectId, subjectType, rows);
             }
-        });
-        for (int start = 0; start < rows.size(); start += BATCH) {
-            int end = Math.min(start + BATCH, rows.size());
-            GeneratedKeyHolder keys = new GeneratedKeyHolder();
-            batches.batchUpdate(
-                    """
-                            insert into evidences (project_id, kind, file_path, line_start, line_end, excerpt, created_by)
-                            values (:projectId, :kind, :filePath, :lineStart, :lineEnd, :excerpt, :createdBy)
-                            """, rows.subList(start, end).toArray(SqlParameterSource[]::new), keys, new String[] {"id"});
-            List<Map<String, Object>> ids = keys.getKeyList();
-            if (ids.size() != end - start) {
-                throw new IllegalStateException(
-                        "evidence insert returned " + ids.size() + " ids for " + (end - start) + " rows");
-            }
-            SqlParameterSource[] links = new SqlParameterSource[ids.size()];
-            for (int index = 0; index < ids.size(); index++) {
-                links[index] = new MapSqlParameterSource()
-                        .addValue("evidenceId", ((Number) ids.get(index).get("id")).longValue())
-                        .addValue("subjectType", subjectType)
-                        .addValue("subjectId", owners.get(start + index));
-            }
-            batches.batchUpdate("""
-                    insert into evidence_links (evidence_id, subject_type, subject_id)
-                    values (:evidenceId, :subjectType, :subjectId)
-                    on conflict (evidence_id, subject_type, subject_id) do nothing
-                    """, links);
         }
+        insertLinkedRows(projectId, subjectType, rows);
+    }
+
+    private void insertLinkedRows(long projectId, String subjectType, List<Object[]> rows) {
+        if (rows.isEmpty()) return;
+        // The materialized CTE assigns each id once; duplicate facts need no RETURNING-order mapping.
+        int inserted = jdbc.sql(INSERT_LINKED_ROWS)
+                .param("projectId", projectId)
+                .param("subjectType", subjectType)
+                .param("rows", rows)
+                .update();
+        if (inserted != rows.size()) throw new IllegalStateException("evidence batch did not link every inserted row");
+        rows.clear();
     }
 }

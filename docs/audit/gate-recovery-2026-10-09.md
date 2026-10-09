@@ -44,13 +44,13 @@ COORD `validation/local/gate-recovery-20261009/medium-historical-cause.json`에 
 
 | 검증 | 현재 결과 |
 | --- | --- |
-| 대상 workload metrics | 최초 대상 묶음30 PASS, 추가 경계 수정 뒤 metrics22 PASS |
+| 대상 workload metrics | 최초 묶음30 PASS, phase/전원 경계 뒤22 PASS, 진단 전용 경계 추가 뒤COORD·INT 각각26 PASS |
 | INT 전체 validation runners | f15b30b의 전원 진입 보완 포함432 PASS·0 FAIL·0 SKIP. runners-int-lid-guard.log 및 아래 통합 회귀에서 재확인 |
 | COORD 추가 러너 회귀 | 432개 중431 PASS·1 FAIL. tree-analyzer proxy-addr2.0.7의 IPv4-mapped CIDR 보안 시험 실패. INT 설치는2.0.8; 이 실패를 제품 PASS로 대체하지 않음. runners-phase-regression.log 보존 |
 | 제한 볼륨 실제 PostgreSQL ENOSPC | 재현·공간 진입 거부 확인 |
 | RSS worker 실제 ps·driver 차단 | 완전 수집 확인, 소형 진단 한정 |
-| 정상 medium 분석·refresh 병목 | NOT RUN. quiet 대기 중 실제 닫힌 덮개 관측으로 소유 진단만 중단; 기존 원본·실패 기록 유지 |
-| packaged incremental/독립 clean-full canonical | 준비, NOT RUN |
+| 정상 medium 분석·refresh 병목 | 2ogirS 진단 재개 완료: 두 초기 분석과1% refresh 기능 PASS·수집COMPLETE, INVALID_LOAD·SLO 수용 제외. §6 |
+| packaged incremental/독립 clean-full canonical | 2ogirS 제품 소스에서21범주 일치·삭제/변경 전파 확인. 이후 변경 후보에는 상속하지 않음. §6 |
 | INT 통합 회귀7종 | f15b30b에서6,591 PASS·0 FAIL·63 SKIP, frontend TypeScript 검사 PASS. INT validation/local/gate-recovery-20261009/full-regression-qYKRfV/ |
 | 새 후보·영향 패키지·medium/large smoke | NOT RUN |
 | 최종 시작/G-PERF20회 | NOT RUN |
@@ -58,7 +58,7 @@ COORD `validation/local/gate-recovery-20261009/medium-historical-cause.json`에 
 medium30초 달성 판정은 새 실측 전이며 기존59.360초 목표 미달은 유지한다. large 초기 분석600초·RSS6GiB와 별도 hard timeout을 따르고 large refresh에 medium30초를 적용하지 않는다. JVM 수집기는 이전 w24 방식을 재사용하되 후보 소스·asar 해시를 인자로 받는다. 계측 실행 시간은 최종 SLO 표본이 아니다.
 실제 ioreg가 닫힌 덮개를 보고한 뒤, 기존 quiet 함수가 CLOSED 표본 세 개를 그대로 승인하는 것을 재현했다. AC·열린 덮개를 세 quiet 표본 모두에서 요구하도록 보완했다. 기존 시험 확장의 수정 전 결과21 PASS·1 FAIL과 수정 후22 PASS를 INT에 보존했다. 실제 호스트 관측 smoke는 앱을 시작하지 않고 대기 경로로 진입했다. 시스템 전원 설정은 변경하지 않았다.
 
-대기 진단 analysis-probe-nnYq0l은 warmup 소유 앱18573의 정상 종료 뒤 측정 앱을 시작하지 않은 상태에서 중단했다. run-IC4YNL 원본의 RUNNING을 PASS로 바꾸지 않고 별도 중단 기록을 남긴다. 새 진단은 최신 러너의 전원·덮개·quiet 조건이 충족돼야 실행된다.
+대기 진단 analysis-probe-nnYq0l은 warmup 소유 앱18573의 정상 종료 뒤 측정 앱을 시작하지 않은 상태에서 중단했다. run-IC4YNL 원본의 RUNNING을 PASS로 바꾸지 않고 별도 중단 기록을 남긴다. 이후 무기한 대기를 중단했으며, 재개 범위는 사용자가 명시적으로 허용한 §6의 진단 전용 예외다. 정식 수용 조건은 변경하지 않았다.
 
 통합 회귀 합계는 고유 시험 수가 아니라 실제 실행 수다(events19회 포함). frontend480·TS analyzer318·runners432·desktop3,278·backend2,064·events19 PASS이며 desktop45·backend18 SKIP은 수용으로 세지 않는다. backend/events는 cleanTest를 실행했고 소스·기존 컨테이너 불변, 새 잔류 컨테이너0을 확인했다. backend-JxvI2N 및 events-8V0NBb가 개별 Docker 증거다.
 
@@ -66,6 +66,26 @@ f15b30b까지 새4개 커밋의 gitleaks 탐지0, 합성 app.token-enc-key가 �
 
 ## 5. 사람 입력과 이름 경계
 
-실계정·SSO, 서명/공증 자격, 두 번째 Mac·업데이트 배포 키/host, 독립 보안·정확도 평가, UX8명·VoiceOver, 법률 판단은 USER-INPUT-READINESS의 **준비 상태만** 유지한다. 자동 PASS나 실제 Keychain 실행은 하지 않았다. 승인된 Sol6.1 high 실행 프로필을 확인하지 못해 다른 모델로 대체하거나 서브에이전트를 시작하지 않았다. native-turn WebSocket 설정의 승인/해결도 가정하지 않았다.
+실계정·SSO, 서명/공증 자격, 두 번째 Mac·업데이트 배포 키/host, 독립 보안·정확도 평가, UX8명·VoiceOver, 법률 판단은 USER-INPUT-READINESS의 **준비 상태만** 유지한다. 자동 PASS나 실제 Keychain 실행은 하지 않았다. Sol6.1 high 등록은 확인했으나 모델 고정·fallback 금지 설정의 대화형 승인이 완료되지 않아 서브에이전트를 시작하지 않았다. 다른 모델로 대체하지 않았고 native-turn WebSocket 설정의 승인/해결도 가정하지 않았다.
 
 이름은 미결정이며 SourceLace·Relowick·Maprill의 상표/도메인은 미검증이다. 표시 이름·아이콘 변경과 appId/profile 변경을 분리해 최종 후보 전 결정해야 한다. 후자는 설치 identity, 사용자 데이터 경로, 격리 Validation/Acceptance identity, 서명·업데이트 연속성의 마이그레이션·재검증이 필요하다. 이름·로고·저장소·appId·프로필 경로는 변경하지 않았다.
+
+## 6. 승인된 진단 재개와 근거 저장 개선
+
+사용자가 현재 부하·AC·외부 화면·닫힌 덮개를 **진단·기능 검증에만** 허용했다. fca6868의 명시적 `--diagnostic-only`는 실제 관측값을 보존하고 정식20회와 함께 사용할 수 없다. SLO/RSS 수용 대상이 아니며 assessment/smokeObservations=null, 부하 위반은 INVALID_LOAD다. 기본 quiet·열린 덮개 기준과 디스크 reserve는 그대로다. 신규 진단 경계 시험은 수정 전3 FAIL, 수정 후COORD/INT 각각26 PASS다.
+
+- INT run-u0KBxm: 실제2ogirS 앱에서10,000파일·50MiB 초기 분석 정상 완료. 수집COMPLETE, 분석 phase 최대간격153ms, 정상 종료·소스/번들 불변 확인. native-analysis-proof.json은 격리 앱의 실제 화면·AX 증거다.
+- INT run-VtoC9J / refresh-probe-SRp0C4: 초기 분석·1% 갱신 기능 PASS·수집COMPLETE, JVM94개 덤프·observer 오류0. 갱신의 IMPORT·SOURCE_PARSING·TS_PARSING에서 source-store retain 대기와 DB 저장 비용이 관측됐다. 계측/고부하 시간이므로30초 목표 판정은 하지 않았다. worker stderr를 버리는 기존 supervisor 때문에 TS_INCREMENTAL 수치를 얻지 못했으며, 이를 재사용0으로 해석하지 않는다.
+- INT canonical-QwhGTb: 실제 증분 갱신 후와 별도 fresh profile의 clean-full이 같은 변경 입력63파일에서21범주 canonical 일치. 노드995·엣지1,657·근거890·flow25, 삭제·변경 전파와 양쪽 정상 종료 확인. SHA256 e77611df30cd38d77dc01b5d57082cff27b56b330eed8177503b086f536de33d. 이것은2ogirS 제품 소스c1b93c9의 결과이며 이후 변경 후보에 상속하지 않는다.
+
+EvidenceService.replaceLinkedAll은 생성 ID를 JDBC로 돌려받아 다시 연결 INSERT에 보내던 경로를500행 단위 materialized CTE로 합쳤다. ID는 서버에서 한 번 할당하고 실제 삽입된 행과 subject를 연결한다. 전체 입력 크기의 중간 parameter/owner 목록을 없앴다. 근거 삭제 범위·마스킹·트랜잭션·의미 있는 작업은 유지하며 migration은 추가하지 않았다.
+
+| 실제 DB 진단 | 10,000 subjects / 20,000 근거 교체 | 정합성 |
+| --- | ---: | --- |
+| 기존 evidence-baseline-vZg3KC | 1,011.58ms | subject·필드 일치 |
+| 변경 evidence-after-2uIG3b | 593.00ms | subject·필드 일치 |
+
+두 값은 단일 격리 PostgreSQL 진단이며 제품 전체 refresh SLO가 아니다. 신규 null·중복 근거 소유자·후반 오류 rollback 경계와 기존 경계5시험 PASS, 별도 근거/graph round-trip 대상7시험 PASS(evidence-target-IHV1Ts). 첫 준비 실패 evidence-baseline-pPuQyk는 임시 경로 명명 보호 조건 위반으로 보존했고, 보호 조건을 낮추지 않고 경로를 고쳤다. source-store 복호화·주소·키·경로 검증은 변경하지 않았다.
+
+추가 RSS 범위 확인은 진행 중이다. PPID 기반 collector가 활성 XPC worker를 포함하는지는 실제 동시 관측으로 확인해야 하며, medium의 표본 간격 COMPLETE만으로 전체 프로세스 범위나 large 수용을 확정하지 않는다. ledger-v8/v9에 연결했다.
+
