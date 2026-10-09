@@ -125,7 +125,15 @@ function observeQuietHost() {
   }
   const text = output.trim();
   if (text && !/^\d+(?:\n\d+)*$/.test(text)) throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED');
-  return { observedAt: new Date().toISOString(), loadAverage: os.loadavg(), mdworkers: text ? text.split('\n').length : 0 };
+  let lidState = 'UNKNOWN';
+  try {
+    const state = execFileSync('/usr/sbin/ioreg', ['-r', '-k', 'AppleClamshellState', '-d', '1'],
+      { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+    const matches = [...state.matchAll(/"AppleClamshellState"\s*=\s*(Yes|No)\b/g)];
+    if (matches.length === 1) lidState = matches[0][1] === 'No' ? 'OPEN' : 'CLOSED';
+  } catch { /* Unobservable power conditions never admit a run. */ }
+  return { observedAt: new Date().toISOString(), loadAverage: os.loadavg(), mdworkers: text ? text.split('\n').length : 0,
+    powerSource: observePowerSource(), lidState };
 }
 
 async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new Promise(resolve => setTimeout(resolve, ms)),
@@ -137,7 +145,7 @@ async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new 
     if (!Array.isArray(sample.loadAverage) || sample.loadAverage.length !== 3
       || !sample.loadAverage.every(value => Number.isFinite(value) && value >= 0)
       || !Number.isSafeInteger(sample.mdworkers) || sample.mdworkers < 0) throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED');
-    if (sample.loadAverage[0] < 4 && sample.mdworkers <= 6) observations.push(sample);
+    if (sample.loadAverage[0] < 4 && sample.mdworkers <= 6 && sample.powerSource === 'AC' && sample.lidState === 'OPEN') observations.push(sample);
     else { observations = []; rejectedObservations++; }
     // No final sleep: the third observation is the one immediately preceding launch.
     if (observations.length === 3) {
@@ -229,8 +237,8 @@ async function main(argv = process.argv.slice(2)) {
       performanceCores: Number(execFileSync('/usr/sbin/sysctl', ['-n', 'hw.perflevel0.physicalcpu'], { encoding: 'utf8' }).trim()),
       logicalCpus: os.cpus().length, memoryBytes: os.totalmem(), loadAverageAfterFixturePreparation: os.loadavg(), loadAverageBefore: null, freeBytesAtStart: freeAtStart,
       power: observePowerSource(), backgroundState: 'shared development machine; other agents may run builds/tests; packaged-app launches serialized by the caller-held native lock',
-      powerObservationScope: 'Series start and both boundaries of each run; not continuous monitoring',
-      loadObservationScope: 'Three quiet observations 30 seconds apart after fixture preparation and before every app launch; not continuous monitoring' },
+      powerObservationScope: 'Series start, quiet-admission samples and both boundaries of each run; not continuous monitoring',
+      loadObservationScope: 'Three AC/open-lid/quiet observations 30 seconds apart after fixture preparation and before every app launch; not continuous monitoring' },
     warmup: null, runs: [] };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   const sampleFile = path.join(evidence, 'resource-samples.csv'), fd = fs.openSync(sampleFile, 'wx', 0o600);

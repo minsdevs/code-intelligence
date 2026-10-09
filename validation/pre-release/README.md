@@ -389,8 +389,11 @@ A passing runner is row-level evidence only, never a gate PASS.
 
 ### Workload failure evidence (2026-10-09)
 
-- Quiet admission rechecks free space after the final quiet observation, including the
-  size-class reserve. Pre-wait disk availability is not launch-time availability.
+- Quiet admission requires AC power and an observed open lid along with low load and
+  indexer pressure for all three observations. Battery, closed or unknown lid/power
+  state resets the admission window; no system power setting is changed.
+- It rechecks free space after the final quiet observation, including the size-class
+  reserve. Pre-wait disk availability is not launch-time availability.
 - Failed runs and incomplete RSS samples retain their private synthetic profile and
   fixture; `retainedWork` identifies the location. Do not delete these before investigation.
 - Analysis polling records the last sanitized job, transport/status/timeout category

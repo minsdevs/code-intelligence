@@ -211,10 +211,11 @@ test('server step timings parse nanosecond instants and keep only public codes',
   assert.doesNotMatch(JSON.stringify(timings), /private|Users/);
 });
 
-test('quiet admission resets on load or indexer pressure and launches directly after its third quiet observation', async () => {
-  for (const blocked of [{ loadAverage: [4, 0, 0], mdworkers: 0 }, { loadAverage: [0, 0, 0], mdworkers: 7 }]) {
-    const samples = [1, 2, blocked, 3, 2, 1].map(value => typeof value === 'number'
-      ? { loadAverage: [value, 0, 0], mdworkers: 6 } : value);
+test('quiet admission resets on host pressure or missing AC/open-lid conditions and launches directly after its third valid observation', async () => {
+  for (const blocked of [{ loadAverage: [4, 0, 0] }, { mdworkers: 7 }, { powerSource: 'BATTERY' },
+    { powerSource: 'UNKNOWN' }, { lidState: 'CLOSED' }, { lidState: 'UNKNOWN' }, { lidState: undefined }]) {
+    const samples = [1, 2, blocked, 3, 2, 1].map(value => ({ loadAverage: [0, 0, 0], mdworkers: 6, powerSource: 'AC', lidState: 'OPEN',
+      ...(typeof value === 'number' ? { loadAverage: [value, 0, 0] } : value) }));
     const actions = [];
     let index = 0;
     const admission = await waitForQuietHost({ observe: () => { actions.push('observe'); return samples[index++]; },
@@ -275,7 +276,7 @@ test('RSS read and write failures retain safe cause and never count unwritten sa
 test('quiet admission rejects space lost during the wait, at the actual launch boundary', async () => {
   const actions = []; let free = 4000;
   await assert.rejects(waitForQuietHost({ requiredFreeBytes: 3500,
-    observe: () => { actions.push('observe'); return { loadAverage: [1, 1, 1], mdworkers: 0 }; },
+    observe: () => { actions.push('observe'); return { loadAverage: [1, 1, 1], mdworkers: 0, powerSource: 'AC', lidState: 'OPEN' }; },
     pause: async () => { free = 3400; actions.push('wait'); },
     readFreeBytes: () => { actions.push('disk'); return free; } }), /DISK_SPACE_LOW/);
   assert.deepEqual(actions, ['observe', 'wait', 'observe', 'wait', 'observe', 'disk']);
