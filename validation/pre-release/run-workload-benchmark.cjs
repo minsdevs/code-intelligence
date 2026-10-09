@@ -17,10 +17,10 @@ const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.
 const { launchEnvironment, bounded } = require('../../desktop/scripts/packaged-keychain-acceptance.cjs');
 const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
-const { readOwnerMemory } = require('./process-memory.cjs');
+const { startOwnedPhaseSampler } = require('./workload-sampler.cjs');
 const { observePowerSource, acObservedAtRunBoundaries, confirmObservedGone } = require('./run-startup-benchmark.cjs');
 const { SIZE_CLASSES, generateWorkload, hashTree, mutateWorkload } = require('./workload-fixture.cjs');
-const { SLO, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplete, installWorkloadWatch, installWorkloadClick } = require('./workload-metrics.cjs');
+const { SLO, evaluateRow, describeSmoke, phaseSamplingComplete, installWorkloadWatch, installWorkloadClick } = require('./workload-metrics.cjs');
 const { expectedServices } = require('./adapter-mode.cjs');
 const { withDropConfirmation } = require('./drop-confirmation.cjs');
 // The analysis results table in either UI language (English is the product default).
@@ -45,34 +45,42 @@ const MINIMUM_FREE_BYTES = 2 * GiB;
 const GRAPH_REPEATS = 5;
 // Cancel after the job has been in a long-running step for a fixed time.
 const CANCEL_TRIGGER = Object.freeze({ steps: ['IMPORT', 'SOURCE_PARSING', 'GRAPH_BUILD', 'TS_PARSING'], afterMs: 1000 });
-const codes = new Set(['STARTUP_TIMEOUT', 'STARTUP_SDK_TIMEOUT', 'STARTUP_FAILED', 'STARTUP_PROCESS_EXITED',
+const codes = new Set(['API_TIMEOUT', 'API_STATUS', 'API_TRANSPORT_FAILED', 'API_OBSERVATION_FAILED',
+  'STARTUP_TIMEOUT', 'STARTUP_SDK_TIMEOUT', 'STARTUP_FAILED', 'STARTUP_PROCESS_EXITED',
   'PREVIEW_FAILED', 'PREVIEW_ADMISSION_MISMATCH', 'ANALYSIS_START_FAILED', 'ANALYSIS_FAILED', 'ANALYSIS_CANCELLED',
   'ANALYSIS_TIMEOUT', 'ANALYSIS_HARD_TIMEOUT', 'OVERVIEW_NOT_SHOWN', 'GRAPH_API_FAILED', 'GRAPH_RENDER_FAILED',
   'INCREMENTAL_FAILED', 'INCREMENTAL_TIMEOUT', 'CANCEL_TRIGGER_MISSED', 'CANCEL_FAILED', 'CANCEL_TIMEOUT',
   'PROJECT_DELETE_FAILED', 'CANCEL_LOCK_NOT_RELEASED', 'CANCEL_ENDED_WITHOUT_CANCELLED', 'MEMORY_SAMPLE_FAILED', 'MEMORY_EVIDENCE_LIMIT', 'MEMORY_SAMPLING_INCOMPLETE',
   'OBSERVED_PROCESSES_REMAIN', 'WORKLOAD_FIXTURE_CHANGED', 'DISK_SPACE_LOW', 'NATIVE_ELECTRON_CLOSE_TIMEOUT',
   'NATIVE_ELECTRON_EXIT_TIMEOUT', 'NATIVE_ELECTRON_UNCLEAN_EXIT', 'NATIVE_SHUTDOWN_RECOVERY_REQUIRED',
-  'NATIVE_SHUTDOWN_UNCONFIRMED', 'NATIVE_SHUTDOWN_DIAGNOSTIC_TIMEOUT', 'NOT_RUN_AFTER_ANALYSIS_FAILURE', 'WORKLOAD_HOST_OBSERVATION_FAILED']);
+  'NATIVE_SHUTDOWN_UNCONFIRMED', 'NATIVE_SHUTDOWN_DIAGNOSTIC_TIMEOUT', 'NOT_RUN_AFTER_ANALYSIS_FAILURE', 'WORKLOAD_HOST_OBSERVATION_FAILED',
+  'WORKLOAD_DIAGNOSTIC_ENVIRONMENT_UNSAFE']);
 function failureCode(error, fallback = 'WORKLOAD_BENCHMARK_CHECK_FAILED') {
   let message; try { message = error?.message; } catch { /* Do not inspect thrown details. */ }
   return codes.has(message) ? message : fallback;
 }
 async function stage(code, action) {
   try { return await action(); }
-  catch (error) { throw new Error(failureCode(error, code)); }
+  catch (error) {
+    const failure = new Error(failureCode(error, code));
+    failure.stage = code;
+    if (Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599) failure.status = error.status;
+    throw failure;
+  }
 }
 
 function argumentsFor(argv) {
-  assert(Array.isArray(argv) && argv.length >= 5 && argv.length <= 8);
+  assert(Array.isArray(argv) && argv.length >= 5 && argv.length <= 9);
   assert(argv[0] === '--app' && typeof argv[1] === 'string' && path.isAbsolute(argv[1]) && !/[\x00-\x1f\x7f]/.test(argv[1]));
   assert(argv[2] === '--class' && Object.hasOwn(SIZE_CLASSES, argv[3]));
   const mode = argv[4];
   assert(['--smoke-1', '--smoke-2', '--series-20'].includes(mode));
   const options = { app: argv[1], sizeClass: argv[3], runs: Number(mode.slice(mode.lastIndexOf('-') + 1)),
-    series: mode === '--series-20', rows: [...DEFAULT_ROWS], keepWork: false };
+    series: mode === '--series-20', rows: [...DEFAULT_ROWS], keepWork: false, diagnosticOnly: false };
   let rowsGiven = false;
   for (let index = 5; index < argv.length; index++) {
     if (argv[index] === '--keep-work') { assert(!options.keepWork && !options.series); options.keepWork = true; continue; }
+    if (argv[index] === '--diagnostic-only') { assert(!options.diagnosticOnly && !options.series); options.diagnosticOnly = true; continue; }
     assert(argv[index] === '--rows' && index + 1 < argv.length && !rowsGiven);
     rowsGiven = true;
     const rows = argv[++index].split(',');
@@ -119,10 +127,19 @@ function observeQuietHost() {
   }
   const text = output.trim();
   if (text && !/^\d+(?:\n\d+)*$/.test(text)) throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED');
-  return { observedAt: new Date().toISOString(), loadAverage: os.loadavg(), mdworkers: text ? text.split('\n').length : 0 };
+  let lidState = 'UNKNOWN';
+  try {
+    const state = execFileSync('/usr/sbin/ioreg', ['-r', '-k', 'AppleClamshellState', '-d', '1'],
+      { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+    const matches = [...state.matchAll(/"AppleClamshellState"\s*=\s*(Yes|No)\b/g)];
+    if (matches.length === 1) lidState = matches[0][1] === 'No' ? 'OPEN' : 'CLOSED';
+  } catch { /* Unobservable power conditions never admit a run. */ }
+  return { observedAt: new Date().toISOString(), loadAverage: os.loadavg(), mdworkers: text ? text.split('\n').length : 0,
+    powerSource: observePowerSource(), lidState };
 }
 
-async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new Promise(resolve => setTimeout(resolve, ms)),
+  requiredFreeBytes = 0, readFreeBytes = () => freeBytes('/private/tmp'), diagnosticOnly = false } = {}) {
   const started = performance.now();
   let observations = [], rejectedObservations = 0;
   for (;;) {
@@ -130,11 +147,19 @@ async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new 
     if (!Array.isArray(sample.loadAverage) || sample.loadAverage.length !== 3
       || !sample.loadAverage.every(value => Number.isFinite(value) && value >= 0)
       || !Number.isSafeInteger(sample.mdworkers) || sample.mdworkers < 0) throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED');
-    if (sample.loadAverage[0] < 4 && sample.mdworkers <= 6) observations.push(sample);
+    if (diagnosticOnly && (sample.powerSource !== 'AC' || !['OPEN', 'CLOSED'].includes(sample.lidState))) {
+      throw new Error('WORKLOAD_DIAGNOSTIC_ENVIRONMENT_UNSAFE');
+    }
+    if (diagnosticOnly || (sample.loadAverage[0] < 4 && sample.mdworkers <= 6 && sample.powerSource === 'AC' && sample.lidState === 'OPEN')) observations.push(sample);
     else { observations = []; rejectedObservations++; }
-    // No final sleep: the third observation is the one immediately preceding launch.
-    if (observations.length === 3) return { status: 'ADMITTED', loadAverageLimit: 4, mdworkerLimit: 6,
-      sampleIntervalMs: 30000, waitedMs: Math.round(performance.now() - started), rejectedObservations, observations };
+    // No final sleep: the admitting observation immediately precedes launch.
+    if (diagnosticOnly || observations.length === 3) {
+      const availableBytes = readFreeBytes();
+      if (!Number.isSafeInteger(availableBytes) || availableBytes < requiredFreeBytes) throw new Error('DISK_SPACE_LOW');
+      return { status: diagnosticOnly ? 'DIAGNOSTIC_ONLY' : 'ADMITTED', loadAverageLimit: 4, mdworkerLimit: 6, freeBytes: availableBytes, requiredFreeBytes,
+        sampleIntervalMs: diagnosticOnly ? null : 30000, waitedMs: Math.round(performance.now() - started), rejectedObservations, observations,
+        timingValidity: diagnosticOnly ? (sample.loadAverage[0] >= 4 || sample.mdworkers > 6 ? 'INVALID_LOAD' : 'NOT_APPLICABLE_DIAGNOSTIC') : 'QUIET_HOST_OBSERVED_AT_LAUNCH' };
+    }
     await pause(30000);
   }
 }
@@ -195,13 +220,14 @@ async function main(argv = process.argv.slice(2)) {
       .map(name => path.join(os.homedir(), 'Library/Application Support', name)) });
   const requireFrontend = createRequire(path.join(repo, 'frontend/package.json'));
   const { _electron } = requireFrontend('playwright'), { expect } = requireFrontend('@playwright/test');
-  const inputs = [__filename, path.join(__dirname, 'workload-metrics.cjs'), path.join(__dirname, 'workload-fixture.cjs'),
+  const inputs = [__filename, path.join(__dirname, 'workload-sampler.cjs'), path.join(__dirname, 'workload-metrics.cjs'), path.join(__dirname, 'workload-fixture.cjs'),
     path.join(__dirname, 'startup-metrics.cjs'), path.join(__dirname, 'process-memory.cjs'), path.join(__dirname, 'drop-confirmation.cjs'),
     path.join(__dirname, 'run-startup-benchmark.cjs'), path.join(repo, 'desktop/scripts/native-acceptance-electron.cjs'),
     path.join(repo, 'desktop/src/isolated-run.cjs')];
   const sources = Object.fromEntries(inputs.map(file => [path.relative(repo, file), hash(file)]));
   const report = { format: 1, status: 'RUNNING', scope: 'synthetic-workload-import-through-packaged-ui',
-    mode: options.series ? 'SERIES' : 'SMOKE', sizeClass: options.sizeClass, requestedRuns: options.runs, rows: options.rows,
+    mode: options.diagnosticOnly ? 'DIAGNOSTIC' : options.series ? 'SERIES' : 'SMOKE', sizeClass: options.sizeClass, requestedRuns: options.runs, rows: options.rows,
+    performanceAcceptanceEligible: options.series && !options.diagnosticOnly, resourceSamplesFormat: 2,
     slo: Object.fromEntries(Object.entries(SLO).filter(([, value]) => value.sizeClass === options.sizeClass)),
     analysisTimeoutMs: settings.analysisTimeoutMs, sampleIntervalMs: 100, graphRepeats: GRAPH_REPEATS, cancelTrigger: CANCEL_TRIGGER,
     cachePolicy: 'warm: OS cache not flushed; one warm-up launch; each run starts a new synthetic profile (initialized before the measured rows) and digests its fixture clone immediately before import',
@@ -218,12 +244,14 @@ async function main(argv = process.argv.slice(2)) {
       performanceCores: Number(execFileSync('/usr/sbin/sysctl', ['-n', 'hw.perflevel0.physicalcpu'], { encoding: 'utf8' }).trim()),
       logicalCpus: os.cpus().length, memoryBytes: os.totalmem(), loadAverageAfterFixturePreparation: os.loadavg(), loadAverageBefore: null, freeBytesAtStart: freeAtStart,
       power: observePowerSource(), backgroundState: 'shared development machine; other agents may run builds/tests; packaged-app launches serialized by the caller-held native lock',
-      powerObservationScope: 'Series start and both boundaries of each run; not continuous monitoring',
-      loadObservationScope: 'Three quiet observations 30 seconds apart after fixture preparation and before every app launch; not continuous monitoring' },
+      powerObservationScope: 'Series start, quiet-admission samples and both boundaries of each run; not continuous monitoring',
+      loadObservationScope: options.diagnosticOnly
+        ? 'Diagnostic opt-in: one actual AC/lid/load observation before every launch; no performance or RSS release acceptance'
+        : 'Three AC/open-lid/quiet observations 30 seconds apart after fixture preparation and before every app launch; not continuous monitoring' },
     warmup: null, runs: [] };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   const sampleFile = path.join(evidence, 'resource-samples.csv'), fd = fs.openSync(sampleFile, 'wx', 0o600);
-  fs.writeSync(fd, 'sequence,elapsed_ms,phase,pid,ppid,rss_kib\n');
+  fs.writeSync(fd, 'sequence,elapsed_ms,phase,pid,ppid,rss_kib,scope_owner_pid\n');
   save(); console.log(JSON.stringify({ status: 'RUNNING', evidence, sizeClass: options.sizeClass, runs: options.runs, treeSha256: fixture.treeSha256 }));
 
   async function launch(sample, started) {
@@ -293,15 +321,19 @@ async function main(argv = process.argv.slice(2)) {
       }
     };
     // Polls a job inside the renderer; returns the first terminal detail and its renderer time.
-    const pollJob = (jobId, { intervalMs, timeoutMs, until = ['DONE', 'FAILED', 'CANCELLED'], onStep }) => (async () => {
+    const pollJob = (jobId, { intervalMs, timeoutMs, until = ['DONE', 'FAILED', 'CANCELLED'], onStep, onObservation }) => (async () => {
       const expires = performance.now() + timeoutMs;
       for (;;) {
         const observed = await bounded(() => page.evaluate(async id => {
           const desktop = window.codeIntelligenceDesktop;
-          const response = await fetch(desktop.apiBaseUrl + '/api/jobs/' + id, { credentials: 'include', headers: { 'X-Code-Intelligence-Token': desktop.apiToken } });
-          return { status: response.status, at: performance.now(), job: response.ok ? await response.json() : null };
-        }, jobId), 60000, 'API_TIMEOUT');
-        if (observed.status !== 200) throw new Error('API_STATUS');
+          try {
+            const response = await fetch(desktop.apiBaseUrl + '/api/jobs/' + id, { credentials: 'include', headers: { 'X-Code-Intelligence-Token': desktop.apiToken } });
+            return { status: response.status, at: performance.now(), job: response.ok ? await response.json() : null };
+          } catch { return { transportFailed: true }; }
+        }, jobId), 60000, 'API_TIMEOUT').catch(error => { throw new Error(failureCode(error, 'API_OBSERVATION_FAILED')); });
+        if (observed.transportFailed) throw new Error('API_TRANSPORT_FAILED');
+        if (observed.status !== 200) throw Object.assign(new Error('API_STATUS'), { status: observed.status });
+        onObservation?.(observed);
         if (until.includes(observed.job.status)) return observed;
         if (onStep && await onStep(observed)) return observed;
         if (performance.now() >= expires) return { ...observed, timedOut: true };
@@ -366,22 +398,23 @@ async function main(argv = process.argv.slice(2)) {
 
   async function analysisRow(page, d, sampler, run, folder) {
     const row = run.rows.analysis = { status: 'RUNNING', metrics: {}, failure: null };
-    sampler.phase('PREVIEW');
+    await sampler.phase('PREVIEW');
     const preview = await stage('PREVIEW_FAILED', () => importAndPreview(page, d, folder, row.metrics));
     row.localImport = preview.localImport;
     run.admittedFiles = preview.localImport?.acceptedFiles ?? null;
     if (preview.localImport?.acceptedFiles !== fixture.files) row.admissionMismatch = true;
-    sampler.phase('ANALYSIS');
+    await sampler.phase('ANALYSIS');
     const started = await stage('ANALYSIS_START_FAILED', () => approve(page, d));
     run.projectId = started.projectId; row.jobId = started.jobId;
     await d.watch('overview', { kind: 'rows', path: `^/projects/${started.projectId}/overview$`, minimum: 1 });
-    const outcome = await stage('ANALYSIS_FAILED', () => d.pollJob(started.jobId, { intervalMs: 1000, timeoutMs: settings.analysisTimeoutMs }));
+    const outcome = await stage('ANALYSIS_FAILED', () => d.pollJob(started.jobId, { intervalMs: 1000, timeoutMs: settings.analysisTimeoutMs,
+      onObservation: observed => { row.lastObservedJob = jobTimings(observed.job); } }));
     row.job = jobTimings(outcome.job);
     if (outcome.timedOut) throw new Error(options.sizeClass === 'large' ? 'ANALYSIS_HARD_TIMEOUT' : 'ANALYSIS_TIMEOUT');
     if (outcome.job.status !== 'DONE') { row.failedStep = failedStep(outcome.job); throw new Error(outcome.job.status === 'CANCELLED' ? 'ANALYSIS_CANCELLED' : 'ANALYSIS_FAILED'); }
     const shown = await d.waitMark('overview', 60000, 'OVERVIEW_NOT_SHOWN');
     row.metrics.analysisMs = Math.round(shown.overview - shown.approveClick);
-    row.analysisWindowSampling = sampler.snapshot().phases.ANALYSIS ?? null;
+    row.analysisWindowSampling = (await sampler.snapshot()).phases.ANALYSIS ?? null;
     run.snapshotId = (await d.api(`/api/projects/${started.projectId}`)).currentSnapshot.id;
     const coverage = await d.api(`/api/projects/${started.projectId}/coverage?snapshotId=${run.snapshotId}`);
     row.outcomes = coverage.outcomes;
@@ -391,7 +424,7 @@ async function main(argv = process.argv.slice(2)) {
 
   async function graphRow(page, d, sampler, run) {
     const row = run.rows.graph = { status: 'RUNNING', metrics: {}, failure: null };
-    sampler.phase('GRAPH');
+    await sampler.phase('GRAPH');
     const { projectId, snapshotId } = run;
     const first = await d.api(`/api/projects/${projectId}/graph/nodes?snapshotId=${snapshotId}&category=symbols&page=1&size=100&sort=path`);
     assert(first.items.length > 0);
@@ -427,7 +460,7 @@ async function main(argv = process.argv.slice(2)) {
 
   async function incrementalRow(page, d, sampler, run, folder) {
     const row = run.rows.incremental = { status: 'RUNNING', metrics: {}, failure: null, checks: {} };
-    sampler.phase('INCREMENTAL');
+    await sampler.phase('INCREMENTAL');
     row.change = mutateWorkload({ root: folder, manifest: fixture });
     const { projectId } = run;
     await d.navigate(`/projects/${projectId}/overview`);
@@ -479,7 +512,7 @@ async function main(argv = process.argv.slice(2)) {
 
   async function cancelRow(page, d, sampler, run, folder) {
     const row = run.rows.cancel = { status: 'RUNNING', metrics: {}, failure: null };
-    sampler.phase('CANCEL');
+    await sampler.phase('CANCEL');
     await stage('CANCEL_FAILED', () => importAndPreview(page, d, folder + '-cancel', {}));
     const started = await stage('CANCEL_FAILED', () => approve(page, d));
     run.cancelProjectId = started.projectId;
@@ -527,7 +560,7 @@ async function main(argv = process.argv.slice(2)) {
 
   async function deleteRow(page, d, sampler, run) {
     const row = run.rows.delete = { status: 'RUNNING', metrics: {}, failure: null };
-    sampler.phase('DELETE');
+    await sampler.phase('DELETE');
     if (!run.projectId) throw new Error('PROJECT_DELETE_FAILED');
     row.snapshots = (await d.api(`/api/projects/${run.projectId}/jobs`)).filter(job => job.status === 'DONE').length;
     const begin = performance.now();
@@ -543,19 +576,20 @@ async function main(argv = process.argv.slice(2)) {
     if (sequence === 0) report.warmup = run; else report.runs.push(run);
     plan = newPlan(); run.profile = path.basename(plan.root);
     save(); plan.assertIdentity();
-    run.freeBytesAtStart = freeBytes('/private/tmp');
+    run.freeBytesBeforePreparation = freeBytes('/private/tmp');
     const folder = path.join(work, `run-${sequence}`);
     let started = performance.now(), launchAttempted = false;
     let sdk, owner, sampler, memory, failure = null, stopObserving;
     const diagnostics = {};
     try {
-      if (run.freeBytesAtStart < MINIMUM_FREE_BYTES) throw new Error('DISK_SPACE_LOW');
+      if (run.freeBytesBeforePreparation < MINIMUM_FREE_BYTES + settings.diskReserveBytes) throw new Error('DISK_SPACE_LOW');
       if (sequence > 0) {
         cloneTree(pristine, folder);
         if (hashTree(folder).treeSha256 !== fixture.treeSha256) throw new Error('WORKLOAD_FIXTURE_CHANGED');
         if (options.rows.includes('cancel')) cloneTree(pristine, folder + '-cancel');
       }
-      run.quietAdmission = await waitForQuietHost();
+      run.quietAdmission = await waitForQuietHost({ requiredFreeBytes: MINIMUM_FREE_BYTES + settings.diskReserveBytes, diagnosticOnly: options.diagnosticOnly });
+      run.freeBytesAtStart = run.quietAdmission.freeBytes;
       run.loadAverageAtStart = run.quietAdmission.observations.at(-1).loadAverage;
       if (sequence === 0) report.environment.loadAverageBefore = run.loadAverageAtStart;
       run.powerAtStart = observePowerSource();
@@ -563,7 +597,7 @@ async function main(argv = process.argv.slice(2)) {
       launchAttempted = true;
       const launched = await stage('STARTUP_FAILED', () => launch(run, started));
       ({ sdk, owner } = launched);
-      sampler = startPhaseSampler(owner.process().pid, fd, sequence, started, { read: () => readOwnerMemory(owner.process().pid) });
+      sampler = startOwnedPhaseSampler(owner.process().pid, fd, sequence, started);
       stopObserving = observeStartup(owner.process(), diagnostics, () => {});
       const page = await stage('STARTUP_FAILED', () => ready(sdk, launched.remaining));
       run.readyMs = Math.round(performance.now() - started);
@@ -572,22 +606,24 @@ async function main(argv = process.argv.slice(2)) {
         let analysisFailure = null;
         if (options.rows[0] === 'preview') {
           const row = run.rows.preview = { status: 'RUNNING', metrics: {}, failure: null };
-          sampler.phase('PREVIEW');
+          await sampler.phase('PREVIEW');
           try {
             const preview = await stage('PREVIEW_FAILED', () => importAndPreview(page, d, folder, row.metrics));
             row.localImport = preview.localImport;
             row.status = preview.localImport?.acceptedFiles === fixture.files ? 'PASS' : 'FAIL';
             if (row.status === 'FAIL') row.failure = 'PREVIEW_ADMISSION_MISMATCH';
           } catch (error) { row.status = 'FAIL'; row.failure = failureCode(error, 'PREVIEW_FAILED'); }
-          finally { row.peakRssKiB = sampler.snapshot().phases.PREVIEW?.peakRssKiB || null; save(); }
+          finally { row.peakRssKiB = (await sampler.snapshot()).phases.PREVIEW?.peakRssKiB || null; save(); }
         } else try {
           await analysisRow(page, d, sampler, run, folder);
           run.rows.analysis.status = 'PASS';
         } catch (error) {
           analysisFailure = failureCode(error, 'ANALYSIS_FAILED');
           run.rows.analysis.status = 'FAIL'; run.rows.analysis.failure = analysisFailure;
+          run.rows.analysis.failureStage = codes.has(error?.stage) ? error.stage : null;
+          run.rows.analysis.httpStatus = Number.isInteger(error?.status) ? error.status : null;
         } finally {
-          const snap = sampler.snapshot();
+          const snap = await sampler.snapshot();
           run.rows.analysis.peakRssKiB = snap.phases.ANALYSIS?.peakRssKiB || null;
           run.rows.analysis.previewPeakRssKiB = snap.phases.PREVIEW?.peakRssKiB || null;
           save();
@@ -597,18 +633,18 @@ async function main(argv = process.argv.slice(2)) {
           if (analysisFailure) { run.rows[name] = { status: 'FAIL', failure: 'NOT_RUN_AFTER_ANALYSIS_FAILURE', metrics: {} }; continue; }
           try { await action(page, d, sampler, run, folder); }
           catch (error) { run.rows[name] ??= { metrics: {} }; run.rows[name].status = 'FAIL'; run.rows[name].failure = failureCode(error, name === 'graph' ? 'GRAPH_API_FAILED' : 'INCREMENTAL_FAILED'); }
-          finally { run.rows[name].peakRssKiB = sampler.snapshot().phases[name.toUpperCase()]?.peakRssKiB || null; save(); }
+          finally { run.rows[name].peakRssKiB = (await sampler.snapshot()).phases[name.toUpperCase()]?.peakRssKiB || null; save(); }
         }
         // Projects are not deleted between rows: the profile is discarded after the run.
         for (const [name, action, code] of [['cancel', cancelRow, 'CANCEL_FAILED'], ['delete', deleteRow, 'PROJECT_DELETE_FAILED']]) {
           if (!options.rows.includes(name)) continue;
           try { await action(page, d, sampler, run, folder); }
           catch (error) { run.rows[name] ??= { metrics: {} }; run.rows[name].status = 'FAIL'; run.rows[name].failure = failureCode(error, code); }
-          finally { run.rows[name].peakRssKiB = sampler.snapshot().phases[name.toUpperCase()]?.peakRssKiB || null; save(); }
+          finally { run.rows[name].peakRssKiB = (await sampler.snapshot()).phases[name.toUpperCase()]?.peakRssKiB || null; save(); }
         }
         if (analysisFailure) throw new Error(analysisFailure);
       }
-      sampler.phase('IDLE');
+      await sampler.phase('IDLE');
       memory = await sampler.stop();
       run.samplingComplete = phaseSamplingComplete(memory, sequence > 0 ? 'ANALYSIS' : 'STARTUP');
       if (owner.process().exitCode !== null || owner.process().signalCode !== null) throw new Error('STARTUP_PROCESS_EXITED');
@@ -626,17 +662,22 @@ async function main(argv = process.argv.slice(2)) {
       else { run.cleanupFailure = 'NO_CAPTURED_CHILD'; failure ||= 'STARTUP_SDK_TIMEOUT'; }
       stopObserving?.();
       run.memory = memory ? { samples: memory.samples, peakRssKiB: memory.peakRssKiB, maximumGapMs: Math.round(memory.maximumGapMs),
-        maximumReadMs: Math.round(memory.maximumReadMs), failure: memory.failure, missingOwnerSamples: memory.missingOwnerSamples,
+        maximumReadMs: Math.round(memory.maximumReadMs), failure: memory.failure, failureDetail: memory.failureDetail,
+        missingOwnerSamples: memory.missingOwnerSamples,
         trailingGapMs: memory.trailingGapMs === null ? null : Math.round(memory.trailingGapMs),
         phases: Object.fromEntries(Object.entries(memory.phases).map(([name, value]) => [name, { ...value, maximumGapMs: Math.round(value.maximumGapMs) }])) } : null;
       if (diagnostics.integrityFailure) run.integrityFailure = diagnostics.integrityFailure;
       run.powerAtEnd = observePowerSource(); run.loadAverageAtEnd = os.loadavg();
       run.profileBytes = directoryBytes(plan.root);
+      run.freeBytesAtEnd = freeBytes('/private/tmp');
+      const rowFailure = Object.values(run.rows).find(row => row.status === 'FAIL');
+      failure ||= rowFailure?.failure ?? null;
+      run.retainFailureEvidence = Boolean(failure || memory?.failure || (memory && !run.samplingComplete));
       // Discard the run's synthetic profile only after its processes were confirmed gone.
-      if (!options.keepWork && run.cleanupConfirmed) {
+      if (!options.keepWork && !run.retainFailureEvidence && run.cleanupConfirmed) {
         try { fs.rmSync(plan.root, { recursive: true, force: true }); run.profileRemoved = true; } catch { run.profileRemoved = false; }
       } else run.profileRemoved = false;
-      if (sequence > 0) {
+      if (sequence > 0 && !options.keepWork && !run.retainFailureEvidence) {
         try { for (const tree of [folder, folder + '-cancel']) fs.rmSync(tree, { recursive: true, force: true }); }
         catch { failure ||= 'WORKLOAD_FIXTURE_CHANGED'; }
       }
@@ -675,7 +716,7 @@ async function main(argv = process.argv.slice(2)) {
     const assessed = {}, observed = {};
     const rowKeys = { preview: [`preview.${options.sizeClass}`], analysis: [`analysis.${options.sizeClass}`, `preview.${options.sizeClass}`], graph: [`graph.${options.sizeClass}`],
       incremental: [`incremental.${options.sizeClass}`], cancel: [`cancel.${options.sizeClass}`] };
-    for (const name of options.rows) {
+    for (const name of options.diagnosticOnly ? [] : options.rows) {
       for (const key of rowKeys[name] ?? []) {
         if (!Object.hasOwn(SLO, key)) continue;
         const samples = rowSamples(name);
@@ -684,15 +725,16 @@ async function main(argv = process.argv.slice(2)) {
       }
     }
     report.assessment = options.series ? assessed : null;
-    report.smokeObservations = options.series ? null : observed;
-    report.measurementStatus = report.runs.length === options.runs && report.runs.every(run => run.status === 'PASS') ? 'COMPLETE' : 'INCOMPLETE';
+    report.smokeObservations = options.series || options.diagnosticOnly ? null : observed;
+    report.measurementStatus = report.runs.length === options.runs && [report.warmup, ...report.runs].every(run => run?.status === 'PASS' && run.samplingComplete === true && run.memory?.failure === null && run.cleanupConfirmed === true) ? 'COMPLETE' : 'INCOMPLETE';
     report.environmentGate = acObservedAtRunBoundaries(report.environment.power, [report.warmup, ...report.runs])
       ? 'AC_OBSERVED_AT_RUN_BOUNDARIES' : 'AC_POWER_NOT_CONFIRMED';
     report.loadGate = report.runs.length === options.runs && [report.warmup, ...report.runs].every(run => run?.quietAdmission?.status === 'ADMITTED')
       ? 'QUIET_HOST_OBSERVED_AT_LAUNCH' : 'QUIET_HOST_NOT_CONFIRMED';
+    if (options.diagnosticOnly && [report.warmup, ...report.runs].some(run => run?.quietAdmission?.timingValidity === 'INVALID_LOAD')) report.loadGate = 'INVALID_LOAD';
     report.status = options.series
       ? (Object.values(assessed).length && Object.values(assessed).every(row => row.status === 'PASS') && report.environmentGate === 'AC_OBSERVED_AT_RUN_BOUNDARIES' && report.loadGate === 'QUIET_HOST_OBSERVED_AT_LAUNCH' ? 'PASS' : 'FAIL')
-      : 'SMOKE_ONLY';
+      : options.diagnosticOnly ? 'DIAGNOSTIC_ONLY' : 'SMOKE_ONLY';
     for (const [name, expected] of Object.entries(sources)) assert.equal(hash(path.join(repo, name)), expected);
     assert.equal(hash(path.join(app, 'Contents/Resources/app.asar')), report.appAsarSha256);
     assert.equal(hash(manifestFile), report.manifestSha256);
@@ -704,7 +746,9 @@ async function main(argv = process.argv.slice(2)) {
     report.fixtureBytesAllocated = directoryBytes(pristine);
     // Profiles of a run whose processes were not confirmed gone are left for inspection.
     const allClean = [report.warmup, ...report.runs].every(run => !run || run.cleanupConfirmed);
-    if (options.keepWork || !allClean) report.retainedWork = { fixture: work, profiles: profileParent, reason: options.keepWork ? 'KEEP_WORK' : 'CLEANUP_UNCONFIRMED' };
+    const failedEvidence = [report.warmup, ...report.runs].some(run => run?.retainFailureEvidence);
+    if (options.keepWork || !allClean || failedEvidence) report.retainedWork = { fixture: work, profiles: profileParent,
+      reason: options.keepWork ? 'KEEP_WORK' : !allClean ? 'CLEANUP_UNCONFIRMED' : 'FAILURE_EVIDENCE' };
     else {
       fs.rmSync(work, { recursive: true, force: true }); fs.rmSync(profileParent, { recursive: true, force: true });
       report.retainedWork = null;
@@ -713,7 +757,7 @@ async function main(argv = process.argv.slice(2)) {
   }
   console.log(JSON.stringify({ status: report.status, evidence, measurementStatus: report.measurementStatus,
     assessment: report.assessment, retainedWork: report.retainedWork }));
-  if (!['PASS', 'SMOKE_ONLY'].includes(report.status)) process.exitCode = 1;
+  if (!['PASS', 'SMOKE_ONLY', 'DIAGNOSTIC_ONLY'].includes(report.status) || report.measurementStatus !== 'COMPLETE') process.exitCode = 1;
   return report;
 }
 

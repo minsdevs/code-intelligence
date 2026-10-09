@@ -66,7 +66,7 @@ function startMemorySampler(child, fd, sequence, started, {
   const result = { samples: 0, idleSamples: 0, peakRssKiB: 0, idlePeakRssKiB: 0,
     firstSampleDelayMs: null, maximumGapMs: 0, maximumReadMs: 0, trailingGapMs: null, missingOwnerSamples: 0,
     requestedIntervalMs: intervalMs, failure: null,
-    scope: 'PID/PPID discovery then targeted owner-tree RSS; births between queries and the initial SDK capture gap are not sampled',
+    scope: 'Read-only owner tree plus exclusive packaged-bundle XPC scope; births between queries and the initial SDK capture gap are not sampled',
     resourceFileLimitBytes: maxCsvBytes, sampleLimit: maxSamples };
   const task = (async () => {
     while (!stopped) {
@@ -80,7 +80,7 @@ function startMemorySampler(child, fd, sequence, started, {
           result.missingOwnerSamples++;
           throw new Error('MEMORY_SAMPLE_FAILED');
         }
-        const text = value.processes.map(row => [sequence, Math.round(at - started), sampledPhase, row.pid, row.ppid, row.rssKiB].join(',') + '\n').join('');
+        const text = value.processes.map(row => [sequence, Math.round(at - started), sampledPhase, row.pid, row.ppid, row.rssKiB, row.scopeOwnerPid ?? ''].join(',') + '\n').join('');
         if (result.samples >= maxSamples || fs.fstatSync(fd).size + Buffer.byteLength(text) > maxCsvBytes) {
           result.failure = 'MEMORY_EVIDENCE_LIMIT'; break;
         }
@@ -150,7 +150,7 @@ async function main(argv = process.argv.slice(2)) {
   const sources = Object.fromEntries(inputs.map(file => [path.relative(repo, file), hash(file)]));
   const report = { format: 1, status: 'RUNNING', scope: 'initialized-empty-synthetic-profile-warm-startup-and-idle',
     requestedRuns: RUNS, startupLimitMs: 10000, idleLimitKiB: 1572864, startupTimeoutMs: STARTUP_TIMEOUT_MS,
-    sampleIntervalMs: SAMPLE_INTERVAL_MS, idleWindowMs: IDLE_WINDOW_MS, resourceCsvLimitBytes: MAX_RESOURCE_CSV_BYTES,
+    sampleIntervalMs: SAMPLE_INTERVAL_MS, idleWindowMs: IDLE_WINDOW_MS, resourceCsvLimitBytes: MAX_RESOURCE_CSV_BYTES, resourceSamplesFormat: 2,
     cachePolicy: 'OS cache not flushed; one initialization outside measured warm runs',
     startupRssBeforeSdkCaptureMeasured: false,
     sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sources,
@@ -167,7 +167,7 @@ async function main(argv = process.argv.slice(2)) {
       readyMs: null, idlePeakRssKiB: null, cleanupConfirmed: false, samplingComplete: false })) };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   const sampleFile = path.join(evidence, 'resource-samples.csv'), fd = fs.openSync(sampleFile, 'wx', 0o600);
-  fs.writeSync(fd, 'sequence,elapsed_ms,phase,pid,ppid,rss_kib\n');
+  fs.writeSync(fd, 'sequence,elapsed_ms,phase,pid,ppid,rss_kib,scope_owner_pid\n');
   save(); console.log(JSON.stringify({ status: 'RUNNING', evidence, requestedRuns: RUNS }));
 
   async function run(sequence) {

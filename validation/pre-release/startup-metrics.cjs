@@ -37,11 +37,13 @@ function memoryForOwner(rows, ownerPid) {
     assert(Number.isSafeInteger(row.ppid) && row.ppid >= 0 && row.ppid !== row.pid, 'MEMORY_ROWS_INVALID');
     assert(Number.isSafeInteger(row.rssKiB) && row.rssKiB >= 0, 'MEMORY_ROWS_INVALID');
     assert(!byPid.has(row.pid), 'MEMORY_ROWS_INVALID');
+    if (Object.hasOwn(row, 'scopeOwnerPid')) assert(row.scopeOwnerPid === ownerPid, 'MEMORY_SCOPE_OWNER_MISMATCH');
     byPid.set(row.pid, row);
   }
   if (!byPid.has(ownerPid)) return null;
 
   const included = new Set([ownerPid]);
+  for (const row of rows) if (row.scopeOwnerPid === ownerPid) included.add(row.pid);
   let previous = -1;
   while (previous !== included.size) {
     previous = included.size;

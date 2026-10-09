@@ -386,3 +386,32 @@ A passing runner is row-level evidence only, never a gate PASS.
 - In `xpc-required` mode one 03 §6 analyzer session runs in one supervisor worker from open to
   close; a supervisor session relays at most 1 GiB each way. An analyzer rejection without syntax
   diagnostics fails the job with `TS_ANALYZER_REJECTED` (or `ANALYSIS_LIMIT`).
+
+### Workload failure evidence (2026-10-09)
+
+- Quiet admission requires AC power and an observed open lid along with low load and
+  indexer pressure for all three observations. Battery, closed or unknown lid/power
+  state resets the admission window; no system power setting is changed.
+- It rechecks free space after the final quiet observation, including the size-class
+  reserve. Pre-wait disk availability is not launch-time availability.
+- Failed runs and incomplete RSS samples retain their private synthetic profile and
+  fixture; `retainedWork` identifies the location. Do not delete these before investigation.
+- Analysis polling records the last sanitized job, transport/status/timeout category
+  and HTTP status without raw errors, paths, tokens or response bodies. An incomplete
+  smoke series exits nonzero; exit zero still does not certify an SLO or release gate.
+- RSS sampling runs in a dedicated worker, independent of synchronous driver fixture
+  hashing and mutation. Phase entry/exit acknowledgements precede the associated action.
+  Samples belong to the phase active when the observation completes, matching their CSV timestamp.
+  Completeness includes unsampled phase-entry and phase-exit windows. Per-phase read
+  and scheduler delays distinguish collector delay from product RSS. Safe I/O categories
+  distinguish reads from CSV writes; null failure does not imply complete sampling.
+  The 100 ms cadence and 250 ms maximum gap are unchanged.
+- An explicitly authorized `--diagnostic-only` smoke run uses one actual launch-boundary
+  observation instead of waiting for quiet/open-lid conditions. AC, an observable lid,
+  the full disk reserve, process ownership and cleanup remain required. The operator
+  must confirm the external display when authorizing closed-lid diagnostics.
+  It cannot be combined with `--series-20`; the default admission rules are unchanged.
+- Diagnostic reports are `DIAGNOSTIC_ONLY`, are not eligible for performance/RSS release
+  acceptance, and omit both SLO assessments and smoke SLO observations. Raw observations
+  remain intact; load/indexer violations are `INVALID_LOAD`, not a pass. Functional
+  failures and incomplete collection still exit nonzero and preserve their evidence.

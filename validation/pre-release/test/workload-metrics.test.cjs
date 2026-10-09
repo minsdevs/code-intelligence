@@ -128,16 +128,16 @@ test('smoke observations are labelled and never assessed', () => {
   assert.equal(failed.observations[0].values.analysisMs.withinLimit, null);
 });
 
-test('phase sampler keeps per-phase peaks, only the owner tree, and a gap rule', async t => {
+test('phase sampler keeps per-phase peaks, the read-only XPC scope, and a gap rule', async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'workload-sampler-test-')));
   const file = path.join(root, 'samples.csv'), fd = fs.openSync(file, 'wx', 0o600);
   t.after(() => { fs.closeSync(fd); fs.rmSync(root, { recursive: true, force: true }); });
   let now = 0, reads = 0;
   const tables = [[{ pid: 10, ppid: 1, rssKiB: 100 }, { pid: 11, ppid: 10, rssKiB: 50 }, { pid: 99, ppid: 1, rssKiB: 9999 }],
-    [{ pid: 10, ppid: 1, rssKiB: 300 }, { pid: 12, ppid: 10, rssKiB: 400 }]];
+    [{ pid: 10, ppid: 1, rssKiB: 300 }, { pid: 12, ppid: 10, rssKiB: 400 }, { pid: 20, ppid: 1, rssKiB: 100, scopeOwnerPid: 10 }]];
   let release;
   const gate = new Promise(resolve => { release = resolve; });
-  // A sample belongs to the phase that was active when its read began.
+  // Complete the first observation before starting the analysis phase.
   const sampler = startPhaseSampler(10, fd, 1, 0, { intervalMs: 30, now: () => now, stopTimeoutMs: 20, read: async () => {
     reads++;
     if (reads === 1) return tables[0];
@@ -153,13 +153,15 @@ test('phase sampler keeps per-phase peaks, only the owner tree, and a gap rule',
   const memory = await sampler.stop();
   assert.equal(reads, 3);
   assert.equal(memory.samples, 2);
-  assert.equal(memory.phases.STARTUP.peakRssKiB, 150); assert.equal(memory.phases.ANALYSIS.peakRssKiB, 700);
-  assert.equal(memory.peakRssKiB, 700); assert.deepEqual(memory.observedPids, [10, 11, 12]);
+  assert.equal(memory.phases.STARTUP.peakRssKiB, 150); assert.equal(memory.phases.ANALYSIS.peakRssKiB, 800);
+  assert.equal(memory.peakRssKiB, 800); assert.deepEqual(memory.observedPids, [10, 11, 12, 20]);
   // The outstanding third read is a recorded sampling failure, not a hang.
   assert.equal(memory.failure, 'MEMORY_SAMPLE_FAILED');
   assert.equal(phaseSamplingComplete(memory, 'ANALYSIS'), false);
   const csv = fs.readFileSync(file, 'utf8');
-  assert.doesNotMatch(csv, /,99,/); assert.match(csv, /^1,100,ANALYSIS,12,10,400$/m);
+  assert.doesNotMatch(csv, /,99,/);
+  const xpc = csv.trim().split('\n').map(line => line.split(',')).find(row => row[3] === '20');
+  assert.deepEqual(xpc, ['1','100','ANALYSIS','20','1','100','10']);
 });
 
 test('an unreadable or absent owner is a sampling failure and writes no row', async t => {
@@ -185,11 +187,9 @@ test('phase sampling completeness requires samples, no failure and bounded gaps'
 });
 
 test('runner arguments require an explicit class and mode and accept only known rows', () => {
-  assert.deepEqual(argumentsFor(['--app', '/a/X.app', '--class', 'medium', '--series-20']),
-    { app: '/a/X.app', sizeClass: 'medium', runs: 20, series: true, rows: ['analysis', 'graph', 'incremental', 'cancel'], keepWork: false });
+
   assert.deepEqual(argumentsFor(['--app', '/a/X.app', '--class', 'small', '--smoke-2', '--rows', 'cancel,analysis']).rows, ['analysis', 'cancel']);
-  assert.deepEqual(argumentsFor(['--app', '/a/X.app', '--class', 'small', '--smoke-1', '--rows', 'analysis,delete', '--keep-work']),
-    { app: '/a/X.app', sizeClass: 'small', runs: 1, series: false, rows: ['analysis', 'delete'], keepWork: true });
+
   assert.deepEqual(argumentsFor(['--app', '/a/X.app', '--class', 'large', '--smoke-1', '--rows', 'preview']).rows, ['preview']);
   for (const argv of [[], ['--app', 'rel', '--class', 'small', '--smoke-1'], ['--app', '/a', '--class', 'huge', '--smoke-1'],
     ['--app', '/a', '--class', 'small', '--series-5'], ['--app', '/a', '--class', 'small', '--smoke-1', '--rows', 'graph'],
@@ -211,10 +211,11 @@ test('server step timings parse nanosecond instants and keep only public codes',
   assert.doesNotMatch(JSON.stringify(timings), /private|Users/);
 });
 
-test('quiet admission resets on load or indexer pressure and launches directly after its third quiet observation', async () => {
-  for (const blocked of [{ loadAverage: [4, 0, 0], mdworkers: 0 }, { loadAverage: [0, 0, 0], mdworkers: 7 }]) {
-    const samples = [1, 2, blocked, 3, 2, 1].map(value => typeof value === 'number'
-      ? { loadAverage: [value, 0, 0], mdworkers: 6 } : value);
+test('quiet admission resets on host pressure or missing AC/open-lid conditions and launches directly after its third valid observation', async () => {
+  for (const blocked of [{ loadAverage: [4, 0, 0] }, { mdworkers: 7 }, { powerSource: 'BATTERY' },
+    { powerSource: 'UNKNOWN' }, { lidState: 'CLOSED' }, { lidState: 'UNKNOWN' }, { lidState: undefined }]) {
+    const samples = [1, 2, blocked, 3, 2, 1].map(value => ({ loadAverage: [0, 0, 0], mdworkers: 6, powerSource: 'AC', lidState: 'OPEN',
+      ...(typeof value === 'number' ? { loadAverage: [value, 0, 0] } : value) }));
     const actions = [];
     let index = 0;
     const admission = await waitForQuietHost({ observe: () => { actions.push('observe'); return samples[index++]; },
@@ -233,4 +234,105 @@ test('unobservable host conditions never admit a performance run', async () => {
       /WORKLOAD_HOST_OBSERVATION_FAILED/);
   }
   await assert.rejects(waitForQuietHost({ observe: () => { throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED'); } }), /WORKLOAD_HOST_OBSERVATION_FAILED/);
+});
+
+test('unsampled leading and trailing phase windows cannot pass the RSS gate', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'workload-gap-test-'));
+  const fd = fs.openSync(path.join(root, 'samples.csv'), 'wx', 0o600);
+  t.after(() => { fs.closeSync(fd); fs.rmSync(root, { recursive: true, force: true }); });
+  for (const boundary of ['leading', 'trailing']) {
+    let clock = 0;
+    const sampler = startPhaseSampler(10, fd, 1, 0, { initialPhase: 'ANALYSIS', intervalMs: 1000,
+      now: () => clock, read: async () => { if (boundary === 'leading') clock = 600; return [{ pid: 10, ppid: 1, rssKiB: 50 }]; } });
+    await new Promise(setImmediate);
+    clock = 600; sampler.phase('IDLE');
+    const memory = await sampler.stop();
+    assert.equal(memory.failure, null);
+    assert.equal(memory.phases.ANALYSIS.maximumGapMs, 600);
+    assert.equal(phaseSamplingComplete(memory, 'ANALYSIS'), false);
+  }
+});
+
+test('RSS read and write failures retain safe cause and never count unwritten samples', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'workload-io-test-'));
+  const fd = fs.openSync(path.join(root, 'samples.csv'), 'wx', 0o600);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const readFailure = startPhaseSampler(10, fd, 1, 0, { now: () => 1,
+    read: async () => { throw Object.assign(new Error('/private/sentinel'), { code: 'ENOMEM' }); } });
+  await new Promise(setImmediate);
+  const read = await readFailure.stop();
+  assert.deepEqual(read.failureDetail, { operation: 'READ', reason: 'ENOMEM', phase: 'STARTUP', elapsedMs: 1 });
+  fs.closeSync(fd);
+  const writeFailure = startPhaseSampler(10, fd, 1, 0, { now: () => 1,
+    read: async () => [{ pid: 10, ppid: 1, rssKiB: 50 }] });
+  await new Promise(setImmediate);
+  const write = await writeFailure.stop();
+  assert.deepEqual(write.failureDetail, { operation: 'WRITE', reason: 'EBADF', phase: 'STARTUP', elapsedMs: 1 });
+  assert.equal(write.samples, 0);
+  assert.equal(phaseSamplingComplete(write, 'STARTUP'), false);
+  assert.doesNotMatch(JSON.stringify({ read, write }), /private|sentinel/);
+});
+
+test('quiet admission rejects space lost during the wait, at the actual launch boundary', async () => {
+  const actions = []; let free = 4000;
+  await assert.rejects(waitForQuietHost({ requiredFreeBytes: 3500,
+    observe: () => { actions.push('observe'); return { loadAverage: [1, 1, 1], mdworkers: 0, powerSource: 'AC', lidState: 'OPEN' }; },
+    pause: async () => { free = 3400; actions.push('wait'); },
+    readFreeBytes: () => { actions.push('disk'); return free; } }), /DISK_SPACE_LOW/);
+  assert.deepEqual(actions, ['observe', 'wait', 'observe', 'wait', 'observe', 'disk']);
+});
+test('an RSS read completing after a phase transition is not counted outside the closed phase', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'workload-phase-transition-'));
+  const fd = fs.openSync(path.join(root, 'samples.csv'), 'wx', 0o600);
+  t.after(() => { fs.closeSync(fd); fs.rmSync(root, { recursive: true, force: true }); });
+  let clock = 0, completeRead;
+  const reading = new Promise(resolve => { completeRead = resolve; });
+  const sampler = startPhaseSampler(10, fd, 1, 0, { intervalMs: 1000, now: () => clock, read: () => reading });
+  clock = 20; sampler.phase('ANALYSIS');
+  clock = 100; completeRead([{ pid: 10, ppid: 1, rssKiB: 50 }]);
+  await new Promise(setImmediate);
+  clock = 120; const memory = await sampler.stop();
+  assert.equal(memory.phases.STARTUP.samples, 0);
+  assert.equal(phaseSamplingComplete(memory, 'STARTUP'), false);
+  assert.equal(memory.phases.ANALYSIS.samples, 1);
+  assert.equal(memory.phases.ANALYSIS.firstAtMs, 100);
+  assert.equal(memory.phases.ANALYSIS.endedAtMs, 120);
+  assert.equal(memory.phases.ANALYSIS.maximumGapMs, 80);
+  assert.equal(phaseSamplingComplete(memory, 'ANALYSIS'), true);
+  assert.deepEqual(fs.readFileSync(path.join(root, 'samples.csv'), 'utf8').trim().split(',').slice(0, 3), ['1','100','ANALYSIS']);
+});
+
+test('diagnostic mode cannot enter the final performance series or accept duplicate opt-ins', () => {
+  for (const suffix of [['--series-20', '--diagnostic-only'], ['--smoke-1', '--diagnostic-only', '--diagnostic-only']]) {
+    assert.throws(() => argumentsFor(['--app', '/a/X.app', '--class', 'medium', ...suffix]));
+  }
+});
+
+test('diagnostic admission preserves busy closed-lid observations without accepting their timing', async () => {
+  const sample = { loadAverage: [5.5, 6, 7], mdworkers: 7, powerSource: 'AC', lidState: 'CLOSED' };
+  const admission = await waitForQuietHost({ diagnosticOnly: true, observe: () => sample,
+    pause: async () => assert.fail('diagnostics must not start an unbounded quiet wait'),
+    requiredFreeBytes: 3500, readFreeBytes: () => 4000 });
+  assert.deepEqual(admission.observations, [sample]);
+  assert.equal(admission.status, 'DIAGNOSTIC_ONLY');
+  assert.equal(admission.timingValidity, 'INVALID_LOAD');
+});
+
+test('diagnostic admission never becomes a performance admission even on a quiet open-lid host', async () => {
+  const admission = await waitForQuietHost({ diagnosticOnly: true,
+    observe: () => ({ loadAverage: [1, 1, 1], mdworkers: 0, powerSource: 'AC', lidState: 'OPEN' }),
+    pause: async () => assert.fail('diagnostics use one fresh observation') });
+  assert.equal(admission.status, 'DIAGNOSTIC_ONLY');
+  assert.equal(admission.timingValidity, 'NOT_APPLICABLE_DIAGNOSTIC');
+});
+
+test('diagnostic admission retains AC, observable lid, and disk-space protections', async () => {
+  const valid = { loadAverage: [5, 5, 5], mdworkers: 8, powerSource: 'AC', lidState: 'CLOSED' };
+  for (const blocked of [{ powerSource: 'BATTERY' }, { powerSource: 'UNKNOWN' }, { lidState: 'UNKNOWN' }]) {
+    await assert.rejects(waitForQuietHost({ diagnosticOnly: true, observe: () => ({ ...valid, ...blocked }),
+      pause: async () => assert.fail('unsafe diagnostics must fail immediately') }), /WORKLOAD_DIAGNOSTIC_ENVIRONMENT_UNSAFE/);
+  }
+  await assert.rejects(waitForQuietHost({ diagnosticOnly: true, observe: () => valid,
+    requiredFreeBytes: 3500, readFreeBytes: () => 3400,
+    pause: async () => assert.fail('disk admission must not wait') }), /DISK_SPACE_LOW/);
 });

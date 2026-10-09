@@ -39,15 +39,15 @@ test('Electron type mapping is fixed enum and unknown values stay unknown', () =
   assert.equal(electronRole('Other'), 'UNKNOWN');
 });
 
-test('role snapshot preserves pid/ppid/rss only and marks vanished command rows UNOBSERVED', () => {
+test('role snapshot preserves XPC scope and marks vanished command rows UNOBSERVED', () => {
   const expected = { java: '/r/jre/bin/java', node: '/electron', postgres: '/r/postgres/bin/postgres', redis: '/r/redis/bin/redis-server' };
-  const processes = [{ pid: 10, ppid: 1, rssKiB: 100 }, { pid: 11, ppid: 10, rssKiB: 20 }, { pid: 12, ppid: 10, rssKiB: 30 }];
+  const processes = [{ pid: 10, ppid: 1, rssKiB: 100 }, { pid: 11, ppid: 10, rssKiB: 20 }, { pid: 12, ppid: 1, rssKiB: 30, scopeOwnerPid: 10 }];
   const commands = [{ pid: 11, comm: '/r/jre/bin/java' }];
   const metrics = [{ pid: 12, type: 'Renderer' }];
   assert.deepEqual(mergeRoleSnapshot(processes, commands, metrics, 10, expected), [
     { pid: 10, ppid: 1, rssKiB: 100, role: 'MAIN' },
     { pid: 11, ppid: 10, rssKiB: 20, role: 'JAVA' },
-    { pid: 12, ppid: 10, rssKiB: 30, role: 'ELECTRON_RENDERER' },
+    { pid: 12, ppid: 1, rssKiB: 30, role: 'ELECTRON_RENDERER', scopeOwnerPid: 10 },
   ]);
   assert.equal(mergeRoleSnapshot([{ pid: 13, ppid: 10, rssKiB: 1 }], [], [], 10, expected)[0].role, 'UNOBSERVED');
 });

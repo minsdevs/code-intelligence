@@ -122,50 +122,84 @@ function startPhaseSampler(ownerPid, fd, sequence, started, { read, now = () => 
   const observed = new Set();
   const phases = {};
   const result = { samples: 0, peakRssKiB: 0, maximumGapMs: 0, maximumReadMs: 0, missingOwnerSamples: 0,
-    requestedIntervalMs: intervalMs, failure: null, phases,
-    scope: 'PID/PPID discovery then targeted owner-tree RSS; processes born and gone between two samples are not observed' };
-  const enter = name => { phases[name] ??= { samples: 0, peakRssKiB: 0, maximumGapMs: 0, firstAtMs: null, lastAtMs: null }; };
+    requestedIntervalMs: intervalMs, failure: null, failureDetail: null, phases,
+    scope: 'Read-only owner tree plus exclusive packaged-bundle XPC scope; processes born and gone between samples are not observed' };
+  const enter = name => { phases[name] ??= { samples: 0, peakRssKiB: 0, maximumGapMs: 0, maximumReadMs: 0,
+    maximumSchedulingDelayMs: 0, startedAtMs: now() - started, endedAtMs: null, firstAtMs: null, lastAtMs: null }; };
+  const finishPhase = at => {
+    const entry = phases[phase];
+    entry.endedAtMs = at - started;
+    entry.maximumGapMs = Math.max(entry.maximumGapMs, entry.endedAtMs - (entry.lastAtMs ?? entry.startedAtMs));
+  };
+  let scheduledAt = now();
   enter(phase);
   const task = (async () => {
     while (!stopped) {
-      const begin = now(), sampledPhase = phase;
+      const begin = now();
+      let sampledPhase = phase;
+      let operation = 'READ';
       try {
         const table = await read();
         if (stopped) break;
         const at = now(), value = memoryForOwner(table, ownerPid);
+        // CSV timestamps represent completed observations; never add them to an already closed phase.
+        sampledPhase = phase;
+        const entry = phases[sampledPhase];
+        entry.maximumSchedulingDelayMs = Math.max(entry.maximumSchedulingDelayMs, begin - scheduledAt);
         result.maximumReadMs = Math.max(result.maximumReadMs, at - begin);
+        entry.maximumReadMs = Math.max(entry.maximumReadMs, at - begin);
         if (!value || value.rssKiB <= 0) { result.missingOwnerSamples++; throw new Error('MEMORY_SAMPLE_FAILED'); }
-        const text = value.processes.map(row => [sequence, Math.round(at - started), sampledPhase, row.pid, row.ppid, row.rssKiB].join(',') + '\n').join('');
+        const text = value.processes.map(row => [sequence, Math.round(at - started), sampledPhase, row.pid, row.ppid, row.rssKiB, row.scopeOwnerPid ?? ''].join(',') + '\n').join('');
         if (result.samples >= maxSamples || csvBytes + Buffer.byteLength(text) > maxCsvBytes) { result.failure = 'MEMORY_EVIDENCE_LIMIT'; break; }
-        const gap = lastAt === null ? 0 : at - lastAt;
+        operation = 'WRITE';
+        fs.writeSync(fd, text); csvBytes += Buffer.byteLength(text);
+        const gap = lastAt === null ? at - started : at - lastAt;
         result.maximumGapMs = Math.max(result.maximumGapMs, gap);
         lastAt = at; result.samples++; result.peakRssKiB = Math.max(result.peakRssKiB, value.rssKiB);
-        const entry = phases[sampledPhase];
+        // Phase boundary gaps count even when the sampler never throws.
         entry.samples++; entry.peakRssKiB = Math.max(entry.peakRssKiB, value.rssKiB);
-        entry.maximumGapMs = Math.max(entry.maximumGapMs, entry.lastAtMs === null ? 0 : gap);
+        entry.maximumGapMs = Math.max(entry.maximumGapMs, at - started - (entry.lastAtMs ?? entry.startedAtMs));
         entry.firstAtMs ??= Math.round(at - started); entry.lastAtMs = Math.round(at - started);
         for (const row of value.processes) observed.add(row.pid);
-        fs.writeSync(fd, text); csvBytes += Buffer.byteLength(text);
-      } catch { result.failure = 'MEMORY_SAMPLE_FAILED'; break; }
+      } catch (error) {
+        const reasons = new Set(['ENOSPC', 'EIO', 'EBADF', 'EMFILE', 'ENFILE', 'ENOMEM', 'EAGAIN', 'ETIMEDOUT',
+          'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', 'OWNED_PROCESS_NOT_OBSERVED', 'PROCESS_TABLE_INVALID',
+          'PROCESS_TABLE_LIMIT', 'MEMORY_TABLE_INVALID', 'MEMORY_TABLE_UNEXPECTED_PID', 'OBSERVED_TREE_LIMIT',
+          'MEMORY_SCOPE_AMBIGUOUS', 'MEMORY_SCOPE_OWNER_MISMATCH', 'MEMORY_PROCESS_IDENTITY_CHANGED']);
+        let reason = 'UNCLASSIFIED';
+        try {
+          if (reasons.has(error?.code)) reason = error.code;
+          else if (reasons.has(error?.message)) reason = error.message;
+          else if (error?.killed === true) reason = 'PROCESS_READ_TIMEOUT';
+        } catch { /* Raw error text can contain private paths or command output. */ }
+        result.failure = 'MEMORY_SAMPLE_FAILED';
+        result.failureDetail = { operation, reason, phase: sampledPhase, elapsedMs: Math.round(now() - started) };
+        break;
+      }
       if (!stopped) await new Promise(resolve => {
         releaseSleep = resolve;
-        timer = setTimeout(resolve, Math.max(0, intervalMs - (now() - begin)));
+        const delay = Math.max(0, intervalMs - (now() - begin));
+        scheduledAt = now() + delay;
+        timer = setTimeout(resolve, delay);
       });
     }
   })();
   return {
-    phase(name) { assert(/^[A-Z_]{1,32}$/.test(name)); phase = name; enter(name); },
+    phase(name) { assert(/^[A-Z_]{1,32}$/.test(name)); if (phase === name) return; finishPhase(now()); phase = name; enter(name); },
     snapshot() { return { failure: result.failure, peakRssKiB: result.peakRssKiB, samples: result.samples,
       phases: JSON.parse(JSON.stringify(phases)) }; },
     async stop() {
-      stoppedAt ??= now();
+      if (stoppedAt === undefined) { stoppedAt = now(); finishPhase(stoppedAt); }
       stopped = true; clearTimeout(timer); releaseSleep?.();
       // A read that never settles is a sampling failure, not a reason to hang the run.
       let bound;
       const settled = await Promise.race([task.then(() => true),
         new Promise(resolve => { bound = setTimeout(() => resolve(false), stopTimeoutMs); })]);
       clearTimeout(bound);
-      if (!settled) result.failure ??= 'MEMORY_SAMPLE_FAILED';
+      if (!settled && !result.failure) {
+        result.failure = 'MEMORY_SAMPLE_FAILED';
+        result.failureDetail = { operation: 'STOP', reason: 'READ_DID_NOT_SETTLE', phase, elapsedMs: Math.round(stoppedAt - started) };
+      }
       const trailing = lastAt === null ? null : Math.max(0, stoppedAt - lastAt);
       if (trailing !== null) result.maximumGapMs = Math.max(result.maximumGapMs, trailing);
       return { ...result, trailingGapMs: trailing, observedPids: [...observed].sort((a, b) => a - b) };

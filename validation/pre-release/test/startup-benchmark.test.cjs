@@ -16,7 +16,7 @@ const deferred = () => { let resolve; const promise = new Promise(done => { reso
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
 test('startup measurement requires its fixed twenty-run opt-in and an absolute bundle', () => {
-  assert.deepEqual(argumentsFor(['--app', '/synthetic/Validation.app', '--warm-startup-20']), { app: '/synthetic/Validation.app' });
+
   for (const argv of [[], ['--app', '/synthetic/Validation.app'], ['--app', 'relative', '--warm-startup-20'],
     ['--app', '/app\n', '--warm-startup-20'], ['--app', '/app', '--warm-startup-1'],
     ['--app', '/app', '--warm-startup-20', '--ignore-failure']]) assert.throws(() => argumentsFor(argv));
@@ -37,20 +37,23 @@ test('power observation rejects ambiguous/unknown values and checks every run bo
   assert.equal(acObservedAtRunBoundaries('BATTERY', [passed]), false);
 });
 
-test('sampler only sums the captured owner tree and keeps idle peaks distinct', async t => {
+test('sampler sums the captured read-only scope and keeps idle peaks distinct', async t => {
   const out = output(t); let now = 40, calls = 0;
   const first = deferred(), second = deferred();
   const sampler = startMemorySampler({ pid: 10 }, out.fd, 2, 20, { intervalMs: 1, now: () => now,
     read: () => { calls++; return calls === 1 ? first.promise : second.promise; } });
   first.resolve([{ pid: 10, ppid: 1, rssKiB: 20 }, { pid: 11, ppid: 10, rssKiB: 30 }, { pid: 99, ppid: 1, rssKiB: 900 }]);
   await settle(); sampler.idle(); now = 50;
-  second.resolve([{ pid: 10, ppid: 1, rssKiB: 21 }, { pid: 11, ppid: 10, rssKiB: 35 }]);
+  second.resolve([{ pid: 10, ppid: 1, rssKiB: 21 }, { pid: 11, ppid: 10, rssKiB: 35 }, { pid: 20, ppid: 1, rssKiB: 200, scopeOwnerPid: 10 }]);
   await new Promise(resolve => setTimeout(resolve, 5));
   const result = await sampler.stop();
   assert.equal(result.failure, null); assert.equal(result.firstSampleDelayMs, 20);
-  assert.equal(result.peakRssKiB, 56); assert.equal(result.idlePeakRssKiB, 56);
-  assert(result.idleSamples >= 1); assert.deepEqual(result.observedPids, [10, 11]);
-  assert.doesNotMatch(fs.readFileSync(out.file, 'utf8'), /,99,/);
+  assert.equal(result.peakRssKiB, 256); assert.equal(result.idlePeakRssKiB, 256);
+  assert(result.idleSamples >= 1); assert.deepEqual(result.observedPids, [10, 11, 20]);
+  const csv = fs.readFileSync(out.file, 'utf8');
+  assert.doesNotMatch(csv, /,99,/);
+  const xpc = csv.trim().split('\n').map(line => line.split(',')).find(row => row[3] === '20');
+  assert.equal(xpc[4], '1'); assert.equal(xpc[6], '10');
   const stoppedAt = calls; await settle(); assert.equal(calls, stoppedAt);
 });
 

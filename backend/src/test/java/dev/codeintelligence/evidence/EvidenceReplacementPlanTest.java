@@ -1,6 +1,7 @@
 package dev.codeintelligence.evidence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.codeintelligence.TestcontainersConfiguration;
 import java.nio.file.Path;
@@ -121,6 +122,68 @@ class EvidenceReplacementPlanTest {
                     .containsExactly("keep/other-project.java", "keep/other-type.java", "keep/unselected.java");
             tx.setRollbackOnly();
         });
+    }
+
+    @Test
+    void duplicateFactsAndNullLocationsKeepTheirOwnersAcrossBatches() {
+        transactions.executeWithoutResult(tx -> {
+            long project = project();
+            Map<Long, List<NewEvidence>> replacement = new LinkedHashMap<>();
+            for (long id = 1; id <= 500; id++) {
+                replacement.put(id, List.of(new NewEvidence(EvidenceKind.CONFIG, null, null, null, null)));
+            }
+            NewEvidence shared = new NewEvidence(EvidenceKind.FILE_LINE, "shared.java", 7, 9, "shared");
+            replacement.put(501L, List.of(shared, shared));
+            replacement.put(502L, List.of(shared));
+            evidence.replaceLinkedAll(project, EvidenceSubjects.GRAPH_NODE, replacement);
+            assertThat(jdbc.queryForObject("""
+                    select count(*) from evidences e join evidence_links l on l.evidence_id=e.id
+                    where e.project_id=? and l.subject_type='GRAPH_NODE' and l.subject_id between 1 and 500
+                      and e.kind='CONFIG' and e.file_path is null and e.line_start is null
+                      and e.line_end is null and e.excerpt is null and e.created_by='STATIC'
+                    """, Integer.class, project)).isEqualTo(500);
+            Map<Long, Long> owners = new LinkedHashMap<>();
+            jdbc.query(
+                    """
+                    select l.subject_id,count(distinct e.id) as facts
+                    from evidences e join evidence_links l on l.evidence_id=e.id
+                    where e.project_id=? and l.subject_type='GRAPH_NODE' and e.kind='FILE_LINE'
+                      and e.file_path='shared.java' and e.line_start=7 and e.line_end=9 and e.excerpt='shared'
+                    group by l.subject_id
+                    """,
+                    rs -> {
+                        owners.put(rs.getLong("subject_id"), rs.getLong("facts"));
+                    },
+                    project);
+            assertThat(owners).isEqualTo(Map.of(501L, 2L, 502L, 1L));
+            tx.setRollbackOnly();
+        });
+    }
+
+    @Test
+    void aLateInvalidFactRollsBackEarlierBatchesAndDeletedEvidence() {
+        long project = transactions.execute(tx -> project());
+        long user = jdbc.queryForObject("select user_id from projects where id=?", Long.class, project);
+        long base = project * 1_000_000;
+        try {
+            evidence.replaceLinkedAll(
+                    project, EvidenceSubjects.GRAPH_NODE, Map.of(base, List.of(fact("retained.java"))));
+            long retained = jdbc.queryForObject("select id from evidences where project_id=?", Long.class, project);
+            Map<Long, List<NewEvidence>> replacement = new LinkedHashMap<>();
+            for (long id = base; id < base + 501; id++) replacement.put(id, List.of(fact("replacement/" + id)));
+            replacement.put(base + 501, List.of(new NewEvidence(null, "invalid.java", null, null, null)));
+            assertThatThrownBy(() -> evidence.replaceLinkedAll(project, EvidenceSubjects.GRAPH_NODE, replacement))
+                    .isInstanceOf(NullPointerException.class);
+            assertThat(jdbc.queryForList("select id from evidences where project_id=?", Long.class, project))
+                    .containsExactly(retained);
+            assertThat(jdbc.queryForObject("""
+                    select e.file_path from evidences e join evidence_links l on l.evidence_id=e.id
+                    where e.id=? and l.subject_type='GRAPH_NODE' and l.subject_id=?
+                    """, String.class, retained, base)).isEqualTo("retained.java");
+        } finally {
+            jdbc.update("delete from projects where id=?", project);
+            jdbc.update("delete from users where id=?", user);
+        }
     }
 
     private long project() {
