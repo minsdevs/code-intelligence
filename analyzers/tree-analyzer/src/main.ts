@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from 'express'
 import { extract } from './tree'
-import { parseAnalyzeRequest } from './request'
+import { parseAnalyzeRequest, parseLocalPaths, parseCacheKey } from './request'
 
 function bootstrap(): void {
   const app = express()
@@ -12,7 +12,12 @@ function bootstrap(): void {
 
   app.post('/analyze', (req: Request, res: Response) => {
     try {
-      res.json(extract(parseAnalyzeRequest(req.body)))
+      const files = parseAnalyzeRequest(req.body)
+      const cacheKey = parseCacheKey(req.body)
+      let reused = 0
+      const result = extract(files, parseLocalPaths(req.body), () => { reused++ }, cacheKey)
+      if (cacheKey) console.error('TREE_INCREMENTAL', JSON.stringify({ files: files.length, reused, parsed: files.length - reused }))
+      res.json(result)
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : String(error) })
     }

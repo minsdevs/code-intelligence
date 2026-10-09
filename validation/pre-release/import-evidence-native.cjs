@@ -35,6 +35,21 @@ function simpleName(name) {
   return /[A-Za-z_$][A-Za-z0-9_$]*/.exec(value)?.[0] ?? null;
 }
 
+function nodeSpanMatches(node, sourceLines) {
+  const end = node.lineEnd ?? node.lineStart;
+  if (node.nodeType === 'FILE') return node.lineStart === 1 && end === sourceLines.length && path.basename(node.filePath) === node.name;
+  // Root CONFIG/MIGRATION facts name a file, not a declaration within it. Subentities do not qualify.
+  if ((node.nodeType === 'CONFIG' || node.nodeType === 'MIGRATION')
+      && node.naturalKey === node.nodeType.toLowerCase() + ':' + node.filePath) {
+    return node.lineStart === 1 && (node.lineEnd == null || end === sourceLines.length)
+      && path.basename(node.filePath) === node.name;
+  }
+  const span = sourceLines.slice(node.lineStart - 1, end).join('\n');
+  if (node.nodeType === 'API_ENDPOINT') return span.includes('"' + /^[A-Z]+ (\/\S*)$/.exec(node.name)?.[1] + '"');
+  return span.includes(node.name) || span.includes(simpleName(node.name));
+}
+
+
 /** Synthetic attack tree; every forbidden byte sequence carries the sentinel and is hashed. */
 function buildTree(root, outside, marker) {
   const forbidden = [], approved = {};
@@ -213,12 +228,7 @@ async function main(argv = process.argv.slice(2)) {
       if (node.lineStart == null) { result.fileLevelVerified++; continue; }
       const end = node.lineEnd ?? node.lineStart;
       if (node.lineStart < 1 || end < node.lineStart || end > s.lines.length) { fail('span bounds ' + node.naturalKey + ' ' + node.lineStart + '-' + end + ' of ' + s.lines.length); continue; }
-      const span = s.lines.slice(node.lineStart - 1, end).join('\n');
-      let ok;
-      if (node.nodeType === 'FILE') ok = node.lineStart === 1 && end === s.lines.length && path.basename(node.filePath) === node.name;
-      else if (node.nodeType === 'API_ENDPOINT') ok = span.includes('"' + /^[A-Z]+ (\/\S*)$/.exec(node.name)?.[1] + '"');
-      else ok = span.includes(node.name) || span.includes(simpleName(node.name));
-      if (!ok) { fail('name/span ' + node.naturalKey + ' ' + node.lineStart + '-' + end); continue; }
+      if (!nodeSpanMatches(node, s.lines)) { fail('name/span ' + node.naturalKey + ' ' + node.lineStart + '-' + end); continue; }
       result.nodeSpanVerified++;
       const detail = await api(`/api/projects/${projectId}/graph/nodes/${node.id}?snapshotId=${snapshot}`);
       for (const e of detail.evidences ?? []) {
@@ -321,7 +331,7 @@ async function main(argv = process.argv.slice(2)) {
       await expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible();
       const [refreshed] = await Promise.all([
         page.waitForResponse(r => new URL(r.url()).pathname === `/api/projects/${projectId}/reanalyze` && r.request().method() === 'POST', { timeout: 60000 }),
-        page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click()]);
+        page.getByRole('button', { name: /^(Re-analyze after reviewing changes|변경 확인 후 재분석)$/ }).click()]);
       assert.ok(refreshed.ok()); await awaitJob((await refreshed.json()).jobId);
       report.reanalysisPath = 'ui-preview-approval';
     } else {
@@ -362,5 +372,5 @@ async function main(argv = process.argv.slice(2)) {
   console.log(JSON.stringify({ status: report.status, evidence, checks: report.checks.length, phase: report.phase }));
   if (report.status !== 'PASS') process.exitCode = 1;
 }
-module.exports = { main, lines, simpleName, gitOid };
+module.exports = { main, lines, simpleName, gitOid, nodeSpanMatches };
 if (require.main === module) main().catch(() => { console.error('IMPORT_EVIDENCE_NATIVE_FAILED'); process.exitCode = 1; });

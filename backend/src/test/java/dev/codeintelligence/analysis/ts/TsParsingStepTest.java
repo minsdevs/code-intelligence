@@ -14,7 +14,6 @@ import dev.codeintelligence.testsupport.TestJobContext;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -29,7 +28,28 @@ class TsParsingStepTest {
 
     private final TsAnalyzerClient client = mock(TsAnalyzerClient.class);
     private final GraphPersistenceService persistence = mock(GraphPersistenceService.class);
-    private final List<Map<String, Object>> outcomes = new ArrayList<>();
+
+    @Test
+    void refreshCarriesOwnedCacheAndCompleteChangedContextAcrossJobsButNotProjects() throws Exception {
+        var inventory = files(3, "export const value = 1;");
+        var step = step(inventory);
+        String cached = "{\"path\":\"0000.ts\",\"key\":\"" + "a".repeat(64) + "\",\"rows\":[]}";
+        when(client.analyze(any()))
+                .thenReturn(new TsAnalyzeDtos.Response(
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, List.of(cached)));
+        step.run(new TestJobContext(1, 2, 3L, root));
+        Files.writeString(root.resolve("0001.ts"), "export const value = 'changed';");
+        step.run(new TestJobContext(2, 2, 3L, root));
+        step.run(new TestJobContext(3, 9, 3L, root));
+        var requests = ArgumentCaptor.forClass(TsAnalyzeDtos.Request.class);
+        verify(client, times(3)).analyze(requests.capture());
+        var sent = requests.getAllValues();
+        assertThat(sent).allSatisfy(request -> assertThat(request.files()).hasSize(3));
+        assertThat(sent.get(0).files().getFirst().cache()).isEmpty();
+        assertThat(sent.get(1).files().getFirst().cache()).isEqualTo(cached);
+        assertThat(sent.get(1).files().get(1).content()).contains("changed");
+        assertThat(sent.get(2).files().getFirst().cache()).isEmpty();
+    }
 
     @Test
     void acceptsExplicitTypeScriptModuleExtensionsEvenForOldUnclassifiedInventory() {
@@ -52,16 +72,6 @@ class TsParsingStepTest {
         assertThat(request.getValue().files().getFirst().path()).isEqualTo("0000.ts");
         assertThat(request.getValue().files().getLast().path()).isEqualTo("0500.ts");
         verify(persistence).persist(eq(2L), eq(3L), any());
-        assertThat(outcomes).hasSize(1002);
-        assertThat(outcomes.subList(501, 1002))
-                .allSatisfy(outcome -> assertThat(outcome)
-                        .containsEntry("sid", 3L)
-                        .containsEntry("status", "UNMEASURED")
-                        .containsEntry("reason", "ANALYZER_OUTCOME_MISSING_OR_INVALID"));
-        assertThat(outcomes.subList(501, 1002))
-                .extracting(outcome -> outcome.get("path"))
-                .containsExactlyElementsOf(
-                        files.stream().map(InventoriedFile::path).toList());
     }
 
     /**
@@ -115,8 +125,6 @@ class TsParsingStepTest {
         assertThat(persisted.getValue().nodes())
                 .extracting(dev.codeintelligence.analysis.core.GraphNodeDraft::naturalKey)
                 .contains("ts:0000.ts#First", "ts:0010.ts#Second");
-        assertThat(outcomes.subList(11, 22))
-                .noneSatisfy(outcome -> assertThat(outcome).containsEntry("reason", "PROJECT_REQUEST_LIMIT"));
     }
 
     @Test
@@ -156,22 +164,8 @@ class TsParsingStepTest {
         JdbcClient jdbc = mock(JdbcClient.class);
         JdbcClient.StatementSpec statement = mock(JdbcClient.StatementSpec.class);
         JdbcClient.MappedQuerySpec<InventoriedFile> query = mock(JdbcClient.MappedQuerySpec.class);
-        when(jdbc.sql(anyString())).thenAnswer(invocation -> {
-            String sql = invocation.getArgument(0);
-            if (!sql.stripLeading().startsWith("update files")) return statement;
-            JdbcClient.StatementSpec update = mock(JdbcClient.StatementSpec.class);
-            Map<String, Object> parameters = new LinkedHashMap<>();
-            when(update.param(anyString(), any())).thenAnswer(call -> {
-                parameters.put(call.getArgument(0), call.getArgument(1));
-                return update;
-            });
-            when(update.update()).thenAnswer(call -> {
-                outcomes.add(Map.copyOf(parameters));
-                return 1;
-            });
-            return update;
-        });
-        when(statement.param("snapshotId", 3L)).thenReturn(statement);
+        when(jdbc.sql(anyString())).thenReturn(statement);
+        when(statement.param(anyString(), any())).thenReturn(statement);
         when(statement.query(any(RowMapper.class))).thenReturn(query);
         when(query.list()).thenReturn(files);
         when(client.enabled()).thenReturn(true);

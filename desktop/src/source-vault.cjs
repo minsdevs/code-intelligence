@@ -13,6 +13,7 @@ const MAX_WRAPPED_KEYRING_BYTES = 64 * 1024;
 const MAX_KEYRING_BYTES = 32 * 1024;
 const MAX_KEYS = 64;
 const MAX_PENDING_OPERATIONS = 4;
+const MAX_RETAIN_READS = 4;
 const MAX_STORE_BYTES = 10 * 1024 * 1024 * 1024;
 const MAX_STORE_ENTRIES = 200_000;
 const MAGIC = Buffer.from('CISRCBLB');
@@ -130,15 +131,16 @@ async function statOrMissing(file) {
 // These pathname checks are not native descriptor-relative ancestor-race confinement.
 async function pathChain(directory) {
   let current = path.parse(directory).root;
+  let stat;
   for (const part of directory.slice(current.length).split(path.sep).filter(Boolean)) {
     current = path.join(current, part);
-    const stat = await fs.lstat(current, { bigint: true });
+    stat = await fs.lstat(current, { bigint: true });
     if (!stat.isDirectory() || stat.isSymbolicLink()) fail('SOURCE_VAULT_UNSAFE_PATH');
   }
+  return stat || await fs.lstat(current, { bigint: true });
 }
 async function privateDirectory(directory, expected) {
-  await pathChain(directory);
-  const stat = await fs.lstat(directory, { bigint: true });
+  const stat = await pathChain(directory);
   checkPrivate(stat, true);
   if (expected && !sameIdentity(stat, expected)) fail('SOURCE_VAULT_UNSAFE_PATH');
   return stat;
@@ -1032,6 +1034,36 @@ async function initialize(options, fresh, restoreStage = false) {
           if (target.sequence > sequence) fail('SOURCE_VAULT_ARGUMENT');
           await verifyRoots();
           return Object.freeze({ format: FORMAT_MAJOR, ...target });
+        });
+      },
+      retain(value) {
+        let projectId;
+        let references;
+        try {
+          ensureUsable();
+          if (restoreStage) fail('SOURCE_VAULT_MODE');
+          projectId = projectArgument(value?.projectId);
+          if (!Array.isArray(value?.blobs) || value.blobs.length < 1 || value.blobs.length > 128)
+            fail('SOURCE_VAULT_ARGUMENT');
+          references = value.blobs.map(blob => {
+            if (!fields(blob, ['sha256', 'byteSize', 'keyId'])) fail('SOURCE_VAULT_ARGUMENT');
+            return ciphertextArguments({ projectId, ...blob });
+          });
+        } catch (error) { return Promise.reject(safeError(error)); }
+        // Only authenticated, already durable addresses are reused. New staged bytes are flushed
+        // by enqueue before verification; no metadata receipt precedes their durability barrier.
+        return enqueue(async () => {
+          // Bound authenticated reads; drain a failed group before a queued mutation or close.
+          for (let offset = 0; offset < references.length; offset += MAX_RETAIN_READS) {
+            const outcomes = await Promise.allSettled(Array.from(references.slice(offset, offset + MAX_RETAIN_READS), async expected => {
+              const stored = await readStored(expected);
+              try { if (stored.keyId !== expected.keyId) fail('SOURCE_VAULT_INTEGRITY'); }
+              finally { stored.bytes.fill(0); }
+            }));
+            for (const outcome of outcomes) if (outcome.status === 'rejected') throw outcome.reason;
+          }
+          await verifyRoots();
+          return Object.freeze({ count: references.length });
         });
       },
       read(value) {

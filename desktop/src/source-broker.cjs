@@ -37,7 +37,8 @@ function validate(request, authToken) {
   // STAGE is a PUT whose durability is acknowledged later by one BARRIER for the whole import.
   const barrier = request?.operation === 'BARRIER';
   const fields = barrier ? ['version', 'requestId', 'auth', 'operation', 'session', 'sequence']
-    : ['version', 'requestId', 'auth', 'operation', 'projectId', 'sha256', 'byteSize'];
+    : request?.operation === 'RETAIN' ? ['version', 'requestId', 'auth', 'operation', 'projectId', 'blobs']
+      : ['version', 'requestId', 'auth', 'operation', 'projectId', 'sha256', 'byteSize'];
   if (request?.operation === 'PUT' || request?.operation === 'STAGE') fields.push('bytes');
   exactKeys(request, fields);
   if (request.version !== 1) reject('SOURCE_BROKER_UNSUPPORTED');
@@ -48,6 +49,19 @@ function validate(request, authToken) {
   if (barrier) {
     if (!fullMatch(request.requestId, UUID) || !fullMatch(request.session, SESSION)
         || !Number.isSafeInteger(request.sequence) || request.sequence < 1) reject('SOURCE_BROKER_INVALID');
+    return null;
+  }
+  if (request.operation === 'RETAIN') {
+    if (!fullMatch(request.requestId, UUID) || !fullMatch(request.projectId, PROJECT_ID)
+        || BigInt(request.projectId) > 9223372036854775807n
+        || !Array.isArray(request.blobs) || request.blobs.length < 1 || request.blobs.length > 128)
+      reject('SOURCE_BROKER_INVALID');
+    for (const blob of request.blobs) {
+      exactKeys(blob, ['sha256', 'byteSize', 'keyId']);
+      if (!fullMatch(blob.sha256, HEX) || !fullMatch(blob.keyId, KEY_ID)
+          || !Number.isSafeInteger(blob.byteSize) || blob.byteSize < 0 || blob.byteSize > MAX_BYTES)
+        reject('SOURCE_BROKER_INVALID');
+    }
     return null;
   }
   if (!fullMatch(request.requestId, UUID) || !['PUT', 'STAGE', 'READ'].includes(request.operation)
@@ -153,6 +167,11 @@ async function createSourceBroker({ socketPath, authToken, vault, timeoutMs = 10
             const settled = await vault.barrier({ session: request.session, sequence: request.sequence });
             if (settled.session !== request.session || settled.sequence !== request.sequence) reject();
             result = { session: settled.session, sequence: settled.sequence };
+          } else if (request.operation === 'RETAIN') {
+            if (typeof vault.retain !== 'function') reject('SOURCE_BROKER_UNSUPPORTED');
+            const retained = await vault.retain({ projectId: request.projectId, blobs: request.blobs });
+            if (retained.count !== request.blobs.length) reject();
+            result = { count: retained.count };
           } else {
             const bytes = await vault.read({ projectId: request.projectId, sha256: request.sha256, byteSize: request.byteSize });
             if (!Buffer.isBuffer(bytes) || bytes.length !== request.byteSize

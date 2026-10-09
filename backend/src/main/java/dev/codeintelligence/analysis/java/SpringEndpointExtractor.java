@@ -21,13 +21,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.springframework.stereotype.Component;
 
 /**
  * {@code @RestController} (or {@code @Controller}+{@code @ResponseBody}) path synthesis →
  * API_ENDPOINT nodes and EXPOSES edges (controller type → endpoint).
  */
-@Component
 public class SpringEndpointExtractor implements CodeAnalyzer {
 
     @Override
@@ -37,10 +35,14 @@ public class SpringEndpointExtractor implements CodeAnalyzer {
 
     @Override
     public AnalysisResult analyze(AnalysisContext ctx) {
+        return analyzeFiles(JavaParseSupport.parseJavaFiles(ctx));
+    }
+
+    AnalysisResult analyzeFiles(Iterable<JavaParseSupport.ParsedJavaFile> files) {
         List<GraphNodeDraft> nodes = new ArrayList<>();
         List<GraphEdgeDraft> edges = new ArrayList<>();
         List<AnalyzerEvidence> evidences = new ArrayList<>();
-        for (JavaParseSupport.ParsedJavaFile unit : JavaParseSupport.parseJavaFiles(ctx)) {
+        for (JavaParseSupport.ParsedJavaFile unit : files) {
             for (TypeDeclaration<?> type : unit.cu().getTypes()) {
                 extractType(type, unit, nodes, edges, evidences);
             }

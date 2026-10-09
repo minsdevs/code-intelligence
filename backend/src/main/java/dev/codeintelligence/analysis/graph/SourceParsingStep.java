@@ -1,6 +1,7 @@
 package dev.codeintelligence.analysis.graph;
 
 import dev.codeintelligence.analysis.core.AnalysisContext;
+import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
@@ -47,6 +48,7 @@ public class SourceParsingStep implements JobStep {
     private final JdbcClient jdbc;
     private final GraphPersistenceService persistence;
     private final EvidenceService evidenceService;
+    private final SourceResultCache resultCache = new SourceResultCache();
 
     public SourceParsingStep(
             List<CodeAnalyzer> analyzers,
@@ -57,6 +59,15 @@ public class SourceParsingStep implements JobStep {
         this.jdbc = jdbc;
         this.persistence = persistence;
         this.evidenceService = evidenceService;
+    }
+
+    private AnalysisResult analyze(
+            CodeAnalyzer analyzer, AnalysisContext context, AnalysisInputFingerprint.Snapshot input) {
+        if (analyzer.getClass() == dev.codeintelligence.analysis.java.JavaAnalyzer.class)
+            return ((dev.codeintelligence.analysis.java.JavaAnalyzer) analyzer).analyze(context, input);
+        if (analyzer instanceof dev.codeintelligence.analysis.java.JavaFrameworkAnalyzer frameworks)
+            return frameworks.analyze(context, input);
+        return resultCache.analyze(analyzer, context, input == null ? null : input.complete());
     }
 
     @Override
@@ -81,10 +92,23 @@ public class SourceParsingStep implements JobStep {
             ctx.updateProgress(100);
             return;
         }
-        for (InventoriedFile file : inventory.files()) {
-            if ("java".equalsIgnoreCase(file.language()) || file.path().endsWith(".java"))
-                FileAnalysisOutcome.record(jdbc, snapshotId, file.path(), "TARGETED", "JAVA_PARSER_STARTED");
-        }
+        FileAnalysisOutcome.recordFiles(
+                jdbc,
+                snapshotId,
+                inventory.files().stream()
+                        .filter(file -> "java".equalsIgnoreCase(file.language())
+                                || file.path().endsWith(".java"))
+                        .map(InventoriedFile::path)::iterator,
+                "TARGETED",
+                "JAVA_PARSER_STARTED");
+        AnalysisContext analysis = new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory);
+        AnalysisInputFingerprint.Snapshot input = matching.stream()
+                        .anyMatch(
+                                analyzer -> analyzer.getClass() == dev.codeintelligence.analysis.java.JavaAnalyzer.class
+                                        || analyzer instanceof dev.codeintelligence.analysis.java.JavaFrameworkAnalyzer
+                                        || SourceResultCache.supports(analyzer))
+                ? AnalysisInputFingerprint.capture(analysis)
+                : null;
         // No analyzer reads another's result. The Java analyzer, the longest and the one that checks
         // for a cancel per file, runs here; the others run meanwhile, in order, on one helper thread.
         // Results merge in analyzer order.
@@ -97,19 +121,11 @@ public class SourceParsingStep implements JobStep {
         try {
             Map<CodeAnalyzer, Future<AnalysisResult>> later = new LinkedHashMap<>();
             for (CodeAnalyzer analyzer : matching) {
-                if (analyzer != inline)
-                    later.put(
-                            analyzer,
-                            helper.submit(() -> analyzer.analyze(
-                                    new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory))));
+                if (analyzer != inline) later.put(analyzer, helper.submit(() -> analyze(analyzer, analysis, input)));
             }
             for (CodeAnalyzer analyzer : matching) {
                 try {
-                    acc.add(
-                            analyzer == inline
-                                    ? analyzer.analyze(new AnalysisContext(
-                                            ctx.projectId(), snapshotId, ctx.clonePath(), inventory))
-                                    : await(later.get(analyzer)));
+                    acc.add(analyzer == inline ? analyze(analyzer, analysis, input) : await(later.get(analyzer)));
                 } catch (JobCancelledException cancelled) {
                     throw cancelled;
                 } catch (RuntimeException e) {
@@ -126,9 +142,7 @@ public class SourceParsingStep implements JobStep {
         }
         ctx.updateProgress(70);
         persistence.persist(ctx.projectId(), snapshotId, acc.toResult());
-        for (FileAnalysisOutcome outcome : acc.outcomes.values()) {
-            FileAnalysisOutcome.record(jdbc, snapshotId, outcome.path(), outcome.status(), outcome.reason());
-        }
+        FileAnalysisOutcome.recordAll(jdbc, snapshotId, acc.outcomes.values());
         failures.addAll(acc.snapshotFailures());
         persistFailures(ctx.projectId(), snapshotId, failures);
         ctx.updateProgress(100);

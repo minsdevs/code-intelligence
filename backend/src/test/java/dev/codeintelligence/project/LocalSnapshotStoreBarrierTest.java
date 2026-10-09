@@ -66,7 +66,13 @@ class LocalSnapshotStoreBarrierTest {
         when(client.enabled()).thenReturn(true);
         when(approvals.requireJobInput(JOB, PROJECT)).thenReturn(binding);
         when(transactions.execute(any())).thenReturn(42L);
-        store = new LocalSnapshotStore(client, jdbc, transactions, approvals, mock(LocalImportDiagnostics.class));
+        store = new LocalSnapshotStore(
+                client,
+                jdbc,
+                mock(org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.class),
+                transactions,
+                approvals,
+                mock(LocalImportDiagnostics.class));
     }
 
     @Test

@@ -98,6 +98,52 @@ class SourceStoreClientTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {1, 128})
+    void retainRequiresAnAcknowledgmentForEveryExactProjectAddress(int count) throws Exception {
+        var blob = new SourceStoreClient.StoredBlob(hash(BODY), BODY.length, KEY);
+        try (var server = new FakeServer(socket -> {
+            JsonNode input = request(socket);
+            assertThat(input.get("operation").stringValue()).isEqualTo("RETAIN");
+            assertThat(input.get("projectId").stringValue()).isEqualTo("7");
+            assertThat(input.get("blobs").size()).isEqualTo(count);
+            assertThat(input.get("blobs").get(0).get("sha256").stringValue()).isEqualTo(hash(BODY));
+            assertThat(input.get("blobs").get(0).get("keyId").stringValue()).isEqualTo(KEY);
+            assertThat(input.get("blobs").get(0).get("byteSize").intValue()).isEqualTo(BODY.length);
+            write(socket, frame(success(input, Map.of("count", count))));
+        })) {
+            server.client().retain(7, java.util.Collections.nCopies(count, blob));
+            server.completed();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 2})
+    void incompleteOrExcessRetentionReceiptCannotPublish(int count) throws Exception {
+        try (var server = new FakeServer(socket -> {
+            var input = request(socket);
+            write(socket, frame(success(input, Map.of("count", count))));
+        })) {
+            fails(
+                    () -> server.client()
+                            .retain(7, List.of(new SourceStoreClient.StoredBlob(hash(BODY), BODY.length, KEY))),
+                    "SOURCE_STORE_INTEGRITY");
+            server.completed();
+        }
+    }
+
+    @Test
+    void retentionRejectsInvalidReferencesBeforeOpeningASocket() {
+        var client = configuredClient("/tmp/ci-missing-retention.sock");
+        var blob = new SourceStoreClient.StoredBlob(hash(BODY), BODY.length, KEY);
+        fails(() -> client.retain(7, List.of()), "SOURCE_STORE_INVALID_REQUEST");
+        fails(() -> client.retain(7, java.util.Collections.nCopies(129, blob)), "SOURCE_STORE_INVALID_REQUEST");
+        fails(() -> client.retain(0, List.of(blob)), "SOURCE_STORE_INVALID_REQUEST");
+        fails(
+                () -> client.retain(7, List.of(new SourceStoreClient.StoredBlob("bad", BODY.length, KEY))),
+                "SOURCE_STORE_INVALID_REQUEST");
+    }
+
     @Test
     void stageSendsAStagedPutAndReturnsTheVaultSessionWatermark() throws Exception {
         String hash = hash(BODY);

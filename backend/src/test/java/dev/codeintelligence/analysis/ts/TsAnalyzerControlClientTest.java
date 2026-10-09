@@ -194,6 +194,25 @@ class TsAnalyzerControlClientTest {
     }
 
     @Test
+    void timeoutAndDisconnectedControlHaveDistinctSafeFailureCodes() throws Exception {
+        try (var main = new FakeDesktopMain(request -> null)) {
+            assertThatThrownBy(() -> main.client(1).health())
+                    .isInstanceOf(RecoveryActionFailure.class)
+                    .hasNoCause()
+                    .satisfies(error -> assertThat(((RecoveryActionFailure) error).failureCode())
+                            .isEqualTo("TS_ANALYZER_TIMEOUT"));
+        }
+        try (var main = new FakeDesktopMain(request -> null)) {
+            Files.delete(main.socket);
+            assertThatThrownBy(() -> main.client(1).health())
+                    .isInstanceOf(RecoveryActionFailure.class)
+                    .hasNoCause()
+                    .satisfies(error -> assertThat(((RecoveryActionFailure) error).failureCode())
+                            .isEqualTo("TS_ANALYZER_TRANSPORT_ERROR"));
+        }
+    }
+
+    @Test
     void anUnansweredOrOversizedResponseFailsWithinTheTimeout() throws Exception {
         try (var main = new FakeDesktopMain(request -> null)) {
             long started = System.nanoTime();

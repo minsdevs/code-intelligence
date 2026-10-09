@@ -62,8 +62,12 @@ async function withFolderPicker(app, folder, action, { timeoutMs = 10000 } = {})
   try { record = await bounded(handle.evaluate(value => value.restore()), timeoutMs, 'FOLDER_PICKER_RESTORE_TIMEOUT'); }
   catch (error) { failure ||= error; }
   try { await bounded(handle.dispose(), timeoutMs, 'FOLDER_PICKER_DISPOSE_TIMEOUT'); } catch (error) { failure ||= error; }
-  if (record?.messageBoxes) throw new Error('UNEXPECTED_DROP_CONFIRMATION', failure ? { cause: failure } : undefined);
+  if (Number.isSafeInteger(record?.messageBoxes) && record.messageBoxes > 0) throw new Error('UNEXPECTED_DROP_CONFIRMATION', failure ? { cause: failure } : undefined);
   if (failure) throw failure;
+  if (!record || Object.keys(record).sort().join(',') !== 'calls,messageBoxes,refused'
+    || !['calls', 'refused', 'messageBoxes'].every(key => Number.isSafeInteger(record[key]) && record[key] >= 0)) {
+    throw new Error('FOLDER_PICKER_RESPONSE_INVALID');
+  }
   if (record.refused) throw new Error('FOLDER_PICKER_REFUSED');
   if (record.calls !== 1) throw new Error('FOLDER_PICKER_NOT_REQUESTED');
   return { result, pickerCalls: record.calls, messageBoxes: 0 };

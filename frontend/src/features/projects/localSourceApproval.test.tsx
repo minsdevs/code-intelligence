@@ -332,10 +332,10 @@ describe('local source approval', () => {
     )
     await act(async () => old.resolve(preview('REFRESH')))
     expect(
-      screen.queryByRole('button', { name: '변경 확인 후 전체 재분석' }),
+      screen.queryByRole('button', { name: '변경 확인 후 재분석' }),
     ).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '변경 사항 미리보기' }))
-    fireEvent.click(await screen.findByRole('button', { name: '변경 확인 후 전체 재분석' }))
+    fireEvent.click(await screen.findByRole('button', { name: '변경 확인 후 재분석' }))
     await waitFor(() => expect(onStarted).toHaveBeenCalledExactlyOnceWith(8, 42))
     expect(reanalyzeLocalProject).toHaveBeenCalledExactlyOnceWith(8, 'opaque-token-never-display')
   })
@@ -348,7 +348,7 @@ describe('local source approval', () => {
       <LocalSourceApproval source={{ operation: 'REFRESH', projectId: 7 }} onStarted={onStarted} />,
     )
     fireEvent.click(screen.getByRole('button', { name: '변경 사항 미리보기' }))
-    fireEvent.click(await screen.findByRole('button', { name: '변경 확인 후 전체 재분석' }))
+    fireEvent.click(await screen.findByRole('button', { name: '변경 확인 후 재분석' }))
     rerender(
       <LocalSourceApproval source={{ operation: 'REFRESH', projectId: 8 }} onStarted={onStarted} />,
     )
@@ -395,7 +395,7 @@ describe('local source approval', () => {
       <LocalSourceApproval source={{ operation: 'REFRESH', projectId: 7 }} onStarted={onStarted} />,
     )
     fireEvent.click(screen.getByRole('button', { name: '변경 사항 미리보기' }))
-    fireEvent.click(await screen.findByRole('button', { name: '변경 확인 후 전체 재분석' }))
+    fireEvent.click(await screen.findByRole('button', { name: '변경 확인 후 재분석' }))
     await screen.findByRole('button', { name: '작업 상태 다시 확인' })
     expect(onStarted).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: '변경 사항 미리보기' })).not.toBeInTheDocument()

@@ -3,16 +3,20 @@ package dev.codeintelligence.project;
 import dev.codeintelligence.source.SourceStoreClient;
 import dev.codeintelligence.source.SourceStoreException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectInserter;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -25,6 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class LocalSnapshotStore {
     private final SourceStoreClient client;
     private final JdbcClient jdbc;
+    private final NamedParameterJdbcTemplate batches;
     private final TransactionTemplate transactions;
     private final LocalSourceApprovalService approvals;
     private final LocalImportDiagnostics diagnostics;
@@ -32,11 +37,13 @@ public class LocalSnapshotStore {
     public LocalSnapshotStore(
             SourceStoreClient client,
             JdbcClient jdbc,
+            NamedParameterJdbcTemplate batches,
             TransactionTemplate transactions,
             LocalSourceApprovalService approvals,
             LocalImportDiagnostics diagnostics) {
         this.client = client;
         this.jdbc = jdbc;
+        this.batches = batches;
         this.transactions = transactions;
         this.approvals = approvals;
         this.diagnostics = diagnostics;
@@ -57,7 +64,19 @@ public class LocalSnapshotStore {
                 .query((rs, row) ->
                         rs.getObject("approved_at", OffsetDateTime.class).toInstant())
                 .single();
-        return new Capture(projectId, jobId, binding, time);
+        var reusable = new java.util.HashMap<String, SourceStoreClient.StoredBlob>();
+        jdbc.sql("select distinct b.sha256,b.byte_size,b.key_id from projects p "
+                        + "join analysis_generations g on g.id=p.current_generation_id and g.project_id=p.id "
+                        + "join source_manifests m on m.id=g.source_manifest_id and m.project_id=p.id "
+                        + "join source_manifest_entries e on e.manifest_id=m.id and e.project_id=p.id "
+                        + "join source_blobs b on b.project_id=e.project_id and b.sha256=e.blob_sha256 "
+                        + "where p.id=:project and g.status='COMMITTED' and m.sealed_at is not null")
+                .param("project", projectId)
+                .query((rs, row) -> new SourceStoreClient.StoredBlob(
+                        rs.getString("sha256"), rs.getLong("byte_size"), rs.getString("key_id")))
+                .list()
+                .forEach(blob -> reusable.put(blob.sha256(), blob));
+        return new Capture(projectId, jobId, binding, time, reusable);
     }
 
     private record Entry(String path, String gitOid, SourceStoreClient.StoredBlob blob) {}
@@ -69,16 +88,25 @@ public class LocalSnapshotStore {
         private final Instant approvedAt;
         private final LocalSourceManifest digest;
         private final List<Entry> entries = new ArrayList<>();
+        private final Map<String, SourceStoreClient.StoredBlob> reusable;
+        private final Map<String, SourceStoreClient.StoredBlob> retained = new java.util.LinkedHashMap<>();
+        private final MessageDigest hashes = sha256Digest();
         private String session;
         private long sequence;
         private boolean finished;
 
-        private Capture(long projectId, long jobId, LocalSourceBinding binding, Instant approvedAt) {
+        private Capture(
+                long projectId,
+                long jobId,
+                LocalSourceBinding binding,
+                Instant approvedAt,
+                Map<String, SourceStoreClient.StoredBlob> reusable) {
             this.projectId = projectId;
             this.jobId = jobId;
             this.binding = binding;
             this.approvedAt = approvedAt;
             this.digest = new LocalSourceManifest(binding.policyVersion(), binding.limitsSha256());
+            this.reusable = reusable;
         }
 
         @Override
@@ -99,14 +127,20 @@ public class LocalSnapshotStore {
                 if (!formatter.idFor(Constants.OBJ_BLOB, bytes).name().equals(gitOid))
                     throw LocalSourceApprovalException.sourceChanged();
             }
-            var staged = client.stage(projectId, bytes);
-            // A reopened vault dropped whatever an earlier session staged but never flushed.
-            if (session == null) session = staged.session();
-            else if (!session.equals(staged.session())) throw SourceStoreException.unavailable();
-            if (staged.sequence() <= sequence) throw SourceStoreException.integrity();
-            sequence = staged.sequence();
-            var blob = staged.blob();
-            digest.add(path, bytes.length, HexFormat.of().parseHex(blob.sha256()));
+            String sha256 = HexFormat.of().formatHex(hashes.digest(bytes));
+            var blob = reusable.get(sha256);
+            if (blob != null && blob.byteSize() == bytes.length) {
+                retained.putIfAbsent(sha256, blob);
+            } else {
+                var staged = client.stage(projectId, bytes);
+                // A reopened vault dropped whatever an earlier session staged but never flushed.
+                if (session == null) session = staged.session();
+                else if (!session.equals(staged.session())) throw SourceStoreException.unavailable();
+                if (staged.sequence() <= sequence) throw SourceStoreException.integrity();
+                sequence = staged.sequence();
+                blob = staged.blob();
+            }
+            digest.add(path, bytes.length, HexFormat.of().parseHex(sha256));
             if (digest.bytes() > binding.selectedBytes()) throw LocalSourceApprovalException.sourceChanged();
             entries.add(new Entry(path, gitOid, blob));
         }
@@ -117,6 +151,11 @@ public class LocalSnapshotStore {
             if (!digest.finish().equals(binding.manifestSha256())
                     || digest.count() != binding.selectedFiles()
                     || digest.bytes() != binding.selectedBytes()) throw LocalSourceApprovalException.sourceChanged();
+            var references = new ArrayList<>(retained.values());
+            for (int offset = 0; offset < references.size(); offset += 128) {
+                dev.codeintelligence.job.JobCancellation.checkpoint();
+                client.retain(projectId, references.subList(offset, Math.min(offset + 128, references.size())));
+            }
             if (session != null) client.barrier(session, sequence);
             return Objects.requireNonNull(transactions.execute(tx -> {
                 jdbc.sql("select id from projects where id=:project for update")
@@ -158,27 +197,32 @@ public class LocalSnapshotStore {
                         .param("files", binding.selectedFiles())
                         .param("bytes", binding.selectedBytes())
                         .update();
-                for (Entry entry : entries) {
-                    jdbc.sql(
-                                    "insert into source_blobs(project_id,sha256,byte_size,key_id) values (:project,:hash,:size,:key) on conflict do nothing")
-                            .param("project", projectId)
-                            .param("hash", entry.blob().sha256())
-                            .param("size", entry.blob().byteSize())
-                            .param("key", entry.blob().keyId())
-                            .update();
-                    int inserted = jdbc.sql(
-                                    "insert into source_manifest_entries(manifest_id,project_id,path,blob_sha256,git_oid,byte_size) "
-                                            + "select :manifest,:project,:path,sha256,:oid,byte_size from source_blobs "
-                                            + "where project_id=:project and sha256=:hash and byte_size=:size and key_id=:key")
-                            .param("manifest", manifest)
-                            .param("project", projectId)
-                            .param("path", entry.path())
-                            .param("oid", entry.gitOid())
-                            .param("hash", entry.blob().sha256())
-                            .param("size", entry.blob().byteSize())
-                            .param("key", entry.blob().keyId())
-                            .update();
-                    if (inserted != 1) throw new IllegalStateException("Retained source metadata is inconsistent.");
+                for (int offset = 0; offset < entries.size(); offset += 500) {
+                    var batch = new org.springframework.jdbc.core.namedparam.SqlParameterSource
+                            [Math.min(500, entries.size() - offset)];
+                    for (int index = 0; index < batch.length; index++) {
+                        Entry entry = entries.get(offset + index);
+                        batch[index] = new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                                .addValue("project", projectId)
+                                .addValue("manifest", manifest)
+                                .addValue("path", entry.path())
+                                .addValue("oid", entry.gitOid())
+                                .addValue("hash", entry.blob().sha256())
+                                .addValue("size", entry.blob().byteSize())
+                                .addValue("key", entry.blob().keyId());
+                    }
+                    batches.batchUpdate(
+                            "insert into source_blobs(project_id,sha256,byte_size,key_id) "
+                                    + "values (:project,:hash,:size,:key) on conflict do nothing",
+                            batch);
+                    int[] inserted = batches.batchUpdate(
+                            "insert into source_manifest_entries(manifest_id,project_id,path,blob_sha256,git_oid,byte_size) "
+                                    + "select :manifest,:project,:path,sha256,:oid,byte_size from source_blobs "
+                                    + "where project_id=:project and sha256=:hash and byte_size=:size and key_id=:key",
+                            batch);
+                    for (int count : inserted) {
+                        if (count != 1) throw new IllegalStateException("Retained source metadata is inconsistent.");
+                    }
                 }
                 jdbc.sql("update source_manifests set sealed_at=clock_timestamp() where id=:id")
                         .param("id", manifest)
@@ -206,6 +250,14 @@ public class LocalSnapshotStore {
                 if (attached != 1) throw LocalSourceApprovalException.invalid();
                 return snapshot;
             }));
+        }
+    }
+
+    private static MessageDigest sha256Digest() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException(error);
         }
     }
 

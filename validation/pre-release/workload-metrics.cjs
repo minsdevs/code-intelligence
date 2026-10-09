@@ -101,7 +101,7 @@ function describeSmoke(row, samples) {
         const limit = slo.p95?.[metric] ?? slo.ceiling?.[metric];
         const list = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
         values[metric] = { values: list, limitMs: limit,
-          withinLimit: sample.status === 'PASS' && list.length > 0 ? list.every(v => v <= limit) : null };
+          withinLimit: sample.status === 'PASS' && list.length > 0 ? list.every(v => Number.isFinite(v) && v >= 0 && v <= limit) : null };
       }
       return { sequence: sample.sequence, status: sample.status, failure: sample.failure ?? null, values,
         peakRssKiB: sample.peakRssKiB ?? null, rssLimitKiB: slo.rssKiB ?? null,
@@ -180,4 +180,33 @@ function phaseSamplingComplete(memory, phase, { maximumGapMs = 250, minimumSampl
     && entry.samples >= minimumSamples && entry.maximumGapMs <= maximumGapMs);
 }
 
-module.exports = { SLO, percentile95, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplete, SAMPLE_INTERVAL_MS };
+function installWorkloadClick(name) {
+  window.__workload ??= { marks: {} };
+  delete window.__workload.marks[name];
+  document.addEventListener('click', () => { window.__workload.marks[name] ??= performance.now(); }, { capture: true, once: true });
+}
+
+// Serialized into the renderer: action and acknowledgement share performance.now().
+function installWorkloadWatch({ name, condition }) {
+  window.__workload ??= { marks: {} };
+  const marks = window.__workload.marks; delete marks[name];
+  const holds = () => {
+    if (condition.after && !Number.isFinite(marks[condition.after])) return false;
+    if (condition.kind === 'button') {
+      const labels = Array.isArray(condition.text) ? condition.text : [condition.text];
+      return [...document.querySelectorAll('button')].some(button => {
+        const text = button.textContent.trim();
+        return text.length > 0 && labels.includes(text);
+      });
+    }
+    if (condition.kind === 'region') return condition.label.some(label => document.querySelector(`section[aria-label="${label}"]`));
+    if (condition.kind === 'rows') return new RegExp(condition.path).test(location.pathname)
+      && document.querySelectorAll(condition.RESULT_ROWS).length >= condition.minimum;
+    return false;
+  };
+  const observer = new MutationObserver(() => { if (holds()) { marks[name] ??= performance.now(); observer.disconnect(); } });
+  observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
+  if (holds()) { marks[name] = performance.now(); observer.disconnect(); }
+}
+
+module.exports = { SLO, percentile95, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplete, SAMPLE_INTERVAL_MS, installWorkloadWatch, installWorkloadClick };

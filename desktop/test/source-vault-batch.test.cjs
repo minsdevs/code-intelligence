@@ -74,6 +74,128 @@ async function countDurability(t, root) {
   return counts;
 }
 
+test('retaining committed source authenticates bytes without another durability write', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const a = await vault.put({ projectId: 3, bytes: Buffer.from('unchanged source') });
+  const b = await vault.put({ projectId: 3, bytes: Buffer.from('another source') });
+  const blobs = [a, b].map(({ sha256, byteSize, keyId }) => ({ sha256, byteSize, keyId }));
+  const before = await fs.readFile(f.blob(a));
+  const counts = await countDurability(t, f.root);
+  assert.deepEqual(await vault.retain({ projectId: 3, blobs }), { count: 2 });
+  assert.deepEqual(counts, { sync: 0, rename: 0 });
+  assert.deepEqual(await fs.readFile(f.blob(a)), before);
+  await assert.rejects(vault.retain({ projectId: 4, blobs }), code('SOURCE_VAULT_MISSING'));
+  await assert.rejects(vault.retain({ projectId: 3, blobs: [{ ...blobs[0], keyId: 'e'.repeat(32) }] }),
+    code('SOURCE_VAULT_INTEGRITY'));
+  const damaged = Buffer.from(before); damaged[damaged.length - 1] ^= 1;
+  await fs.writeFile(f.blob(a), damaged);
+  await assert.rejects(vault.retain({ projectId: 3, blobs }), code('SOURCE_VAULT_INTEGRITY'));
+});
+
+test('retention cannot acknowledge missing, oversized or caller-mutated addresses', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const a = await vault.put({ projectId: 1, bytes: Buffer.from('immutable reference') });
+  const ref = { sha256: a.sha256, byteSize: a.byteSize, keyId: a.keyId };
+  await assert.rejects(vault.retain({ projectId: 1, blobs: [] }), code('SOURCE_VAULT_ARGUMENT'));
+  await assert.rejects(vault.retain({ projectId: 1, blobs: Array(129).fill(ref) }), code('SOURCE_VAULT_ARGUMENT'));
+  await assert.rejects(vault.retain({ projectId: 1, blobs: Array(1) }), code('SOURCE_VAULT_IO'));
+  const pending = vault.retain({ projectId: 1, blobs: [ref] });
+  ref.sha256 = '0'.repeat(64);
+  assert.deepEqual(await pending, { count: 1 });
+  await assert.rejects(vault.retain({ projectId: 1, blobs: [ref] }), code('SOURCE_VAULT_MISSING'));
+});
+
+test('a full retention batch authenticates its last blob and preserves queued durability on rejection', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const a = await vault.put({ projectId: 7, bytes: Buffer.from('earlier durable source') });
+  const b = await vault.put({ projectId: 7, bytes: Buffer.from('last durable source') });
+  const pending = await vault.stage({ projectId: 7, bytes: Buffer.from('pending independent source') });
+  const ref = ({ sha256, byteSize, keyId }) => ({ sha256, byteSize, keyId });
+  const original = await fs.readFile(f.blob(b));
+  const damaged = Buffer.from(original); damaged[damaged.length - 1] ^= 1;
+  await fs.writeFile(f.blob(b), damaged);
+  await assert.rejects(vault.retain({ projectId: 7, blobs: [...Array(127).fill(ref(a)), ref(b)] }),
+    code('SOURCE_VAULT_INTEGRITY'));
+  await vault.close();
+  const reopened = await f.open();
+  assert.deepEqual(await reopened.read(pending), Buffer.from('pending independent source'));
+  assert.deepEqual(await fs.readFile(f.blob(b)), damaged);
+  await fs.writeFile(f.blob(b), original);
+  assert.deepEqual(await reopened.retain({ projectId: 7, blobs: [...Array(127).fill(ref(a)), ref(b)] }), { count: 128 });
+});
+
+test('retention refuses a replaced project ancestor without touching the linked ciphertext', async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const stored = await vault.put({ projectId: 8, bytes: Buffer.from('approved retained source') });
+  const original = await fs.readFile(f.blob(stored));
+  const project = path.join(f.options.sourceRoot, '8');
+  const moved = path.join(f.root, 'moved-project');
+  await fs.rename(project, moved);
+  await fs.symlink(moved, project);
+  const { sha256, byteSize, keyId } = stored;
+  await assert.rejects(vault.retain({ projectId: 8, blobs: [{ sha256, byteSize, keyId }] }),
+    code('SOURCE_VAULT_UNSAFE_PATH'));
+  assert.deepEqual(await fs.readFile(path.join(moved, sha256, 'blob.bin')), original);
+});
+
+test('retention failure drains an in-flight authenticated read before resolving or closing', { timeout: 15000 }, async t => {
+  const f = await fixture(t);
+  const vault = await f.create();
+  const a = await vault.put({ projectId: 9, bytes: Buffer.from('retained while another read fails') });
+  const b = await vault.put({ projectId: 9, bytes: Buffer.from('independent durable source') });
+  const ref = ({ sha256, byteSize, keyId }) => ({ sha256, byteSize, keyId });
+  let beginRead, releaseRead, reportFault;
+  const started = new Promise(resolve => { beginRead = resolve; });
+  const released = new Promise(resolve => { releaseRead = resolve; });
+  const faultIssued = new Promise(resolve => { reportFault = resolve; });
+  const open = fs.open;
+  let fault = false;
+  fs.open = async function(file, ...args) {
+    if (file === f.blob(b) && !fault) {
+      await started;
+      fault = true; reportFault();
+      throw Object.assign(new Error('synthetic read fault'), { code: 'EIO' });
+    }
+    const handle = await open.call(this, file, ...args);
+    if (file === f.blob(a)) {
+      const read = handle.read;
+      handle.read = async function(...args) { beginRead(); await released; return read.apply(this, args); };
+    }
+    return handle;
+  };
+  let settled = false, closed = false, deadline, closing;
+  const retention = vault.retain({ projectId: 9, blobs: [ref(a), ref(b)] }).then(
+    value => { settled = true; return { value }; },
+    error => { settled = true; return { error }; },
+  );
+  try {
+    await Promise.race([faultIssued, new Promise((_, reject) => {
+      deadline = setTimeout(() => reject(new Error('authentication fault did not start')), 5000);
+    })]);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false, 'a failed batch still owns its pending authenticated read');
+    closing = vault.close().then(() => { closed = true; });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(closed, false, 'closing cannot release ownership while a read remains in flight');
+    releaseRead();
+    assert.equal((await retention).error?.code, 'SOURCE_VAULT_IO');
+    await closing;
+  } finally {
+    clearTimeout(deadline);
+    releaseRead();
+    fs.open = open;
+    await retention;
+    if (closing) await closing;
+  }
+  const reopened = await f.open();
+  assert.deepEqual(await reopened.read(a), Buffer.from('retained while another read fails'));
+  assert.deepEqual(await reopened.read(b), Buffer.from('independent durable source'));
+});
+
 test('staged blobs become readable and durable only through a barrier of the same vault session', async t => {
   const f = await fixture(t);
   const vault = await f.create();

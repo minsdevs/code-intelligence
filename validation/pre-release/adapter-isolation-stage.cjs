@@ -24,6 +24,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 const { createRequire } = require('node:module');
+const { withFolderPicker } = require('./folder-picker.cjs');
 
 const repo = path.resolve(__dirname, '../..');
 const desktop = path.join(repo, 'desktop');
@@ -193,18 +194,10 @@ async function analyze(app, evidenceDirectory, { expectUnavailable }) {
     const api = async route => { const response = await call(route); assert.equal(response.status, 200, route); return JSON.parse(response.text); };
 
     await page.evaluate(() => { history.pushState(null, '', '/import'); window.dispatchEvent(new PopStateEvent('popstate')); });
-    const picker = await electronApp.evaluateHandle(({ dialog }, selected) => {
-      const original = dialog.showOpenDialog; let calls = 0;
-      const choose = async (...args) => {
-        const options = args.at(-1);
-        if (calls || options?.title !== 'Choose a source folder to analyze') throw new Error('FOLDER_PICKER_REFUSED');
-        calls++; return { canceled: false, filePaths: [selected] };
-      };
-      dialog.showOpenDialog = choose;
-      return { restore() { dialog.showOpenDialog = original; return calls; } };
-    }, project);
-    try { await page.getByRole('button', { name: 'Choose folder', exact: true }).click(); }
-    finally { assert.equal(await picker.evaluate(value => value.restore()), 1); await picker.dispose(); }
+    await withFolderPicker(electronApp, project, async () => {
+      await page.getByRole('button', { name: 'Choose folder', exact: true }).click();
+      await page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).waitFor({ state: 'visible' });
+    });
     await page.getByRole('button', { name: /^(Preview files to import|가져올 파일 미리보기)$/ }).click();
     const seen = new Map();
     const sampler = setInterval(() => {

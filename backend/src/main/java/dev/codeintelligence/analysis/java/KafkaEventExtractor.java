@@ -23,10 +23,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.springframework.stereotype.Component;
 
 /** {@code @KafkaListener} / {@code KafkaTemplate.send} → QUEUE_TOPIC + SUBSCRIBES/PUBLISHES. */
-@Component
 public class KafkaEventExtractor implements CodeAnalyzer {
 
     @Override
@@ -36,11 +34,15 @@ public class KafkaEventExtractor implements CodeAnalyzer {
 
     @Override
     public AnalysisResult analyze(AnalysisContext ctx) {
+        return analyzeFiles(JavaParseSupport.parseJavaFiles(ctx));
+    }
+
+    AnalysisResult analyzeFiles(Iterable<JavaParseSupport.ParsedJavaFile> files) {
         List<GraphNodeDraft> nodes = new ArrayList<>();
         List<GraphEdgeDraft> edges = new ArrayList<>();
         List<AnalyzerEvidence> evidences = new ArrayList<>();
         Map<String, GraphNodeDraft> topics = new LinkedHashMap<>();
-        for (JavaParseSupport.ParsedJavaFile unit : JavaParseSupport.parseJavaFiles(ctx)) {
+        for (JavaParseSupport.ParsedJavaFile unit : files) {
             for (TypeDeclaration<?> type : unit.cu().getTypes()) {
                 String typeKey = NaturalKeys.javaType(JavaParseSupport.fqcn(unit.pkg(), type));
                 type.walk(MethodDeclaration.class, method -> {

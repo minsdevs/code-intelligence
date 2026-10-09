@@ -884,7 +884,7 @@ async function main(argv = process.argv.slice(2)) {
         await expect(page.getByRole('region', { name: /^(Import preview to review|확인할 가져오기 미리보기)$/ })).toBeVisible({ timeout: 60000 });
         const [response] = await Promise.all([
           page.waitForResponse(item => new URL(item.url()).pathname === `/api/projects/${ctx.projectId}/reanalyze` && item.request().method() === 'POST', { timeout: 60000 }),
-          page.getByRole('button', { name: /^(Re-analyze everything after reviewing changes|변경 확인 후 전체 재분석)$/ }).click(),
+          page.getByRole('button', { name: /^(Re-analyze after reviewing changes|변경 확인 후 재분석)$/ }).click(),
         ]);
         assert.ok(response.ok());
         const jobId = (await response.json()).jobId;

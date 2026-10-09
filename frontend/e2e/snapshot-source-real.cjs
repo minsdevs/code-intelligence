@@ -287,7 +287,7 @@ async function main() {
       await page.getByRole('button', { name: '상태 새로고침', exact: true }).click();
       await page.getByRole('button', { name: '변경 사항 미리보기', exact: true }).click();
       await expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible();
-      await page.getByRole('button', { name: '변경 확인 후 전체 재분석', exact: true }).click();
+      await page.getByRole('button', { name: '변경 확인 후 재분석', exact: true }).click();
       await expect.poll(async () => (await api(`/api/projects/${args.project}`)).currentSnapshot.id,
         { timeout: 45000 }).not.toBe(args.b);
       const refreshed = (await api(`/api/projects/${args.project}`)).currentSnapshot.id;

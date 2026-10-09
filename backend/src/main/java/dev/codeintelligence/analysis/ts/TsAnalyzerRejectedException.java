@@ -1,6 +1,5 @@
 package dev.codeintelligence.analysis.ts;
 
-import dev.codeintelligence.common.RecoveryActionFailure;
 import java.util.regex.Pattern;
 import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.json.JsonFactory;
@@ -12,7 +11,7 @@ import tools.jackson.databind.json.JsonMapper;
  * session, an invalid command). Only the analyzer's stable code reaches the job error; any other
  * response text stays out of it.
  */
-public final class TsAnalyzerRejectedException extends TsAnalyzerException implements RecoveryActionFailure {
+public final class TsAnalyzerRejectedException extends TsAnalyzerException {
     public static final String CODE = "TS_ANALYZER_REJECTED";
     static final String ANALYSIS_LIMIT = "ANALYSIS_LIMIT";
     private static final Pattern REASON = Pattern.compile("[A-Z][A-Z_]{0,63}");

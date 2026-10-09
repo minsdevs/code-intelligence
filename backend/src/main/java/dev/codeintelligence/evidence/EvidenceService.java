@@ -1,5 +1,6 @@
 package dev.codeintelligence.evidence;
 
+import dev.codeintelligence.common.CustomPlans;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -95,17 +96,23 @@ public class EvidenceService {
     @Transactional
     public void replaceLinkedAll(long projectId, String subjectType, Map<Long, List<NewEvidence>> bySubject) {
         List<Long> subjects = List.copyOf(bySubject.keySet());
-        for (int start = 0; start < subjects.size(); start += BATCH) {
-            jdbc.sql("""
-                            delete from evidences e
-                            where e.id in (
-                                select el.evidence_id from evidence_links el
-                                where el.subject_type = :subjectType and el.subject_id in (:subjectIds)
-                            )
-                            """)
-                    .param("subjectType", subjectType)
-                    .param("subjectIds", subjects.subList(start, Math.min(start + BATCH, subjects.size())))
-                    .update();
+        if (!subjects.isEmpty()) {
+            // An empty-table generic plan can rescan all historical links for every subject batch.
+            CustomPlans.run(jdbc, () -> {
+                for (int start = 0; start < subjects.size(); start += BATCH) {
+                    jdbc.sql("""
+                                    delete from evidences e
+                                    where e.id in (
+                                        select el.evidence_id from evidence_links el
+                                        where el.subject_type = :subjectType and el.subject_id in (:subjectIds)
+                                    )
+                                    """)
+                            .param("subjectType", subjectType)
+                            .param("subjectIds", subjects.subList(start, Math.min(start + BATCH, subjects.size())))
+                            .update();
+                }
+                return null;
+            });
         }
         List<Long> owners = new ArrayList<>();
         List<SqlParameterSource> rows = new ArrayList<>();

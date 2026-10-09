@@ -25,6 +25,10 @@ async function fixture(t) {
   server.setSecureContext({ key: fs.readFileSync(transport.materials.backend.key), cert: transport.materials.backend.pem });
   const requests = [];
   server.on('request', (req, res) => {
+    if (['GET', 'HEAD'].includes(req.method) && req.headers['x-code-intelligence-token'] === undefined
+      && !['/health', '/private', '/redirect', '/must-not-follow'].includes(req.url)) {
+      res.writeHead(404).end(); req.resume(); return;
+    }
     requests.push(req.url);
     if (req.headers['x-code-intelligence-token'] !== token) { res.writeHead(401); res.end(); return; }
     if (req.url === '/redirect') { res.writeHead(302, { Location: transport.backend.origin + '/must-not-follow' }); res.end(); return; }
@@ -66,10 +70,21 @@ test('close drains every in-flight pinned request and refuses reuse', { skip: pr
   const f = await fixture(t);
   let reached, count = 0; const received = new Promise(resolve => { reached = resolve; });
   f.server.removeAllListeners('request');
-  f.server.on('request', () => { if (++count === 2) reached(); });
+  f.server.on('request', (req, res) => {
+    if (['GET', 'HEAD'].includes(req.method) && req.headers['x-code-intelligence-token'] === undefined
+      && !['/pending-a', '/pending-b'].includes(req.url)) { res.writeHead(404).end(); req.resume(); return; }
+    if (++count === 2) reached();
+  });
+  await new Promise((resolve, reject) => {
+    https.get(f.transport.backend.origin + '/', { rejectUnauthorized: false, agent: false }, response => {
+      assert.equal(response.statusCode, 404); response.resume(); response.on('end', resolve);
+    }).on('error', reject);
+  });
+  assert.equal(count, 0);
   const firstRejected = assert.rejects(f.transport.backend.request(f.transport.backend.origin + '/pending-a'));
   const secondRejected = assert.rejects(f.transport.backend.request(f.transport.backend.origin + '/pending-b'));
   await received;
+  assert.equal(count, 2);
   const first = f.transport.close();
   assert.equal(f.transport.close(), first);
   await first; await firstRejected; await secondRejected;
@@ -112,3 +127,18 @@ test('real Electron accepts the service CA while refusing another service and a 
   });
 });
 
+
+test('foreign probes do not count but authenticated wrong paths and missing-token fixture paths do', { skip: process.platform === 'win32' }, async t => {
+  const f = await fixture(t), client = f.transport.backend;
+  const probe = url => new Promise((resolve, reject) => {
+    https.get(client.origin + url, { rejectUnauthorized: false, agent: false }, response => {
+      response.resume(); response.on('end', () => resolve(response.statusCode));
+    }).on('error', reject);
+  });
+  assert.equal(await probe('/'), 404);
+  assert.equal(await probe('/favicon.ico'), 404);
+  assert.deepEqual(f.requests, []);
+  assert.equal((await client.request(client.origin + '/wrong-path')).status, 204);
+  assert.equal(await probe('/private'), 401);
+  assert.deepEqual(f.requests, ['/wrong-path', '/private']);
+});

@@ -37,6 +37,8 @@ public class TsParsingStep implements JobStep {
     private final JdbcClient jdbc;
     private final GraphPersistenceService persistence;
     private final AnalysisProperties analysisProperties;
+    private final dev.codeintelligence.analysis.core.AdapterResultCache cache =
+            new dev.codeintelligence.analysis.core.AdapterResultCache();
 
     public TsParsingStep(
             TsAnalyzerClient client,
@@ -82,9 +84,11 @@ public class TsParsingStep implements JobStep {
             throw failure;
         }
         ctx.updateProgress(20);
+        var previous = cache.snapshot(
+                ctx.projectId(), files.stream().map(InventoriedFile::path).toList());
         TsInput input;
         try {
-            input = readInput(ctx.clonePath(), files, snapshotId);
+            input = readInput(ctx.clonePath(), files, snapshotId, previous);
         } catch (TsAnalyzerException failure) {
             recordAll(snapshotId, files, "UNMEASURED", "PROJECT_REQUEST_LIMIT");
             throw failure;
@@ -99,9 +103,15 @@ public class TsParsingStep implements JobStep {
         TsAnalyzeDtos.Response response;
         try {
             response = input.payloads() != null
-                    ? JobCancellation.interruptibly(() -> client.analyze(new TsAnalyzeDtos.Request(input.payloads())))
+                    ? JobCancellation.interruptibly(
+                            () -> client.analyze(new TsAnalyzeDtos.Request(input.payloads(), null, cache.signingKey())))
                     : TsProjectSession.analyze(
-                            client, input.paths(), input.manifest(), path -> read(ctx.clonePath(), path));
+                            client,
+                            input.paths(),
+                            input.manifest(),
+                            path -> read(ctx.clonePath(), path),
+                            previous,
+                            cache.signingKey());
         } catch (JobCancelledException cancelled) {
             throw cancelled;
         } catch (RuntimeException failure) {
@@ -115,10 +125,11 @@ public class TsParsingStep implements JobStep {
         }
         AnalysisResult result = TsGraphMapper.toGraph(response);
         persistence.persist(ctx.projectId(), snapshotId, result);
+        cache.replace(ctx.projectId(), input.paths(), response.cache());
         FileAnalysisOutcome.recordResponse(
                 jdbc,
                 snapshotId,
-                input.paths().stream().filter(TsParsingStep::isPrimarySource).toList(),
+                input.paths().stream().filter(TsParsingStep::isPrimarySource)::iterator,
                 result.fileOutcomes());
         ctx.updateProgress(100);
     }
@@ -128,7 +139,12 @@ public class TsParsingStep implements JobStep {
     }
 
     private void recordAll(long snapshotId, List<InventoriedFile> files, String status, String reason) {
-        for (InventoriedFile file : files) recordOne(snapshotId, file, status, reason);
+        FileAnalysisOutcome.recordFiles(
+                jdbc,
+                snapshotId,
+                files.stream().map(InventoriedFile::path).filter(TsParsingStep::isPrimarySource)::iterator,
+                status,
+                reason);
     }
 
     private void recordOne(long snapshotId, InventoriedFile file, String status, String reason) {
@@ -159,11 +175,12 @@ public class TsParsingStep implements JobStep {
     private record TsInput(
             List<String> paths, List<TsAnalyzeDtos.FilePayload> payloads, TsProjectSession.Manifest manifest) {}
 
-    private TsInput readInput(Path clonePath, List<InventoriedFile> files, long snapshotId) {
+    private TsInput readInput(
+            Path clonePath, List<InventoriedFile> files, long snapshotId, java.util.Map<String, String> previous) {
         TsProjectSession.requireWithinLimit(files.size(), 0);
         List<String> paths = new ArrayList<>();
         List<TsAnalyzeDtos.FilePayload> payloads = new ArrayList<>();
-        TsRequestBudget budget = new TsRequestBudget();
+        TsRequestBudget budget = new TsRequestBudget(cache.signingKey());
         TsProjectSession.ManifestBuilder manifest = new TsProjectSession.ManifestBuilder();
         for (InventoriedFile file : files) {
             JobCancellation.checkpoint();
@@ -178,7 +195,8 @@ public class TsParsingStep implements JobStep {
                     continue;
                 }
                 String content = Files.readString(resolved, StandardCharsets.UTF_8);
-                TsAnalyzeDtos.FilePayload payload = new TsAnalyzeDtos.FilePayload(file.path(), content);
+                TsAnalyzeDtos.FilePayload payload =
+                        new TsAnalyzeDtos.FilePayload(file.path(), content, previous.getOrDefault(file.path(), ""));
                 // Retain source text only while one request can still carry the whole project.
                 if (payloads != null && !budget.tryAdd(payload)) payloads = null;
                 if (payloads != null) payloads.add(payload);

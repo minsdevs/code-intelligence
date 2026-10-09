@@ -1,16 +1,20 @@
 export type AnalyzeFile = {
   path: string
   content: string
+  /** Backend-owned extraction result; never part of the source manifest. */
+  cache?: string
 }
 
 export type AnalyzeRequest = {
   files: AnalyzeFile[]
+  cacheKey?: string
   /** Chunked whole-project analysis (03 §6); `files` stays empty on session commands. */
   session?: SessionCommand
 }
 
 export type SessionCommand = {
   op: 'open' | 'put' | 'seal' | 'analyze' | 'page' | 'close'
+  cacheKey?: string
   id?: string
   seq?: number
   page?: number
@@ -111,6 +115,7 @@ export type UnresolvedCallHit = {
 }
 
 export type AnalyzeResponse = {
+  cache?: string[]
   fileOutcomes?: { path: string; status: 'SUCCESS' | 'PARTIAL' | 'UNMEASURED'; reason: string }[]
   routes: RouteHit[]
   components: SymbolHit[]

@@ -22,8 +22,15 @@ import org.slf4j.LoggerFactory;
 final class JavaParseSupport {
 
     private static final Logger log = LoggerFactory.getLogger(JavaParseSupport.class);
+    static final java.util.concurrent.atomic.AtomicLong PARSER_INVOCATIONS =
+            new java.util.concurrent.atomic.AtomicLong();
 
     private JavaParseSupport() {}
+
+    static ParseAhead<InventoriedFile, ParsedJavaFile> parseAhead(
+            AnalysisContext context, java.util.List<InventoriedFile> files) {
+        return new ParseAhead<>(files, JavaParseSupport::parser, (parser, file) -> parse(context, parser, file));
+    }
 
     /**
      * Parses lazily and in order, a few files ahead on helper threads ({@link ParseAhead}), so a
@@ -32,12 +39,11 @@ final class JavaParseSupport {
      */
     static Iterable<ParsedJavaFile> parseJavaFiles(AnalysisContext ctx) {
         return () -> new Iterator<>() {
-            private final ParseAhead<InventoriedFile, ParsedJavaFile> parses = new ParseAhead<>(
+            private final ParseAhead<InventoriedFile, ParsedJavaFile> parses = parseAhead(
+                    ctx,
                     ctx.inventory().files().stream()
                             .filter(JavaParseSupport::isJava)
-                            .toList(),
-                    JavaParseSupport::parser,
-                    (parser, file) -> parse(ctx, parser, file));
+                            .toList());
             private ParsedJavaFile next;
 
             @Override
@@ -70,6 +76,7 @@ final class JavaParseSupport {
             return null;
         }
         try {
+            PARSER_INVOCATIONS.incrementAndGet();
             ParseResult<CompilationUnit> parsed = parser.parse(absolute);
             if (!parsed.isSuccessful() || parsed.getResult().isEmpty()) {
                 return null;

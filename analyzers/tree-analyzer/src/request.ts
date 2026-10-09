@@ -38,6 +38,24 @@ export function parseAnalyzeRequest(value: unknown): AnalyzeFile[] {
     if (Buffer.byteLength(file.content, 'utf8') > MAX_CONTENT_BYTES) {
       throw new AnalyzeRequestError('file content exceeds 1 MiB')
     }
-    return { path, content: file.content }
+    const cache = parseCacheKey(value) && typeof file.cache === 'string' && Buffer.byteLength(file.cache) <= 128 * 1024 ? file.cache : undefined
+    return { path, content: file.content, ...(cache === undefined ? {} : { cache }) }
   })
+}
+
+export function parseLocalPaths(value: unknown): string[] | undefined {
+  const paths = (value as AnalyzeRequest | undefined)?.localPaths
+  if (paths === undefined) return undefined
+  if (!Array.isArray(paths) || paths.length > 50_000 || Buffer.byteLength(JSON.stringify(paths)) > 2 * 1024 * 1024) {
+    throw new AnalyzeRequestError('localPaths exceeds the project inventory limit')
+  }
+  return paths.map((path) => {
+    if (typeof path !== 'string') throw new AnalyzeRequestError('localPaths needs path strings')
+    return assertSafeRelativePath(path)
+  })
+}
+
+export function parseCacheKey(value: unknown): string | undefined {
+  const key = (value as AnalyzeRequest | undefined)?.cacheKey
+  return typeof key === 'string' && /^[0-9a-f]{64}$/.test(key) ? key : undefined
 }

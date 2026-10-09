@@ -118,3 +118,7 @@ missing/remote/ambiguous target leaves the picker path unavailable.
 - The UX pilot was not rerun on a packaged app; only its unit tests ran.
 - `adapter-isolation-stage.cjs` keeps its own laxer copy of the picker answer (title check
   only, no restore check). Moving it to the shared helper is a small follow-up.
+
+## 2026-10-08 후속 상태
+
+위 미실행 표기는 w9 단위 완료 시점의 기록이다. w15에서 `adapter-isolation-stage.cjs`의 느슨한 사본을 제거하고 공유 picker로 통합했다. 통합 담당자가 별도 ad-hoc staged 앱의 실제 분석과 p6yGme UX pilot 190상태를 확인했다([w15 후속 감사](w15-runner-2026-10-08.md)). 실제 Keychain 러너·main inspector 수용은 실행하지 않았으며 사람이 실행해야 한다.

@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { SLO, percentile95, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplete } = require('../workload-metrics.cjs');
-const { argumentsFor, instantMs, jobTimings } = require('../run-workload-benchmark.cjs');
+const { argumentsFor, instantMs, jobTimings, waitForQuietHost } = require('../run-workload-benchmark.cjs');
 
 const pass = (sequence, metrics, extra = {}) => ({ sequence, status: 'PASS', metrics, peakRssKiB: 1000000,
   samplingComplete: true, cleanupConfirmed: true, ...extra });
@@ -209,4 +209,28 @@ test('server step timings parse nanosecond instants and keep only public codes',
   assert.deepEqual(timings, { status: 'FAILED', failureCode: null, queuedMs: 250, runMs: 10000,
     steps: [{ key: 'TS_PARSING', status: 'FAILED', progressPct: 20, durationMs: 2500 }] });
   assert.doesNotMatch(JSON.stringify(timings), /private|Users/);
+});
+
+test('quiet admission resets on load or indexer pressure and launches directly after its third quiet observation', async () => {
+  for (const blocked of [{ loadAverage: [4, 0, 0], mdworkers: 0 }, { loadAverage: [0, 0, 0], mdworkers: 7 }]) {
+    const samples = [1, 2, blocked, 3, 2, 1].map(value => typeof value === 'number'
+      ? { loadAverage: [value, 0, 0], mdworkers: 6 } : value);
+    const actions = [];
+    let index = 0;
+    const admission = await waitForQuietHost({ observe: () => { actions.push('observe'); return samples[index++]; },
+      pause: async ms => { assert.equal(ms, 30000); actions.push('pause'); } });
+    assert.deepEqual(admission.observations, samples.slice(3));
+    assert.equal(admission.rejectedObservations, 1);
+    assert.deepEqual(actions, ['observe', 'pause', 'observe', 'pause', 'observe', 'pause',
+      'observe', 'pause', 'observe', 'pause', 'observe']);
+  }
+});
+
+test('unobservable host conditions never admit a performance run', async () => {
+  for (const sample of [{ loadAverage: [], mdworkers: 0 }, { loadAverage: [NaN, 0, 0], mdworkers: 0 },
+    { loadAverage: [-1, 0, 0], mdworkers: 0 }, { loadAverage: [0, 0, 0], mdworkers: -1 }]) {
+    await assert.rejects(waitForQuietHost({ observe: () => sample, pause: async () => assert.fail('invalid observations must not wait or launch') }),
+      /WORKLOAD_HOST_OBSERVATION_FAILED/);
+  }
+  await assert.rejects(waitForQuietHost({ observe: () => { throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED'); } }), /WORKLOAD_HOST_OBSERVATION_FAILED/);
 });
