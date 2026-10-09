@@ -1,6 +1,6 @@
 # KOwFxr refresh 병목 개선 후보 — 2026-10-09
 
-**현재 판정: NO_GO.** 통합 회귀와 변경 영역의 패키지 기능은 확인했다. 최종 20회·정식 서명/공증·독립 평가·실계정/실제 Keychain 수용은 미완료다. 이전 후보의 목표 미달·부하 위반은 [XPhUTE 감사](candidate-xphute-2026-10-08.md), [p6yGme 감사](candidate-p6ygme-2026-10-08.md), [h7hpw4 감사](candidate-h7hpw4-2026-10-08.md)에 보존하며 새 실행 결과로 고쳐 쓰지 않는다.
+**현재 판정: NO_GO.** 통합 회귀와 변경 영역의 패키지 기능은 확인했지만 medium 1% refresh 목표 미달이 남았다. 최종 20회·정식 서명/공증·독립 평가·실계정/실제 Keychain 수용도 미완료다. 이전 후보의 목표 미달·부하 위반은 [XPhUTE 감사](candidate-xphute-2026-10-08.md), [p6yGme 감사](candidate-p6ygme-2026-10-08.md), [h7hpw4 감사](candidate-h7hpw4-2026-10-08.md)에 보존하며 새 실행 결과로 고쳐 쓰지 않는다.
 
 ## 1. 기준과 실행 조건
 
@@ -62,7 +62,33 @@
 
 기존 `stage5-delta.sh KOwFxr`와 calm-meadow의 `w23-refresh/changed-native.sh KOwFxr`로 실행했다. 모든 명령 exit 0, 후보 app.asar/manifest 일치와 기록된 mock Keychain·실계정 미사용을 `stage5-KOwFxr/native-facts.json`에서 대조했다. SIGKILL 복구는 전원 손실 검증이 아니며 내부 보안 탐침은 독립 보안 검토·signed-helper C15 수용의 대체물이 아니다.
 
-## 5. 미실행 수용과 사용자 입력
+## 5. 성능 진단과 잔여 병목
+
+기존 stage5-timing.sh KOwFxr로 medium 09:36:49–10:03:02, large 10:05:32–11:13:36 KST에 실행했다. 각 구간에는 warmup·회차 사이 quiet 대기도 포함된다. 두 러너 모두 SMOKE_ONLY / COMPLETE, exit 0이며 여섯 번의 앱 실행(warmup 포함) 모두 실행 직전 quiet admission과 AC 경계 관측을 확인했다. 이는 최종 20회 SLO 수용이 아니다.
+
+| 클래스·회차 | 초기 분석(초) | 1% refresh(초) | 실행 직전 load1 |
+| --- | ---: | ---: | ---: |
+| medium 1 | 139.791 | 79.094 | 3.3682 |
+| medium 2 | 136.082 | 80.364 | 3.6831 |
+| large 1 | 529.340 | 398.829 | 2.6606 |
+| large 2 | 526.712 | 398.680 | 3.4614 |
+
+medium은 10,000파일·50MiB 중 100파일, large는 50,000파일·200MiB 중 500파일을 변경했다. large 초기 분석은 두 관측 모두 600초 이내지만, medium refresh는 30초 목표에 미달한다. large refresh의 별도 SLO는 없다. 전체 canonical 비교는 NOT RUN이며 resultEqualsFull=null을 유지했다. 두 결과의 source/app 불변과 각 실행의 cleanup을 확인했다.
+
+| medium refresh 단계 | 1회차(ms) | 2회차(ms) |
+| --- | ---: | ---: |
+| IMPORT | 13,690 | 14,199 |
+| SOURCE_PARSING | 13,442 | 12,804 |
+| GRAPH_BUILD | 2,999 | 2,940 |
+| TS_PARSING | 42,415 | 43,923 |
+
+현재 가장 긴 단계는 TS_PARSING이다. 이 시간만으로 analyzer CPU·통신·DB 저장 중 어느 부분이 원인인지 단정하지 않는다. 단계별 계측으로 남은 비용을 분리하며, 격리 SQL 계획·정규식 진단의 개선을 패키지 목표 달성으로 대체하지 않는다.
+
+원본은 workload-performance/run-pTTsgG/result.json과 workload-performance/run-I2fgeN/result.json이다. stage5-KOwFxr/performance-facts.json, sleep-correlation-timing.json, ledger-plan.json, ledger.json에 원본 해시·관측 범위·NOT RUN을 연결했다. 사전 점검부터 종료까지 09:03:46–11:13:36 KST의 pmset 원본과 대조한 실제 Sleep/Wake/DarkWake 전환은 0건이었다. 전원 assertion이나 Wake Requests는 전환으로 세지 않았다. 이 대조가 실행 중 부하의 연속 보증이나 최종 수용을 뜻하지는 않는다.
+
+첫 실행 wrapper의 heredoc 구문 오류는 측정 시작 전에 발생했다. timing-preflight-attempt1.log에 보존했으며 실제 측정을 중복 실행하거나 실패 기록을 덮어쓰지 않았다. 이전 XPhUTE의 부하 무효 기록도 그대로 유지한다.
+
+## 6. 미실행 수용과 사용자 입력
 
 시작20회, small/medium/large G-PERF20회, packaged clean-full canonical 동등성, 비용 probe·PK-08·SBOM 재생성은 이번 후보 **NOT RUN**이다. overview/outcome 개수 일치는 canonical 동등성을 대신하지 못한다. frontend digest가 이전 후보와 같아 UX190 자동 pilot은 이번에 NOT RUN이며 이전 실행은 역사적 기록으로만 유지한다.
 
