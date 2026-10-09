@@ -726,7 +726,7 @@ async function main(argv = process.argv.slice(2)) {
     }
     report.assessment = options.series ? assessed : null;
     report.smokeObservations = options.series || options.diagnosticOnly ? null : observed;
-    report.measurementStatus = report.runs.length === options.runs && report.runs.every(run => run.status === 'PASS') ? 'COMPLETE' : 'INCOMPLETE';
+    report.measurementStatus = report.runs.length === options.runs && [report.warmup, ...report.runs].every(run => run?.status === 'PASS' && run.samplingComplete === true && run.memory?.failure === null && run.cleanupConfirmed === true) ? 'COMPLETE' : 'INCOMPLETE';
     report.environmentGate = acObservedAtRunBoundaries(report.environment.power, [report.warmup, ...report.runs])
       ? 'AC_OBSERVED_AT_RUN_BOUNDARIES' : 'AC_POWER_NOT_CONFIRMED';
     report.loadGate = report.runs.length === options.runs && [report.warmup, ...report.runs].every(run => run?.quietAdmission?.status === 'ADMITTED')

@@ -91,5 +91,7 @@ EvidenceService.replaceLinkedAll은 생성 ID를 JDBC로 돌려받아 다시 연
 
 수집기는 전체 호스트의 PID/PPID/실행파일만 조회한 뒤, 소유 트리와 정확히 같은 독립 Validation 번들의 XPC 범위만 대상으로 RSS를 조회한다. 같은 앱 main이 둘 이상이면 모호성 오류로 거부하고 조회 중 실행파일 변경도 거부한다. 실제 PPID는 보존하고 읽기 전용 scopeOwnerPid를 별도 기록한다. 종료 권한이나 cleanup의 소유 범위는 확대하지 않는다. CSV 형식2는 scope_owner_pid를 추가한다. 100ms 주기·250ms 공백 기준은 유지한다.
 
-누락/귀속 경계 시험은 수정 전2 FAIL, 변경 영향 sampler 시험68 PASS·0 FAIL이며 실제 OS reader smoke도 확인했다(rss-scope-fix-i9Fmt4). 수정 후 실제 XPC 앱 동시 수집·새 후보 검증은 다음 단계이며 아직 PASS로 기록하지 않는다. ledger-v8/v9의 과거 관측은 보존한다.
+누락/귀속 경계 시험은 수정 전2 FAIL, 변경 영향 sampler 시험68 PASS·0 FAIL이며 실제 OS reader smoke를 확인했다(rss-scope-fix-i9Fmt4). 수정 후 실제 앱 rss-scope-X9Ivw8/run-b7khSU는 시작 중 실행파일 변경을 오류로 거부해 warmup/분석 모두 RSS 불완전이었다. 기능 분석 PASS를 RSS 완료로 세지 않는다. 정상 자식의 /bin/sh→/bin/sleep 전환으로 같은 오탐을 실제 OS에서 최소 재현했다(rss-exec-before-9fb7CD).
+
+이 실행은 memory.failure·samplingComplete=false·실패 프로필을 보존했지만 상위 measurementStatus가 기능 성공만 보고 COMPLETE를 반환했다. 이제 warmup/각 회차의 완전 수집·memory 오류 없음·정상 종료도 요구하며 미완전은 INCOMPLETE·실패 exit로 남긴다. 실제 실패 경로와 정상 exec 보완은 후속 검증 중이다. 과거 원본 결과와 ledger-v8/v9는 덮어쓰지 않는다.
 
