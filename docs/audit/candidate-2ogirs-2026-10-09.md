@@ -82,6 +82,21 @@ medium 종료 뒤 large의 저부하 대기 중 디스크 가용량 472,965,120B
 
 각 디렉터리의 `result.json`·`retirement.json`이 근거다. 원본 입력은 runtime·automation marker·backend PID·실행 결과·로그·전체 inventory로 이번 시험의 합성 데이터임을 확인했다. 보고서·실패 폴더·source fixture·다른 프로필 파일은 보존했다. 실사용 프로필·Keychain·secrets.enc·source vault는 이 보관 작업에서 읽지 않았다. 과거 진단의 원본 디렉터리 불변 검증은 **그 실행 시점의 사실**이며, 지금의 확장 PostgreSQL 디렉터리는 검증된 ZIP으로 대체되어 있다. 복원 후 inode 동일성이나 같은 UID의 모든 동시 변경을 원자적으로 배제했다는 보장은 하지 않는다.
 
+### 검증용 중복 파일의 조기 정리
+
+사용자의 추가 승인으로 완료된 작업자 8개의 검증용 복제본만 최종 작업트리 제거와 분리해 먼저 정리했다. 공통 native lock과 caffeinate 아래에서 등록 작업트리·통합된 HEAD·clean 상태·소유권·경로 identity·전체 파일 inventory·열린 파일을 확인했다. 원본과 다른 의존성 폴더는 제외했으며 작업트리 자체·소스·빌드 결과·실패 기록은 제거하지 않았다.
+
+| 범위 | 제거한 복제본 | 불일치로 보존 | 시작 가용량(바이트) | 종료 가용량(바이트) |
+| --- | ---: | ---: | ---: | ---: |
+| 검증 앱 | 24 | 0 | 2,928,136,192 | 2,983,194,624 |
+| 의존성 폴더 | 24 | 8 | 3,166,904,320 | 3,228,839,936 |
+
+검증 앱의 보존 원본은 원본 저장소의 1lvULq·tZgvV7과 calm-meadow의 LA8ZS9이다. 기존 ad-hoc 서명 검증과 파일·실행 비트·링크 inventory 일치를 확인했으며 새 서명은 하지 않았다. 각 작업자 후보 디렉터리의 `DUPLICATE-RUNTIME-RETIRED.json`에 보존 원본 경로와 해시를 남겼다. 의존성 원본은 calm-meadow의 frontend·desktop·두 analyzer의 node_modules다. 이 보존 원본들은 후속 정리 대상에서 제외한다.
+
+근거는 calm-meadow의 `validation/local/w24-ts-refresh/runtime-dedup-1/result.json`·`dependency-dedup-1/result.json`과 각 단계의 사전 비교·개별 retirement 기록이다. 다섯 합성 안전장치 smoke에서 실제 동일 복제본 제거와 불일치·열린 파일·identity 교체·원본 자체 지정 거부를 확인한 동일 제거 함수를 재사용했다. 두 실제 정리 모두 보존 원본의 전체 inventory와 작업자 소스 clean 상태를 종료 시 재확인했다.
+
+논리 크기가 큰 복제본이라도 APFS 공유 블록 때문에 실제 공간 증가는 작았다. 두 구간 사이의 공간 변화에는 다른 호스트 작업도 포함될 수 있으므로 관측 차이를 이 정리의 독점 회수량으로 단정하지 않는다. large 재개에 필요한 공간은 아직 확보하지 못했다. 열린 파일 확인은 현재 사용자 권한의 시점 관측이며 동일 UID 동시 변경을 원자적으로 배제하거나 모든 확장 속성을 보존했다는 보장은 아니다.
+
 원본 저장소로의 증거 복제는 측정·PR 병합·main fast-forward 뒤 마지막 한 번의 `/bin/cp -cRp` 보관 단계에서 수행한다. 계획한 새 위치는 `validation/local/release-gate-followup-20261009-2ogirS/`이며, `calm-meadow-validation/`과 `integration-validation/` 아래에 각 출처 경로를 유지한다. 이 문서 커밋 시점에는 미실행이며, 완료 여부는 해당 위치의 `archive-result.json`으로 확인한다. 기존 목적지는 덮어쓰지 않는다.
 
 ## 6. 미실행 수용과 사용자 입력
