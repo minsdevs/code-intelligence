@@ -45,19 +45,24 @@ COORD `validation/local/gate-recovery-20261009/medium-historical-cause.json`에 
 | 검증 | 현재 결과 |
 | --- | --- |
 | 대상 workload metrics | 최초 대상 묶음30 PASS, 추가 경계 수정 뒤 metrics22 PASS |
-| INT 전체 validation runners | d07871e에서432 PASS·0 FAIL·0 SKIP. runners-int-d078.log |
+| INT 전체 validation runners | f15b30b의 전원 진입 보완 포함432 PASS·0 FAIL·0 SKIP. runners-int-lid-guard.log 및 아래 통합 회귀에서 재확인 |
 | COORD 추가 러너 회귀 | 432개 중431 PASS·1 FAIL. tree-analyzer proxy-addr2.0.7의 IPv4-mapped CIDR 보안 시험 실패. INT 설치는2.0.8; 이 실패를 제품 PASS로 대체하지 않음. runners-phase-regression.log 보존 |
 | 제한 볼륨 실제 PostgreSQL ENOSPC | 재현·공간 진입 거부 확인 |
 | RSS worker 실제 ps·driver 차단 | 완전 수집 확인, 소형 진단 한정 |
 | 정상 medium 분석·refresh 병목 | NOT RUN. quiet 대기 중 실제 닫힌 덮개 관측으로 소유 진단만 중단; 기존 원본·실패 기록 유지 |
 | packaged incremental/독립 clean-full canonical | 준비, NOT RUN |
-| 새 후보·통합 전체 회귀·영향 패키지·medium/large smoke | NOT RUN |
+| INT 통합 회귀7종 | f15b30b에서6,591 PASS·0 FAIL·63 SKIP, frontend TypeScript 검사 PASS. INT validation/local/gate-recovery-20261009/full-regression-qYKRfV/ |
+| 새 후보·영향 패키지·medium/large smoke | NOT RUN |
 | 최종 시작/G-PERF20회 | NOT RUN |
 
 medium30초 달성 판정은 새 실측 전이며 기존59.360초 목표 미달은 유지한다. large 초기 분석600초·RSS6GiB와 별도 hard timeout을 따르고 large refresh에 medium30초를 적용하지 않는다. JVM 수집기는 이전 w24 방식을 재사용하되 후보 소스·asar 해시를 인자로 받는다. 계측 실행 시간은 최종 SLO 표본이 아니다.
 실제 ioreg가 닫힌 덮개를 보고한 뒤, 기존 quiet 함수가 CLOSED 표본 세 개를 그대로 승인하는 것을 재현했다. AC·열린 덮개를 세 quiet 표본 모두에서 요구하도록 보완했다. 기존 시험 확장의 수정 전 결과21 PASS·1 FAIL과 수정 후22 PASS를 INT에 보존했다. 실제 호스트 관측 smoke는 앱을 시작하지 않고 대기 경로로 진입했다. 시스템 전원 설정은 변경하지 않았다.
 
 대기 진단 analysis-probe-nnYq0l은 warmup 소유 앱18573의 정상 종료 뒤 측정 앱을 시작하지 않은 상태에서 중단했다. run-IC4YNL 원본의 RUNNING을 PASS로 바꾸지 않고 별도 중단 기록을 남긴다. 새 진단은 최신 러너의 전원·덮개·quiet 조건이 충족돼야 실행된다.
+
+통합 회귀 합계는 고유 시험 수가 아니라 실제 실행 수다(events19회 포함). frontend480·TS analyzer318·runners432·desktop3,278·backend2,064·events19 PASS이며 desktop45·backend18 SKIP은 수용으로 세지 않는다. backend/events는 cleanTest를 실행했고 소스·기존 컨테이너 불변, 새 잔류 컨테이너0을 확인했다. backend-JxvI2N 및 events-8V0NBb가 개별 Docker 증거다.
+
+f15b30b까지 새4개 커밋의 gitleaks 탐지0, 합성 app.token-enc-key가 있는63개 시험 파일의 값·해시가 기준 main과 같음을 확인했다. 아직 push·PR·병합은 하지 않았다. ledger-v3.json에 연결했다.
 
 ## 5. 사람 입력과 이름 경계
 
