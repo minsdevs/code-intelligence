@@ -98,7 +98,8 @@ async function readOwnerMemory(ownerPid, { execute = runExecFile } = {}) {
   const rows = executableRows(stdout, true);
   for (const row of rows) {
     assert(identities.has(row.pid), 'MEMORY_TABLE_UNEXPECTED_PID');
-    if (row.executable !== identities.get(row.pid)) throw new Error('MEMORY_PROCESS_IDENTITY_CHANGED');
+    // Children may legitimately exec; current PPID/bundle scope is revalidated below.
+    if (row.pid === ownerPid && row.executable !== identities.get(row.pid)) throw new Error('MEMORY_PROCESS_IDENTITY_CHANGED');
   }
   const current = samplingScope(rows, ownerPid);
   return current.selected.map(row => ({ pid: row.pid, ppid: row.ppid, rssKiB: row.rssKiB,

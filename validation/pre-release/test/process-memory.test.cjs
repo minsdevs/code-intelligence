@@ -117,9 +117,16 @@ test('two instances of the same packaged executable refuse RSS attribution befor
   assert.equal(h.calls.length, 1);
 });
 
-test('a PID whose executable changed between discovery and memory observation is rejected', async () => {
-  const h = recorder(['10 1 /bin/owner\n11 10 /bin/child\n', '10 1 5 /bin/owner\n11 10 6 /bin/replacement\n']);
+test('a replaced owner executable is rejected', async () => {
+  const h = recorder(['10 1 /bin/owner\n11 10 /bin/child\n', '10 1 5 /bin/replacement\n11 10 6 /bin/child\n']);
   await assert.rejects(readOwnerMemory(10, { execute: h.execute }), /MEMORY_PROCESS_IDENTITY_CHANGED/);
+});
+
+test('a child may exec while current ownership, not the stale executable, defines RSS scope', async () => {
+  const h = recorder(['10 1 /bin/owner\n11 10 /bin/child\n12 10 /bin/child\n',
+    '10 1 5 /bin/owner\n11 10 6 /bin/replacement\n12 99 50 /bin/foreign\n']);
+  const rows = await readOwnerMemory(10, { execute: h.execute });
+  assert.deepEqual(rows, [{ pid: 10, ppid: 1, rssKiB: 5 }, { pid: 11, ppid: 10, rssKiB: 6 }]);
 });
 
 test('XPC scope does not keep a non-bundle child after it leaves that process tree', async () => {
