@@ -1,6 +1,6 @@
 # 2ogirS route 저장 개선 후보 — 2026-10-09
 
-**현재 판정: NO_GO.** 통합 회귀와 변경 영역 패키지 검증은 완료했다. 새 medium·large smoke-2는 진행 중이며 성능 개선·medium refresh 30초 달성은 아직 판정하지 않는다. 최종 20회·packaged clean-full canonical 동등성·독립 평가·사람 수용도 미완료다. [KOwFxr 감사](candidate-kowfxr-2026-10-09.md)의 목표 미달과 이전 실패·INVALID_LOAD는 유지한다.
+**현재 판정: NO_GO.** 통합 회귀와 변경 영역 패키지 검증은 완료했지만 medium은 첫 회차 refresh 목표 미달·둘째 회차 분석 실패로 INCOMPLETE다. large는 디스크 공간 부족으로 시작 전 중단했으며 사용자 공간 확보를 기다린다. 최종 20회·packaged clean-full canonical 동등성·독립 평가·사람 수용도 미완료다. [KOwFxr 감사](candidate-kowfxr-2026-10-09.md)의 목표 미달과 이전 실패·INVALID_LOAD는 유지한다.
 
 ## 1. 기준과 경계
 
@@ -52,7 +52,19 @@
 
 ## 4. 성능 진단 상태
 
-기존 `coordination-2026-10-08/stage5-timing.sh 2ogirS`의 medium·large smoke-2가 진행 중이다. 새 관측값·원본 해시·Sleep/Wake 대조·ledger는 실행 종료 뒤 확정한다. 이전 후보의 수치를 새 후보 결과로 복사하지 않는다.
+기존 `coordination-2026-10-08/stage5-timing.sh 2ogirS`의 medium 구간은 13:36:13–15:54:26 KST에 실행됐다. `workload-performance/run-VsTTVE/result.json`은 SMOKE_ONLY / INCOMPLETE, 명령 exit 0이다. 둘째 회차가 ANALYSIS_FAILED로 끝났으므로 이 종료값을 검증 통과로 해석하지 않는다. 첫 회차에서 확보한 시간만 아래에 기록한다. large는 NOT RUN이며 전체 ledger는 아직 확정하지 않았다.
+
+| 완료 관측 | 초기 분석(초) | 1% refresh(초) | 실행 직전 load1 |
+| --- | ---: | ---: | ---: |
+| medium 1 | 141.117 | 59.360 | 3.0225 |
+
+refresh 목표는 30초이며 이 관측은 미달이다. 사용자는 이번 후보의 남은 검증을 마친 뒤 실제 미달·미실행을 기록하고 문서·PR·병합까지 마감하도록 선택했다. 추가 최적화는 별도 작업이며 기존 SLO나 출시 기준을 낮춘 승인이 아니다.
+
+둘째 회차는 quiet admission을 7,057,793ms 기다린 뒤 시작했지만 분석에 실패했다. graph·incremental은 원본에 FAIL / NOT_RUN_AFTER_ANALYSIS_FAILURE, cancel은 CANCEL_FAILED로 기록되어 있다. 메모리 표본에도 MEMORY_SAMPLE_FAILED가 있어 완전한 RSS 증거로 취급하지 않는다. 두 회차의 cleanup과 원본 실패 결과를 보존했고, 실패 프로필은 기존 러너가 자동 정리했다. 상세 실패 원인은 아직 UNDETERMINED다. medium 원본 결과 SHA-256은 `062005995d0f37cb289d3b3e91a10895921feb42e9a1d0d9be54761b02c1903c`이다.
+
+`stage5-2ogirS/medium-failure-sleep.json`은 보존한 pmset 원본과 대조한 기록이다. medium 전체 구간에는 timestamped record 581개와 정확한 Sleep/Wake/DarkWake 전환0건이 있었다. 실제 실패 회차의 마지막 admission 관측부터 종료까지는 timestamped record가 없어 NO_RECORDS_IN_WINDOW다. 이 자료만으로 실패를 절전·부하 또는 특정 제품 코드 탓으로 확정하지 않는다.
+
+medium 종료 뒤 large의 저부하 대기 중 디스크 가용량 472,965,120B를 관측했다. 이전 large 실행의 프로필은 3,922,182,144B·3,918,684,160B였으므로 검증 작업을 중단했다. timing summary에 large 시작이 없고 large 로그도 생성되지 않아 NOT RUN으로 기록한다. `stage5-2ogirS/timing-cancellation.json`에 중단과 원본 medium 해시를 보존했다. 사용자는 공간 확보 후 large 재개를 선택했다. 기존 medium 실패를 재실행으로 대체하지 않으며, 뒤늦게 관측한 공간 부족만으로 앞선 분석 실패의 원인을 확정하지 않는다.
 
 실행 직전 quiet admission은 load1<4·mdworker_shared≤6을 30초 간격으로 세 번 확인한다. 사용자가 승인한 AC·외부 화면·덮개 닫힘 예외는 진단 smoke에만 적용한다. 최종 20회에는 조용한 AC·덮개 열린 기기가 필요하며 현재 NOT RUN이다. 시작 직전 부하·전원 경계 관측을 실행 전체의 연속 보증으로 해석하지 않는다.
 
@@ -70,7 +82,7 @@
 
 각 디렉터리의 `result.json`·`retirement.json`이 근거다. 원본 입력은 runtime·automation marker·backend PID·실행 결과·로그·전체 inventory로 이번 시험의 합성 데이터임을 확인했다. 보고서·실패 폴더·source fixture·다른 프로필 파일은 보존했다. 실사용 프로필·Keychain·secrets.enc·source vault는 이 보관 작업에서 읽지 않았다. 과거 진단의 원본 디렉터리 불변 검증은 **그 실행 시점의 사실**이며, 지금의 확장 PostgreSQL 디렉터리는 검증된 ZIP으로 대체되어 있다. 복원 후 inode 동일성이나 같은 UID의 모든 동시 변경을 원자적으로 배제했다는 보장은 하지 않는다.
 
-원본 저장소로의 증거 복제는 측정 종료 후 마지막 한 번의 `/bin/cp -cRp` 보관 단계에서 수행한다. 이 문서 작성 시점에는 아직 실행하지 않았다.
+원본 저장소로의 증거 복제는 측정·PR 병합·main fast-forward 뒤 마지막 한 번의 `/bin/cp -cRp` 보관 단계에서 수행한다. 계획한 새 위치는 `validation/local/release-gate-followup-20261009-2ogirS/`이며, `calm-meadow-validation/`과 `integration-validation/` 아래에 각 출처 경로를 유지한다. 이 문서 커밋 시점에는 미실행이며, 완료 여부는 해당 위치의 `archive-result.json`으로 확인한다. 기존 목적지는 덮어쓰지 않는다.
 
 ## 6. 미실행 수용과 사용자 입력
 

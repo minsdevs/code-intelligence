@@ -4,7 +4,7 @@
 - 이번 실측 기준: `KOwFxr`, product source `a04fa4d`, baseline `tZgvV7`, `xpc-required`.
 - 통합 브랜치: `release/gate-followup-20261008`; 유닛 시작 HEAD `cec85e9`.
 - 증거: `validation/local/w24-ts-refresh/` 및 `workload-performance/run-w1k0wK/`.
-- **유닛 정확성·호출 수 검증과 새 후보 2ogirS의 회귀·영향 패키지 검증은 통과했다. 성능 진단은 진행 중이며 medium refresh 30초 달성은 아직 판정하지 않는다.** KOwFxr의 목표 미달과 최종 20회 NOT RUN은 유지한다.
+- **유닛 정확성·호출 수 검증과 새 후보 2ogirS의 회귀·영향 패키지 검증은 통과했지만 성능 수용은 미통과다.** 사용자 선택에 따라 이번 후보 검증·기록·병합 뒤 마감하고 추가 최적화는 분리한다. 과거 실패와 최종 20회 NOT RUN은 유지한다.
 
 ## 실제 패키지 관측
 
@@ -54,6 +54,6 @@ KOwFxr 실행에서 보존한 **합성 전용** profile의 marker·runtime·back
 
 ## 남은 판정
 
-같은 제품 소스 c1b93c9의 2ogirS 후보에서 회귀 6,587 PASS·실패0·63 SKIP, 제품36·경합8 및 내부 보안 탐침을 확인했다. medium·large smoke-2는 진행 중이다. 최종20회·실제 Keychain·실계정·서명/공증·독립 C15·수작업 UX 등은 이 유닛의 결과로 승격하지 않는다. 사용자 입력은 기존 USER-INPUT-READINESS 기준으로 준비 상태만 보고한다. [후보 감사](candidate-2ogirs-2026-10-09.md).
+같은 제품 소스 c1b93c9의 2ogirS 후보에서 회귀 6,587 PASS·실패0·63 SKIP, 제품36·경합8 및 내부 보안 탐침을 확인했다. medium은 첫 회차 refresh59.360초로 목표 미달, 둘째 회차 ANALYSIS_FAILED로 INCOMPLETE다. large는 공간 부족으로 시작 전 중단·NOT RUN이며 사용자가 공간 확보 후 재개를 선택했다. 최종20회·실제 Keychain·실계정·서명/공증·독립 C15·수작업 UX 등은 이 유닛의 결과로 승격하지 않는다. 사용자 입력은 기존 USER-INPUT-READINESS 기준으로 준비 상태만 보고한다. [후보 감사](candidate-2ogirs-2026-10-09.md).
 
 후속 빌드의 공간 확보 과정에서 성공한 합성 DB 복제본 두 개와 합성 입력의 확장 PostgreSQL 디렉터리는 전체 복원·inventory 일치 검증 뒤 ZIP 보관으로 전환했다. 원본 불변은 위 진단 실행 시점에 확인한 사실이며, 현재 보관 위치·검증 범위는 [후보 감사 §5](candidate-2ogirs-2026-10-09.md#5-실패-보존과-합성-db-보관)에 기록했다. 실패·보고서·source fixture·다른 프로필 파일은 보존했다.
