@@ -396,7 +396,9 @@ A passing runner is row-level evidence only, never a gate PASS.
 - Analysis polling records the last sanitized job, transport/status/timeout category
   and HTTP status without raw errors, paths, tokens or response bodies. An incomplete
   smoke series exits nonzero; exit zero still does not certify an SLO or release gate.
-- RSS completeness includes unsampled phase-entry and phase-exit windows. Per-phase
-  read and scheduler delays distinguish collector delay from product RSS. Safe I/O
-  failure categories identify read versus CSV-write failures; null failure does not
-  imply complete sampling. The 100 ms cadence and 250 ms maximum gap are unchanged.
+- RSS sampling runs in a dedicated worker, independent of synchronous driver fixture
+  hashing and mutation. Phase entry/exit acknowledgements precede the associated action.
+  Completeness includes unsampled phase-entry and phase-exit windows. Per-phase read
+  and scheduler delays distinguish collector delay from product RSS. Safe I/O categories
+  distinguish reads from CSV writes; null failure does not imply complete sampling.
+  The 100 ms cadence and 250 ms maximum gap are unchanged.

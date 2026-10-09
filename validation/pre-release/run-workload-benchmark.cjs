@@ -17,10 +17,10 @@ const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.
 const { launchEnvironment, bounded } = require('../../desktop/scripts/packaged-keychain-acceptance.cjs');
 const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
-const { readOwnerMemory } = require('./process-memory.cjs');
+const { startOwnedPhaseSampler } = require('./workload-sampler.cjs');
 const { observePowerSource, acObservedAtRunBoundaries, confirmObservedGone } = require('./run-startup-benchmark.cjs');
 const { SIZE_CLASSES, generateWorkload, hashTree, mutateWorkload } = require('./workload-fixture.cjs');
-const { SLO, evaluateRow, describeSmoke, startPhaseSampler, phaseSamplingComplete, installWorkloadWatch, installWorkloadClick } = require('./workload-metrics.cjs');
+const { SLO, evaluateRow, describeSmoke, phaseSamplingComplete, installWorkloadWatch, installWorkloadClick } = require('./workload-metrics.cjs');
 const { expectedServices } = require('./adapter-mode.cjs');
 const { withDropConfirmation } = require('./drop-confirmation.cjs');
 // The analysis results table in either UI language (English is the product default).
@@ -206,7 +206,7 @@ async function main(argv = process.argv.slice(2)) {
       .map(name => path.join(os.homedir(), 'Library/Application Support', name)) });
   const requireFrontend = createRequire(path.join(repo, 'frontend/package.json'));
   const { _electron } = requireFrontend('playwright'), { expect } = requireFrontend('@playwright/test');
-  const inputs = [__filename, path.join(__dirname, 'workload-metrics.cjs'), path.join(__dirname, 'workload-fixture.cjs'),
+  const inputs = [__filename, path.join(__dirname, 'workload-sampler.cjs'), path.join(__dirname, 'workload-metrics.cjs'), path.join(__dirname, 'workload-fixture.cjs'),
     path.join(__dirname, 'startup-metrics.cjs'), path.join(__dirname, 'process-memory.cjs'), path.join(__dirname, 'drop-confirmation.cjs'),
     path.join(__dirname, 'run-startup-benchmark.cjs'), path.join(repo, 'desktop/scripts/native-acceptance-electron.cjs'),
     path.join(repo, 'desktop/src/isolated-run.cjs')];
@@ -381,12 +381,12 @@ async function main(argv = process.argv.slice(2)) {
 
   async function analysisRow(page, d, sampler, run, folder) {
     const row = run.rows.analysis = { status: 'RUNNING', metrics: {}, failure: null };
-    sampler.phase('PREVIEW');
+    await sampler.phase('PREVIEW');
     const preview = await stage('PREVIEW_FAILED', () => importAndPreview(page, d, folder, row.metrics));
     row.localImport = preview.localImport;
     run.admittedFiles = preview.localImport?.acceptedFiles ?? null;
     if (preview.localImport?.acceptedFiles !== fixture.files) row.admissionMismatch = true;
-    sampler.phase('ANALYSIS');
+    await sampler.phase('ANALYSIS');
     const started = await stage('ANALYSIS_START_FAILED', () => approve(page, d));
     run.projectId = started.projectId; row.jobId = started.jobId;
     await d.watch('overview', { kind: 'rows', path: `^/projects/${started.projectId}/overview$`, minimum: 1 });
@@ -397,7 +397,7 @@ async function main(argv = process.argv.slice(2)) {
     if (outcome.job.status !== 'DONE') { row.failedStep = failedStep(outcome.job); throw new Error(outcome.job.status === 'CANCELLED' ? 'ANALYSIS_CANCELLED' : 'ANALYSIS_FAILED'); }
     const shown = await d.waitMark('overview', 60000, 'OVERVIEW_NOT_SHOWN');
     row.metrics.analysisMs = Math.round(shown.overview - shown.approveClick);
-    row.analysisWindowSampling = sampler.snapshot().phases.ANALYSIS ?? null;
+    row.analysisWindowSampling = (await sampler.snapshot()).phases.ANALYSIS ?? null;
     run.snapshotId = (await d.api(`/api/projects/${started.projectId}`)).currentSnapshot.id;
     const coverage = await d.api(`/api/projects/${started.projectId}/coverage?snapshotId=${run.snapshotId}`);
     row.outcomes = coverage.outcomes;
@@ -407,7 +407,7 @@ async function main(argv = process.argv.slice(2)) {
 
   async function graphRow(page, d, sampler, run) {
     const row = run.rows.graph = { status: 'RUNNING', metrics: {}, failure: null };
-    sampler.phase('GRAPH');
+    await sampler.phase('GRAPH');
     const { projectId, snapshotId } = run;
     const first = await d.api(`/api/projects/${projectId}/graph/nodes?snapshotId=${snapshotId}&category=symbols&page=1&size=100&sort=path`);
     assert(first.items.length > 0);
@@ -443,7 +443,7 @@ async function main(argv = process.argv.slice(2)) {
 
   async function incrementalRow(page, d, sampler, run, folder) {
     const row = run.rows.incremental = { status: 'RUNNING', metrics: {}, failure: null, checks: {} };
-    sampler.phase('INCREMENTAL');
+    await sampler.phase('INCREMENTAL');
     row.change = mutateWorkload({ root: folder, manifest: fixture });
     const { projectId } = run;
     await d.navigate(`/projects/${projectId}/overview`);
@@ -495,7 +495,7 @@ async function main(argv = process.argv.slice(2)) {
 
   async function cancelRow(page, d, sampler, run, folder) {
     const row = run.rows.cancel = { status: 'RUNNING', metrics: {}, failure: null };
-    sampler.phase('CANCEL');
+    await sampler.phase('CANCEL');
     await stage('CANCEL_FAILED', () => importAndPreview(page, d, folder + '-cancel', {}));
     const started = await stage('CANCEL_FAILED', () => approve(page, d));
     run.cancelProjectId = started.projectId;
@@ -543,7 +543,7 @@ async function main(argv = process.argv.slice(2)) {
 
   async function deleteRow(page, d, sampler, run) {
     const row = run.rows.delete = { status: 'RUNNING', metrics: {}, failure: null };
-    sampler.phase('DELETE');
+    await sampler.phase('DELETE');
     if (!run.projectId) throw new Error('PROJECT_DELETE_FAILED');
     row.snapshots = (await d.api(`/api/projects/${run.projectId}/jobs`)).filter(job => job.status === 'DONE').length;
     const begin = performance.now();
@@ -580,7 +580,7 @@ async function main(argv = process.argv.slice(2)) {
       launchAttempted = true;
       const launched = await stage('STARTUP_FAILED', () => launch(run, started));
       ({ sdk, owner } = launched);
-      sampler = startPhaseSampler(owner.process().pid, fd, sequence, started, { read: () => readOwnerMemory(owner.process().pid) });
+      sampler = startOwnedPhaseSampler(owner.process().pid, fd, sequence, started);
       stopObserving = observeStartup(owner.process(), diagnostics, () => {});
       const page = await stage('STARTUP_FAILED', () => ready(sdk, launched.remaining));
       run.readyMs = Math.round(performance.now() - started);
@@ -589,14 +589,14 @@ async function main(argv = process.argv.slice(2)) {
         let analysisFailure = null;
         if (options.rows[0] === 'preview') {
           const row = run.rows.preview = { status: 'RUNNING', metrics: {}, failure: null };
-          sampler.phase('PREVIEW');
+          await sampler.phase('PREVIEW');
           try {
             const preview = await stage('PREVIEW_FAILED', () => importAndPreview(page, d, folder, row.metrics));
             row.localImport = preview.localImport;
             row.status = preview.localImport?.acceptedFiles === fixture.files ? 'PASS' : 'FAIL';
             if (row.status === 'FAIL') row.failure = 'PREVIEW_ADMISSION_MISMATCH';
           } catch (error) { row.status = 'FAIL'; row.failure = failureCode(error, 'PREVIEW_FAILED'); }
-          finally { row.peakRssKiB = sampler.snapshot().phases.PREVIEW?.peakRssKiB || null; save(); }
+          finally { row.peakRssKiB = (await sampler.snapshot()).phases.PREVIEW?.peakRssKiB || null; save(); }
         } else try {
           await analysisRow(page, d, sampler, run, folder);
           run.rows.analysis.status = 'PASS';
@@ -606,7 +606,7 @@ async function main(argv = process.argv.slice(2)) {
           run.rows.analysis.failureStage = codes.has(error?.stage) ? error.stage : null;
           run.rows.analysis.httpStatus = Number.isInteger(error?.status) ? error.status : null;
         } finally {
-          const snap = sampler.snapshot();
+          const snap = await sampler.snapshot();
           run.rows.analysis.peakRssKiB = snap.phases.ANALYSIS?.peakRssKiB || null;
           run.rows.analysis.previewPeakRssKiB = snap.phases.PREVIEW?.peakRssKiB || null;
           save();
@@ -616,18 +616,18 @@ async function main(argv = process.argv.slice(2)) {
           if (analysisFailure) { run.rows[name] = { status: 'FAIL', failure: 'NOT_RUN_AFTER_ANALYSIS_FAILURE', metrics: {} }; continue; }
           try { await action(page, d, sampler, run, folder); }
           catch (error) { run.rows[name] ??= { metrics: {} }; run.rows[name].status = 'FAIL'; run.rows[name].failure = failureCode(error, name === 'graph' ? 'GRAPH_API_FAILED' : 'INCREMENTAL_FAILED'); }
-          finally { run.rows[name].peakRssKiB = sampler.snapshot().phases[name.toUpperCase()]?.peakRssKiB || null; save(); }
+          finally { run.rows[name].peakRssKiB = (await sampler.snapshot()).phases[name.toUpperCase()]?.peakRssKiB || null; save(); }
         }
         // Projects are not deleted between rows: the profile is discarded after the run.
         for (const [name, action, code] of [['cancel', cancelRow, 'CANCEL_FAILED'], ['delete', deleteRow, 'PROJECT_DELETE_FAILED']]) {
           if (!options.rows.includes(name)) continue;
           try { await action(page, d, sampler, run, folder); }
           catch (error) { run.rows[name] ??= { metrics: {} }; run.rows[name].status = 'FAIL'; run.rows[name].failure = failureCode(error, code); }
-          finally { run.rows[name].peakRssKiB = sampler.snapshot().phases[name.toUpperCase()]?.peakRssKiB || null; save(); }
+          finally { run.rows[name].peakRssKiB = (await sampler.snapshot()).phases[name.toUpperCase()]?.peakRssKiB || null; save(); }
         }
         if (analysisFailure) throw new Error(analysisFailure);
       }
-      sampler.phase('IDLE');
+      await sampler.phase('IDLE');
       memory = await sampler.stop();
       run.samplingComplete = phaseSamplingComplete(memory, sequence > 0 ? 'ANALYSIS' : 'STARTUP');
       if (owner.process().exitCode !== null || owner.process().signalCode !== null) throw new Error('STARTUP_PROCESS_EXITED');
