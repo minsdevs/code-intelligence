@@ -152,6 +152,21 @@ test('two instances of the same packaged executable refuse RSS attribution befor
   const h = recorder(['10 1 P '+main+'\n30 1 P '+main+'\n']);
   await assert.rejects(readOwnerMemory(10, h), /MEMORY_SCOPE_AMBIGUOUS/);
   assert.equal(h.targets.length, 0);
+  // The same binary under another owner's tree is still a second instance.
+  const foreignTree = recorder(['10 1 P '+main+'\n90 1 P /bin/other\n91 90 P '+main+'\n']);
+  await assert.rejects(readOwnerMemory(10, foreignTree), /MEMORY_SCOPE_AMBIGUOUS/);
+});
+
+test('an owned descendant running the main binary is sampled, not treated as a second instance', async () => {
+  const main = '/tmp/App.app/Contents/MacOS/App';
+  const service = '/tmp/App.app/Contents/XPCServices/Parser.xpc/Contents/MacOS/Parser';
+  // 12 is a node-mode child (spawned through the owner's Java control runtime 11) before it re-executes.
+  const h = recorder(['10 1 P '+main+'\n11 10 P /tmp/App.app/Contents/Resources/jre/bin/java\n12 11 P '+main+'\n20 1 P '+service+'\n',
+    '10 1 100 '+main+'\n11 10 50 /tmp/App.app/Contents/Resources/jre/bin/java\n12 11 30 '+main+'\n20 1 7 '+service+'\n']);
+  assert.deepEqual(await readOwnerMemory(10, h), [
+    { pid: 10, ppid: 1, rssKiB: 100 }, { pid: 11, ppid: 10, rssKiB: 50 }, { pid: 12, ppid: 11, rssKiB: 30 }, { pid: 20, ppid: 1, rssKiB: 7, scopeOwnerPid: 10 },
+  ]);
+  assert.deepEqual(new Set(h.targets[0]), new Set([10, 11, 12, 20]));
 });
 
 test('a replaced owner executable is rejected', async () => {

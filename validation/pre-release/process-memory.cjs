@@ -107,7 +107,10 @@ function samplingScope(rows, ownerPid) {
   const xpc = new Set();
   const main = /^(\/.*\.app\/Contents)\/MacOS\/[^/]+$/.exec(owner.executable);
   if (main) {
-    if (rows.filter(row => row.pathKnown && row.executable === owner.executable).length !== 1) throw new Error('MEMORY_SCOPE_AMBIGUOUS');
+    // A second instance of the packaged main executable outside this owner's tree makes bundle XPC
+    // attribution ambiguous. An owned descendant running the same binary (an ELECTRON_RUN_AS_NODE child
+    // before it re-executes into the Helper app) is part of this instance and is not ambiguity.
+    if (rows.some(row => row.pathKnown && row.executable === owner.executable && !owned.has(row.pid))) throw new Error('MEMORY_SCOPE_AMBIGUOUS');
     const prefix = main[1] + '/XPCServices/';
     for (const row of rows) {
       if (row.pathKnown && row.executable.startsWith(prefix) && path.normalize(row.executable) === row.executable
