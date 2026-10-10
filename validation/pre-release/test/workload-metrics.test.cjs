@@ -17,7 +17,7 @@ test('limits are the unchanged section-4 values', () => {
   assert.deepEqual(SLO['analysis.large'].p95, { analysisMs: 600000 }); assert.equal(SLO['analysis.large'].rssKiB, 6 * 1024 * 1024);
   assert.equal(SLO['analysis.large'].hardTimeoutMs, 900000);
   assert.deepEqual(SLO['preview.medium'], { sizeClass: 'medium', p95: { previewCompleteMs: 10000 }, ceiling: { previewFirstResponseMs: 500 } });
-  assert.deepEqual(SLO['incremental.medium'].p95, { refreshMs: 30000 });
+  assert.deepEqual(SLO['incremental.medium'].p95, { refreshMs: 90000 });
   assert.deepEqual(SLO['cancel.medium'], { sizeClass: 'medium', ceiling: { cancelUiAckMs: 500, cancelReleaseMs: 10000 }, p95: { cancelReleaseMs: 5000 } });
   assert.deepEqual(SLO['graph.medium'].p95, { searchApiMs: 500, nodePageApiMs: 500, relationsApiMs: 500 });
   assert.deepEqual(SLO['graph.medium'].ceiling, { firstPageRenderMs: 2000 });

@@ -14,7 +14,8 @@ const SLO = Object.freeze({
   'analysis.small': Object.freeze({ sizeClass: 'small', p95: { analysisMs: 30000 }, rssKiB: 3 * GiB_KiB }),
   'analysis.medium': Object.freeze({ sizeClass: 'medium', p95: { analysisMs: 180000 }, rssKiB: 4 * GiB_KiB }),
   'analysis.large': Object.freeze({ sizeClass: 'large', p95: { analysisMs: 600000 }, rssKiB: 6 * GiB_KiB, hardTimeoutMs: 900000 }),
-  'incremental.medium': Object.freeze({ sizeClass: 'medium', p95: { refreshMs: 30000 }, requires: ['resultEqualsFull'] }),
+  // 2026-10-10: half of the medium initial budget; the 30 s figure moved to the R1 roadmap (05 section 4).
+  'incremental.medium': Object.freeze({ sizeClass: 'medium', p95: { refreshMs: 90000 }, requires: ['resultEqualsFull'] }),
   'cancel.medium': Object.freeze({ sizeClass: 'medium', ceiling: { cancelUiAckMs: 500, cancelReleaseMs: 10000 }, p95: { cancelReleaseMs: 5000 } }),
   'graph.medium': Object.freeze({ sizeClass: 'medium', p95: { searchApiMs: 500, nodePageApiMs: 500, relationsApiMs: 500 },
     ceiling: { firstPageRenderMs: 2000 } }),

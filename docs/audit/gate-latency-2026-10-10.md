@@ -68,3 +68,20 @@ medium 진단 run-qYRPKu는 첫 분석139.146초, 1% refresh58.046초(job57.529�
 after 계측 graph-sql-after-c8p73ves는 COORD 작업트리 class(capture graph-jdbc-capture-coord-89476ec-dirty-v2, toolchain JDK21, GraphPersistenceService.class만 before와 다름)를 같은 복제 절차와 입력(21,892 nodes/38,104 edges/18,997 evidence)에 적용했다. fresh 2.120/1.926/1.812초는 before 2.166/1.805/1.879초와 같은 범위다. replay는 node-upsert 88→44회(약1,063~1,187→501~555ms), persist 4.463/4.244/4.302→3.714/3.474/3.641초로 줄었다. 6회 모두 node/edge/evidence canonical 동일, rollback, 원본 cluster inventory·보호 파일 불변, clone PG exit0이다. after 실행의 load1은5.36으로 before3.60보다 높았다. 남은 replay 비용은 stored-drafts 44회 약0.95초와 route-binding-delete 약0.2~0.3초이며 이 수정의 범위가 아니다. 이 진단은 최종 snapshot 그래프 전체를 입력으로 한 저장 경로 측정이고 medium GRAPH_BUILD3.677초의 일부만 설명하므로 30초 달성 근거가 아니다.
 
 이 수정은 소스 변경이므로 mV5bkc의 회귀·패키지 PASS를 상속하지 않는다. 새 소스의 통합 회귀, 새 후보, 영향 패키지, medium/large smoke, 대규모 실제 앱 incremental 대 fresh-profile clean-full 비교는 NOT RUN이며 NO_GO를 유지한다.
+
+## 7. medium 1% refresh SLO 조정 — 사용자 결정
+
+사용자는 30초가 다른 방법으로 닿을 수 없다면 목표를 현실적인 범위로 조정해 진행하라고 결정했다. 30초가 증명 가능하게 불가능한 것은 아니지만, 현재 설계의 국소 최적화로는 닿을 수 없다는 근거는 다음과 같다.
+
+| 후보 | medium 1% refresh(초) | 조건 |
+| --- | ---: | --- |
+| h7hpw4 (2026-10-08) | 185.738 / 183.732 | 진단 |
+| p6yGme (2026-10-08) | 110.086 / 108.495 | 진단 |
+| XPhUTE (2026-10-08) | 86.848 / 89.946 | 첫 회차 기록 시점 load1 3.14, 둘째 INVALID_LOAD |
+| kOwFXr (2026-10-09) | 79.094 / 80.364 | 실행 직전 load1 3.37/3.68 |
+| lqudku (2026-10-09) | 56.876 / 59.867 | INVALID_LOAD/닫힌 덮개 진단, RSS 완전 |
+| mV5bkc (2026-10-10) | 58.046 | 닫힌 덮개·고부하 진단, RSS INCOMPLETE |
+
+연속된 최적화로 185→58초까지 줄었지만 최근 두 후보는 같은 범위에서 멈췄다. 남은 비용 IMPORT 11.1·SOURCE_PARSING 12.2·TS_PARSING 22.3초는 변경량(1%)이 아니라 저장소 크기에 비례한다. small 1,200파일의 refresh 6.618초(IMPORT 1.423/SOURCE 1.536/TS 2.499)에 대해 medium 10,000파일은 파일8.3배에 시간8.8배이며 세 단계가 각각 약8배다. 즉 각 단계가 전체 저장소 규모의 일을 다시 하고 있다. 30초에 닿으려면 세 단계 중 최소 두 단계를 변경 비례로 바꿔야 하는데, 신뢰 경계의 source-store 검증 생략·invalidation 불명 시 full fallback 제거·TS 전이 의존성 계약 축소는 모두 금지된 정확성 위험이고, 단계별 증분 설계는 출시 게이트 안에서 끝낼 수 없는 설계 변경이다. graph 중복 쓰기 제거(§6)의 약0.6~0.75초, manifest SQL 약18ms, TS 캐시 용량 배제(§5.3)도 이를 바꾸지 않는다.
+
+조정 내용: 05 §4의 증분 행과 `validation/pre-release/workload-metrics.cjs`의 `incremental.medium`을 p95≤30,000ms→≤90,000ms로 바꿨다. 90초는 medium 초기 분석 예산180초의 절반이며, 증분이 전체 분석보다 최소 두 배 빨라야 한다는 요구를 유지한다. 결과 full 동일(`resultEqualsFull`) 요구, 20회 p95, quiet AC/open-lid 조건, INVALID_LOAD 제외는 그대로다. 30초는 단계별 변경 비례 증분 설계 뒤의 R1 목표로 남긴다. 최근 진단값 56.9~59.9초는 조정된 값 안에 있지만 정식 조건의 20회가 아니므로 G-PERF PASS로 바꾸지 않는다.

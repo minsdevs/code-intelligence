@@ -72,10 +72,12 @@ embedding/summary/review/task/playground/what-if와 retry 모두 같은 egress g
 | 작은 분석 | 1k files/5MiB p95≤30초, 전체 RSS≤3GiB | memory guard/time diagnostic |
 | 중간 분석 | 10k files/50MiB p95≤180초, RSS≤4GiB | T05 session 통과 후에만 이 등급 광고 |
 | 큰 구조 탐색 | 50k files/200MiB p95≤600초, RSS≤6GiB | deep capability 별 상한 안내; 15분 hard timeout |
-| 증분 1% 변경 | medium p95≤30초, 결과 full 동일 | invalidation 불명은 full fallback |
+| 증분 1% 변경 | medium p95≤90초(초기 분석 예산180초의 절반, 2026-10-10 조정), 결과 full 동일. 30초는 단계별 증분 설계 뒤의 R1 목표 | invalidation 불명은 full fallback |
 | 취소 | UI ack≤500ms, worker 종료+lock release p95≤5초/max10초 | kill/wait/fencing, partial publish 금지 |
 | 그래프 | 검색/부분graph API p95≤500ms, 첫 100노드 표시≤2초 | page당500 nodes/2k edges, 전체10k 탐색 제한 표기 |
 | 복구 | 1GiB 테스트 백업 restore≤5분, hash 일치100% | 실패 rollback/marker로 backend 차단 |
+
+**증분 SLO 조정(2026-10-10, 사용자 결정):** medium 1% refresh의 원래 목표30초는 h7hpw4 185.7/183.7초→p6yGme 110.1/108.5초→XPhUTE 86.8/89.9초→kOwFXr 79.1/80.4초→lqudku 56.9/59.9초→mV5bkc 58.0초로 줄었지만, 남은 비용은 IMPORT·SOURCE_PARSING·TS_PARSING이 변경량이 아니라 저장소 크기에 비례하는 데서 나온다(small 1,200파일 refresh 6.6초 대 medium 10,000파일 58초). 신뢰 경계의 source-store 검증과 invalidation 불명 시 full fallback을 유지하는 한 국소 최적화로 30초에 닿을 수 없고, 단계별 변경 비례 증분은 정확성 위험이 있는 설계 변경이다. 따라서 출시 게이트는 초기 분석 예산의 절반인 p95≤90초(결과 full 동일 유지)로 조정하고, 30초는 R1 설계 목표로 남긴다. 조정은 기준 완화의 기록이며 측정 조건(quiet AC/open-lid 20회)이나 결과 동일성 요구는 바꾸지 않는다. [기록](../audit/gate-latency-2026-10-10.md).
 
 hard source file2MiB, DB graph generation 최대1M nodes/5M edges(예산 초과 PARTIAL_LIMIT, current 전환 금지), worker 응답 page≤1MiB/metadata field≤64KiB, AI context는 model별 상한과 사용자 선택 중 작은 것. 전체 분석 메모리 watchdog은6GiB 초과에서 새 work 중지하고 worker 종료; OS OOM 전 제어해야 한다. pg temp/disk·graph 폭증도 quota에 포함한다.
 
