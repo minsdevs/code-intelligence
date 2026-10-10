@@ -60,6 +60,8 @@ R0/R1 engineering 작업 합계는66–112 집중 인일이다. [공개18셀의 
 
 **후속 후보(2026-10-09):** PR #114/main aabb8e6 뒤 실패 진입·근거 SQL·RSS worker/XPC/exec 경계를 수정했다. da6062e의 lqudku(tZgvV7/xpc-required)는 통합6,602 PASS·0 FAIL·63 SKIP·TypeScript PASS, 새 제품36·경합8 PASS·내부 보안 COMPLETE, 실제 패키지 clean-full21범주 일치다. medium 분석 수집은 완전하지만 refresh56.876/59.867초로30초 미달. large 기능 두 회차 PASS이나 둘째 RSS 공백756ms로 INCOMPLETE·exit1·실패 프로필 보존. 고부하/닫힌 덮개 진단은 정식 수용이 아니며 최종20회 NOT RUN·NO_GO. [후속 감사](../audit/gate-recovery-2026-10-09.md).
 
+**잔여 기술 작업(2026-10-10, 진행 중):** PR #115/main b0309e9에서 vault 중복 경로 검사와 선택 PID RSS 읽기 지연을 개선했다. 37addef의 영향 회귀3,725 PASS·0 FAIL·45 SKIP, 보존lqudku 시작 진단4회·CSV 재집계 일치다. 분석 XPC·large 수용이나 새 후보 검증으로 확대하지 않는다. 안전한 중복 사본 정리 후에도 가용 약3.12GB로 기존 공간 기준 미달이다. 새 후보·medium30초 재측정·large RSS·대규모 clean-full은 NOT RUN, NO_GO 유지. [지연 후속 감사](../audit/gate-latency-2026-10-10.md).
+
 | Gate | PASS의 증거 | 금지되는 대체 증거 | 현재 |
 |---|---|---|---|
 | G-IMPORT | C05 및 실제 picker→preview→snapshot, secret/size/race0 | 작은 fixture copy 성공만 | 부분 실행·미통과(lqudku): 새 제품36 통과, medium 실제 import/분석 두 회차 기능 완료. 전체 import-evidence 매트릭스·실제 OS picker 사람 클릭 NOT RUN. 이전 실패와 후보별 제한을 보존하며 이전 PASS를 상속하지 않음. [후속 감사](../audit/gate-recovery-2026-10-09.md). |
@@ -226,7 +228,7 @@ main에서도 같은 기존 실패다. 깨끗한 `19300fa`의 [LA8ZS9](../audit/
 | 2 실제 GitHub 가져오기 | 소비자 권한 검증 구현·회귀 완료 / 실계정 대기 | repo·clone/import·PR metadata에 revision-bound 권한과 결과 게시 검증. 기존 실패 project1의 실제 UI 재분석은 사용자 데이터 적용 조건 충족 후 |
 | 3 인증 수명주기 | refresh/CAS 구현·기본 Docker 인증통합 보완 / 실권한 수용 미완료 | 기존 JDBC6과 별도로 실제 Spring HTTP/JPA/Redis 인증13, 유지보수HTTP9 및 기본backend suite 통과. 실제 GitHub refresh/revoke/SSO와 그 전체운영경로 수용은 별도 |
 | 4 분석·작업 신뢰 | stale worker fencing(High) 수정·packaged 경합 통과 / 독립 수용 미완료 | worker/DB 경합60·LA8ZS9 packaged8, C05 70/71·C06 사실4,313·migration walk 통과. 실행 중 단계 10초 취소(T03), CONFIG/MIGRATION span·v0 pin·capability coverage, Java call-site span·abstention·interface dispatch 판정 미해결. 독립 주석·blind review는 사람 필요 |
-| 5 성능·보안·사용성 | lqudku 회귀·기능·canonical 완료, 성능/RSS 잔여 / NO_GO | 소유 DB ENOSPC·치명 종료/공간 진입 거부 재현, 근거 SQL·RSS 경계 수정. 통합6,602 PASS·0 FAIL·63 SKIP·TypeScript PASS, 새 패키지 제품36·경합8 PASS·내부 보안 COMPLETE·clean-full21범주 일치. medium 분석 RSS 완전하지만 refresh56.876/59.867초로30초 미달. large 기능 두 회차 PASS이나 둘째 분석 RSS756ms 공백으로 INCOMPLETE·exit1. 진단 시간/RSS는 정식 수용 제외, 최종20회·독립 보안·사람 UX 미완료. [후속 감사](../audit/gate-recovery-2026-10-09.md). |
+| 5 성능·보안·사용성 | 잔여 지연 수정·영향 회귀 완료, 공간 확보 및 새 후보 검증 대기 / NO_GO | 37addef: vault 보안 경계 유지 최적화·hybrid RSS, 영향3,725 PASS·0 FAIL·45 SKIP·보존 앱 시작 진단4회. 기존lqudku medium refresh56.876/59.867초와 large 둘째 RSS INCOMPLETE를 해결 완료로 바꾸지 않음. 가용 약3.12GB로 새 후보·medium/large·대규모 clean-full NOT RUN. 최종20회·독립 보안·사람 UX 미완료. [현재 감사](../audit/gate-latency-2026-10-10.md), [이전 후보](../audit/gate-recovery-2026-10-09.md). |
 | 6 새 설치·업데이트 | LA8ZS9 패키징·기능36개·복구 두 경계 통과, 서명 준비 점검 통과 / 정식 설치·업데이트 미구현·미수용 | `19300fa` 무변경 작업트리에서 ad-hoc Validation 앱 제작. Mach-O100 서명 계획·외부 참조0·단일 Mac loader 근사 통과. 제품 updater·migration checkpoint·rollback floor(High) 미구현, Developer ID·공증·새 기기/최소OS는 사용자 자격·장비 필요 |
 | 7 배포물·운영 준비 | 완전 SBOM(미귀속0)·고지 포함 패키징 / 라이선스 의무·운영 조건 잔여 | wFroXK(2026-10-08): CycloneDX 1.5 구성요소348·미귀속0, backend JAR 중첩150·제외 대상0, Dependabot 4건 lockfile 패치([h7hpw4 기록](../audit/candidate-h7hpw4-2026-10-08.md)). 이전: CycloneDX 1.5 구성요소350, LA8ZS9에 Electron/Chromium 라이선스·제3자 고지 포함(원문 없음96→15). Redis·JRE source offer·FFmpeg는 법률 판단, JRE 공급 기록·jmh-core 포함 정리 필요. 2026-10-07 온라인 advisory 재조회 0건(이전 결과 보존). 지원정책·설치/복구 안내·릴리스노트·운영 App 소유는 잔여 |
 | **8 출시 최종 판정** | **이번 후보의 No-Go 판정 기록 완료 / 출시 미승인** | 앞선 필수 gate·독립 검토·정식 서명/공증 자격과 최종 공개 승인 전 배포 금지. 미검증을 통과로 바꾸지 않음 |
