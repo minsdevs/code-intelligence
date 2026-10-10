@@ -26,12 +26,12 @@ async function prepareNativeRss(evidence) {
       { timeout: 30000, maxBuffer: MAX_BYTES, env: ENV });
   } catch { throw new Error('MEMORY_NATIVE_BUILD_FAILED'); }
   assert.equal(hash(source), sourceSha256, 'MEMORY_NATIVE_SOURCE_CHANGED');
-  return Object.freeze({ binary, binarySha256: hash(binary), sourceSha256, driverSha256: hash(__filename), protocol: 1 });
+  return Object.freeze({ binary, binarySha256: hash(binary), sourceSha256, driverSha256: hash(__filename), protocol: 2 });
 }
 
 async function openNativeRss(prepared) {
   const { binary, binarySha256, protocol } = prepared;
-  assert.equal(protocol, 1, 'MEMORY_NATIVE_PROTOCOL');
+  assert.equal(protocol, 2, 'MEMORY_NATIVE_PROTOCOL');
   const directory = fs.lstatSync(path.dirname(binary)), file = fs.lstatSync(binary);
   assert(directory.isDirectory() && directory.uid === process.getuid() && (directory.mode & 0o077) === 0,
     'MEMORY_NATIVE_BINARY_CHANGED');
@@ -65,7 +65,7 @@ async function openNativeRss(prepared) {
     const text = Buffer.concat(current.parts, current.bytes).toString('utf8');
     const complete = ready ? text.endsWith('END\n') : text.endsWith('\n');
     if (!complete) return;
-    if ((!ready && text !== 'READY 1\n') || (ready && text.slice(0, -4).includes('END\n'))) {
+    if ((!ready && text !== 'READY 2\n') || (ready && text.slice(0, -4).includes('END\n'))) {
       fail(new Error('MEMORY_NATIVE_PROTOCOL')); child.kill('SIGTERM'); return;
     }
     pending = null; clearTimeout(current.timer);
@@ -96,16 +96,21 @@ async function openNativeRss(prepared) {
   };
   try { await response(); ready = true; }
   catch (error) { await close().catch(() => {}); throw error; }
+  const request = line => {
+    assert(!pending && !closing && !exited, 'MEMORY_NATIVE_STATE');
+    const result = response();
+    if (pending) child.stdin.write(line);
+    return result;
+  };
+  // Discovery frame (every live PID with PPID and executable source) without spawning a process.
+  const discover = async () => request('D\n');
   const readSelected = async pids => {
     assert(Array.isArray(pids) && pids.length > 0 && pids.length <= 1024
       && pids.every(pid => Number.isSafeInteger(pid) && pid > 1 && pid <= 2147483647)
       && new Set(pids).size === pids.length, 'MEMORY_OWNER_INVALID');
-    assert(!pending && !closing && !exited, 'MEMORY_NATIVE_STATE');
-    const result = response();
-    if (pending) child.stdin.write(pids.join(',') + '\n');
-    return result;
+    return request(pids.join(',') + '\n');
   };
-  return Object.freeze({ pid: child.pid, read: ownerPid => readOwnerMemory(ownerPid, { readSelected }), close });
+  return Object.freeze({ pid: child.pid, discover, read: ownerPid => readOwnerMemory(ownerPid, { discover, readSelected }), close });
 }
 
 module.exports = { prepareNativeRss, openNativeRss, NATIVE_RSS_FAILURE_CODES };

@@ -8,6 +8,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const { once } = require('node:events');
 const { prepareNativeRss, openNativeRss } = require('../native-rss.cjs');
 const { prepareOwnedPhaseSampler } = require('../workload-sampler.cjs');
+const { discoveryRows } = require('../process-memory.cjs');
 
 const gone = pid => assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
 test('native RSS boundaries and owned helper lifecycle', { skip: process.platform !== 'darwin', timeout: 30000 }, async t => {
@@ -40,7 +41,36 @@ test('native RSS boundaries and owned helper lifecycle', { skip: process.platfor
     for (const input of ['0\n', ' +12\n', '12,12\n', '12', Array.from({ length: 1025 }, (_, i) => i + 2).join(',') + '\n']) {
       const result = spawnSync(prepared.binary, [], { input, encoding: 'utf8', timeout: 5000 });
       assert.equal(result.status, 2);
-      assert.equal(result.stdout, 'READY 1\n');
+      assert.equal(result.stdout, 'READY 2\n');
+    }
+  });
+  await t.test('discovery lists every live PID without spawning and keeps an exec path after the binary is unlinked', async () => {
+    // A small owned binary keeps running after its file is removed: proc_pidpath fails (ENOENT) and the
+    // helper falls back to the exec path recorded with the process arguments, the source /bin/ps also uses.
+    const copy = path.join(root, 'sleeper');
+    fs.writeFileSync(copy + '.c', '#include <stdio.h>\n#include <unistd.h>\nint main(void) { puts("R"); fflush(stdout); pause(); return 0; }\n');
+    assert.equal(spawnSync('/usr/bin/xcrun', ['clang', '-O2', '-o', copy, copy + '.c'], { timeout: 30000 }).status, 0);
+    const child = spawn(copy, [], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const closed = once(child, 'close');
+    assert.equal(String((await once(child.stdout, 'data'))[0]), 'R\n'); // running from mapped pages before the file goes
+    fs.unlinkSync(copy);
+    const reader = await openNativeRss(prepared);
+    try {
+      const started = performance.now();
+      const frame = await reader.discover();
+      const elapsedMs = performance.now() - started;
+      const rows = discoveryRows(frame);
+      const byPid = new Map(rows.map(row => [row.pid, row]));
+      assert.equal(byPid.get(process.pid)?.executable, fs.realpathSync(process.execPath));
+      assert.deepEqual(byPid.get(child.pid), { pid: child.pid, ppid: process.pid, executable: copy, pathKnown: true });
+      assert.deepEqual(byPid.get(reader.pid), { pid: reader.pid, ppid: process.pid, executable: prepared.binary, pathKnown: true });
+      assert(rows.length >= 3 && rows.every(row => row.pathKnown || !row.executable.startsWith('/')));
+      assert(elapsedMs < 250, `discovery took ${elapsedMs} ms`);
+      const sampled = await reader.read(process.pid);
+      assert(sampled.some(row => row.pid === child.pid && row.ppid === process.pid && row.rssKiB > 0));
+    } finally {
+      child.kill('SIGTERM'); await closed;
+      await reader.close();
     }
   });
   await t.test('a changed retained binary cannot be started', async () => {
