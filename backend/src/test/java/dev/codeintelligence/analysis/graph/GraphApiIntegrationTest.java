@@ -232,7 +232,7 @@ class GraphApiIntegrationTest {
     void laterAnalyzerCannotOverwriteEndpointSourceFromAnotherModule() throws Exception {
         ResponseCookie session = loginWithPat();
         Seeded seeded = seedChain();
-        for (String path : List.of("one/Controller.java", "two/controller.ts")) {
+        for (String path : List.of("one/Controller.java", "two/controller.ts", "three/Controller.java")) {
             jdbcTemplate.update(
                     "insert into files(snapshot_id,path,language,size,content_hash) values (?,?,'java',1,'x')",
                     seeded.snapshotId(),
@@ -248,6 +248,24 @@ class GraphApiIntegrationTest {
                 seeded.projectId(), seeded.snapshotId(), new AnalysisResult(List.of(first), List.of(link), List.of()));
         persistence.persist(
                 seeded.projectId(), seeded.snapshotId(), new AnalysisResult(List.of(second), List.of(link), List.of()));
+        GraphNodeDraft third = GraphNodeDraft.of(
+                GraphNodeType.API_ENDPOINT, first.naturalKey(), "GET /items", "three/Controller.java", 3, 4);
+        GraphNodeDraft updatedMethod = new GraphNodeDraft(
+                "METHOD", "java:demo.A#a()", "updated a", null, null, null, null, Map.of("revision", 3));
+        persistence.persist(
+                seeded.projectId(),
+                seeded.snapshotId(),
+                new AnalysisResult(List.of(updatedMethod, third), List.of(link), List.of()));
+        assertThat(jdbcTemplate.queryForObject("""
+                        select name = 'updated a' and metadata->>'revision' = '3'
+                        from graph_nodes where id = ? and snapshot_id = ?
+                        """, Boolean.class, seeded.a(), seeded.snapshotId()))
+                .isTrue();
+        assertThat(jdbcTemplate.queryForList("""
+                        select jsonb_array_elements_text(metadata->'candidateFiles')
+                        from graph_nodes where snapshot_id = ? and natural_key = ?
+                        """, String.class, seeded.snapshotId(), first.naturalKey()))
+                .containsExactlyInAnyOrder("one/Controller.java", "two/controller.ts", "three/Controller.java");
         Map<String, Object> stored = jdbcTemplate.queryForMap(
                 "select node_type,file_id,line_start from graph_nodes where snapshot_id=? and natural_key=?",
                 seeded.snapshotId(),
