@@ -8,6 +8,7 @@ import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -323,6 +324,14 @@ public class FlowDetectionStep implements JobStep {
                     return 0;
                 })
                 .list();
+        // Rows arrive in storage order, which an incremental refresh changes for re-created edges. Flow
+        // step order is persisted, so neighbours are ordered by natural key to match a clean analysis.
+        Comparator<Node> byKey = Comparator.comparing(Node::naturalKey);
+        for (List<Node> nodes : graph.nodesByType.values()) nodes.sort(byKey);
+        Comparator<Edge> byTarget = Comparator.comparing(Edge::type).thenComparing(edge -> graph.key(edge.targetId));
+        Comparator<Edge> bySource = Comparator.comparing(Edge::type).thenComparing(edge -> graph.key(edge.sourceId));
+        for (List<Edge> edges : graph.out.values()) edges.sort(byTarget);
+        for (List<Edge> edges : graph.in.values()) edges.sort(bySource);
         return graph;
     }
 
@@ -331,6 +340,11 @@ public class FlowDetectionStep implements JobStep {
         private final Map<String, List<Node>> nodesByType = new HashMap<>();
         private final Map<Long, List<Edge>> out = new HashMap<>();
         private final Map<Long, List<Edge>> in = new HashMap<>();
+
+        private String key(long nodeId) {
+            Node node = byId.get(nodeId);
+            return node == null ? "" : node.naturalKey;
+        }
     }
 
     private record Node(

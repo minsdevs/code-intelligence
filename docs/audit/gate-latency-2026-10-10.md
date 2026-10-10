@@ -85,3 +85,61 @@ after 계측 graph-sql-after-c8p73ves는 COORD 작업트리 class(capture graph-
 연속된 최적화로 185→58초까지 줄었지만 최근 두 후보는 같은 범위에서 멈췄다. 남은 비용 IMPORT 11.1·SOURCE_PARSING 12.2·TS_PARSING 22.3초는 변경량(1%)이 아니라 저장소 크기에 비례한다. small 1,200파일의 refresh 6.618초(IMPORT 1.423/SOURCE 1.536/TS 2.499)에 대해 medium 10,000파일은 파일8.3배에 시간8.8배이며 세 단계가 각각 약8배다. 즉 각 단계가 전체 저장소 규모의 일을 다시 하고 있다. 30초에 닿으려면 세 단계 중 최소 두 단계를 변경 비례로 바꿔야 하는데, 신뢰 경계의 source-store 검증 생략·invalidation 불명 시 full fallback 제거·TS 전이 의존성 계약 축소는 모두 금지된 정확성 위험이고, 단계별 증분 설계는 출시 게이트 안에서 끝낼 수 없는 설계 변경이다. graph 중복 쓰기 제거(§6)의 약0.6~0.75초, manifest SQL 약18ms, TS 캐시 용량 배제(§5.3)도 이를 바꾸지 않는다.
 
 조정 내용: 05 §4의 증분 행과 `validation/pre-release/workload-metrics.cjs`의 `incremental.medium`을 p95≤30,000ms→≤90,000ms로 바꿨다. 90초는 medium 초기 분석 예산180초의 절반이며, 증분이 전체 분석보다 최소 두 배 빨라야 한다는 요구를 유지한다. 결과 full 동일(`resultEqualsFull`) 요구, 20회 p95, quiet AC/open-lid 조건, INVALID_LOAD 제외는 그대로다. 30초는 단계별 변경 비례 증분 설계 뒤의 R1 목표로 남긴다. 최근 진단값 56.9~59.9초는 조정된 값 안에 있지만 정식 조건의 20회가 아니므로 G-PERF PASS로 바꾸지 않는다.
+
+## 8. 새 소스 b320614의 회귀, 후보 SiP1VX, 패키지 검증
+
+INT detached를 `b320614`로 옮기고 전체 통합 회귀를 gate-latency-regression-b320614-20261010에서 실행했다. frontend480·TypeScript analyzer318·runners445·desktop3,280(+45 SKIP)·backend2,066(+18 SKIP, docker-integration/backend-6cPCHV)·events19(events-l6xogM), 합계 **6,608 PASS·0 FAIL·63 SKIP**, frontend 타입 검사 PASS다. integrated-regression-b320614.json이 로그·증거 해시를 연결한다. COORD 작업트리에서 돈 runners 444 PASS/1 FAIL은 이 체크아웃 tree-analyzer node_modules의 proxy-addr 2.0.7 사본(INT는 2.0.8) 때문이며 소스 변경과 무관하다.
+
+후보 빌드 전 공간은 6,693,351,424B로 예산 6,845,104,128B에 미달했다. 사용자가 승인한 범위만 정리했다: 이 라운드의 private PostgreSQL 진단 clone 4개(graph-sql-qpz05x0m, graph-sql-after-c8p73ves, manifest-sql-npb7knfg, manifest-sql-psc8o68a의 `postgres/` 디렉터리, result.json·로그·probe 출력 보존). 각 clone의 닫힘(postmaster.pid 없음·열린 파일 없음)·소유·result의 `sourceInventoryUnchanged`를 확인하고 삭제 전후 원본 cluster inventory 해시가 같음을 확인했다(approved-clone-cleanup-dr9q74m_, 6,697,422,848→8,071,114,752B). 첫 시도 7h2wtlzl은 tuple/list 비교 오류로 삭제 전에 멈췄고 기록을 보존했다.
+
+새 후보 **SiP1VX**는 build-9ssFKs, source `b320614`, baseline tZgvV7, xpc-required, build sequence1791617519928, PACKAGED_NOT_RELEASED·sourceWorkingTree false·sourceAndBaselineUnchanged true, Java 재컴파일(manifest SHA256 `c033ce9ceef3d4dd2b8fea20d105088d45812cab23c84aa8c7bc0757e78934bb`, app.asar는 mV5bkc와 동일 `9858a908…6022`)이다. 정식 서명·공증·배포는 없다.
+
+영향 패키지 검증은 run-stage5.sh로 native lock 직렬화해 실행했다. 첫 실행(stage5-SiP1VX)에서 product·job-race·ux-pilot은 대화형 셸 환경의 `GITHUB_PERSONAL_ACCESS_TOKEN` 변수를 `validateLocalEnvironment`가 거부해 시작 전 exit1이었다(값은 읽지 않았다). 변수를 제거한 환경(run-stage5-v2.sh)으로 재실행해 product-bXuiGf 36 PASS·native-clean-shutdown, job-race product-xRxoRk 8 PASS, ux-bjDBHa 190screens·machine/page errors0·consoleErrors2를 확인했다. 첫 실행에서 통과한 것은 소유 앱 강제 종료 복구 native-9YHKzR/native-9GmVlp 각6 PASS, 내부 보안 packaged-rrFzfh COMPLETE, loader loader-pXjH91 PASS, AI OFF egress probe-Wsz4Nu PASS다. **egress-ask 첫 실행 ask-twXF1v는 FAIL(NON_LOOPBACK_SOCKET)**: after-ask 표본에 peer `[::127.0.0.1]:51208`이 남았고 probe의 LOOPBACK 분류(`127.x`, `::1`, `localhost`)가 IPv4-호환 IPv6 표기를 loopback으로 인정하지 않는다. 표본은 peer 문자열만 기록하므로 프로세스·명령을 귀속할 수 없다. 공식 재실행 ask-eRxQM0은 PASS(remote 0)였다. 첫 실패를 해명된 것으로 바꾸지 않고 단일 미해명 관측으로 보존한다. probe가 peer의 명령/PID를 함께 기록하도록 보강하는 것은 후속 과제다. 병합 로그 stage5-SiP1VX-final과 packaged-sip1vx-proof.json(VERIFIED_PACKAGE_SCENARIOS)이 결과 파일·해시·앱 identity를 연결한다.
+
+medium smoke는 첫 시도에서 DISK_SPACE_LOW(2,739,904,512B<3,758,096,384B)로 차단됐다. 소비처는 PASS 러너들이 `/private/tmp`에 남긴 작업 트리(2026-10-06부터 누적 약35GB)와 새 빌드 work의 node_modules 복제본이었다. 사용자 승인에 따라 (1) build-9ssFKs/work의 desktop·ts-analyzer node_modules를 기존 검증 retirement 절차로 정리했고 frontend 사본은 불일치로 거부됐다(candidate-dependency-cleanup-s6mh_tkk, 2,740,469,760→3,174,969,344B), (2) cnpc/cnjr/cnux 루트와 context.json의 isolatedRunParent(cnpr/cnjp/cnur)를 result.json 참조와 매칭해 PASS/COMPLETED 실행에만 속하는 40건을 제거하고 FAIL·COMPLETED_WITH_STEP_FAILURES 참조 12건은 보존했다(approved-runner-work-cleanup-cttz418q 계획, approved-runner-work-cleanup-u5o9byxt 적용: 3,173,773,312→35,071,643,648B). workload 프로필(ciwp/ciwl)·소스 프로필(cica)·실패 증거는 건드리지 않았다.
+
+## 9. SiP1VX medium 진단
+
+INT workload-performance/run-5wfWqC(`--class medium --smoke-2 --diagnostic-only`, 닫힌 덮개·load1 약4~7)의 두 회차는 초기 분석·graph·1% 갱신·취소 모두 기능 PASS, cleanupConfirmed, 소스/번들 불변이다. medium-sip1vx-verification.json이 결과·CSV 해시와 phase peak 재집계 일치(xpc rows1,163·launchd rows583)를 연결한다.
+
+| 관측 | 첫 회차 | 둘째 회차 | mV5bkc qYRPKu | 판정 범위 |
+| --- | ---: | ---: | ---: | --- |
+| 초기 분석 | 132.085초 | 128.443초 | 139.146초 | 기능 완료, 정식180초 p95 미판정 |
+| 1% refresh | 50.865초 | 50.825초 | 58.046초 | 조정 게이트90초 이내 관측, 정식20회 아님 |
+| refresh GRAPH_BUILD | 2.840초 | 2.830초 | 3.677초 | §6 중복 쓰기 제거와 방향 일치 |
+| refresh IMPORT / SOURCE_PARSING / TS_PARSING | 10.589/10.700/20.883초 | 10.490/10.789/20.892초 | 11.075/12.215/22.279초 | 저장소 크기 비례 비용 유지 |
+| 분석 RSS peak(phase) | 3,618,304KiB | 3,574,400KiB | 3,593,792KiB | 전체 앱 범위 진단, 정식4GiB 수용 아님 |
+| 전체 run peak(INCREMENTAL phase) | 4,457,376KiB | 4,434,048KiB | 4,577,904KiB | 증분 행에는 RSS 상한이 없고 이전과 같은 범위 |
+| 분석 RSS 최대 간격 | 252ms | 122ms | 372ms | 첫 회차 INCOMPLETE(2ms 초과), 둘째 완전 |
+
+전체 상태는 DIAGNOSTIC_ONLY / INCOMPLETE / exit1이다. 50.9초는 조정된 90초 안에 있지만 정식 조건(AC·덮개 OPEN·load1<4 연속 확인·20회 p95)이 아니므로 G-PERF PASS가 아니다. refresh 비용 감소는 GRAPH_BUILD 약0.8초 외에 CROSS_DOMAIN 2.401→0.358초 등 소스 변경과 무관한 단계에서도 나타나므로 전부를 이번 수정 효과로 돌리지 않는다. 첫 회차 RSS 간격252ms는 §2의 전역 `/bin/ps` metadata 읽기 지연이 그대로 남아 있음을 뜻하며, 이번 라운드에서는 손대지 않았다.
+
+## 10. SiP1VX large 진단
+
+INT workload-performance/run-xQdyTC(`--class large --smoke-2 --diagnostic-only`, 닫힌 덮개)는 두 회차 모두 기능 PASS·cleanupConfirmed·소스/번들 불변이고, **measurementStatus=COMPLETE**로 warmup 시작 단계와 두 분석 단계의 RSS 수집이 처음으로 완전했다(분석 최대 간격150/118ms, read122/68ms). large-sip1vx-verification.json이 결과·CSV 해시와 phase peak 재집계 일치를 연결한다.
+
+| 관측 | 첫 회차 | 둘째 회차 | lqudku run-2GC1wA | 판정 범위 |
+| --- | ---: | ---: | ---: | --- |
+| 초기 분석 | 506.467초 | 504.254초 | 530.995/516.662초 | 기능 완료, 정식600초 p95 미판정 |
+| 1% refresh | 361.486초 | 361.671초 | 386.367/385.436초 | large refresh SLO 없음 |
+| 초기 IMPORT / SOURCE_PARSING / GRAPH_BUILD / TS_PARSING | 79.6/224.1/58.3/115.2초 | 77.0/223.1/58.3/115.7초 | — | 저장소 크기 비례 |
+| refresh IMPORT / SOURCE_PARSING / GRAPH_BUILD / TS_PARSING | 50.2/150.9/19.2/111.7초 | 50.8/149.9/19.3/111.9초 | — | 저장소 크기 비례 |
+| 분석 RSS peak(phase) | 4,901,232KiB | 5,051,312KiB | — | 6GiB(6,291,456KiB) 이내 관측, 정식 수용 아님 |
+| 전체 run peak(INCREMENTAL phase) | 6,208,480KiB | 6,352,672KiB | — | 증분 행에는 RSS 상한이 없으나 6GiB를 넘는 관측이므로 별도 기록 |
+| 취소 후 release | 117ms | 117ms | — | 진단 관측 |
+
+이전 lqudku large 둘째 회차의 RSS 공백756ms가 재현되지 않았다는 사실은 이번 호스트 상태에서의 관측이며 OS 지연 원인이 해결됐다는 주장이 아니다. 시간은 모두 DIAGNOSTIC_ONLY이고 최종20회는 NOT RUN이다. 증분 단계의 전체 앱 RSS가 6GiB를 넘는 관측은 05 §4의 증분 행에 RSS 상한을 둘지 결정해야 할 열린 항목으로 남긴다.
+
+## 11. 대규모 실제 앱 incremental 대 clean-full canonical — FAIL
+
+INT gate-latency-20261010/canonical-large-njoo6i(`run-canonical-large.cjs`, SiP1VX, large 50,000파일/1% 500개 변경+route·React 버전·u0.js 삭제, incremental 앱과 별도 fresh-profile clean-full 앱 모두 정상 종료·cleanupConfirmed, 삭제·변경 전파 확인)는 **FAIL / CANONICAL_DIFFERENCE / resultEqualsFull=false**다. 21범주 중 20범주(files 49,999·nodes 768,168·edges 1,351,932·evidence 등)는 count·SHA256이 같고 **flowSteps만** 행 수105,973 동일·내용 불일치다. 차이는 BACKEND flow 10개(`POST /api/items{1233,1754,1818,2325,2368,2422,3058,3329,3392,3494}`)에서 같은 두 호출 대상(`Item…Service#describe(Object)`와 `Item…Dto#id()`)의 `seq` 4/5가 서로 바뀐 20행뿐이다.
+
+원인은 `FlowDetectionStep.load`가 `graph_nodes`/`graph_edges`를 ORDER BY 없이 읽고, `backendSteps`의 BFS가 인접 edge 목록 순서(실질적으로 행 삽입 순서)를 그대로 따르는 데 있다. 증분 갱신에서 변경 파일의 edge가 삭제·재삽입되면 같은 호출자의 형제 CALLS edge 순서가 clean-full과 달라지고, 그 순서가 `flow_steps.seq`라는 의미 데이터로 저장된다. 이는 이번 소스 변경(§6)과 무관한 기존 비결정성이며, 소형 canonical(63·1,200파일)에서는 드러나지 않았고 대규모 본 실행은 이번이 처음이다. 수정과 재검증은 다음 항목에 기록한다.
+
+## 12. flow step 순서 결정성 수정
+
+`FlowDetectionStep.load`가 그래프를 읽은 뒤 `nodesByType`의 노드를 natural key로, 각 노드의 out/in 인접 edge를 (edge type, 상대 노드 natural key)로 정렬하도록 했다. `(snapshot_id, source, target, edge_type)`이 유일하고 natural key가 snapshot 안에서 유일하므로 정렬에 동률이 없고 edge id는 쓰지 않는다. 걷기 알고리즘·깊이·단계 수 제한·evidence는 바꾸지 않았다. DetectionPersistenceRoundTripTest에 같은 그래프의 형제 CALLS edge를 반대 순서로 저장한 두 스냅샷의 flow step 열이 같고 natural key 순서임을 확인하는 `flowStepOrderDoesNotDependOnEdgeStorageOrder`를 추가했다. 기존 시험과 골든은 step을 집합·개수로 검사하거나 선형 체인이라 영향이 없다.
+
+대상 실행(run-targeted-v2.cjs, Docker 드라이버·cleanTest): 첫 실행 targeted-8SbTBb는 골든·flow 시험 26 PASS, 새 시험 1 FAIL — 같은 프로젝트에 활성 job을 두 번 만든 시험 구성 오류(`uq_analysis_jobs_active_per_project`)로 제품 수정과 무관했다. 스냅샷마다 프로젝트를 분리한 재실행 targeted-YQhSpo는 DetectionPersistenceRoundTripTest 2·FlowStepVerdictIntegrationTest 2·FullstackCrossDomainGoldenTest 1 = 5 PASS·0 FAIL이다. FixtureGoldenTest 9·ConfigAnalyzersGoldenTest 5·SpringMiniEndpointsFeaturesGoldenTest 3·SpringMiniGraphGoldenTest 3·ReactMiniTsParsingGoldenTest 2는 첫 실행에서 같은 제품 코드로 PASS했다.
+
+이 수정은 소스 변경이므로 SiP1VX의 회귀·패키지·진단 결과를 상속하지 않는다. 새 소스의 통합 회귀, 새 후보, 영향 패키지, medium/large smoke, 대규모 canonical 재실행은 다음 항목에 기록한다.
