@@ -69,9 +69,18 @@ public class GraphPersistenceService {
                     .distinct()
                     .toList();
             List<GraphNodeDraft> candidates = CustomPlans.run(jdbc, () -> storedDrafts(snapshotId, keys));
+            int storedCount = candidates.size();
             candidates.addAll(result.nodes());
             AnalysisResult safe = GraphIdentityGuard.sanitize(
                     new AnalysisResult(candidates, result.edges(), result.evidences(), result.fileOutcomes()));
+            // Stored keys are unique, so sanitizing retains this prefix, replacing only ambiguous
+            // declarations. Those replacements must be written; unchanged stored rows need not be.
+            List<GraphNodeDraft> updates = candidates;
+            updates.clear();
+            for (int index = 0; index < safe.nodes().size(); index++) {
+                GraphNodeDraft node = safe.nodes().get(index);
+                if (index >= storedCount || GraphIdentityGuard.ambiguous(node)) updates.add(node);
+            }
             var refreshedRoutes = result.nodes().stream()
                     .filter(node -> "FE_ROUTE".equals(node.nodeType())
                             && node.metadata().containsKey("componentResolution"))
@@ -79,8 +88,8 @@ public class GraphPersistenceService {
                     .collect(java.util.stream.Collectors.toCollection(java.util.HashSet::new));
             List<Long> clearedRouteIds =
                     refreshedRoutes.isEmpty() ? List.of() : new ArrayList<>(Math.min(BATCH, refreshedRoutes.size()));
-            Map<String, Long> fileIds = CustomPlans.run(jdbc, () -> fileIds(snapshotId, safe.nodes()));
-            List<Long> nodeIds = upsertNodes(snapshotId, safe.nodes(), fileIds);
+            Map<String, Long> fileIds = CustomPlans.run(jdbc, () -> fileIds(snapshotId, updates));
+            List<Long> nodeIds = upsertNodes(snapshotId, updates, fileIds);
             Map<String, List<AnalyzerEvidence>> evidenceByKey = new HashMap<>();
             for (AnalyzerEvidence evidence : safe.evidences()) {
                 if (evidence.subjectNaturalKey() != null)
@@ -90,8 +99,8 @@ public class GraphPersistenceService {
             }
             Map<String, Long> ids = new LinkedHashMap<>();
             Map<Long, List<NewEvidence>> replacedEvidence = new LinkedHashMap<>();
-            for (int index = 0; index < safe.nodes().size(); index++) {
-                GraphNodeDraft node = safe.nodes().get(index);
+            for (int index = 0; index < updates.size(); index++) {
+                GraphNodeDraft node = updates.get(index);
                 Long id = nodeIds.get(index);
                 if (refreshedRoutes.remove(node.naturalKey())) {
                     clearedRouteIds.add(id);

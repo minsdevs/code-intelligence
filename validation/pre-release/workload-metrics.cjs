@@ -6,6 +6,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { memoryForOwner } = require('./startup-metrics.cjs');
+const { NATIVE_RSS_FAILURE_CODES } = require('./native-rss.cjs');
 
 const GiB_KiB = 1024 * 1024;
 const SLO = Object.freeze({
@@ -13,7 +14,8 @@ const SLO = Object.freeze({
   'analysis.small': Object.freeze({ sizeClass: 'small', p95: { analysisMs: 30000 }, rssKiB: 3 * GiB_KiB }),
   'analysis.medium': Object.freeze({ sizeClass: 'medium', p95: { analysisMs: 180000 }, rssKiB: 4 * GiB_KiB }),
   'analysis.large': Object.freeze({ sizeClass: 'large', p95: { analysisMs: 600000 }, rssKiB: 6 * GiB_KiB, hardTimeoutMs: 900000 }),
-  'incremental.medium': Object.freeze({ sizeClass: 'medium', p95: { refreshMs: 30000 }, requires: ['resultEqualsFull'] }),
+  // 2026-10-10: half of the medium initial budget; the 30 s figure moved to the R1 roadmap (05 section 4).
+  'incremental.medium': Object.freeze({ sizeClass: 'medium', p95: { refreshMs: 90000 }, requires: ['resultEqualsFull'] }),
   'cancel.medium': Object.freeze({ sizeClass: 'medium', ceiling: { cancelUiAckMs: 500, cancelReleaseMs: 10000 }, p95: { cancelReleaseMs: 5000 } }),
   'graph.medium': Object.freeze({ sizeClass: 'medium', p95: { searchApiMs: 500, nodePageApiMs: 500, relationsApiMs: 500 },
     ceiling: { firstPageRenderMs: 2000 } }),
@@ -162,7 +164,7 @@ function startPhaseSampler(ownerPid, fd, sequence, started, { read, now = () => 
         entry.firstAtMs ??= Math.round(at - started); entry.lastAtMs = Math.round(at - started);
         for (const row of value.processes) observed.add(row.pid);
       } catch (error) {
-        const reasons = new Set(['ENOSPC', 'EIO', 'EBADF', 'EMFILE', 'ENFILE', 'ENOMEM', 'EAGAIN', 'ETIMEDOUT',
+        const reasons = new Set([...NATIVE_RSS_FAILURE_CODES, 'ENOSPC', 'EIO', 'EBADF', 'EMFILE', 'ENFILE', 'ENOMEM', 'EAGAIN', 'ETIMEDOUT',
           'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', 'OWNED_PROCESS_NOT_OBSERVED', 'PROCESS_TABLE_INVALID',
           'PROCESS_TABLE_LIMIT', 'MEMORY_TABLE_INVALID', 'MEMORY_TABLE_UNEXPECTED_PID', 'OBSERVED_TREE_LIMIT',
           'MEMORY_SCOPE_AMBIGUOUS', 'MEMORY_SCOPE_OWNER_MISMATCH', 'MEMORY_PROCESS_IDENTITY_CHANGED']);

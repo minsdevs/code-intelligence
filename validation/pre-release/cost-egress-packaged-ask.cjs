@@ -20,6 +20,7 @@ const { createRequire } = require('node:module');
 const { execFileSync } = require('node:child_process');
 const { ensureOutputParent } = require('./owned-output.cjs');
 const { inetSockets } = require('./cost-egress-packaged-probe.cjs');
+const { prepareNativeRss, openNativeRss } = require('./native-rss.cjs');
 const { prepareIsolatedRun } = require('../../desktop/src/isolated-run.cjs');
 const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.cjs');
 const { validationProviderTarget } = require('../../desktop/src/ai-https-transport.cjs');
@@ -136,9 +137,11 @@ async function main(argv = process.argv.slice(2)) {
   const provider = await startFakeProvider(variant.target);
   const { _electron } = createRequire(path.join(repo, 'frontend/package.json'))('playwright');
   const { expect } = createRequire(path.join(repo, 'frontend/package.json'))('@playwright/test');
-  let sdk, owner, stopObserving; const diagnostics = {};
+  let sdk, owner, reader, stopObserving; const diagnostics = {};
   const check = (name, value) => { report.checks.push({ name, ...value }); save(); };
   try {
+    report.memoryReader = await prepareNativeRss(evidence);
+    reader = await openNativeRss(report.memoryReader);
     sdk = await _electron.launch({ executablePath: path.join(app, 'Contents/MacOS/Code Intelligence Validation'),
       args: ['--use-mock-keychain', '--isolated-run-claim=' + plan.claimFile], cwd: repo, env: launchEnvironment(process.env), timeout: 120000 });
     owner = captureOwnedApplication(sdk);
@@ -147,7 +150,7 @@ async function main(argv = process.argv.slice(2)) {
     await expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible({ timeout: 120000 });
     assert.deepEqual(await sdk.evaluate(({ app }) => ({ profile: app.getPath('userData'), packaged: app.isPackaged })),
       { profile: plan.paths.userData, packaged: true });
-    const sample = async label => { const value = await inetSockets(owner.process().pid); report.socketSamples.push({ label, ...value }); save(); return value; };
+    const sample = async label => { const value = await inetSockets(owner.process().pid, reader); report.socketSamples.push({ label, ...value }); save(); return value; };
     const runtimeStatus = () => page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus());
     check('first-run-status', { aiOff: (await runtimeStatus()).aiOff });
     await sample('ready');
@@ -259,6 +262,8 @@ async function main(argv = process.argv.slice(2)) {
     report.failures = failures; report.status = failures.length ? 'FAIL' : 'PASS';
   } catch (error) { report.status = 'FAIL'; report.failure = String(error?.message ?? 'PROBE_FAILED').slice(0, 120); }
   finally {
+    try { if (reader) { await reader.close(); report.memoryReaderCleanupConfirmed = true; } }
+    catch { report.memoryReaderCleanupConfirmed = false; report.status = 'FAIL'; report.failure ||= 'MEMORY_SAMPLE_FAILED'; }
     if (owner) {
       try { await closeValidatedApplication(owner, diagnostics); await confirmObservedGone([owner.process().pid]); report.cleanupConfirmed = true; }
       catch { report.cleanupConfirmed = false; report.status = 'FAIL'; }

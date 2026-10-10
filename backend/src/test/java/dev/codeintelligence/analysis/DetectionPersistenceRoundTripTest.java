@@ -113,6 +113,73 @@ class DetectionPersistenceRoundTripTest {
         assertThat(flowExecutions).isLessThan(50);
     }
 
+    /**
+     * An incremental refresh re-creates the edges of changed files, so sibling calls arrive in a different
+     * storage order than in a clean analysis. The persisted step order must not depend on that order.
+     */
+    @Test
+    void flowStepOrderDoesNotDependOnEdgeStorageOrder() {
+        long userId = jdbcTemplate.queryForObject(
+                "insert into users (github_id, login) values (?, ?) returning id",
+                Long.class,
+                System.nanoTime(),
+                "flow-order-" + System.nanoTime());
+        String[][] orders = {{"describe", "id"}, {"id", "describe"}};
+        java.util.List<java.util.List<String>> steps = new java.util.ArrayList<>();
+        for (String[] order : orders) {
+            // One project per snapshot: the running job context holds the project's single active job.
+            long projectId = jdbcTemplate.queryForObject("""
+                    insert into projects (user_id, name, repo_owner, repo_name)
+                    values (?, 'flow-order', 'acme', ?) returning id
+                    """, Long.class, userId, "flow-order-" + System.nanoTime());
+            long snapshotId = jdbcTemplate.queryForObject("""
+                    insert into snapshots (project_id, commit_sha, status)
+                    values (?, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'ANALYZING') returning id
+                    """, Long.class, projectId);
+            long endpoint = node(
+                    snapshotId,
+                    "API_ENDPOINT",
+                    "endpoint:POST:/api/items",
+                    "POST /api/items",
+                    "{\"handlerKey\": \"java:m.C#create\"}");
+            long controller = node(snapshotId, "CLASS", "java:m.C", "C", "{\"layer\": \"CONTROLLER\"}");
+            long handler = node(snapshotId, "METHOD", "java:m.C#create", "create", "{\"layer\": \"CONTROLLER\"}");
+            long describe = node(snapshotId, "METHOD", "java:m.S#describe", "describe", "{\"layer\": \"SERVICE\"}");
+            long id = node(snapshotId, "METHOD", "java:m.Dto#id", "id", "{}");
+            edge(snapshotId, controller, endpoint, "EXPOSES");
+            edge(snapshotId, controller, handler, "DECLARES");
+            for (String callee : order) edge(snapshotId, handler, callee.equals("id") ? id : describe, "CALLS");
+            flowDetection.run(TestJobContext.running(jdbcTemplate, projectId, snapshotId, dataDir));
+            steps.add(jdbcTemplate.queryForList("""
+                    select s.seq || ':' || n.natural_key
+                    from flows f join flow_steps s on s.flow_id = f.id join graph_nodes n on n.id = s.node_id
+                    where f.snapshot_id = ? and f.kind = 'BACKEND' order by s.seq
+                    """, String.class, snapshotId));
+        }
+        assertThat(steps.get(1)).isEqualTo(steps.get(0));
+        assertThat(steps.get(0))
+                .containsExactly(
+                        "1:endpoint:POST:/api/items",
+                        "2:java:m.C",
+                        "3:java:m.C#create",
+                        "4:java:m.Dto#id",
+                        "5:java:m.S#describe");
+    }
+
+    private long node(long snapshotId, String type, String key, String name, String metadata) {
+        return jdbcTemplate.queryForObject("""
+                insert into graph_nodes (snapshot_id, node_type, natural_key, name, metadata)
+                values (?, ?, ?, ?, ?::jsonb) returning id
+                """, Long.class, snapshotId, type, key, name, metadata);
+    }
+
+    private void edge(long snapshotId, long source, long target, String type) {
+        jdbcTemplate.update("""
+                insert into graph_edges (snapshot_id, source_node_id, target_node_id, edge_type, confidence)
+                values (?, ?, ?, ?, 'CONFIRMED')
+                """, snapshotId, source, target, type);
+    }
+
     private void seed(long snapshotId) {
         String s = Long.toString(snapshotId);
         jdbcTemplate.execute("""

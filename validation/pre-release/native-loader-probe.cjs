@@ -136,7 +136,7 @@ async function packagedRun({ repo, app, runtime, report, save }) {
   const { launchEnvironment, bounded } = require('../../desktop/scripts/packaged-keychain-acceptance.cjs');
   const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
   const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
-  const { readOwnerMemory } = require('./process-memory.cjs');
+  const { prepareNativeRss, openNativeRss } = require('./native-rss.cjs');
   const { confirmObservedGone } = require('./run-startup-benchmark.cjs');
   // A fresh short parent keeps the profile's Unix socket paths within the macOS limit from any
   // worktree depth (isolated-run socket budget), as run-integrity-diagnostic.cjs does.
@@ -149,10 +149,12 @@ async function packagedRun({ repo, app, runtime, report, save }) {
   const run = { status: 'RUNNING', profileRoot: plan.root, mockKeychain: true, launchPath: launchEnv.PATH,
     launchEnvironmentKeys: Object.keys(launchEnv).sort(), dyldVariables: Object.keys(launchEnv).filter(key => key.startsWith('DYLD_')).length };
   report.packaged = run; save();
-  const diagnostics = {}; let sdk, owner, stopObserving, failure = null;
+  const diagnostics = {}; let sdk, owner, reader, stopObserving, failure = null;
   const started = performance.now(), expires = started + 120000;
   const remaining = () => { const value = Math.floor(expires - performance.now()); if (value <= 0) throw new Error('STARTUP_TIMEOUT'); return value; };
   try {
+    run.memoryReader = await prepareNativeRss(path.join(repo, report.evidence));
+    reader = await openNativeRss(run.memoryReader);
     sdk = await _electron.launch({ executablePath: path.join(app, 'Contents/MacOS/Code Intelligence Validation'),
       args: ['--use-mock-keychain', '--isolated-run-claim=' + plan.claimFile], cwd: repo, env: launchEnv, timeout: remaining() });
     owner = captureOwnedApplication(sdk);
@@ -163,7 +165,7 @@ async function packagedRun({ repo, app, runtime, report, save }) {
     assert.equal(status.ready, true); assert.equal(status.recoveryOnly, false); assert.equal(status.error, null);
     run.services = [...status.services].sort();
     assert.deepEqual(run.services, expectedServices(app));
-    const processes = await readOwnerMemory(owner.process().pid);
+    const processes = await reader.read(owner.process().pid);
     const pids = processes.map(row => row.pid);
     const { stdout } = await execute('/bin/ps', ['-p', pids.join(','), '-o', 'pid=,comm='], { timeout: 5000, env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' } });
     // Display only: PostgreSQL children retitle themselves, so comm is not an executable path.
@@ -187,6 +189,8 @@ async function packagedRun({ repo, app, runtime, report, save }) {
     if (owner.process().exitCode !== null) throw new Error('STARTUP_PROCESS_EXITED');
   } catch (error) { failure = error?.message && /^[A-Z_]+$/.test(error.message) ? error.message : 'LOADER_PROBE_FAILED'; run.errorName = error?.name || null; }
   finally {
+    try { if (reader) { await reader.close(); run.memoryReaderCleanupConfirmed = true; } }
+    catch { run.memoryReaderCleanupConfirmed = false; failure ||= 'MEMORY_SAMPLE_FAILED'; }
     if (owner) {
       try { await closeValidatedApplication(owner, diagnostics); await confirmObservedGone([owner.process().pid]); run.cleanupConfirmed = true; }
       catch (error) { run.cleanupFailure = error?.message || 'CLEANUP_FAILED'; failure ||= 'CLEANUP_FAILED'; }

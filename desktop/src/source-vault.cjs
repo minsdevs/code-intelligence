@@ -129,18 +129,25 @@ async function statOrMissing(file) {
 
 // Callers canonicalize the trusted OS/userData parent before appending module-owned paths.
 // These pathname checks are not native descriptor-relative ancestor-race confinement.
-async function pathChain(directory) {
+async function pathChain(directory, directories, missingCode) {
   let current = path.parse(directory).root;
   let stat;
   for (const part of directory.slice(current.length).split(path.sep).filter(Boolean)) {
     current = path.join(current, part);
-    stat = await fs.lstat(current, { bigint: true });
+    try { stat = await fs.lstat(current, { bigint: true }); }
+    catch (error) { if (missingCode && error.code === 'ENOENT') fail(missingCode); throw error; }
     if (!stat.isDirectory() || stat.isSymbolicLink()) fail('SOURCE_VAULT_UNSAFE_PATH');
+    if (directories?.has(current)) {
+      checkPrivate(stat, true);
+      const expected = directories.get(current);
+      if (expected && !sameIdentity(stat, expected)) fail('SOURCE_VAULT_UNSAFE_PATH');
+      directories.set(current, stat);
+    }
   }
   return stat || await fs.lstat(current, { bigint: true });
 }
-async function privateDirectory(directory, expected) {
-  const stat = await pathChain(directory);
+async function privateDirectory(directory, expected, directories, missingCode) {
+  const stat = await pathChain(directory, directories, missingCode);
   checkPrivate(stat, true);
   if (expected && !sameIdentity(stat, expected)) fail('SOURCE_VAULT_UNSAFE_PATH');
   return stat;
@@ -211,8 +218,8 @@ async function scanSourceStore(sourceRoot, maximum) {
   for (const entry of entries.values()) if (entry.kind === 'file') bytes += entry.bytes;
   return { entries, bytes };
 }
-async function readPrivateFile(file, maximum, missingCode) {
-  await privateDirectory(path.dirname(file));
+async function readPrivateFile(file, maximum, missingCode, directories) {
+  await privateDirectory(path.dirname(file), undefined, directories, directories ? missingCode : undefined);
   const before = await statOrMissing(file);
   if (!before) fail(missingCode);
   checkPrivate(before, false);
@@ -235,6 +242,7 @@ async function readPrivateFile(file, maximum, missingCode) {
     const current = await fs.lstat(file, { bigint: true });
     checkPrivate(current, false);
     if (!sameFileState(opened, after) || !sameFileState(after, current)) fail('SOURCE_VAULT_UNSAFE_PATH');
+    if (directories) await privateDirectory(path.dirname(file), undefined, directories);
     return { bytes, stat: after };
   } catch (error) {
     bytes?.fill(0);
@@ -769,16 +777,13 @@ async function initialize(options, fresh, restoreStage = false) {
     // A batch passes the identities it has just created for addresses not yet in the ledger.
     const readStoredEnvelope = async (expected, known = {}) => {
       const directory = address(expected);
-      if (!await statOrMissing(path.dirname(directory), { directory: true })) fail('SOURCE_VAULT_MISSING');
-      if (!await statOrMissing(directory, { directory: true })) fail('SOURCE_VAULT_MISSING');
-      const projectStat = await privateDirectory(path.dirname(directory), known.projectStat ?? store.entries.get(expected.projectId));
-      const addressStat = await privateDirectory(directory, known.addressStat ?? store.entries.get(`${expected.projectId}/${expected.sha256}`));
-      const encrypted = await readPrivateFile(path.join(directory, 'blob.bin'), MAX_FILE_BYTES + MAX_HEADER_BYTES + 12, 'SOURCE_VAULT_MISSING');
-      try {
-        await privateDirectory(path.dirname(directory), projectStat);
-        await privateDirectory(directory, addressStat);
-        return encrypted;
-      } catch (error) { encrypted.bytes.fill(0); throw error; }
+      // Validate both identities in each ancestor walk; do not reuse a prior read's checks.
+      const directories = new Map([
+        [path.dirname(directory), known.projectStat ?? store.entries.get(expected.projectId)],
+        [directory, known.addressStat ?? store.entries.get(`${expected.projectId}/${expected.sha256}`)],
+      ]);
+      return readPrivateFile(path.join(directory, 'blob.bin'), MAX_FILE_BYTES + MAX_HEADER_BYTES + 12,
+        'SOURCE_VAULT_MISSING', directories);
     };
     const readStored = async (expected) => {
       const encrypted = await readStoredEnvelope(expected);
