@@ -158,12 +158,76 @@ canonical 대규모 비교 첫 실행 canonical-large-v9eVLf는 incremental 앱 
 
 INT gate-latency-20261010/canonical-large-I0B1GR(bPN1sU, source `3a6ec0a`, large 50,000파일/1% 500개 변경+route·React 버전·u0.js 삭제)는 **PASS / resultEqualsFull=true**다. incremental 앱(초기 분석+갱신)과 별도 fresh-profile clean-full 앱 모두 정상 종료·cleanupConfirmed이고 삭제·변경 전파가 확인됐다. 21범주 전부 count와 C 정렬 NDJSON SHA256이 같다: files 49,999·nodes 768,168·edges 1,351,932·endpoints 19,495·entities 4,499·routes 4,249·features 7,249·featureLinks 37,241·flows 23,744·**flowSteps 105,973**·findings 4,499·sourceEntries 49,999·evidence 695,657, unknown/dangling evidence 0. §11에서 유일하게 어긋났던 flowSteps가 §12 수정 뒤 일치했으므로, 대규모 실제 앱의 증분 결과가 clean-full과 동일하다는 06 §5 계약을 이 후보에서 실제로 확인했다. 시간 판정은 NOT_APPLICABLE_DIAGNOSTIC이며 SLO 수용이 아니다.
 
-## 15. 현재 상태 요약
+## 15. RSS 전역 metadata 지연 — ps 제거와 native 열거(5b562f5)
 
-- 소스 `3a6ec0a`(main b0309e9 뒤 6커밋: 경로 검사 통합, RSS helper, 그래프 중복 쓰기 제거, refresh SLO 조정, flow 정렬) — 통합 회귀 6,609 PASS·0 FAIL·63 SKIP, 타입 검사 PASS.
-- 후보 bPN1sU — 제품36·복구6/6·경합8 PASS, 내부 보안 COMPLETE, 자동 UX190화면(consoleErrors2), loader/egress/ask PASS, **대규모 packaged incremental=clean-full PASS**.
-- 성능: medium 1% refresh 진단 50.8~57.8초(조정 게이트 p95≤90초 범위, 30초는 R1), large 초기 504~547초·refresh 361~434초. 모두 닫힌 덮개·고부하 DIAGNOSTIC_ONLY이며 정식 20회(AC·덮개 OPEN·quiet host)는 NOT RUN.
-- RSS: 분석 단계 최대 간격이 부하에 따라 122~601ms로 흔들리며 250ms 계약을 안정적으로 만족하지 못한다(전역 `/bin/ps` metadata 경로, §2·§9). 이번 라운드에서 손대지 않았다.
-- 미해명 단일 관측: SiP1VX egress-ask 첫 실행의 `[::127.0.0.1]:51208` 소켓(§8). probe가 peer의 프로세스를 기록하지 않아 귀속 불가, 이후 3회 실행 모두 remote 0.
-- 열린 결정: 증분 단계 전체 앱 RSS 6GiB 초과 관측에 대한 상한 여부(§10).
-- push·PR·병합·원본 main 반영·최종 증거 보관은 NOT RUN. 사람 수용 게이트(독립 보안·정확도·UX/VoiceOver·실계정·서명/공증·법률)는 준비 상태만 유지. **판정 NO_GO 유지.**
+§2·§9·§13의 분석 단계 RSS 간격(122~601ms)은 선택 PID 읽기가 아니라 매 frame의 전역 `/bin/ps -ww -axo pid=,ppid=,comm=` 호출에서 왔다. 이번 호스트(load1 2.6~4.0, 약1,090 프로세스)에서 다시 잰 값: 전체 테이블 ps 45~50ms, **실패 PID 26개만 `ps -p`로 읽어도 47~50ms**(ps의 비용은 행 수가 아니라 호출당 고정), 단일 PID `ps -p` 3ms, native 열거(proc_listallpids+PROC_PIDT_SHORTBSDINFO+proc_pidpath) 2.7~3.8ms. 인계 §7이 제안한 "native 열거+실패 PID만 ps 보완"은 ps 호출당 비용 때문에 효과가 없어 채택하지 않았다.
+
+native 열거에서 path를 못 읽는 PID는 26개(모두 live, 25개는 같은 UID)였고 전부 실행 파일이 교체·삭제된 프로세스(errno 2)다. `/bin/ps`(setuid root)는 이 경로를 `KERN_PROCARGS2`의 exec path에서 읽는다. 같은 출처를 helper가 직접 읽으면 25개가 복구되고, 남는 1개는 다른 UID(root)의 프로세스로 비특권 helper는 인자 영역을 읽을 수 없어 kernel 짧은 이름만 남는다. 짧은 이름 추정을 bundle 귀속에 쓰지 않도록 행에 출처를 붙였다.
+
+변경(`validation/pre-release/native-rss.c` 프로토콜2, `native-rss.cjs`, `process-memory.cjs`):
+- helper `D` 명령이 모든 live PID를 `<pid> <ppid> <source> <executable>`로 돌려준다. source P=proc_pidpath, A=인자 영역 exec path(argv[0]이 아니라 kernel이 기록한 exec path), C=짧은 kernel 이름(다른 사용자 프로세스). 열거 도중 사라진 PID는 두 번째 metadata 읽기가 ESRCH일 때만 생략하고, 그 밖의 실패는 frame 실패(exit 3)다. 모든 행은 제어문자 검사·PID 중복 검사·50,000행/2MiB 상한을 통과해야 한다.
+- `readOwnerMemory`는 per-frame ps를 더 쓰지 않는다(`discover`·`readSelected` 둘 다 필수). C 행은 PID/PPID 자손 추적에만 참여하고 owner 동일 실행 파일 모호성 검사·XPC bundle prefix 매칭에서는 제외한다. owner 자신은 path가 있어야 하며(`MEMORY_OWNER_PATH_UNAVAILABLE`) 선택 RSS 읽기도 같은 path 보완을 쓰므로 owner identity 비교의 출처가 같다. ux pilot/startup benchmark의 phase 사이 liveness 검사(`readProcessTable`, pid/ppid만)는 그대로 ps다.
+- 이 수집 scope는 읽기 전용이며 프로세스 종료 권한이나 인가 경계로 쓰지 않는다(§2 계약 유지).
+
+검증: `process-memory.test`·`native-rss.test` 22 PASS. 새 시험은 삭제된 실행 파일(소유 C 프로그램을 실행 뒤 unlink)의 PID가 A 출처로 남고 RSS 행이 유지됨, C 행이 자손 추적만 하고 bundle 귀속을 못 함, owner path 부재 거부를 확인한다(시스템 바이너리 사본은 unlink 시 SIGKILL되어 시험 대상으로 쓸 수 없었다). COORD runners 전체 450/451 PASS(1 FAIL은 §13의 COORD `proxy-addr` 2.0.7 stale node_modules 환경 문제, INT에서는 PASS). 소형 진단 `P/rss-discovery-AwOcMW/result.json`(소유 node 프로세스1개, 1,099 프로세스 열거, 200 frame, 회귀 실행 중 load1 6.7): frame당 p50 5.13ms·p95 7.75ms·max 21.15ms로 이전 ps 경로의 45~50ms 고정 비용이 사라졌다. 실제 packaged 후보의 분석 단계 간격은 §17에 기록한다.
+
+### 15.1 실제 후보에서 드러난 특권 자식 문제와 수정(acdbb03)
+
+444ebf2의 후보 f1sTDf(build-OP2XUl)는 회귀 6,615 PASS·0 FAIL·63 SKIP, 패키지 9개 PASS(UX 190화면·consoleErrors 2)였으나 medium smoke run-0wnUbn이 두 회차 모두 기능 PASS(refresh 49.360/51.651초)·**MEMORY_SAMPLE_FAILED**였고 표본은 세 회차 모두 STARTUP 끝(약 8초, READY 직후)에서 멈췄다. worker가 원인 코드를 삼키므로 INT 작업 사본에만 진단 출력을 넣고 small smoke를 두 번 돌렸다(run-WAniiN, run-R1bUuH; 진단 뒤 INT 변경은 되돌려 clean 확인). 원인은 helper exit 3 — 선택 읽기의 `PROC_PIDTBSDINFO`가 pid 하나에 **EPERM**(errno 1)을 돌려줬다. 그 PID는 앱 main의 owner-memory reporter가 READY 직후부터 2~5초마다 실행하는 `/bin/ps`(setuid root)다. 별도 C 프로브로 확인한 바, 이 자식은 생존 16~50ms 동안 SHORTBSDINFO(uid 0)·proc_pidpath는 읽히지만 TBSDINFO/TASKINFO는 EPERM, KERN_PROCARGS2는 EINVAL이다. 이전 ps 기반 discovery는 자체 비용 45~50ms 때문에 이 자식이 끝난 뒤에야 선택 읽기에 들어가 ESRCH로 건너뛰었고, discovery가 4ms로 빨라지자 같은 경쟁이 매 회차 재현됐다.
+
+수정: helper는 선택 집합에서 `bsd()`가 EPERM인 PID를 SHORTBSDINFO로 다시 확인해 **다른 실효 UID**일 때만 `<pid> <ppid> U <path>`로 보고한다(같은 UID의 EPERM은 그대로 frame 실패). `readOwnerMemory`는 U 행이 있는 frame에서만 그 PID 집합에 한해 `/bin/ps -o pid=,ppid=,rss= -p`(단일 PID 3ms)로 RSS를 읽고, ps가 빠뜨린 PID는 재discovery에도 없을 때만 종료로 보며 아직 있으면 `MEMORY_PRIVILEGED_UNREADABLE`로 실패한다. owner 자신이 U면 거부한다. 또 sampler worker가 실패 코드(`stop:MEMORY_NATIVE_QUERY_FAILED` 형태, 원문 금지)와 helper 종료 실패 전까지 모은 표본을 함께 넘기고 runner가 `memoryFailureDetail`로 기록한다. 시험: 실제 setuid `/bin/ps` 자식을 pipe에 막아둔 채 own tree를 읽어 U 행이 RSS와 함께 돌아오는 시험 추가, 단위 50 PASS, COORD runners 452/453(환경 1건). INT에서 acdbb03 runner로 f1sTDf small smoke run-pUkc00: **COMPLETE**, 분석 gap 118ms·최대 read 19ms·312표본·retainedWork 없음.
+
+### 15.2 cwsig6 라운드 — 회귀 재실행, medium 완전 수집, 그리고 두 번째 경쟁(e157298)
+
+acdbb03 체인: 통합 회귀는 backend Docker 스위트에서 `SearchApiIntegrationTest` 2건이 컨텍스트 로드 중 PostgreSQL 연결 실패(EOF; load1 16·fseventsd 165% CPU 구간)로 FAIL했고 backend 소스는 3a6ec0a 이후 변경이 없으므로 §13과 같은 절차로 backend 스위트만 재실행해 병합했다(`gate-latency-regression-acdbb03-merged-20261010`, **6,617 PASS·0 FAIL·63 SKIP**, `integrated-regression-acdbb03.json`). 후보 **cwsig6**(build-IvEZVf, tZgvV7/xpc-required)는 패키지 9개 PASS(제품36·복구6/6·경합8·내부 보안 COMPLETE·UX190화면 consoleErrors2·loader/egress/ask PASS, egress 비loopback 0). 제품 바이트는 bPN1sU와 동일하다(`product-identity-bPN1sU-cwsig6.json`: app.asar 동일, runtime-manifest 964항목 중 buildSequence 외 차이 0; 3a6ec0a 이후 desktop/backend/analyzers/frontend diff 없음). 따라서 대규모 canonical은 재실행하지 않고 I0B1GR PASS를 같은 제품 바이트의 증거로 유지한다(디스크 예산도 재실행을 허용하지 않았다).
+
+medium smoke run-VY4PCa: 세 회차 모두 **COMPLETE**, 분석 단계 최대 간격 **106/130/131ms**(이전 122~601ms), refresh 52.600/52.379초, 초기 132.4/128.1초, 분석 peak 3.60/3.57GiB, 증분 peak 4.37/4.41GiB. 닫힌 덮개 DIAGNOSTIC_ONLY다.
+
+large smoke run-bnPh13은 기능 PASS(초기 506.4/516.5초, refresh 372.9/371.8초)였으나 두 회차 모두 ANALYSIS 도중(234.0초, 54.5초) 수집이 멈췄고, 이번에는 sampler가 원인 코드를 남겼다: **MEMORY_SCOPE_AMBIGUOUS**. 같은 코드가 startup probe run-tseqvZ/run-DzKZA7에서도 STARTUP 2.3초(CACHE_AND_ANALYZER 직후)에 나왔다. 원인: ps 시절 discovery는 `comm`(argv[0])을 썼지만 native discovery는 실제 vnode 경로를 돌려주므로, owner의 Java control runtime이 `process.execPath`로 띄우는 ELECTRON_RUN_AS_NODE 자식(ts-analyzer 등)이 Helper 앱으로 재실행되기 전 수십 ms 동안 main 바이너리 경로로 보이고, "같은 packaged 실행 파일이 둘"이라는 모호성 규칙이 이를 두 번째 앱 인스턴스로 판정했다(helper `D`를 0.3초 간격으로 돌려 확인: 정상 상태에서는 main 경로 프로세스가 회차당 1개뿐이고 Helper 경로 자식 2개가 3초에 나타남). 수정 e157298: 모호성은 **owner 자손 밖**에서 같은 main 바이너리가 보일 때로 한정하고, 자손은 다른 자식처럼 표본에 넣는다(다른 소유 트리의 같은 바이너리는 여전히 거부, 시험 추가, 단위 80 PASS). 사용자 승인으로 run-bnPh13 보존 프로필/fixture 8.7GB를 정리한 뒤(approved-profile-cleanup-v2-5jpkcd83) e157298 체인을 다시 돌렸다. 결과는 §17에 기록한다.
+
+## 16. egress 소켓 귀속(444ebf2)
+
+§8의 `[::127.0.0.1]:51208` 관측은 peer 문자열만 남아 귀속할 수 없었다. `cost-egress-packaged-probe.cjs`의 `inetSockets`가 lsof `-F pcfPnT` 필드 출력을 읽어 비loopback peer마다 소유 pid·command·PPID·scope owner·fd·protocol·소켓 이름·TCP 상태를 `remoteDetails`에 기록한다(`remote` 배열과 실패 판정은 그대로). egress-ask도 같은 함수를 쓴다. 판정 기준(`LOOPBACK` 정규식)은 바꾸지 않았으므로 같은 형태가 다시 나오면 실패하고 이번에는 귀속 정보가 남는다. `cost-egress-sockets.test` 2 PASS.
+
+## 17. e157298 라운드 — 후보 ZO7qZn, medium·large·startup RSS 완전 수집
+
+e157298 체인(run-chain-v2.sh, SKIP_CANONICAL)은 한 번에 끝까지 갔다. 통합 회귀 `gate-latency-regression-e157298`은 재실행 없이 **6,618 PASS·0 FAIL·63 SKIP**(6,681건, `integrated-regression-e157298.json`; acdbb03 대비 +1은 모호성 시험)이다. 후보 **ZO7qZn**(build-yIrzd4, source `e157298`, baseline tZgvV7/xpc-required, build sequence 1791650855306, app.asar `9858a908…6022`, manifest `14cbd56f…400eb`, PACKAGED_NOT_RELEASED)의 stage-5는 9개 모두 통과했다: product-qvhZC0 36 PASS, 복구 6/6(native-GQ1g2I·native-Ih2xfv), 경합 8, 내부 보안 COMPLETE_NOT_INDEPENDENT_ACCEPTANCE, UX 190화면·machine/page errors 0·consoleErrors 2, loader PASS_SINGLE_MAC_APPROXIMATION, egress-off PASS, egress-ask PASS(비loopback 0, `remoteDetails` 없음). `packaged-ZO7qZn-proof.json`이 결과·해시를 연결한다. 제품 바이트는 bPN1sU·cwsig6와 동일하다(`product-identity-bPN1sU-ZO7qZn.json`: asar 동일, manifest 964항목 중 buildSequence 외 차이 0; acdbb03 이후 변경은 `validation/pre-release`뿐). 대규모 canonical은 §15.2와 같은 근거로 I0B1GR PASS를 유지한다(ledger `NOT_RERUN_IDENTICAL_PRODUCT_BYTES`).
+
+| 관측 | medium run-qLZOIV 1회차 | medium 2회차 | large run-UsLN1e 1회차 | large 2회차 |
+| --- | ---: | ---: | ---: | ---: |
+| measurementStatus | COMPLETE | COMPLETE | COMPLETE | COMPLETE |
+| 분석 단계 RSS 최대 간격 | **110ms** | **112ms** | **185ms** | **181ms** |
+| 모든 단계 최대 간격(단계) | 128ms(INCREMENTAL) | 112ms(ANALYSIS) | 185ms(ANALYSIS) | 181ms(ANALYSIS) |
+| 초기 분석 | 123.213초 | 128.666초 | 525.496초 | 522.546초 |
+| 1% refresh | 53.023초 | 52.788초 | 380.936초 | 369.065초 |
+| 분석 RSS peak | 3,605,744KiB | 3,551,328KiB | 4,869,104KiB | 5,077,488KiB |
+| INCREMENTAL RSS peak(run peak) | 4,814,816KiB | 4,416,464KiB | 6,199,568KiB | 6,502,880KiB |
+| 취소 release | 346ms | 441ms | 122ms | 116ms |
+| 그래프 검색 API 5회 | 105~155ms | 133~151ms | 362~576ms | 361~574ms |
+| admission load1 / mdworker / 덮개 | 10.2 / 0 / CLOSED | 29.6 / 32 / CLOSED | 34.1 / 32 / CLOSED | 16.6 / 0 / CLOSED |
+
+warmup(0회차) 시작 단계 간격은 medium 110ms·large 113ms다. 세 후보(§9·§10 SiP1VX 118~150ms, §13 bPN1sU 124~601ms, §15.2 cwsig6 106~131ms)에 걸쳐 불안정했던 분석 단계 RSS 간격이 small·medium·large 전부에서 250ms 계약 안쪽(최대 185ms)으로 들어왔고, 이 수치는 load1 10~34·mdworker 32인 구간에서 나왔다. 시작 진단 run-VyT0Ch(ELECTRON/xpc-required, 4회 warm, `--startup-probe-3`)도 **COMPLETE_DIAGNOSTIC**: readyMs 8,329(warmup)/7,956/7,920/7,872, idle peak RSS 1,384,464/1,343,472/1,341,568/1,355,216KiB(05 §4 idle 1.5GiB=1,572,864KiB 이내 관측), 네 회차 모두 samplingComplete·cleanupConfirmed·integrityFailure 없음. §15.2의 MEMORY_SCOPE_AMBIGUOUS는 large·startup 어느 쪽에서도 재현되지 않았다.
+
+이 라운드의 시간·RSS 수치는 전부 닫힌 덮개·`timingValidity=INVALID_LOAD` DIAGNOSTIC_ONLY다(`performanceAcceptanceEligible=false`). 바뀐 것은 "RSS 수집이 완전한가"라는 계측 계약이 세 등급과 시작 진단에서 충족된다는 점이지, SLO 수용이 아니다. ledger-v5.json(`CANDIDATE_VERIFIED_DIAGNOSTICS_RECORDED`, releaseVerdict NO_GO)이 이 라운드와 이전 후보 f1sTDf/cwsig6의 연결을 기록한다.
+
+### 17.1 정식 측정 조건 — 호스트 차단과 기준 제안(결정 대기)
+
+정식 20회 조건(AC·덮개 OPEN·load1<4·mdworker_shared≤6)은 이 세션 동안 한 번도 성립하지 않았다. 덮개는 세션 내내 CLOSED(`AppleClamshellState=Yes`)였고, load1은 다른 작업트리의 Gradle·Spotlight(mdworker 32) 때문에 체인 실행 중 8~42였다. 사용자 지시("부하가 안 떨어지면 다른 방법을 찾거나 기준을 변경")에 따라 재실행을 반복하지 않고 다음을 제안한다. 어느 쪽도 이 문서에서 적용하지 않았고, 이 라운드의 수치를 PASS로 바꾸지 않는다.
+
+1. **덮개 조건**: 20회 admission에서 `lidState=OPEN`을 필수에서 "기록"으로 낮추고, AC·load1<4·mdworker≤6만 필수로 둔다. 근거: 덮개 상태는 관측값으로 result.json에 남고, 닫힌 덮개의 영향(열 제한)은 load·시간 분포로 드러나며 그 자체가 분포를 왜곡한다는 증거는 이 세션에 없다. 반대 근거: 05 §4 기준 장비 정의와 이전 라운드의 조건을 바꾸는 것이므로 사용자 결정이 필요하고, 바꾸면 그 이후 20회만 비교 가능하다.
+2. **부하 조건은 유지**: load1<4·mdworker≤6은 timingValidity의 실체이므로 완화하지 않는다. 대신 20회는 이 호스트의 다른 세션 작업이 끝난 뒤(또는 다른 기기에서) `wait-quiet` admission이 자연히 열릴 때 한 번 돌린다. 이번 라운드의 세 등급 COMPLETE는 그 실행이 "RSS 수집 실패로 무효"가 될 가능성을 제거했다는 의미다.
+3. **대안 없는 항목**: 정식 측정 없이 G-PERF를 통과로 바꾸는 방법은 없다. 05 §4의 "미측정 개발 목표" 문구와 NO_GO는 유지한다.
+
+### 17.2 증분 단계 전체 앱 RSS 6GiB 초과 — 결정 대기
+
+large INCREMENTAL 단계 run peak는 SiP1VX 6,208,480/6,352,672, bPN1sU 6,270,112/6,322,912, ZO7qZn 6,199,568/6,502,880KiB로 세 후보에서 일관되게 6GiB(6,291,456KiB)의 −1.5%~+3.4%에 있고, medium은 4.4~4.8GiB로 중간 분석 상한 4GiB를 넘는다(초기 분석 peak는 각각 5.08GiB·3.61GiB로 상한 이내). 05 §4 증분 행에는 RSS 상한이 없고 전체 분석 watchdog(6GiB 초과 시 새 work 중지)은 분석 중 발동하지 않았다. 선택지: (a) 증분 행에 같은 등급 상한을 명시 — 현재 large refresh는 상한을 넘으므로 refresh 중 메모리 감축(이전 스냅샷 보유분 해제)이 선행돼야 한다; (b) 증분 상한을 "등급 상한+10%"로 두고 이유(이전 스냅샷과 새 스냅샷 공존)를 적는다; (c) 상한 없이 관측만 유지. 권고는 (a)지만 R1 범위의 설계 작업이므로 사용자 결정으로 남긴다. 어느 경우든 지금 수치는 닫힌 덮개 진단이다.
+
+## 18. 현재 상태 요약
+
+- 소스 `e157298`(main b0309e9 뒤 12커밋: 경로 검사 통합, RSS helper, 그래프 중복 쓰기 제거, refresh SLO 조정, flow 정렬, native 열거·특권 자식·소유 자식 모호성 수정, egress 귀속, startup failureDetail) — 통합 회귀 6,618 PASS·0 FAIL·63 SKIP, 타입 검사 PASS.
+- 후보 ZO7qZn(bPN1sU·cwsig6와 제품 바이트 동일) — 제품36·복구6/6·경합8 PASS, 내부 보안 COMPLETE, 자동 UX190화면(consoleErrors2), loader/egress/ask PASS, **대규모 packaged incremental=clean-full PASS**(I0B1GR, 동일 바이트로 유지).
+- 성능: medium 1% refresh 진단 50.8~57.8초(조정 게이트 p95≤90초 범위, 30초는 R1), large 초기 504~547초·refresh 361~434초, 시작 ready 7.9~8.3초·idle RSS 1.34~1.38GiB. 모두 닫힌 덮개·고부하 DIAGNOSTIC_ONLY이며 정식 20회는 NOT RUN(§17.1 제안 대기).
+- RSS: 전역 `/bin/ps` 경로를 native 열거로 바꾸고(§15) 특권 자식(§15.1)·소유 자식 모호성(§15.2)을 고친 뒤 small 118ms·medium 110/112ms·large 185/181ms·startup 4회 모두 COMPLETE(§17). 250ms 계약은 세 등급에서 충족됐고 이 사실은 부하와 무관한 계측 결과다.
+- 미해명 단일 관측: SiP1VX egress-ask 첫 실행의 `[::127.0.0.1]:51208` 소켓(§8). 이후 f1sTDf·cwsig6·ZO7qZn 포함 모든 실행에서 remote 0이며 probe는 이제 peer 프로세스를 기록한다(§16).
+- 열린 결정: 정식 측정의 덮개 조건(§17.1), 증분 단계 전체 앱 RSS 상한(§17.2).
+- 마감 순서(push·PR·병합·원본 main 반영·최종 증거 보관)는 인계 §10에 따라 이 문서 커밋 뒤 진행한다. 사람 수용 게이트(독립 보안·정확도·UX/VoiceOver·실계정·서명/공증·법률)는 준비 상태만 유지. **판정 NO_GO 유지.**
