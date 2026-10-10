@@ -143,3 +143,27 @@ INT gate-latency-20261010/canonical-large-njoo6i(`run-canonical-large.cjs`, SiP1
 대상 실행(run-targeted-v2.cjs, Docker 드라이버·cleanTest): 첫 실행 targeted-8SbTBb는 골든·flow 시험 26 PASS, 새 시험 1 FAIL — 같은 프로젝트에 활성 job을 두 번 만든 시험 구성 오류(`uq_analysis_jobs_active_per_project`)로 제품 수정과 무관했다. 스냅샷마다 프로젝트를 분리한 재실행 targeted-YQhSpo는 DetectionPersistenceRoundTripTest 2·FlowStepVerdictIntegrationTest 2·FullstackCrossDomainGoldenTest 1 = 5 PASS·0 FAIL이다. FixtureGoldenTest 9·ConfigAnalyzersGoldenTest 5·SpringMiniEndpointsFeaturesGoldenTest 3·SpringMiniGraphGoldenTest 3·ReactMiniTsParsingGoldenTest 2는 첫 실행에서 같은 제품 코드로 PASS했다.
 
 이 수정은 소스 변경이므로 SiP1VX의 회귀·패키지·진단 결과를 상속하지 않는다. 새 소스의 통합 회귀, 새 후보, 영향 패키지, medium/large smoke, 대규모 canonical 재실행은 다음 항목에 기록한다.
+
+## 13. 소스 3a6ec0a의 회귀, 후보 bPN1sU, 패키지·진단
+
+run-chain.sh로 INT detached를 `3a6ec0a`로 옮기고 체인을 실행했다. 첫 통합 회귀(gate-latency-regression-3a6ec0a-20261010)는 7개 suite 모두 시험 실패 0이었으나 backend Docker 드라이버가 **REVIEW_REQUIRED**였다. 실행 중 새 컨테이너 2개(postgres:17-alpine, testcontainers ryuk, 세션 432abada…)가 관측됐는데 이 저장소의 시험은 pgvector/pgvector:pg16·redis:7-alpine만 쓰고, 같은 시각 다른 프로젝트 작업트리(jinju-companion-bus)의 Gradle `bootTest`가 이 호스트에서 돌고 있었다. 드라이버는 남의 컨테이너를 입양·삭제하지 않으므로 검토 상태로 끝났고, 그 컨테이너는 외부 작업 종료 후 사라졌다. backend suite만 같은 드라이버로 재실행(docker-integration/backend-8nwLdg, PASS_EXECUTED_WITH_EXPLICIT_SKIPS, 기존 컨테이너 불변·새 컨테이너 잔존0)해 병합 root gate-latency-regression-3a6ec0a-20261010-merged를 만들었고 integrated-regression-3a6ec0a.json은 frontend480·TypeScript analyzer318·runners445·desktop3,280(+45)·backend2,067(+18, 새 결정성 시험 포함)·events19, 합계 **6,609 PASS·0 FAIL·63 SKIP**, 타입 검사 PASS를 기록한다.
+
+후보 **bPN1sU**는 build-AZJ6T6, source `3a6ec0a`, baseline tZgvV7, xpc-required, build sequence1791625425279, Java 재컴파일(manifest SHA256 `3bd740fcaa868643c8d2bcd91f5c5184a4ec5f6b35daccd29013016e3c6125e8`, app.asar 동일 `9858a908…6022`), PACKAGED_NOT_RELEASED다. stage-5(run-stage5-v2.sh, stage5-bPN1sU)는 한 번에 9개 모두 통과했다: product-nHstUt 36 PASS, native-lJCgKJ/native-6IVCmP 각6 PASS, job-race product-awMDUg 8 PASS, 내부 보안 packaged-ON2IEU COMPLETE, ux-Paxdr4 190screens·errors0·consoleErrors2, loader-EeVYWA PASS, egress-off·egress-ask PASS(remote 소켓0). packaged-bPN1sU-proof.json이 결과·해시·앱 identity를 연결한다.
+
+진단 smoke는 다른 세션의 Gradle 작업과 겹친 고부하 구간에서 돌았다. medium run-w9EfH7: 초기 136.499/140.338초, refresh **55.109/57.756초**(GRAPH_BUILD 2.955/4.547초, TS 22.755/21.800초), 분석 RSS gap 124/487ms로 둘째 회차 INCOMPLETE. large run-l0EyAj: 초기 546.961/543.401초, refresh 433.680/402.192초, 분석 RSS gap 601/498ms로 두 회차 INCOMPLETE, 분석 peak 4,920,016/5,210,272KiB. 둘 다 DIAGNOSTIC_ONLY/INCOMPLETE이며 SiP1VX 진단(§9·§10)보다 느린 것은 소스 차이(flow 정렬은 FLOW_DETECTION 단계뿐)가 아니라 호스트 부하 차이로 본다. 정식 조건의 20회가 아니므로 어느 쪽도 SLO 판정에 쓰지 않는다.
+
+canonical 대규모 비교 첫 실행 canonical-large-v9eVLf는 incremental 앱 완료 뒤 clean-full 앱 실행 중 **DISK_SPACE_LOW**로 FAIL했다(시작 시 가용 9,095,311,360B). 이 라운드의 medium/large 진단이 INCOMPLETE로 프로필·fixture 약11GB를 FAILURE_EVIDENCE로 보존한 것이 직접 원인이다. 사용자 승인에 따라 retire-retained-profiles.py로 보존 프로필/fixture 복사본 16개(이번 라운드 cica-B8Ljyx·cica-8ETiVd·ciwp-RvM2sp·ciwl-7V7B6V·ciwp-ndVmEI·ciwl-UZMjgE와 이전 라운드 run-gapJPc·run-XBkM4L·run-TsY7ff·run-u0KBxm·run-5wfWqC의 profiles/fixture)를 제거했다. 각 대상은 소유·닫힘과 result.json의 retainedWork/work 참조를 확인했고, result.json·resource-samples.csv·canonical NDJSON 출력(canonical-large-njoo6i의 incremental/clean-full 23파일 존재 확인)은 보존했으며 mV5bkc 실패 증거 ciwp-B8usnf/ciwl-0G7d3R는 제외했다(approved-profile-cleanup-c51adby5, 가용 3,074,715,648→약31.2GB). 재실행 결과는 다음 항목에 기록한다.
+
+## 14. 대규모 실제 앱 incremental 대 clean-full canonical — PASS
+
+INT gate-latency-20261010/canonical-large-I0B1GR(bPN1sU, source `3a6ec0a`, large 50,000파일/1% 500개 변경+route·React 버전·u0.js 삭제)는 **PASS / resultEqualsFull=true**다. incremental 앱(초기 분석+갱신)과 별도 fresh-profile clean-full 앱 모두 정상 종료·cleanupConfirmed이고 삭제·변경 전파가 확인됐다. 21범주 전부 count와 C 정렬 NDJSON SHA256이 같다: files 49,999·nodes 768,168·edges 1,351,932·endpoints 19,495·entities 4,499·routes 4,249·features 7,249·featureLinks 37,241·flows 23,744·**flowSteps 105,973**·findings 4,499·sourceEntries 49,999·evidence 695,657, unknown/dangling evidence 0. §11에서 유일하게 어긋났던 flowSteps가 §12 수정 뒤 일치했으므로, 대규모 실제 앱의 증분 결과가 clean-full과 동일하다는 06 §5 계약을 이 후보에서 실제로 확인했다. 시간 판정은 NOT_APPLICABLE_DIAGNOSTIC이며 SLO 수용이 아니다.
+
+## 15. 현재 상태 요약
+
+- 소스 `3a6ec0a`(main b0309e9 뒤 6커밋: 경로 검사 통합, RSS helper, 그래프 중복 쓰기 제거, refresh SLO 조정, flow 정렬) — 통합 회귀 6,609 PASS·0 FAIL·63 SKIP, 타입 검사 PASS.
+- 후보 bPN1sU — 제품36·복구6/6·경합8 PASS, 내부 보안 COMPLETE, 자동 UX190화면(consoleErrors2), loader/egress/ask PASS, **대규모 packaged incremental=clean-full PASS**.
+- 성능: medium 1% refresh 진단 50.8~57.8초(조정 게이트 p95≤90초 범위, 30초는 R1), large 초기 504~547초·refresh 361~434초. 모두 닫힌 덮개·고부하 DIAGNOSTIC_ONLY이며 정식 20회(AC·덮개 OPEN·quiet host)는 NOT RUN.
+- RSS: 분석 단계 최대 간격이 부하에 따라 122~601ms로 흔들리며 250ms 계약을 안정적으로 만족하지 못한다(전역 `/bin/ps` metadata 경로, §2·§9). 이번 라운드에서 손대지 않았다.
+- 미해명 단일 관측: SiP1VX egress-ask 첫 실행의 `[::127.0.0.1]:51208` 소켓(§8). probe가 peer의 프로세스를 기록하지 않아 귀속 불가, 이후 3회 실행 모두 remote 0.
+- 열린 결정: 증분 단계 전체 앱 RSS 6GiB 초과 관측에 대한 상한 여부(§10).
+- push·PR·병합·원본 main 반영·최종 증거 보관은 NOT RUN. 사람 수용 게이트(독립 보안·정확도·UX/VoiceOver·실계정·서명/공증·법률)는 준비 상태만 유지. **판정 NO_GO 유지.**
