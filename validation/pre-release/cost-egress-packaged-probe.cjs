@@ -32,22 +32,45 @@ const PACKAGED_MODULES = ['ai-desktop-gateway.cjs', 'ai-egress-bridge.cjs', 'ai-
   'ai-https-transport.cjs', 'ai-model-contracts.cjs', 'main.cjs', 'preload.cjs', 'safety-journal.cjs', 'safety-lifecycle.cjs'];
 const LOOPBACK = /^(127\.\d+\.\d+\.\d+|\[?::1\]?|localhost|\*)$/;
 
-// Every inet socket of the app's process tree; any remote host that is not loopback is recorded.
-async function inetSockets(ownerPid, reader) {
-  const pids = (await reader.read(ownerPid)).map(row => row.pid);
+// lsof -F fields: p<pid> c<command> f<fd> P<protocol> n<name> T<tcp info>; file fields repeat per process.
+function parseInetSockets(text) {
+  const sockets = [];
+  let pid = null, command = null, current = null;
+  for (const line of String(text).split('\n')) {
+    const field = line[0], value = line.slice(1);
+    if (field === 'p') { pid = Number(value); command = null; current = null; }
+    else if (field === 'c') command = value;
+    else if (field === 'f') { current = { pid, command, fd: value, protocol: null, name: null, state: null }; sockets.push(current); }
+    else if (current && field === 'P') current.protocol = value;
+    else if (current && field === 'n') current.name = value;
+    else if (current && field === 'T' && value.startsWith('ST=')) current.state = value.slice(3);
+  }
+  return sockets.filter(socket => socket.name);
+}
+const peerHost = peer => peer.startsWith('[') ? peer.slice(1, peer.indexOf(']')) : peer.slice(0, peer.lastIndexOf(':'));
+
+// Every inet socket of the app's process tree; any remote host that is not loopback is recorded together
+// with the owning pid/command, fd, protocol and TCP state so an observation can be attributed later.
+async function inetSockets(ownerPid, reader, { execute: run = execute } = {}) {
+  const rows = await reader.read(ownerPid);
+  const pids = rows.map(row => row.pid);
   let stdout = '';
   try {
-    ({ stdout } = await execute('/usr/sbin/lsof', ['-nP', '-a', '-p', pids.join(','), '-i'],
+    ({ stdout } = await run('/usr/sbin/lsof', ['-nP', '-a', '-p', pids.join(','), '-i', '-F', 'pcfPnT'],
       { timeout: 10000, maxBuffer: 4 * 1024 * 1024, env: { PATH: '/usr/bin:/bin:/usr/sbin', LANG: 'C', LC_ALL: 'C' } }));
   } catch (error) { if (error.code !== 1) throw error; } // lsof exits 1 when nothing matches.
-  const remote = [];
-  for (const line of stdout.split('\n').slice(1)) {
-    const name = line.trim().split(/\s+/).slice(8).join(' ');
-    if (!name) continue;
-    const peer = name.includes('->') ? name.split('->')[1].split(' ')[0] : null;
-    if (peer) { const host = peer.slice(0, peer.lastIndexOf(':')); if (!LOOPBACK.test(host)) remote.push(peer); }
+  const remote = [], remoteDetails = [];
+  let sockets = 0;
+  for (const socket of parseInetSockets(stdout)) {
+    sockets++;
+    const peer = socket.name.includes('->') ? socket.name.split('->')[1].split(' ')[0] : null;
+    if (!peer || LOOPBACK.test(peerHost(peer))) continue;
+    remote.push(peer);
+    const row = rows.find(value => value.pid === socket.pid);
+    remoteDetails.push({ peer, pid: socket.pid, command: socket.command, ppid: row?.ppid ?? null,
+      scopeOwnerPid: row?.scopeOwnerPid ?? null, fd: socket.fd, protocol: socket.protocol, name: socket.name, state: socket.state });
   }
-  return { processes: pids.length, remote };
+  return { processes: pids.length, sockets, remote, remoteDetails };
 }
 
 async function main(argv = process.argv.slice(2)) {
@@ -166,4 +189,4 @@ async function main(argv = process.argv.slice(2)) {
   if (report.status !== 'PASS') process.exitCode = 1;
 }
 if (require.main === module) main().catch(error => { console.error(error?.message ?? 'PROBE_FAILED'); process.exitCode = 1; });
-module.exports = { inetSockets };
+module.exports = { inetSockets, parseInetSockets };
