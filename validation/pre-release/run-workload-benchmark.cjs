@@ -17,7 +17,8 @@ const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.
 const { launchEnvironment, bounded } = require('../../desktop/scripts/packaged-keychain-acceptance.cjs');
 const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
-const { startOwnedPhaseSampler } = require('./workload-sampler.cjs');
+const { prepareOwnedPhaseSampler } = require('./workload-sampler.cjs');
+const { prepareNativeRss, NATIVE_RSS_FAILURE_CODES } = require('./native-rss.cjs');
 const { observePowerSource, acObservedAtRunBoundaries, confirmObservedGone } = require('./run-startup-benchmark.cjs');
 const { SIZE_CLASSES, generateWorkload, hashTree, mutateWorkload } = require('./workload-fixture.cjs');
 const { SLO, evaluateRow, describeSmoke, phaseSamplingComplete, installWorkloadWatch, installWorkloadClick } = require('./workload-metrics.cjs');
@@ -45,7 +46,7 @@ const MINIMUM_FREE_BYTES = 2 * GiB;
 const GRAPH_REPEATS = 5;
 // Cancel after the job has been in a long-running step for a fixed time.
 const CANCEL_TRIGGER = Object.freeze({ steps: ['IMPORT', 'SOURCE_PARSING', 'GRAPH_BUILD', 'TS_PARSING'], afterMs: 1000 });
-const codes = new Set(['API_TIMEOUT', 'API_STATUS', 'API_TRANSPORT_FAILED', 'API_OBSERVATION_FAILED',
+const codes = new Set([...NATIVE_RSS_FAILURE_CODES, 'API_TIMEOUT', 'API_STATUS', 'API_TRANSPORT_FAILED', 'API_OBSERVATION_FAILED',
   'STARTUP_TIMEOUT', 'STARTUP_SDK_TIMEOUT', 'STARTUP_FAILED', 'STARTUP_PROCESS_EXITED',
   'PREVIEW_FAILED', 'PREVIEW_ADMISSION_MISMATCH', 'ANALYSIS_START_FAILED', 'ANALYSIS_FAILED', 'ANALYSIS_CANCELLED',
   'ANALYSIS_TIMEOUT', 'ANALYSIS_HARD_TIMEOUT', 'OVERVIEW_NOT_SHOWN', 'GRAPH_API_FAILED', 'GRAPH_RENDER_FAILED',
@@ -220,7 +221,9 @@ async function main(argv = process.argv.slice(2)) {
       .map(name => path.join(os.homedir(), 'Library/Application Support', name)) });
   const requireFrontend = createRequire(path.join(repo, 'frontend/package.json'));
   const { _electron } = requireFrontend('playwright'), { expect } = requireFrontend('@playwright/test');
-  const inputs = [__filename, path.join(__dirname, 'workload-sampler.cjs'), path.join(__dirname, 'workload-metrics.cjs'), path.join(__dirname, 'workload-fixture.cjs'),
+  let nativeReader;
+  const inputs = [__filename, path.join(__dirname, 'native-rss.cjs'), path.join(__dirname, 'native-rss.c'),
+    path.join(__dirname, 'workload-sampler.cjs'), path.join(__dirname, 'workload-metrics.cjs'), path.join(__dirname, 'workload-fixture.cjs'),
     path.join(__dirname, 'startup-metrics.cjs'), path.join(__dirname, 'process-memory.cjs'), path.join(__dirname, 'drop-confirmation.cjs'),
     path.join(__dirname, 'run-startup-benchmark.cjs'), path.join(repo, 'desktop/scripts/native-acceptance-electron.cjs'),
     path.join(repo, 'desktop/src/isolated-run.cjs')];
@@ -579,7 +582,7 @@ async function main(argv = process.argv.slice(2)) {
     run.freeBytesBeforePreparation = freeBytes('/private/tmp');
     const folder = path.join(work, `run-${sequence}`);
     let started = performance.now(), launchAttempted = false;
-    let sdk, owner, sampler, memory, failure = null, stopObserving;
+    let sdk, owner, preparedSampler, sampler, memory, failure = null, stopObserving;
     const diagnostics = {};
     try {
       if (run.freeBytesBeforePreparation < MINIMUM_FREE_BYTES + settings.diskReserveBytes) throw new Error('DISK_SPACE_LOW');
@@ -588,6 +591,7 @@ async function main(argv = process.argv.slice(2)) {
         if (hashTree(folder).treeSha256 !== fixture.treeSha256) throw new Error('WORKLOAD_FIXTURE_CHANGED');
         if (options.rows.includes('cancel')) cloneTree(pristine, folder + '-cancel');
       }
+      preparedSampler = await prepareOwnedPhaseSampler(nativeReader);
       run.quietAdmission = await waitForQuietHost({ requiredFreeBytes: MINIMUM_FREE_BYTES + settings.diskReserveBytes, diagnosticOnly: options.diagnosticOnly });
       run.freeBytesAtStart = run.quietAdmission.freeBytes;
       run.loadAverageAtStart = run.quietAdmission.observations.at(-1).loadAverage;
@@ -597,7 +601,7 @@ async function main(argv = process.argv.slice(2)) {
       launchAttempted = true;
       const launched = await stage('STARTUP_FAILED', () => launch(run, started));
       ({ sdk, owner } = launched);
-      sampler = startOwnedPhaseSampler(owner.process().pid, fd, sequence, started);
+      sampler = await preparedSampler.start(owner.process().pid, fd, sequence, started);
       stopObserving = observeStartup(owner.process(), diagnostics, () => {});
       const page = await stage('STARTUP_FAILED', () => ready(sdk, launched.remaining));
       run.readyMs = Math.round(performance.now() - started);
@@ -651,6 +655,8 @@ async function main(argv = process.argv.slice(2)) {
     } catch (error) { failure = failureCode(error); }
     finally {
       try { if (sampler) memory ??= await sampler.stop(); } catch { failure ||= 'MEMORY_SAMPLE_FAILED'; }
+      try { if (preparedSampler) { await preparedSampler.close(); run.memoryReaderCleanupConfirmed = true; } }
+      catch { run.memoryReaderCleanupConfirmed = false; failure ||= 'MEMORY_SAMPLE_FAILED'; }
       if (owner) {
         try {
           await closeValidatedApplication(owner, diagnostics);
@@ -706,6 +712,7 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   try {
+    nativeReader = await prepareNativeRss(evidence); report.memoryReader = nativeReader; save();
     if (await measuredRun(0)) {
       for (let sequence = 1; sequence <= options.runs; sequence++) {
         const passed = await measuredRun(sequence);

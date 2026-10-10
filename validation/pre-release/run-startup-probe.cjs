@@ -16,7 +16,7 @@ const { launchEnvironment, bounded } = require('../../desktop/scripts/packaged-k
 const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
 const { ensureNativeParent } = require('../backup-compatibility/owned-crash.cjs');
-const { readOwnerMemory } = require('./process-memory.cjs');
+const { prepareNativeRss, openNativeRss, NATIVE_RSS_FAILURE_CODES } = require('./native-rss.cjs');
 const { startMemorySampler, confirmObservedGone, observePowerSource, acObservedAtRunBoundaries } = require('./run-startup-benchmark.cjs');
 const { expectedServices } = require('./adapter-mode.cjs');
 
@@ -28,7 +28,7 @@ const MAX_PS_BYTES = 2 * 1024 * 1024;
 const MAX_PS_ROWS = 50000;
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const FIXED_ROLES = new Set(['MAIN', 'JAVA', 'NODE', 'POSTGRES', 'REDIS', 'ELECTRON_MAIN', 'ELECTRON_RENDERER', 'ELECTRON_GPU', 'ELECTRON_UTILITY', 'ELSE', 'UNKNOWN', 'UNOBSERVED']);
-const FAILURE_CODES = new Set(['STARTUP_TIMEOUT', 'STARTUP_SDK_TIMEOUT', 'STARTUP_PROCESS_EXITED', 'STARTUP_IDENTITY_FAILED',
+const FAILURE_CODES = new Set([...NATIVE_RSS_FAILURE_CODES, 'STARTUP_TIMEOUT', 'STARTUP_SDK_TIMEOUT', 'STARTUP_PROCESS_EXITED', 'STARTUP_IDENTITY_FAILED',
   'MEMORY_SAMPLE_FAILED', 'MEMORY_SAMPLING_INCOMPLETE', 'ROLE_SAMPLE_FAILED', 'ROLE_TABLE_INVALID', 'OBSERVED_PROCESSES_REMAIN',
   'NATIVE_ELECTRON_CLOSE_TIMEOUT', 'NATIVE_ELECTRON_EXIT_TIMEOUT', 'NATIVE_ELECTRON_UNCLEAN_EXIT',
   'NATIVE_SHUTDOWN_RECOVERY_REQUIRED', 'NATIVE_SHUTDOWN_UNCONFIRMED', 'NATIVE_SHUTDOWN_DIAGNOSTIC_TIMEOUT']);
@@ -127,7 +127,9 @@ async function main(argv = process.argv.slice(2)) {
     postgres: path.join(runtime, 'postgres/bin/postgres'),
     redis: path.join(runtime, 'redis/bin/redis-server'),
   };
-  const sourceFiles = [__filename, path.join(__dirname, 'run-startup-benchmark.cjs'), path.join(__dirname, 'startup-metrics.cjs'),
+  let nativeReader;
+  const sourceFiles = [__filename, path.join(__dirname, 'native-rss.cjs'), path.join(__dirname, 'native-rss.c'),
+    path.join(__dirname, 'run-startup-benchmark.cjs'), path.join(__dirname, 'startup-metrics.cjs'),
     path.join(__dirname, 'process-memory.cjs'), path.join(repo, 'validation/backup-compatibility/owned-crash.cjs'),
     path.join(repo, 'desktop/scripts/native-acceptance-electron.cjs'), path.join(repo, 'desktop/src/startup-diagnostics.cjs'),
     path.join(repo, 'desktop/src/isolated-run.cjs')];
@@ -150,15 +152,17 @@ async function main(argv = process.argv.slice(2)) {
     const sample = { sequence, status: 'RUNNING', readyMs: null, cleanupConfirmed: false, samplingComplete: false, startupPhases: [], roles: [] };
     if (sequence === 0) report.warmup = sample; else report.samples[sequence - 1] = sample;
     save(); plan.assertIdentity(); sample.powerAtStart = observePowerSource();
-    const started = performance.now(), expires = started + STARTUP_TIMEOUT_MS;
+    let started = performance.now(), expires;
     const remaining = () => { const value = Math.floor(expires - performance.now()); if (value <= 0) throw new Error('STARTUP_TIMEOUT'); return value; };
-    let sdk, owner, sampler, memory, stopObserving, failure = null, lastPhase;
+    let sdk, owner, sampler, memory, reader, stopObserving, failure = null, lastPhase;
     const diagnostics = {};
     try {
+      reader = await openNativeRss(nativeReader);
+      started = performance.now(); expires = started + STARTUP_TIMEOUT_MS;
       sdk = await _electron.launch({ executablePath: path.join(app, 'Contents/MacOS/Code Intelligence Validation'),
         args: ['--use-mock-keychain', '--isolated-run-claim=' + plan.claimFile], cwd: repo, env: launchEnvironment(process.env), timeout: remaining() });
       owner = captureOwnedApplication(sdk); sample.pid = owner.process().pid;
-      sampler = startMemorySampler(owner.process(), fd, sequence, started);
+      sampler = startMemorySampler(owner.process(), fd, sequence, started, { read: () => reader.read(owner.process().pid) });
       stopObserving = observeStartup(owner.process(), diagnostics, () => {
         if (diagnostics.integrityFailure) sample.integrityFailure ??= diagnostics.integrityFailure;
         if (diagnostics.startup?.state === 'FAILED') sample.startupFailure ??= diagnostics.startup;
@@ -178,7 +182,7 @@ async function main(argv = process.argv.slice(2)) {
       memory = await sampler.stop(); sample.idlePeakRssKiB = memory.idlePeakRssKiB;
       sample.samplingComplete = !memory.failure && memory.samples > 0 && memory.idleSamples >= 20 && memory.maximumGapMs <= 250 && memory.missingOwnerSamples === 0;
       if (!sample.samplingComplete) throw new Error('MEMORY_SAMPLING_INCOMPLETE');
-      const processes = await readOwnerMemory(owner.process().pid);
+      const processes = await reader.read(owner.process().pid);
       let metrics = [];
       try { metrics = await bounded(() => sdk.evaluate(({ app }) => app.getAppMetrics().map(item => ({ pid: item.pid, type: item.type }))), 5000, 'ROLE_SAMPLE_FAILED'); }
       catch { metrics = []; }
@@ -188,6 +192,8 @@ async function main(argv = process.argv.slice(2)) {
     } catch (error) { failure = failureCode(error); }
     finally {
       try { if (sampler) memory ??= await sampler.stop(); } catch { failure ||= 'MEMORY_SAMPLE_FAILED'; }
+      try { if (reader) { await reader.close(); sample.memoryReaderCleanupConfirmed = true; } }
+      catch (error) { sample.memoryReaderCleanupConfirmed = false; failure ||= failureCode(error); }
       if (owner) {
         try { await closeValidatedApplication(owner, diagnostics); await confirmObservedGone([owner.process().pid, ...(memory?.observedPids ?? [])]); sample.cleanupConfirmed = true; }
         catch (error) { sample.cleanupFailure = failureCode(error); failure ||= sample.cleanupFailure; }
@@ -205,6 +211,7 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   try {
+    nativeReader = await prepareNativeRss(evidence); report.memoryReader = nativeReader; save();
     if (await run(0)) for (let sequence = 1; sequence <= RUNS; sequence++) if (!await run(sequence)) break;
     report.status = report.samples.every(sample => sample.status === 'PASS') ? 'COMPLETE_DIAGNOSTIC' : 'INCOMPLETE_DIAGNOSTIC';
     report.environmentGate = acObservedAtRunBoundaries(power, [report.warmup, ...report.samples])

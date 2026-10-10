@@ -21,4 +21,10 @@
 
 `rss-reader-SFUJma/result.json`은 작은 Node owner를 대상으로 production reader를100회 실행했다. 두 ps 호출 중 discovery의 p95/max는51.037/54.586ms, targeted read는41.193/225.424ms였고 전체 최대271.203ms였다. 제품 large 부하 없이도250ms를 넘을 수 있음을 확인했다. OS 내부 지연의 정확한 원인은 아직 분리하지 않았다. 실제 PPID, 동일 번들의 XPC 범위·owner identity·수집 상한을 유지해야 하며 읽기 scope를 종료 권한으로 사용하지 않는다.
 
+글로벌 탐색까지 libproc로 바꾸는 후보는 폐기했다. short BSD metadata에서도1,090개 중1개, executable path에서는26개를 읽지 못했고 그중25개는 같은 UID였다. 이 누락을 필터링하거나 통과 처리하지 않았다. 채택한 hybrid는 기존 전체 ps metadata 탐색과 owner/동일 번들 XPC scope 재검사를 유지하고, 이미 선택된 최대1,024개 PID의 RSS만 지속형 libproc helper에서 읽는다. 컴파일·READY는 측정/quiet admission 전에 끝내며 EOF·시간 초과·PID identity 변화·잘못된 응답은 실패 처리한다. fallback이나 수집 간격/SLO 완화는 없다. 종료용 process table과 권한은 변경하지 않는다.
+
+실제 정식 worker smoke `rss-production-XAfxln/result.json`에서101개 표본을 수집했다. ANALYSIS 최대 gap104.722ms, 최대 read50.519ms, missing-owner0, failure null, samplingComplete true였다. main thread를650ms 동안 CPU 소비 없이 멈춰도 worker 수집이 지속됐다. CSV peak 합산/실제 PPID/외부 helper 제외와 두 소유 프로세스의 종료를 확인했다. 이 실행은 load1 5.00→6.73의 소형 진단이며 packaged large의 수용 증거가 아니다.
+
+`rss-contracts.log`:64 PASS/0 FAIL/0 SKIP. 실제 macOS에서64MiB를 commit한 자식의 RSS 단위·증가량, admission 전 취소 시 helper 종료, 잘못된/중복/초과 PID 거부, 보존 binary 변조 거부를 확인했다. 기존 owner/XPC 정합성 및 불완전 RSS 거부 계약을 유지했다. startup/workload뿐 아니라 loader·egress·loopback ask의 공유 호출자도 명시적 reader 수명주기로 이관했다.
+
 시작 시 AC·닫힌 덮개·load1 12.48·가용 약3.2GB를 관측했다. 새 build/medium/large의 기존 공간 진입 조건과 정식 quiet/open-lid 조건을 만족하지 못했다. 임의 삭제·부하 기준 완화 없이 소형 재현과 대상 시험을 진행했다. 최종20회와 사람 수용은 NOT RUN/준비 상태만 유지한다.

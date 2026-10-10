@@ -86,15 +86,16 @@ function samplingScope(rows, ownerPid) {
   return { owned, xpc, selected };
 }
 
-async function readOwnerMemory(ownerPid, { execute = runExecFile } = {}) {
+async function readOwnerMemory(ownerPid, { execute = runExecFile, readSelected } = {}) {
   assert(Number.isSafeInteger(ownerPid) && ownerPid > 1, 'MEMORY_OWNER_INVALID');
   assert.equal(typeof execute, 'function', 'PROCESS_EXEC_INVALID');
+  assert.equal(typeof readSelected, 'function', 'MEMORY_READER_REQUIRED');
   const options = { timeout: 5000, maxBuffer: MAX_BUFFER, env: FIXED_ENV };
   // Global discovery has no RSS or arguments. Memory is read only for this sampling scope.
   const table = await execute('/bin/ps', ['-ww', '-axo', 'pid=,ppid=,comm='], options);
   const initial = samplingScope(executableRows(table.stdout), ownerPid).selected;
   const identities = new Map(initial.map(row => [row.pid, row.executable]));
-  const { stdout } = await execute('/bin/ps', ['-ww', '-p', [...identities.keys()].join(','), '-o', 'pid=,ppid=,rss=,comm='], options);
+  const stdout = await readSelected([...identities.keys()]);
   const rows = executableRows(stdout, true);
   for (const row of rows) {
     assert(identities.has(row.pid), 'MEMORY_TABLE_UNEXPECTED_PID');

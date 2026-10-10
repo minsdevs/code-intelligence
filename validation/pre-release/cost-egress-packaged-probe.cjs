@@ -20,7 +20,7 @@ const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.
 const { launchEnvironment } = require('../../desktop/scripts/packaged-keychain-acceptance.cjs');
 const { observeStartup, closeValidatedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
 const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
-const { readOwnerMemory } = require('./process-memory.cjs');
+const { prepareNativeRss, openNativeRss } = require('./native-rss.cjs');
 const { confirmObservedGone } = require('./run-startup-benchmark.cjs');
 
 const execute = promisify(execFile);
@@ -33,8 +33,8 @@ const PACKAGED_MODULES = ['ai-desktop-gateway.cjs', 'ai-egress-bridge.cjs', 'ai-
 const LOOPBACK = /^(127\.\d+\.\d+\.\d+|\[?::1\]?|localhost|\*)$/;
 
 // Every inet socket of the app's process tree; any remote host that is not loopback is recorded.
-async function inetSockets(ownerPid) {
-  const pids = (await readOwnerMemory(ownerPid)).map(row => row.pid);
+async function inetSockets(ownerPid, reader) {
+  const pids = (await reader.read(ownerPid)).map(row => row.pid);
   let stdout = '';
   try {
     ({ stdout } = await execute('/usr/sbin/lsof', ['-nP', '-a', '-p', pids.join(','), '-i'],
@@ -80,9 +80,11 @@ async function main(argv = process.argv.slice(2)) {
   save(); console.log(JSON.stringify({ status: report.status, evidence }));
   const { _electron } = createRequire(path.join(repo, 'frontend/package.json'))('playwright');
   const { expect } = createRequire(path.join(repo, 'frontend/package.json'))('@playwright/test');
-  let sdk, owner, stopObserving; const diagnostics = {};
+  let sdk, owner, reader, stopObserving; const diagnostics = {};
   const check = (name, value) => { report.checks.push({ name, ...value }); save(); };
   try {
+    report.memoryReader = await prepareNativeRss(evidence);
+    reader = await openNativeRss(report.memoryReader);
     sdk = await _electron.launch({ executablePath: path.join(app, 'Contents/MacOS/Code Intelligence Validation'),
       args: ['--use-mock-keychain', '--isolated-run-claim=' + plan.claimFile], cwd: repo, env: launchEnvironment(process.env), timeout: 120000 });
     owner = captureOwnedApplication(sdk);
@@ -91,7 +93,7 @@ async function main(argv = process.argv.slice(2)) {
     await expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible({ timeout: 120000 });
     const identity = await sdk.evaluate(({ app }) => ({ profile: app.getPath('userData'), packaged: app.isPackaged }));
     assert.deepEqual(identity, { profile: plan.paths.userData, packaged: true });
-    const sample = async label => { const value = await inetSockets(owner.process().pid); report.socketSamples.push({ label, ...value }); save(); return value; };
+    const sample = async label => { const value = await inetSockets(owner.process().pid, reader); report.socketSamples.push({ label, ...value }); save(); return value; };
     await sample('ready');
     const status = await page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus());
     check('runtime-status', { ready: status.ready, aiOff: status.aiOff, recoveryOnly: status.recoveryOnly });
@@ -146,6 +148,8 @@ async function main(argv = process.argv.slice(2)) {
     report.failures = failures; report.status = failures.length ? 'FAIL' : 'PASS';
   } catch (error) { report.status = 'FAIL'; report.failure = String(error?.message ?? 'PROBE_FAILED').slice(0, 120); }
   finally {
+    try { if (reader) { await reader.close(); report.memoryReaderCleanupConfirmed = true; } }
+    catch { report.memoryReaderCleanupConfirmed = false; report.status = 'FAIL'; report.failure ||= 'MEMORY_SAMPLE_FAILED'; }
     if (owner) {
       try { await closeValidatedApplication(owner, diagnostics); await confirmObservedGone([owner.process().pid]); report.cleanupConfirmed = true; }
       catch { report.cleanupConfirmed = false; report.status = 'FAIL'; }

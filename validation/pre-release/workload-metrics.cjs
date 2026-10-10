@@ -6,6 +6,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { memoryForOwner } = require('./startup-metrics.cjs');
+const { NATIVE_RSS_FAILURE_CODES } = require('./native-rss.cjs');
 
 const GiB_KiB = 1024 * 1024;
 const SLO = Object.freeze({
@@ -162,7 +163,7 @@ function startPhaseSampler(ownerPid, fd, sequence, started, { read, now = () => 
         entry.firstAtMs ??= Math.round(at - started); entry.lastAtMs = Math.round(at - started);
         for (const row of value.processes) observed.add(row.pid);
       } catch (error) {
-        const reasons = new Set(['ENOSPC', 'EIO', 'EBADF', 'EMFILE', 'ENFILE', 'ENOMEM', 'EAGAIN', 'ETIMEDOUT',
+        const reasons = new Set([...NATIVE_RSS_FAILURE_CODES, 'ENOSPC', 'EIO', 'EBADF', 'EMFILE', 'ENFILE', 'ENOMEM', 'EAGAIN', 'ETIMEDOUT',
           'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', 'OWNED_PROCESS_NOT_OBSERVED', 'PROCESS_TABLE_INVALID',
           'PROCESS_TABLE_LIMIT', 'MEMORY_TABLE_INVALID', 'MEMORY_TABLE_UNEXPECTED_PID', 'OBSERVED_TREE_LIMIT',
           'MEMORY_SCOPE_AMBIGUOUS', 'MEMORY_SCOPE_OWNER_MISMATCH', 'MEMORY_PROCESS_IDENTITY_CHANGED']);
