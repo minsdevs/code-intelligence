@@ -116,7 +116,7 @@ export type UnresolvedCallHit = {
 
 export type AnalyzeResponse = {
   cache?: string[]
-  fileOutcomes?: { path: string; status: 'SUCCESS' | 'PARTIAL' | 'UNMEASURED'; reason: string }[]
+  fileOutcomes?: { path: string; status: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'UNMEASURED'; reason: string }[]
   routes: RouteHit[]
   components: SymbolHit[]
   hooks: SymbolHit[]

@@ -17,6 +17,7 @@ const { requireCapacity } = require('../../desktop/scripts/macos-runtime-supply.
 const { ensureOutputParent, assertOutputPath } = require('./owned-output.cjs');
 const { candidateSpaceBudget } = require('./candidate-capacity.cjs');
 const { validationProviderTarget } = require('../../desktop/src/ai-https-transport.cjs');
+const { validationUpdateFeed } = require('../../desktop/src/update-validation-feed.cjs');
 const { adapterMode } = require('./adapter-mode.cjs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 // Validation-build-only fake-provider variant (G-COST PK-08): the candidate's AI transport targets this fixed
@@ -100,6 +101,13 @@ function regularFiles(directory) {
 }
 
 function argumentsForCandidate(argv) {
+  // Optional trailing `--update-feed <json>`: a validation-build-only loopback update feed (G-UPDATE packaged
+  // acceptance). The feed file holds public fixture material only (host, port, CA certificate, Ed25519 public key).
+  let updateFeed = null;
+  if (argv.length >= 2 && argv[argv.length - 2] === '--update-feed') {
+    updateFeed = argv[argv.length - 1]; assert.equal(typeof updateFeed, 'string'); assert(path.isAbsolute(updateFeed));
+    argv = argv.slice(0, -2);
+  }
   // ADR-01 `xpc-required` is an explicit option of this development build; the shipped default stays unchanged.
   const isolated = argv.length === 6;
   assert(argv.length === 4 || isolated); assert.equal(argv[0], '--app'); assert.equal(argv[2], '--build-sequence');
@@ -107,7 +115,8 @@ function argumentsForCandidate(argv) {
   assert.equal(argv[3].match(/^[1-9][0-9]{0,18}$/)?.[0], argv[3]);
   assert(BigInt(argv[3]) <= 9223372036854775807n);
   if (isolated) { assert.equal(argv[4], '--adapter-isolation'); assert.equal(argv[5], 'xpc-required'); }
-  return { app: argv[1], buildSequence: argv[3], ...(isolated ? { adapterIsolation: 'xpc-required' } : {}) };
+  return { app: argv[1], buildSequence: argv[3], ...(isolated ? { adapterIsolation: 'xpc-required' } : {}),
+    ...(updateFeed ? { updateFeed } : {}) };
 }
 
 /**
@@ -283,6 +292,10 @@ async function main(argv = process.argv.slice(2)) {
   assert.equal(baseline, options.app); assert.equal(path.basename(baseline), 'Code Intelligence Validation.app');
   assert.equal(path.dirname(path.dirname(baseline)), repo);
   assert.match(path.basename(path.dirname(baseline)), /^\.native-product-[A-Za-z0-9]+$/);
+  // The feed is validated by the same product reader that the packaged main process applies.
+  const updateFeed = options.updateFeed
+    ? validationUpdateFeed({ name: 'code-intelligence-validation', validationUpdateFeed: JSON.parse(fs.readFileSync(options.updateFeed, 'utf8')) })
+    : null;
   const originalRuntime = path.join(baseline, 'Contents/Resources/runtime'), originalManifestFile = path.join(originalRuntime, 'runtime-manifest.json');
   const originalManifest = JSON.parse(fs.readFileSync(originalManifestFile));
   assert(BigInt(options.buildSequence) > BigInt(originalManifest.buildSequence));
@@ -434,8 +447,14 @@ async function main(argv = process.argv.slice(2)) {
     await validateRuntimeManifest(stage, manifest);
     const retained = fs.mkdtempSync(path.join(repo, '.native-product-')); report.retained = retained; save();
     const pkg = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'))), baseBuild = pkg.build;
-    const config = candidatePackagerConfig(baseBuild, retained, desktop);
+    const config = candidatePackagerConfig(baseBuild, retained, desktop, updateFeed);
     report.validationAiProviderOrigin = config.extraMetadata.validationAiProviderOrigin;
+    if (updateFeed) {
+      report.validationUpdateFeed = { host: updateFeed.host, port: updateFeed.port, keyId: updateFeed.keyId, teamId: updateFeed.teamId,
+        manifestPath: updateFeed.manifestPath, caSha256: crypto.createHash('sha256').update(updateFeed.caPem).digest('hex'),
+        publicKeySha256: crypto.createHash('sha256').update(updateFeed.publicKey).digest('hex'),
+        note: 'Validation-only loopback feed; fixture CA/key/Team ID, not release material' };
+    }
     const configFile = path.join(desktop, 'candidate-config.json'); fs.writeFileSync(configFile, JSON.stringify(config, null, 2), { flag: 'wx' });
     run(process.execPath, [path.join(desktop, 'node_modules/electron-builder/out/cli/cli.js'), '--mac', 'dir', '--arm64', '--publish', 'never', '--config', configFile],
       desktop, 'packager', { ...fixedEnv, HOME: path.join(work, 'home'), TMPDIR: path.join(work, 'tmp'),
@@ -494,10 +513,10 @@ async function main(argv = process.argv.slice(2)) {
     save(); throw error;
   }
 }
-function candidatePackagerConfig(baseBuild, output, desktop) {
+function candidatePackagerConfig(baseBuild, output, desktop, updateFeed = null) {
   return { ...baseBuild, productName: 'Code Intelligence Validation', appId: VALIDATION_APP_ID,
     extraMetadata: { name: 'code-intelligence-validation', productName: 'Code Intelligence Validation',
-      validationAiProviderOrigin: VALIDATION_AI_PROVIDER_ORIGIN },
+      validationAiProviderOrigin: VALIDATION_AI_PROVIDER_ORIGIN, ...(updateFeed ? { validationUpdateFeed: updateFeed } : {}) },
     directories: { output }, mac: { ...baseBuild.mac, identity: '-', notarize: false },
     npmRebuild: false, nodeGypRebuild: false, buildDependenciesFromSource: false, electronDist: path.join(desktop, 'node_modules/electron/dist') };
 }

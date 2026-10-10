@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { extractTs } from './ts-extractor'
+import { partitionBySyntax } from './syntax-diagnostics'
 import { assertSafeRelativePath } from './paths'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -63,41 +64,59 @@ describe('explicit TypeScript module extensions', () => {
 })
 
 describe('syntax uncertainty', () => {
+  // D4 (2026-10-11): a per-file verdict. Broken files are excluded and published as FAILED/TS_SYNTAX_ERROR;
+  // the rest is analysed without a SUCCESS claim and without project-wide route/endpoint facts.
   it.each([
     ['broken.ts', "export const SYNTHETIC_SECRET_MARKER = ;"],
     ['broken.tsx', 'export const view = <div>'],
     ['broken.mts', 'export class Broken {'],
     ['broken.cts', 'export const value = ;'],
-  ])('rejects a syntactically broken %s with location-only diagnostics', (path, content) => {
-    let failure: unknown
-    try { extractTs([{ path, content }]) } catch (error) { failure = error }
-    expect(failure).toMatchObject({
-      name: 'ParserSyntaxError',
-      diagnostics: expect.arrayContaining([expect.objectContaining({ filePath: path, code: expect.any(Number), lineStart: 1, columnStart: expect.any(Number) })]),
-    })
-    expect(String(failure)).not.toContain('SYNTHETIC_SECRET_MARKER')
-    expect(JSON.stringify(failure)).not.toContain('SYNTHETIC_SECRET_MARKER')
+  ])('publishes a syntactically broken %s as a failed file verdict without leaking its text', (path, content) => {
+    const result = extractTs([{ path, content }, { path: 'ok.ts', content: 'export function fine() { return 1 }' }])
+    expect(result.fileOutcomes).toEqual(expect.arrayContaining([
+      { path, status: 'FAILED', reason: 'TS_SYNTAX_ERROR' },
+      { path: 'ok.ts', status: 'PARTIAL', reason: 'SYNTAX_IN_PROJECT' },
+    ]))
+    expect(JSON.stringify(result)).not.toContain('SYNTHETIC_SECRET_MARKER')
+    expect(result.nodes.some((node) => node.filePath === 'ok.ts')).toBe(true)
+    expect(result.nodes.some((node) => node.filePath === path)).toBe(false)
   })
 
-  it('does not return apparently complete endpoints when another bootstrap file cannot parse', () => {
-    expect(() => extractTs([
+  it('withholds apparently complete endpoints when another bootstrap file cannot parse', () => {
+    const result = extractTs([
       { path: 'controller.ts', content: "import { Controller, Get } from '@nestjs/common'; @Controller('orders') class Orders { @Get() read() {} }" },
       { path: 'main.ts', content: "import { NestFactory } from '@nestjs/core'; const app = await NestFactory.create( ;" },
-    ])).toThrowError(expect.objectContaining({ name: 'ParserSyntaxError' }))
+    ])
+    expect(result.endpoints).toEqual([])
+    expect(result.routes).toEqual([])
+    expect(result.fileOutcomes).toEqual(expect.arrayContaining([
+      { path: 'main.ts', status: 'FAILED', reason: 'TS_SYNTAX_ERROR' },
+      { path: 'controller.ts', status: 'PARTIAL', reason: 'SYNTAX_IN_PROJECT' },
+    ]))
   })
 
-  it('bounds returned diagnostics while retaining the total across files', () => {
-    let failure: unknown
-    try {
-      extractTs(['a.ts', 'b.ts'].map(path => ({ path, content: 'const value = ;\n'.repeat(80) })))
-    } catch (error) { failure = error }
-    expect(failure).toMatchObject({ name: 'ParserSyntaxError', totalDiagnostics: 160 })
-    expect((failure as { diagnostics: unknown[] }).diagnostics).toHaveLength(100)
+  it('keeps file-local facts of valid files and leaves imports of a broken file unresolved', () => {
+    const result = extractTs([
+      { path: 'calls.ts', content: "import { helper } from './broken'; export function twice(value: number) { return value * 2 }\nexport function direct() { return twice(2) }\nexport function viaBroken() { return helper() }" },
+      { path: 'broken.ts', content: 'export function helper( {' },
+    ])
+    expect(result.edges.some((edge) => edge.type === 'CALLS' && edge.targetKey === 'ts:calls.ts#twice')).toBe(true)
+    expect(result.edges.some((edge) => String(edge.targetKey).includes('broken'))).toBe(false)
+    expect(result.fileOutcomes).toEqual(expect.arrayContaining([{ path: 'broken.ts', status: 'FAILED', reason: 'TS_SYNTAX_ERROR' }]))
+  })
+
+  it('bounds location-only diagnostics per file while counting the total', () => {
+    const partition = partitionBySyntax(['a.ts', 'b.ts'].map(path => ({ path, content: 'const value = ;\n'.repeat(80) })), () => 3)
+    expect(partition.total).toBe(160)
+    expect(partition.rejected.get('a.ts')).toHaveLength(80)
+    expect(partition.rejected.get('a.ts')?.[0]).toEqual({ filePath: 'a.ts', code: expect.any(Number), lineStart: 1, columnStart: expect.any(Number) })
+    expect(partition.accepted).toEqual([])
   })
 
   it('does not execute valid input or conflate missing imports/types with parse errors', () => {
     expect(() => extractTs([{ path: 'not-executed.ts', content: `import { missing } from './not-provided';
       throw new Error('must never run'); const value: MissingType = missing();` }])).not.toThrow()
+    expect(extractTs([{ path: 'ok.ts', content: 'export const ok = 1' }]).fileOutcomes).toEqual([{ path: 'ok.ts', status: 'SUCCESS', reason: 'TS_PARSED' }])
   })
 })
 

@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { BadRequestException } from '@nestjs/common'
 import { AnalyzeService } from './analyze.service'
 import { projectBoundaryFixture } from './fixtures/project-boundary'
 
 describe('safe syntax error API contract without an HTTP server', () => {
-  it('maps parser failure to HTTP 400 with a stable code and location-only diagnostics', async () => {
+  it('publishes a per-file syntax verdict with location-only diagnostics instead of rejecting the project (D4)', async () => {
     const fixture = JSON.parse(readFileSync(new URL('../../../backend/src/test/resources/fixtures/ts-syntax-error.json', import.meta.url), 'utf8'))
-    let failure: unknown
-    try { await new AnalyzeService().analyze(fixture.input) } catch (error) { failure = error }
-    expect(failure).toBeInstanceOf(BadRequestException)
-    expect((failure as BadRequestException).getStatus()).toBe(400)
-    expect((failure as BadRequestException).getResponse()).toEqual(fixture.response)
-    expect(JSON.stringify((failure as BadRequestException).getResponse())).not.toContain(fixture.input.files[0].content)
+    const result = await new AnalyzeService().analyze(fixture.input)
+    expect(result.fileOutcomes).toEqual([{ path: 'src/broken.mts', status: 'FAILED', reason: 'TS_SYNTAX_ERROR' }])
+    expect(result.nodes).toEqual([])
+    expect(JSON.stringify(result)).not.toContain(fixture.input.files[0].content)
+    // The 400 shape of the fixture remains the contract for an analyzer that still rejects a project;
+    // the backend parser of that shape (TsSyntaxInputException) is tested against the same fixture.
+    expect(fixture.response).toMatchObject({ statusCode: 400, code: 'TS_SYNTAX_ERROR', retryable: false })
   })
 
   it('preserves successful module extraction and ordinary request validation', async () => {

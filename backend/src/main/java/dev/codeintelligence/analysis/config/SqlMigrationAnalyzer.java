@@ -6,6 +6,7 @@ import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
 import dev.codeintelligence.analysis.core.EdgeConfidence;
+import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import dev.codeintelligence.analysis.core.FileInventory;
 import dev.codeintelligence.analysis.core.GraphEdgeType;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
@@ -68,7 +69,14 @@ public class SqlMigrationAnalyzer implements CodeAnalyzer {
         }
         for (TableSchema schema : tables.values()) {
             String key = NaturalKeys.table(schema.name);
-            collector.put(GraphNodeDraft.of(GraphNodeType.DB_TABLE, key, schema.name, schema.sourcePath, 1, null)
+            // Span evidence: the CREATE TABLE statement's lines in its migration file (06 SQL-S).
+            collector.put(GraphNodeDraft.of(
+                            GraphNodeType.DB_TABLE,
+                            key,
+                            schema.name,
+                            schema.sourcePath,
+                            schema.lineStart == null ? 1 : schema.lineStart,
+                            schema.lineEnd)
                     .withAreaType(AreaType.DATABASE.name())
                     .withMetadata(schema.toMetadata()));
         }
@@ -111,14 +119,22 @@ public class SqlMigrationAnalyzer implements CodeAnalyzer {
                 throw new IllegalStateException("no SQL statements parsed");
             }
             int applied = 0;
+            // Statement line ranges come from the text segments between ';' separators (the parser keeps
+            // no positions on CreateTable); they are used only when they align one-to-one.
+            List<int[]> segments = statementSegments(file.text);
+            boolean aligned = segments.size() == statements.size();
             for (Statement statement : statements) {
-                applyStatement(statement, file, tables, collector, migrationKey);
+                applyStatement(
+                        statement, file, tables, collector, migrationKey, aligned ? segments.get(applied) : null);
                 applied++;
             }
             if (applied == 0) {
                 throw new IllegalStateException("no SQL statements applied");
             }
+            collector.outcome(new FileAnalysisOutcome(file.file.path(), "SUCCESS", "SQL_PARSED"));
         } catch (Exception e) {
+            // Per-file parse verdict (06 SQL-P): the migration stays a file-level fact, nothing is resolved.
+            collector.outcome(new FileAnalysisOutcome(file.file.path(), "FAILED", "SQL_PARSE_FAILED"));
             collector.evidence(new AnalyzerEvidence(
                     migrationKey,
                     EvidenceKind.FILE_LINE,
@@ -135,7 +151,8 @@ public class SqlMigrationAnalyzer implements CodeAnalyzer {
             MigrationFile file,
             Map<String, TableSchema> tables,
             GraphCollector collector,
-            String migrationKey) {
+            String migrationKey,
+            int[] lines) {
         if (statement instanceof CreateTable create) {
             String name = tableName(create.getTable());
             if (name == null) {
@@ -143,9 +160,20 @@ public class SqlMigrationAnalyzer implements CodeAnalyzer {
             }
             TableSchema schema = tables.computeIfAbsent(name, key -> new TableSchema(key, file.file.path()));
             schema.columns.clear();
+            if (lines != null && file.file.path().equals(schema.sourcePath)) {
+                schema.lineStart = lines[0];
+                schema.lineEnd = lines[1];
+            }
             if (create.getColumnDefinitions() != null) {
                 for (ColumnDefinition column : create.getColumnDefinitions()) {
-                    schema.columns.add(columnMeta(column.getColumnName(), column.getColDataType()));
+                    Map<String, Object> meta = columnMeta(column.getColumnName(), column.getColDataType());
+                    Integer line = columnLine(file.text, lines, column.getColumnName());
+                    if (line != null) {
+                        meta.put("lineStart", line);
+                        meta.put("lineEnd", line);
+                        if (!file.file.path().equals(schema.sourcePath)) meta.put("path", file.file.path());
+                    }
+                    schema.columns.add(meta);
                 }
             }
             collector.edge(migrationKey, NaturalKeys.table(name), GraphEdgeType.DEPENDS_ON, EdgeConfidence.CONFIRMED);
@@ -193,6 +221,95 @@ public class SqlMigrationAnalyzer implements CodeAnalyzer {
             schema.columns.removeIf(column -> def.getColumnName().equalsIgnoreCase(String.valueOf(column.get("name"))));
             schema.columns.add(columnMeta(def.getColumnName(), def.getColDataType()));
         });
+    }
+
+    /**
+     * 1-based [firstLine, lastLine] of each non-blank statement segment between top-level ';' separators,
+     * skipping string literals, quoted identifiers and comments. Lines exclude the separator itself.
+     */
+    static List<int[]> statementSegments(String text) {
+        List<int[]> segments = new ArrayList<>();
+        int line = 1, segmentStartLine = -1, lastContentLine = -1;
+        boolean inLineComment = false, inBlockComment = false;
+        char quote = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '\n') {
+                line++;
+                inLineComment = false;
+                continue;
+            }
+            if (inLineComment) continue;
+            if (inBlockComment) {
+                if (c == '*' && i + 1 < text.length() && text.charAt(i + 1) == '/') {
+                    inBlockComment = false;
+                    i++;
+                }
+                continue;
+            }
+            if (quote != 0) {
+                if (c == quote) quote = 0;
+                continue;
+            }
+            if (c == '-' && i + 1 < text.length() && text.charAt(i + 1) == '-') {
+                inLineComment = true;
+                i++;
+                continue;
+            }
+            if (c == '/' && i + 1 < text.length() && text.charAt(i + 1) == '*') {
+                inBlockComment = true;
+                i++;
+                continue;
+            }
+            if (c == '\'' || c == '"' || c == '`') {
+                quote = c;
+            }
+            if (c == ';') {
+                if (segmentStartLine > 0) segments.add(new int[] {segmentStartLine, lastContentLine});
+                segmentStartLine = -1;
+                lastContentLine = -1;
+                continue;
+            }
+            if (!Character.isWhitespace(c)) {
+                if (segmentStartLine < 0) segmentStartLine = line;
+                lastContentLine = line;
+            }
+        }
+        if (segmentStartLine > 0) segments.add(new int[] {segmentStartLine, lastContentLine});
+        return segments;
+    }
+
+    /**
+     * The line holding a column definition: the unique statement line that starts (after whitespace) with the
+     * column name as written, quoted or unquoted. Null when absent or ambiguous; the column keeps no span then.
+     */
+    private static Integer columnLine(String text, int[] statementLines, String columnName) {
+        String name = unquote(columnName);
+        if (name == null || statementLines == null) {
+            return null;
+        }
+        String[] lines = text.split("\\r?\\n", -1);
+        Integer found = null;
+        for (int line = statementLines[0]; line <= Math.min(statementLines[1], lines.length); line++) {
+            String stripped = lines[line - 1].strip();
+            String head = stripped;
+            for (String quote : List.of("\"", "`", "[")) {
+                if (head.startsWith(quote)) {
+                    head = head.substring(1);
+                    break;
+                }
+            }
+            if (head.regionMatches(true, 0, name, 0, name.length())
+                    && head.length() > name.length()
+                    && !Character.isLetterOrDigit(head.charAt(name.length()))
+                    && head.charAt(name.length()) != '_') {
+                if (found != null) {
+                    return null;
+                }
+                found = line;
+            }
+        }
+        return found;
     }
 
     private static Map<String, Object> columnMeta(String name, Object type) {
@@ -258,6 +375,8 @@ public class SqlMigrationAnalyzer implements CodeAnalyzer {
     private static final class TableSchema {
         final String name;
         final String sourcePath;
+        Integer lineStart;
+        Integer lineEnd;
         final List<Map<String, Object>> columns = new ArrayList<>();
         final List<String> indexes = new ArrayList<>();
 

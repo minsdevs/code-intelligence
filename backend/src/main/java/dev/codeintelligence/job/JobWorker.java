@@ -35,6 +35,7 @@ public class JobWorker {
     private final JobWorkspaceProvider workspaces;
     private final MaintenanceGate maintenance;
     private final AnalysisMemoryWatchdog memory;
+    private final StepHeapRelease heap;
     private final SimpleAsyncTaskExecutor executor;
     // Run claims and final transitions of a job are serialized against each other (B4 fencing).
     private final ReentrantLock runOwnership = new ReentrantLock();
@@ -73,7 +74,6 @@ public class JobWorker {
                 AnalysisMemoryWatchdog.disabled());
     }
 
-    @Autowired
     public JobWorker(
             JobRepository repository,
             Pipeline pipeline,
@@ -82,6 +82,20 @@ public class JobWorker {
             JobWorkspaceProvider workspaces,
             MaintenanceGate maintenance,
             AnalysisMemoryWatchdog memory) {
+        this(repository, pipeline, publisher, appProperties, workspaces, maintenance, memory, new StepHeapRelease());
+    }
+
+    @Autowired
+    public JobWorker(
+            JobRepository repository,
+            Pipeline pipeline,
+            JobProgressPublisher publisher,
+            AppProperties appProperties,
+            JobWorkspaceProvider workspaces,
+            MaintenanceGate maintenance,
+            AnalysisMemoryWatchdog memory,
+            StepHeapRelease heap) {
+        this.heap = heap;
         this.repository = repository;
         this.pipeline = pipeline;
         this.publisher = publisher;
@@ -175,6 +189,7 @@ public class JobWorker {
             if (releaseRun(jobId, run)) {
                 publisher.publish(jobId);
             }
+            heap.afterJob(jobId);
         }
     }
 
@@ -205,6 +220,7 @@ public class JobWorker {
             }
             repository.markStepDone(step.id());
             publisher.publish(job.id());
+            heap.afterStep(step.stepKey());
             return true;
         } catch (JobCancelledException cancelled) {
             // The job is CANCELLING; releaseRun completes the cancellation once this worker has left.

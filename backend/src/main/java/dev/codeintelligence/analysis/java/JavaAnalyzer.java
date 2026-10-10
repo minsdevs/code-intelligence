@@ -677,16 +677,37 @@ public class JavaAnalyzer implements CodeAnalyzer {
             collector.supertype(fqcn, target);
             GraphNodeType targetKind = type.isInterface() ? GraphNodeType.INTERFACE : GraphNodeType.CLASS;
             ensureType(target, targetKind, filePath, collector);
-            collector.edge(typeKey, NaturalKeys.javaType(target), GraphEdgeType.EXTENDS, EdgeConfidence.CONFIRMED);
+            collector.edge(
+                    typeKey,
+                    NaturalKeys.javaType(target),
+                    GraphEdgeType.EXTENDS,
+                    EdgeConfidence.CONFIRMED,
+                    clauseSite(ext, "extends", filePath));
             usesType(typeKey, target, filePath, collector);
         }
         for (ClassOrInterfaceType impl : type.getImplementedTypes()) {
             String target = JavaTypeNames.resolve(impl, cu, pkg);
             collector.supertype(fqcn, target);
             ensureType(target, GraphNodeType.INTERFACE, filePath, collector);
-            collector.edge(typeKey, NaturalKeys.javaType(target), GraphEdgeType.IMPLEMENTS, EdgeConfidence.CONFIRMED);
+            collector.edge(
+                    typeKey,
+                    NaturalKeys.javaType(target),
+                    GraphEdgeType.IMPLEMENTS,
+                    EdgeConfidence.CONFIRMED,
+                    clauseSite(impl, "implements", filePath));
             usesType(typeKey, target, filePath, collector);
         }
+    }
+
+    /** Inheritance-clause evidence: the lines of the supertype as written and the clause keyword (06 J-S). */
+    private static Map<String, Object> clauseSite(ClassOrInterfaceType supertype, String clause, String filePath) {
+        Map<String, Object> site = new LinkedHashMap<>();
+        site.put("filePath", filePath);
+        site.put("clause", clause);
+        supertype.getBegin().ifPresent(position -> site.put("lineStart", position.line));
+        supertype.getEnd().ifPresent(position -> site.put("lineEnd", position.line));
+        supertype.getTokenRange().ifPresent(range -> site.put("expression", range.toString()));
+        return site;
     }
 
     private void visitImports(CompilationUnit cu, String typeKey, Collector collector) {
@@ -823,18 +844,39 @@ public class JavaAnalyzer implements CodeAnalyzer {
             Map<String, Object> metadata = new LinkedHashMap<>(site);
             metadata.put("candidateSignatures", List.of(signature(targetFqcn, methodName, argTypes)));
             metadata.put("resolution", "unresolved");
+            // The method is not declared in project source (inherited from a framework type or not
+            // resolvable): a stub without file association, so no span evidence is claimed for it.
             ensureMethod(
                     targetFqcn,
                     methodName,
                     argTypes,
-                    ownerFile(targetFqcn, filePath, collector),
-                    Map.of("inherited", true),
+                    null,
+                    Map.of("inherited", true, "provenance", "INHERITED", "declaringTypeUnknown", true),
                     collector);
             collector.edge(callerKey, targetKey, GraphEdgeType.CALLS, EdgeConfidence.POSSIBLE, metadata);
             return;
         }
         List<String> candidates = List.copyOf(collector.projectMethodsByName.getOrDefault(methodName, Set.of()));
         if (candidates.isEmpty()) {
+            // No project declaration can be the target: publish the abstention with its call-site evidence
+            // (06 J-C negative cases) instead of dropping the call silently. The target is outside the
+            // project (JDK, framework or reflection), so nothing is resolved.
+            Map<String, Object> abstention = new LinkedHashMap<>();
+            abstention.put("expression", site.getOrDefault("expression", methodName));
+            if (site.containsKey("lineStart")) abstention.put("lineStart", site.get("lineStart"));
+            if (site.containsKey("lineEnd")) abstention.put("lineEnd", site.get("lineEnd"));
+            abstention.put("reason", "EXTERNAL_TARGET");
+            if (resolved.isPresent()) {
+                try {
+                    abstention.put(
+                            "declaringType", resolved.get().declaringType().getQualifiedName());
+                } catch (RuntimeException ignored) {
+                    // The declaring type is informational only.
+                }
+            } else {
+                receiver.ifPresent(type -> abstention.put("receiverType", type));
+            }
+            collector.unresolvedCall(callerKey, abstention);
             return;
         }
         Map<String, Object> metadata = new LinkedHashMap<>(site);
@@ -1044,11 +1086,6 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
     }
 
-    private String ownerFile(String fqcn, String fallback, Collector collector) {
-        GraphNodeDraft existing = collector.nodes.get(NaturalKeys.javaType(fqcn));
-        return existing != null && existing.filePath() != null ? existing.filePath() : fallback;
-    }
-
     private void annotate(
             NodeWithAnnotations<?> annotated,
             String subjectKey,
@@ -1201,6 +1238,9 @@ public class JavaAnalyzer implements CodeAnalyzer {
         private final List<AnalyzerEvidence> evidences = new ArrayList<>();
         private final Map<String, FileAnalysisOutcome> outcomes = new LinkedHashMap<>();
         private final Set<String> unresolvedFiles = new java.util.HashSet<>();
+        /** Published abstentions (calls with no project target) by caller method key, in visit order. */
+        private final Map<String, List<Map<String, Object>>> unresolvedCalls = new LinkedHashMap<>();
+
         private final Set<String> projectTypes = new java.util.LinkedHashSet<>();
         /**
          * Project method keys by method name, in first-declaration order. Unresolved calls look their
@@ -1265,6 +1305,14 @@ public class JavaAnalyzer implements CodeAnalyzer {
             unresolvedFiles.add(file);
         }
 
+        void unresolvedCall(String callerKey, Map<String, Object> detail) {
+            Map<String, Object> copy = Map.copyOf(detail);
+            record(EventKind.UNRESOLVED_CALL, callerKey, copy);
+            unresolvedCalls
+                    .computeIfAbsent(callerKey, ignored -> new ArrayList<>())
+                    .add(copy);
+        }
+
         void edgeDraft(GraphEdgeDraft edge) {
             record(EventKind.EDGE, edge, null);
             edges.add(edge);
@@ -1320,7 +1368,17 @@ public class JavaAnalyzer implements CodeAnalyzer {
         }
 
         AnalysisResult toResult() {
-            List<GraphNodeDraft> all = new ArrayList<>(nodes.values());
+            List<GraphNodeDraft> all = new ArrayList<>();
+            for (GraphNodeDraft node : nodes.values()) {
+                List<Map<String, Object>> abstentions = unresolvedCalls.get(node.naturalKey());
+                if (abstentions == null || abstentions.isEmpty()) {
+                    all.add(node);
+                    continue;
+                }
+                Map<String, Object> metadata = new LinkedHashMap<>(node.metadata());
+                metadata.put("unresolvedCalls", List.copyOf(abstentions));
+                all.add(node.withMetadata(metadata));
+            }
             all.addAll(identityCandidates);
             return GraphIdentityGuard.sanitize(new AnalysisResult(
                     all, List.copyOf(edges), List.copyOf(evidences), List.copyOf(outcomes.values())));
@@ -1334,6 +1392,7 @@ public class JavaAnalyzer implements CodeAnalyzer {
         CONCRETE_METHOD(true),
         EVIDENCE(false),
         UNRESOLVED(false),
+        UNRESOLVED_CALL(false),
         NODE(true),
         PROJECT_METHOD(true),
         EDGE(false);
@@ -1368,6 +1427,11 @@ public class JavaAnalyzer implements CodeAnalyzer {
                 case CONCRETE_METHOD -> collector.concreteMethod((String) value, (DeclaredMethod) other);
                 case EVIDENCE -> collector.evidence((AnalyzerEvidence) value);
                 case UNRESOLVED -> collector.unresolved((String) value);
+                case UNRESOLVED_CALL -> {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> detail = (Map<String, Object>) other;
+                    collector.unresolvedCall((String) value, detail);
+                }
                 case NODE -> collector.put((GraphNodeDraft) value);
                 case PROJECT_METHOD -> collector.projectMethod((String) value, (String) other);
                 case EDGE -> collector.edgeDraft((GraphEdgeDraft) value);

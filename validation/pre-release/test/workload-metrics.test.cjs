@@ -211,9 +211,8 @@ test('server step timings parse nanosecond instants and keep only public codes',
   assert.doesNotMatch(JSON.stringify(timings), /private|Users/);
 });
 
-test('quiet admission resets on host pressure or missing AC/open-lid conditions and launches directly after its third valid observation', async () => {
-  for (const blocked of [{ loadAverage: [4, 0, 0] }, { mdworkers: 7 }, { powerSource: 'BATTERY' },
-    { powerSource: 'UNKNOWN' }, { lidState: 'CLOSED' }, { lidState: 'UNKNOWN' }, { lidState: undefined }]) {
+test('quiet admission resets on host pressure or missing AC power and launches directly after its third valid observation', async () => {
+  for (const blocked of [{ loadAverage: [4, 0, 0] }, { mdworkers: 7 }, { powerSource: 'BATTERY' }, { powerSource: 'UNKNOWN' }]) {
     const samples = [1, 2, blocked, 3, 2, 1].map(value => ({ loadAverage: [0, 0, 0], mdworkers: 6, powerSource: 'AC', lidState: 'OPEN',
       ...(typeof value === 'number' ? { loadAverage: [value, 0, 0] } : value) }));
     const actions = [];
@@ -225,6 +224,19 @@ test('quiet admission resets on host pressure or missing AC/open-lid conditions 
     assert.deepEqual(actions, ['observe', 'pause', 'observe', 'pause', 'observe', 'pause',
       'observe', 'pause', 'observe', 'pause', 'observe']);
   }
+});
+
+// 2026-10-11 user decision (05 section 4): the lid state is recorded, not required. Earlier diagnostics stay diagnostics.
+test('quiet admission records the lid state of every observation without requiring it to be open', async () => {
+  const lids = ['CLOSED', 'UNKNOWN', 'OPEN'];
+  let index = 0;
+  const admission = await waitForQuietHost({ observe: () => ({ loadAverage: [1, 0, 0], mdworkers: 0, powerSource: 'AC', lidState: lids[index++] }),
+    pause: async () => {} });
+  assert.equal(admission.status, 'ADMITTED');
+  assert.equal(admission.lidPolicy, 'RECORDED_NOT_REQUIRED'); assert.equal(admission.powerRequired, 'AC');
+  assert.deepEqual(admission.lidStates, lids);
+  assert.deepEqual(admission.observations.map(sample => sample.lidState), lids);
+  assert.equal(admission.timingValidity, 'QUIET_HOST_OBSERVED_AT_LAUNCH');
 });
 
 test('unobservable host conditions never admit a performance run', async () => {

@@ -52,7 +52,7 @@ async function startUpdateServer(t) {
       headers: response.headers, body: response, abort: () => outgoing.destroy() }));
     outgoing.once('error', reject);
   });
-  return { host: HOST, routes, requests, request, base: `https://${HOST}` };
+  return { host: HOST, routes, requests, request, base: `https://${HOST}`, port, ca: tls.ca };
 }
 
 module.exports = { startUpdateServer, HOST };

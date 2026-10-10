@@ -1455,6 +1455,7 @@ async function startApplication() {
     if (process.platform === 'darwin' && runtimeManifest.backupProtocol === 3) {
       updateStartup = await openUpdateStartup({ electron: { app, dialog, shell, net: electronNet, Menu }, safety: safetyLifecycle,
         userData, runningBuild, runtimeRoot: runtimeRoot(), execPath: process.execPath, resourcesPath: process.resourcesPath,
+        metadata: packageMetadata,
         stopRuntime: () => withRuntimeOperation(() => stopRuntime()),
         quit: () => app.quit() });
       if (!await updateStartup.beforeRuntime()) { app.quit(); return; }

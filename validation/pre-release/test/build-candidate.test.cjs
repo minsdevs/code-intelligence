@@ -16,9 +16,15 @@ test('candidate argument parsing requires an explicit absolute bundle and ordere
     assert.throws(() => argumentsForCandidate(['--app', '/synthetic/app', '--build-sequence', sequence]));
   }
   for (const args of [[], ['--app', 'relative', '--build-sequence', '1'], ['--publish', '/app', '--build-sequence', '1'],
-    ['--app', '/app', '--build-sequence', '1', '--overwrite'], ['--app', '/app', '--guess', '1']]) {
+    ['--app', '/app', '--build-sequence', '1', '--overwrite'], ['--app', '/app', '--guess', '1'],
+    ['--app', '/app', '--build-sequence', '1', '--update-feed', 'relative/feed.json'], ['--app', '/app', '--build-sequence', '1', '--update-feed']]) {
     assert.throws(() => argumentsForCandidate(args));
   }
+  // G-UPDATE packaged acceptance: the validation-only loopback feed is an explicit trailing option.
+  assert.deepEqual(argumentsForCandidate(['--app', '/synthetic/app', '--build-sequence', '7', '--adapter-isolation', 'xpc-required', '--update-feed', '/fixture/feed.json']),
+    { app: '/synthetic/app', buildSequence: '7', adapterIsolation: 'xpc-required', updateFeed: '/fixture/feed.json' });
+  assert.deepEqual(argumentsForCandidate(['--app', '/synthetic/app', '--build-sequence', '7', '--update-feed', '/fixture/feed.json']),
+    { app: '/synthetic/app', buildSequence: '7', updateFeed: '/fixture/feed.json' });
 });
 
 test('candidate packaging is the validation identity carrying the loopback fake-provider variant (PK-08)', () => {

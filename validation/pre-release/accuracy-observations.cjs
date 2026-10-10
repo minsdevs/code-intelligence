@@ -40,8 +40,9 @@ const CALL_CELL = { java: 'J-C', ts: 'T-C', js: 'JS-C' };
 const UI_CELL = { ts: 'T-UI', js: 'JS-UI' };
 const JAVA_SYMBOLS = new Set(['CLASS', 'INTERFACE', 'ENUM', 'RECORD', 'ANNOTATION', 'METHOD']);
 // Only a per-file parse failure is a file-level syntax verdict. PROJECT_SYNTAX_REJECTED marks every
-// submitted TS/JS file alike (TsParsingStep), so it does not say which file is invalid: no verdict.
-const SYNTAX_REASONS = new Set(['JAVA_PARSE_FAILED']);
+// submitted TS/JS file alike (older TsParsingStep path), so it does not say which file is invalid: no
+// verdict. TS_SYNTAX_ERROR (per-file analyzer verdict) and SQL_PARSE_FAILED (SqlMigrationAnalyzer) are.
+const SYNTAX_REASONS = new Set(['JAVA_PARSE_FAILED', 'TS_SYNTAX_ERROR', 'SQL_PARSE_FAILED']);
 // Product reason vocabulary -> annotation-guide vocabulary (validation/t00/ANNOTATING.md).
 const UNRESOLVED_REASON = { DYNAMIC_MEMBER: 'DYNAMIC_TARGET', UNRESOLVED_TARGET: 'UNRESOLVED_TARGET' };
 
@@ -117,12 +118,22 @@ function convertFixture(fixture, dump, idPrefix = 'p') {
     publishedRows: { files: dump.files.length, nodes: dump.nodes.length, edges: dump.edges.length,
       endpoints: dump.endpoints.length, entities: dump.entities.length, routes: dump.routes.length },
     evidence: { hashChecked: 0, hashValid: 0, hashInvalid: [], factsWithSpan: 0, factsWithoutValidSpan: [],
-      incompleteLineRange: 0, namespace: 'NOT_PUBLISHED_BY_PRODUCT_ROSTER_ASSIGNED' },
+      incompleteLineRange: 0,
+      // D9 (2026-10-11): the product publishes a per-node area (project_areas.area_type) as its module/service
+      // namespace. Validity = every emitted fact's file has a published area and each roster namespace maps to
+      // exactly one product area. Observation facts keep the roster namespace (06 gold identity).
+      namespace: { source: 'PRODUCT_AREA_TYPE_PER_NODE', factsWithNamespace: 0, factsWithoutNamespace: [], rosterToProduct: {}, consistent: null } },
     emitted: {}, excludedByFixtureEligibility: 0, notInDeclaredCells: 0, unmappedByType: {}, projections: {},
     outsideRoster: [], candidateSetsOverFive: 0 };
   const facts = [], bump = (map, key, by = 1) => { map[key] = (map[key] ?? 0) + by; };
   const nodes = new Map(dump.nodes.map(node => [node.key, node]));
   const files = new Map(dump.files.map(file => [file.path, file]));
+  // Product namespace per file: the FILE node's area, else the first area published for that file.
+  const areaByFile = new Map();
+  for (const node of dump.nodes) {
+    if (node.path == null || node.area == null) continue;
+    if (node.type === 'FILE' || !areaByFile.has(node.path)) areaByFile.set(node.path, node.area);
+  }
   for (const file of dump.files) if (!sources.has(file.path)) audit.outsideRoster.push(file.path);
   // Product-published hash evidence: files.content_hash is the git blob id of the analysed bytes.
   for (const [file, source] of sources) {
@@ -140,6 +151,13 @@ function convertFixture(fixture, dump, idPrefix = 'p') {
     if (!eligibility?.eligible) { audit.excludedByFixtureEligibility++; return; }
     if (!span) { audit.evidence.factsWithoutValidSpan.push({ cellId, path: file, origin }); return; }
     audit.evidence.factsWithSpan++;
+    const area = areaByFile.get(file) ?? null;
+    if (area === null) audit.evidence.namespace.factsWithoutNamespace.push({ cellId, path: file, origin });
+    else {
+      audit.evidence.namespace.factsWithNamespace++;
+      const seen = audit.evidence.namespace.rosterToProduct[source.meta.namespace] ??= [];
+      if (!seen.includes(area)) seen.push(area);
+    }
     bump(audit.emitted, cellId);
     facts.push({ observationId: idPrefix + String(++sequence).padStart(5, '0'), cellId, kind: fact.kind, relationKind: fact.relationKind,
       source: { path: file, sha256: source.meta.sha256, namespace: source.meta.namespace, start: span.start, end: span.end },
@@ -163,23 +181,48 @@ function convertFixture(fixture, dump, idPrefix = 'p') {
       emit(cellId, file, whole, { kind: 'PARSER', relationKind: 'PARSE', resolution: 'NOT_APPLICABLE', valid: false, diagnostics: ['SYNTAX_ERROR'] }, 'file');
     } else bump(audit.projections, 'parser-no-verdict-' + row.analysisStatus + (row.analysisReason ? '-' + row.analysisReason : ''));
   }
+  // Trim one trailing byte (',' or ';') from a projected span: statement/column text without its separator.
+  const withoutTrailing = (span, byte) => span && span.end > span.start + 1 && sources.get(currentFile)?.bytes[span.end - 1] === byte
+    ? { start: span.start, end: span.end - 1 } : span;
+  let currentFile = null;
+  // Abstention evidence shared by the TS and Java paths: the call expression on its line (06 C cells).
+  function unresolvedCallFacts(cellId, file, calls) {
+    const source = sources.get(file);
+    for (const call of calls) {
+      const callee = source?.textOnLine(call.lineStart, call.expression);
+      const span = callee ? source.callExpression(callee) ?? callee : null;
+      bump(audit.projections, span ? 'unresolved-call-expression' : 'unresolved-call-unlocated');
+      const reason = UNRESOLVED_REASON[call.reason] ?? (REASON.test(call.reason ?? '') ? call.reason : 'UNRESOLVED_TARGET');
+      emit(cellId, file, span, { kind: 'FACT', relationKind: 'CALLS', resolution: 'UNRESOLVED', reasonCode: reason }, 'unresolved-call');
+    }
+  }
   // S: declarations with their line evidence.
   for (const node of dump.nodes) {
     const language = ok(node.path);
+    currentFile = node.path;
+    if (node.path == null) {
+      // External or inherited stubs carry no file association and therefore no span claim (D8).
+      bump(audit.unmappedByType, 'node:' + node.type + (node.metadata?.provenance === 'INHERITED' ? ':inherited-stub' : ':external'));
+      continue;
+    }
     if (language === 'java' && JAVA_SYMBOLS.has(node.type) && node.key.startsWith('java:')) {
       emit('J-S', node.path, nodeSpan(node), { kind: 'FACT', relationKind: 'SYMBOL', resolution: 'STATIC_RESOLVED', targets: [node.key] }, 'node');
+      if (node.type === 'METHOD') unresolvedCallFacts('J-C', node.path, node.metadata?.unresolvedCalls ?? []);
     } else if ((language === 'ts' || language === 'js') && /^(?:ts|js):/.test(node.key) && node.type !== 'FILE') {
       emit(SYMBOL_CELL[language], node.path, nodeSpan(node), { kind: 'FACT', relationKind: 'SYMBOL', resolution: 'STATIC_RESOLVED', targets: [node.key] }, 'node');
-      for (const call of node.metadata?.unresolvedCalls ?? []) {
-        const source = sources.get(node.path), callee = source?.textOnLine(call.lineStart, call.expression);
-        const span = callee ? source.callExpression(callee) ?? callee : null;
-        bump(audit.projections, span ? 'unresolved-call-expression' : 'unresolved-call-unlocated');
-        const reason = UNRESOLVED_REASON[call.reason] ?? (REASON.test(call.reason ?? '') ? call.reason : 'UNRESOLVED_TARGET');
-        emit(CALL_CELL[language], node.path, span, { kind: 'FACT', relationKind: 'CALLS', resolution: 'UNRESOLVED', reasonCode: reason }, 'unresolved-call');
-      }
+      unresolvedCallFacts(CALL_CELL[language], node.path, node.metadata?.unresolvedCalls ?? []);
     } else if (language === 'sql' && node.type === 'DB_TABLE') {
-      emit('SQL-S', node.path, nodeSpan(node), { kind: 'FACT', relationKind: 'SYMBOL', resolution: 'STATIC_RESOLVED', targets: ['sql:' + node.key.replace(/^table:/, '')] }, 'node');
-      bump(audit.unmappedByType, 'sql-column-without-span', (node.metadata?.columns ?? []).length);
+      // The CREATE TABLE statement lines without the terminating ';' (06 SQL-S schema-table).
+      const table = 'sql:' + node.key.replace(/^table:/, '');
+      emit('SQL-S', node.path, withoutTrailing(nodeSpan(node), 0x3b), { kind: 'FACT', relationKind: 'SYMBOL', resolution: 'STATIC_RESOLVED', targets: [table] }, 'node');
+      for (const column of node.metadata?.columns ?? []) {
+        const file = column.path ?? node.path, source = sources.get(file);
+        if (column.lineStart == null || !source) { bump(audit.unmappedByType, 'sql-column-without-span'); continue; }
+        currentFile = file;
+        const span = withoutTrailing(source.lineSpan(column.lineStart, column.lineEnd ?? column.lineStart), 0x2c);
+        bump(audit.projections, span ? 'sql-column-definition-line' : 'sql-column-unlocated');
+        emit('SQL-S', file, span, { kind: 'FACT', relationKind: 'SYMBOL', resolution: 'STATIC_RESOLVED', targets: [table + '#' + column.name] }, 'column');
+      }
     } else if ((language === 'ts' || language === 'js') && node.type === 'COMPONENT') {
       emit(UI_CELL[language], node.path, nodeSpan(node), { kind: 'FACT', relationKind: 'FRAMEWORK', resolution: 'STATIC_RESOLVED',
         targets: [language + ':' + node.key.replace(/^component:/, '')] }, 'node');
@@ -197,7 +240,21 @@ function convertFixture(fixture, dump, idPrefix = 'p') {
   for (const edge of dump.edges) {
     const from = nodes.get(edge.source), to = nodes.get(edge.target), language = ok(from?.path);
     if ((edge.type === 'EXTENDS' || edge.type === 'IMPLEMENTS') && language === 'java') {
-      emit('J-S', from.path, nodeSpan(from), { kind: 'FACT', relationKind: 'SYMBOL', resolution: 'STATIC_RESOLVED',
+      // Clause evidence: the supertype as written on its line, extended back over the clause keyword when
+      // that keyword immediately precedes it (D7); a multi-line or unlocated clause falls back to the type.
+      const source = sources.get(from.path), site = edge.metadata ?? {};
+      let span = site.lineStart != null && site.expression ? source?.textOnLine(site.lineStart, site.expression) ?? null : null;
+      if (span) {
+        const keyword = Buffer.from(site.clause ?? edge.type.toLowerCase(), 'utf8');
+        let index = span.start;
+        while (index > 0 && [0x20, 0x09].includes(source.bytes[index - 1])) index--;
+        if (index >= keyword.length && source.bytes.subarray(index - keyword.length, index).equals(keyword)
+          && (index - keyword.length === 0 || !/[A-Za-z0-9_$]/.test(String.fromCharCode(source.bytes[index - keyword.length - 1])))) {
+          span = { start: index - keyword.length, end: span.end };
+        }
+      }
+      bump(audit.projections, span ? 'inheritance-clause' : 'inheritance-declaration-fallback');
+      emit('J-S', from.path, span ?? nodeSpan(from), { kind: 'FACT', relationKind: 'SYMBOL', resolution: 'STATIC_RESOLVED',
         targets: [edge.type.toLowerCase() + ' ' + edge.target] }, 'edge');
     } else if (edge.type === 'CALLS' && CALL_CELL[language]) {
       const source = sources.get(from.path);
@@ -295,6 +352,8 @@ function convertFixture(fixture, dump, idPrefix = 'p') {
     reasonCode: executionState === 'COMPLETED' ? null : REASON.test(dump.failureCode ?? '') ? dump.failureCode : 'PRODUCT_EXECUTION_FAILED',
     versions: manifest.versions, facts, outcomes };
   audit.outsideRoster = [...new Set(audit.outsideRoster)].sort();
+  audit.evidence.namespace.consistent = audit.evidence.namespace.factsWithoutNamespace.length === 0
+    && Object.values(audit.evidence.namespace.rosterToProduct).every(areas => areas.length === 1);
   return { run, audit };
 }
 

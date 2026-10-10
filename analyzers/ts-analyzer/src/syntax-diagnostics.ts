@@ -1,4 +1,4 @@
-import type { Project, SourceFile } from 'ts-morph'
+import { ts as tsModule, type Project, type SourceFile } from 'ts-morph'
 
 export type ParserSyntaxDiagnostic = {
   filePath: string
@@ -23,6 +23,34 @@ export function assertParseable(project: Project, sources: SourceFile[]): void {
   const { diagnostics, total } = syntaxDiagnostics(project, sources)
   // A broken bootstrap/import may affect other files. Reject the whole result.
   if (total > 0) throw new ParserSyntaxError(diagnostics, total)
+}
+
+/**
+ * Per-file syntax verdict before any program is built (G-ACCURACY D4, 2026-10-11): a file with syntactic
+ * diagnostics is excluded from the analysis and published as FAILED/TS_SYNTAX_ERROR; the remaining files
+ * are analysed. Nothing in the diagnostics is message text or source: code and position only.
+ */
+export type SyntaxPartition = { accepted: AnalyzeFileLike[]; rejected: Map<string, ParserSyntaxDiagnostic[]>; total: number }
+export type AnalyzeFileLike = { path: string; content: string }
+
+export function partitionBySyntax(files: AnalyzeFileLike[], scriptKindOf: (path: string) => number): SyntaxPartition {
+  const rejected = new Map<string, ParserSyntaxDiagnostic[]>()
+  const accepted: AnalyzeFileLike[] = []
+  let total = 0
+  for (const file of files) {
+    const source = tsModule.createSourceFile('/' + file.path.replace(/^\/+/, ''), file.content, tsModule.ScriptTarget.ESNext, false, scriptKindOf(file.path))
+    const errors = (source as unknown as { parseDiagnostics?: { start?: number; code: number }[] }).parseDiagnostics ?? []
+    if (errors.length === 0) { accepted.push(file); continue }
+    total += errors.length
+    const diagnostics: ParserSyntaxDiagnostic[] = []
+    for (const error of errors) {
+      if (diagnostics.length >= 100) break
+      const location = source.getLineAndCharacterOfPosition(error.start ?? 0)
+      diagnostics.push({ filePath: file.path, code: error.code, lineStart: location.line + 1, columnStart: location.character + 1 })
+    }
+    rejected.set(file.path, diagnostics)
+  }
+  return { accepted, rejected, total }
 }
 
 /** Syntactic diagnostics of `sources` in order, at most 100 reported. */
