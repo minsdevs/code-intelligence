@@ -33,9 +33,10 @@ async function openSourceVaultStorage({ windowsBoundary, safetyRoot, sourceRoot,
     return selected.session;
   }
   const statOrMissing = (file, { directory = false } = {}) => storage(file).stat(file, { directory, missing: true });
-  async function privateDirectory(file, expected) {
-    const state = await storage(file).stat(file, { directory: true });
-    if (!state || state.kind !== 'directory' || expected && !sameIdentity(state, expected)) fail('SOURCE_VAULT_UNSAFE_PATH');
+  async function privateDirectory(file, expected, missingCode) {
+    const state = await storage(file).stat(file, { directory: true, ...(missingCode ? { missing: true } : {}) });
+    if (!state) fail(missingCode || 'SOURCE_VAULT_UNSAFE_PATH');
+    if (state.kind !== 'directory' || expected && !sameIdentity(state, expected)) fail('SOURCE_VAULT_UNSAFE_PATH');
     return state;
   }
   async function directoryEmpty(file) {
@@ -45,12 +46,22 @@ async function openSourceVaultStorage({ windowsBoundary, safetyRoot, sourceRoot,
   async function ensureDirectory(file) {
     return await statOrMissing(file, { directory: true }) || await storage(file).mkdir(file);
   }
-  async function readPrivateFile(file, maximum, missingCode) {
+  async function readPrivateFile(file, maximum, missingCode, directories) {
+    if (directories) {
+      for (const [directory, expected] of directories) {
+        directories.set(directory, await privateDirectory(directory, expected, missingCode));
+      }
+    }
     const state = await statOrMissing(file);
     if (!state) fail(missingCode);
     if (BigInt(state.size) > BigInt(maximum)) fail('SOURCE_VAULT_LIMIT');
     const value = await readStorageFile(storage(file), file, maximum, { expected: state });
-    return { bytes: value.bytes, stat: value.state };
+    try {
+      if (directories) {
+        for (const [directory, expected] of directories) await privateDirectory(directory, expected);
+      }
+      return { bytes: value.bytes, stat: value.state };
+    } catch (error) { value.bytes.fill(0); throw error; }
   }
   async function scanDirectory(directory, depth, prefix, entries, maximum) {
     const before = await privateDirectory(directory);

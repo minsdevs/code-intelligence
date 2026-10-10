@@ -142,6 +142,47 @@ test('retention refuses a replaced project ancestor without touching the linked 
   assert.deepEqual(await fs.readFile(path.join(moved, sha256, 'blob.bin')), original);
 });
 
+for (const [kind, duringRead] of [['project', false], ['address', true]]) {
+  test('retention refuses a replaced ' + kind + (duringRead ? ' directory during its read' : ' directory before its read'), async t => {
+    const f = await fixture(t);
+    const vault = await f.create();
+    const stored = await vault.put({ projectId: 8, bytes: Buffer.from('retained directory identity') });
+    const original = await fs.readFile(f.blob(stored));
+    const directory = kind === 'project' ? path.dirname(f.address(stored)) : f.address(stored);
+    const moved = path.join(f.root, 'replaced-directory');
+    const replace = async () => {
+      await fs.rename(directory, moved);
+      await fs.mkdir(directory, { mode: 0o700 });
+      const child = kind === 'project' ? stored.sha256 : 'blob.bin';
+      await fs.rename(path.join(moved, child), path.join(directory, child));
+    };
+    const open = fs.open;
+    let readBytes;
+    if (duringRead) {
+      fs.open = async function(file, ...args) {
+        const handle = await open.call(this, file, ...args);
+        if (file === f.blob(stored)) {
+          const read = handle.read;
+          handle.read = async function(bytes, ...rest) {
+            const result = await read.call(this, bytes, ...rest);
+            readBytes = bytes;
+            await replace();
+            return result;
+          };
+        }
+        return handle;
+      };
+    } else await replace();
+    try {
+      const { sha256, byteSize, keyId } = stored;
+      await assert.rejects(vault.retain({ projectId: 8, blobs: [{ sha256, byteSize, keyId }] }),
+        code('SOURCE_VAULT_UNSAFE_PATH'));
+      if (duringRead) assert.deepEqual(readBytes, Buffer.alloc(readBytes.length));
+      assert.deepEqual(await fs.readFile(f.blob(stored)), original);
+    } finally { fs.open = open; }
+  });
+}
+
 test('retention failure drains an in-flight authenticated read before resolving or closing', { timeout: 15000 }, async t => {
   const f = await fixture(t);
   const vault = await f.create();
