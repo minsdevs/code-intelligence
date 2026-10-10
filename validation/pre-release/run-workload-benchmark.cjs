@@ -654,9 +654,9 @@ async function main(argv = process.argv.slice(2)) {
       if (owner.process().exitCode !== null || owner.process().signalCode !== null) throw new Error('STARTUP_PROCESS_EXITED');
     } catch (error) { failure = failureCode(error); }
     finally {
-      try { if (sampler) memory ??= await sampler.stop(); } catch { failure ||= 'MEMORY_SAMPLE_FAILED'; }
+      try { if (sampler) memory ??= await sampler.stop(); } catch (error) { memory ??= error?.partial ?? null; run.memoryFailureDetail ??= error?.detail ?? null; failure ||= 'MEMORY_SAMPLE_FAILED'; }
       try { if (preparedSampler) { await preparedSampler.close(); run.memoryReaderCleanupConfirmed = true; } }
-      catch { run.memoryReaderCleanupConfirmed = false; failure ||= 'MEMORY_SAMPLE_FAILED'; }
+      catch (error) { run.memoryFailureDetail ??= error?.detail ?? null; run.memoryReaderCleanupConfirmed = false; failure ||= 'MEMORY_SAMPLE_FAILED'; }
       if (owner) {
         try {
           await closeValidatedApplication(owner, diagnostics);

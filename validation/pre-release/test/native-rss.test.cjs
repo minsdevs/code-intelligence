@@ -33,6 +33,26 @@ test('native RSS boundaries and owned helper lifecycle', { skip: process.platfor
     await reader.close(); gone(reader.pid);
     await assert.rejects(reader.read(child.pid), /MEMORY_NATIVE_STATE/);
   });
+  await t.test('a privileged setuid child in the owner tree is still observed with its RSS', async () => {
+    // /bin/ps is setuid root: its task is not readable by the helper (EPERM). It stays alive while its
+    // wide output waits on the full pipe, so the frame must report it as U and read its RSS through ps.
+    const child = spawn('/bin/ps', ['-ww', '-axo', 'pid=,ppid=,rss=,command='], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const closed = once(child, 'close');
+    await once(child, 'spawn');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const reader = await openNativeRss(prepared);
+    try {
+      assert.equal(child.exitCode, null, 'ps must still be blocked on its pipe for this test');
+      const frame = await (async () => { const { stdout } = await require('node:util').promisify(require('node:child_process').execFile)('/bin/ps', ['-o', 'pid=,ppid=,rss=', '-p', String(child.pid)]); return stdout; })();
+      assert.match(frame, new RegExp('^\\s*' + child.pid + '\\s+' + process.pid + '\\s+\\d+'));
+      const rows = await reader.read(process.pid);
+      const row = rows.find(value => value.pid === child.pid);
+      assert(row && row.ppid === process.pid && Number.isSafeInteger(row.rssKiB) && row.rssKiB > 0, 'privileged child row with RSS');
+    } finally {
+      child.stdout.resume(); child.kill('SIGTERM'); await closed;
+      await reader.close();
+    }
+  });
   await t.test('abandoning admission before a sampler starts leaves no helper behind', async () => {
     const worker = await prepareOwnedPhaseSampler(prepared);
     await worker.close(); gone(worker.helperPid);

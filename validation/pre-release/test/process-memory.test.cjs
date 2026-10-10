@@ -174,3 +174,30 @@ test('XPC scope does not keep a non-bundle child after it leaves that process tr
   const rows = await readOwnerMemory(10, h);
   assert.deepEqual(rows.map(row => row.pid), [10,20]);
 });
+
+test('a privileged child (U row) is read through one ps call, and a vanished one needs a second discovery', async () => {
+  // 31 is the owner's setuid /bin/ps run: the helper reports it as U, ps supplies its RSS.
+  const h = recorder(['10 1 P /bin/owner\n31 10 P /bin/ps\n11 10 P /bin/child\n', '10 1 100 /bin/owner\n31 10 U /bin/ps\n11 10 20 /bin/child\n', '31 10 2048\n']);
+  assert.deepEqual(await readOwnerMemory(10, h), [
+    { pid: 10, ppid: 1, rssKiB: 100 }, { pid: 31, ppid: 10, rssKiB: 2048 }, { pid: 11, ppid: 10, rssKiB: 20 },
+  ]);
+  assert.deepEqual(h.calls, [{ command: '/bin/ps', args: ['-o', 'pid=,ppid=,rss=', '-p', '31'] }]);
+  assert.equal(h.discoveries(), 1);
+  // ps no longer lists it and neither does a fresh discovery: it exited between the two reads.
+  const gone = recorder(['10 1 P /bin/owner\n31 10 P /bin/ps\n', '10 1 100 /bin/owner\n31 10 U /bin/ps\n', '', '10 1 P /bin/owner\n']);
+  assert.deepEqual(await readOwnerMemory(10, gone), [{ pid: 10, ppid: 1, rssKiB: 100 }]);
+  assert.equal(gone.discoveries(), 2);
+  // ps omits it but discovery still lists it: the frame must not pass with a silently dropped process.
+  const stuck = recorder(['10 1 P /bin/owner\n31 10 P /bin/ps\n', '10 1 100 /bin/owner\n31 10 U /bin/ps\n', '', '10 1 P /bin/owner\n31 10 P /bin/ps\n']);
+  await assert.rejects(readOwnerMemory(10, stuck), /MEMORY_PRIVILEGED_UNREADABLE/);
+  // ps rows must agree on the parent, and the owner itself can never be privileged.
+  const parent = recorder(['10 1 P /bin/owner\n31 10 P /bin/ps\n', '10 1 100 /bin/owner\n31 10 U /bin/ps\n', '31 99 2048\n']);
+  await assert.rejects(readOwnerMemory(10, parent), /MEMORY_TABLE_INVALID/);
+  const owner = recorder(['10 1 P /bin/owner\n', '10 1 U /bin/owner\n']);
+  await assert.rejects(readOwnerMemory(10, owner), /MEMORY_OWNER_PRIVILEGED/);
+  // A ps exit of 1 (nothing matched) is not an error; other ps failures propagate.
+  const nothing = recorder(['10 1 P /bin/owner\n31 10 P /bin/ps\n', '10 1 100 /bin/owner\n31 10 U /bin/ps\n', Object.assign(new Error('ps'), { code: 1 }), '10 1 P /bin/owner\n']);
+  assert.deepEqual(await readOwnerMemory(10, nothing), [{ pid: 10, ppid: 1, rssKiB: 100 }]);
+  const broken = recorder(['10 1 P /bin/owner\n31 10 P /bin/ps\n', '10 1 100 /bin/owner\n31 10 U /bin/ps\n', Object.assign(new Error('ps'), { code: 'ENOENT' })]);
+  await assert.rejects(readOwnerMemory(10, broken), { code: 'ENOENT' });
+});

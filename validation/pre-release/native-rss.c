@@ -9,6 +9,8 @@
 //                  second metadata read confirms ESRCH; any other failure fails the frame (exit 3).
 //   "<pid>,<pid>"  selected RSS: "<pid> <ppid> <rssKiB> <executable>" (P or A path only) with PID-reuse
 //                  checks (exit 4); a selected PID without any executable path fails the frame (exit 3).
+//                  A privileged (other effective UID) process in the set whose task this helper may not
+//                  read is reported as "<pid> <ppid> U <executable>" for the caller to read via /bin/ps.
 #include <errno.h>
 #include <inttypes.h>
 #include <libproc.h>
@@ -19,6 +21,7 @@
 #include <string.h>
 #include <sys/proc_info.h>
 #include <sys/sysctl.h>
+#include <unistd.h>
 
 #define MAX_TARGETS 1024
 #define MAX_PROCESSES 50000
@@ -117,7 +120,25 @@ static int selected(char *input) {
     struct proc_bsdinfo before, after;
     struct proc_taskinfo task;
     char executable[PROC_PIDPATHINFO_MAXSIZE];
-    if (!bsd(pids[i], &before)) { if (errno == ESRCH) continue; return 3; }
+    if (!bsd(pids[i], &before)) {
+      if (errno == ESRCH) continue;
+      if (errno != EPERM) return 3;
+      // A privileged child in the tree (e.g. the app's own setuid /bin/ps run): this unprivileged helper
+      // may read its short metadata and path but not its task. Report it as U so the caller reads its
+      // RSS through /bin/ps instead of dropping it.
+      struct proc_bsdshortinfo info;
+      if (!short_bsd(pids[i], &info)) { if (errno == ESRCH) continue; return 3; }
+      if (info.pbsi_pid != (uint32_t)pids[i] || info.pbsi_uid == getuid()) return 3;
+      if (proc_pidpath(pids[i], executable, sizeof(executable)) <= 0
+          && !argument_exec_path(pids[i], executable, sizeof(executable))) {
+        struct proc_bsdshortinfo again;
+        if (!short_bsd(pids[i], &again) && errno == ESRCH) continue;
+        return 3;
+      }
+      if (!printable(executable)) return 4;
+      if (!append(&length, "%d %u U %s\n", pids[i], info.pbsi_ppid, executable)) return 5;
+      continue;
+    }
     // RSS is attached only to a process identified by an executable path (vnode path, else the exec
     // path recorded with its arguments, as in discovery).
     if (proc_pidinfo(pids[i], PROC_PIDTASKINFO, 0, &task, sizeof(task)) != sizeof(task)
