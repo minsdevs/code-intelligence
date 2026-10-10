@@ -67,7 +67,7 @@ function startMemorySampler(child, fd, sequence, started, {
   const observed = new Set();
   const result = { samples: 0, idleSamples: 0, peakRssKiB: 0, idlePeakRssKiB: 0,
     firstSampleDelayMs: null, maximumGapMs: 0, maximumReadMs: 0, trailingGapMs: null, missingOwnerSamples: 0,
-    requestedIntervalMs: intervalMs, failure: null,
+    requestedIntervalMs: intervalMs, failure: null, failureDetail: null,
     scope: 'Read-only owner tree plus exclusive packaged-bundle XPC scope; births between queries and the initial SDK capture gap are not sampled',
     resourceFileLimitBytes: maxCsvBytes, sampleLimit: maxSamples };
   const task = (async () => {
@@ -95,7 +95,18 @@ function startMemorySampler(child, fd, sequence, started, {
         }
         for (const row of value.processes) observed.add(row.pid);
         fs.writeSync(fd, text);
-      } catch { result.failure = 'MEMORY_SAMPLE_FAILED'; break; }
+      } catch (error) {
+        // Only a classified failure code is recorded, never raw error text (private paths, command output).
+        let reason = 'UNCLASSIFIED';
+        try {
+          const code = typeof error?.code === 'string' ? error.code : typeof error?.message === 'string' ? error.message : null;
+          if (code && /^[A-Z][A-Z0-9_]{2,63}$/.test(code)) reason = code;
+          else if (error?.killed === true) reason = 'PROCESS_READ_TIMEOUT';
+        } catch { /* keep UNCLASSIFIED */ }
+        result.failure = 'MEMORY_SAMPLE_FAILED';
+        result.failureDetail = { reason, phase: sampledPhase, elapsedMs: Math.round(now() - started), samples: result.samples };
+        break;
+      }
       if (!stopped) await new Promise(resolve => {
         releaseSleep = resolve;
         timer = setTimeout(resolve, Math.max(0, intervalMs - (now() - begin)));
