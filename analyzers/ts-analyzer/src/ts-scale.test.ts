@@ -1,6 +1,5 @@
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
-import { ParserSyntaxError } from './syntax-diagnostics'
 import { extractTs } from './ts-extractor'
 import type { AnalyzeFile } from './types'
 
@@ -98,13 +97,18 @@ describe('sliced whole-manifest TS extraction', () => {
     }
   }, 60_000)
 
-  it('rejects a syntax error in any slice with the whole-manifest diagnostics', () => {
+  it('publishes the same per-file syntax verdicts in single-program and sliced mode (D4)', () => {
     const files = [...importChain(40), { path: 'src/broken/z.ts', content: 'export const = 1\n' }, { path: 'src/broken/y.ts', content: 'let (\n' }]
-    const failure = (options = {}) => {
-      try { extractTs(files, options); return null } catch (error) { return error }
+    const verdicts = (options = {}) => {
+      const result = extractTs(files, options)
+      return { outcomes: [...(result.fileOutcomes ?? [])].sort((a, b) => a.path.localeCompare(b.path)), routes: result.routes, endpoints: result.endpoints,
+        brokenNodes: result.nodes.filter((node) => String(node.filePath).startsWith('src/broken/')).length }
     }
-    const single = failure()
-    expect(single).toBeInstanceOf(ParserSyntaxError)
-    expect(failure({ ...SLICED, sliceProgramBytes: 64 })).toEqual(single)
+    const single = verdicts()
+    expect(single.outcomes).toEqual(expect.arrayContaining([
+      { path: 'src/broken/z.ts', status: 'FAILED', reason: 'TS_SYNTAX_ERROR' }, { path: 'src/broken/y.ts', status: 'FAILED', reason: 'TS_SYNTAX_ERROR' }]))
+    expect(single.outcomes.filter((outcome) => !outcome.path.startsWith('src/broken/')).every((outcome) => outcome.status === 'PARTIAL')).toBe(true)
+    expect(single.routes).toEqual([]); expect(single.endpoints).toEqual([]); expect(single.brokenNodes).toBe(0)
+    expect(verdicts({ ...SLICED, sliceProgramBytes: 64 })).toEqual(single)
   })
 })

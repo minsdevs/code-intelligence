@@ -3,7 +3,7 @@ import type { AnalyzeFile, AnalyzeResponse, ApiCallHit, EndpointHit, RouteHit, S
 import { isTsJs } from './paths'
 import { extractGeneric } from './generic-extractor'
 import { extractSemanticGraph, phaseRecorder, type SliceScope } from './semantic-extractor'
-import { assertParseable } from './syntax-diagnostics'
+import { assertParseable, partitionBySyntax } from './syntax-diagnostics'
 import { createReactComponentResolver } from './react-component-binding'
 import { forEachDescendantOfKinds } from './walk'
 import { extractSliced } from './ts-slices'
@@ -48,16 +48,51 @@ export type ExtractOptions = {
 }
 
 export function extractTs(files: AnalyzeFile[], options: ExtractOptions = {}): AnalyzeResponse {
-  const tsFiles = files.filter((file) => isTsJs(file.path))
+  const allTsFiles = files.filter((file) => isTsJs(file.path))
+  // D4 (2026-10-11): syntactically broken files are excluded before any program is built and published as
+  // FAILED/TS_SYNTAX_ERROR; the other files are analysed. Because a broken file may be the bootstrap or an
+  // import target of the rest, no file of such a project claims SUCCESS and the project-wide framework facts
+  // (routes, endpoints) are withheld. Nothing is executed or type-checked for the rejected files.
+  const partition = partitionBySyntax(allTsFiles, scriptKindOf)
+  const rejected = partition.rejected
+  const analysed = rejected.size ? files.filter((file) => !rejected.has(file.path)) : files
+  const tsFiles = rejected.size ? allTsFiles.filter((file) => !rejected.has(file.path)) : allTsFiles
+  const response = extractAccepted(analysed, tsFiles, options)
+  return rejected.size ? withSyntaxRejections(response, allTsFiles, rejected) : response
+}
+
+function scriptKindOf(path: string): number {
+  if (/\.tsx$/i.test(path)) return ts.ScriptKind.TSX
+  if (/\.jsx$/i.test(path)) return ts.ScriptKind.JSX
+  if (/\.[mc]?js$/i.test(path)) return ts.ScriptKind.JS
+  return ts.ScriptKind.TS
+}
+
+function extractAccepted(files: AnalyzeFile[], tsFiles: AnalyzeFile[], options: ExtractOptions): AnalyzeResponse {
   const bytes = tsFiles.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0)
   if (options.incremental || bytes > (options.singleProgramBytes ?? SINGLE_PROGRAM_BYTES)) {
     return extractSliced(files, tsFiles, options.sliceProgramBytes, options.onProgram, options.incremental, options.onReuse, options.cacheKey, options.onMetadataReuse)
   }
   const project = createProgramProject(tsFiles)
+  // Invariant after the partition: the program holds no syntactic diagnostics.
   assertParseable(project, project.getSourceFiles())
   const output = extractProgram(files, project)
   output.symbols.push(...extractGeneric(files))
   return assembleResponse(tsFiles, output)
+}
+
+export const SYNTAX_REJECTED_REASON = 'TS_SYNTAX_ERROR'
+export const SYNTAX_NEIGHBOUR_REASON = 'SYNTAX_IN_PROJECT'
+
+function withSyntaxRejections(response: AnalyzeResponse, allTsFiles: AnalyzeFile[], rejected: Map<string, unknown>): AnalyzeResponse {
+  const previous = new Map((response.fileOutcomes ?? []).map((outcome) => [outcome.path, outcome]))
+  const fileOutcomes = allTsFiles.map((file) => {
+    if (rejected.has(file.path)) return { path: file.path, status: 'FAILED' as const, reason: SYNTAX_REJECTED_REASON }
+    const outcome = previous.get(file.path)
+    if (!outcome) return { path: file.path, status: 'UNMEASURED' as const, reason: 'ANALYZER_OUTCOME_MISSING' }
+    return outcome.status === 'SUCCESS' ? { path: file.path, status: 'PARTIAL' as const, reason: SYNTAX_NEIGHBOUR_REASON } : outcome
+  })
+  return { ...response, fileOutcomes, routes: [], endpoints: [] }
 }
 
 export type ProgramOutput = {

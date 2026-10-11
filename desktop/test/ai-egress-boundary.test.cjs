@@ -38,6 +38,8 @@ const NETWORK_INVENTORY = Object.freeze({
   'main.cjs': { modules: ['net'], reason: 'loopback port reservation for bundled services' },
   'service-transport.cjs': { modules: ['https', 'tls'], reason: 'loopback TLS to bundled backend/analyzer with pinned per-run CA' },
   'source-broker.cjs': { modules: ['net'], reason: 'private source-vault Unix-domain socket' },
+  'update-validation-feed.cjs': { modules: ['https'],
+    reason: 'validation-build-only loopback update feed: fixture host resolved to 127.0.0.1, chain pinned to the fixture CA, no DNS (G-UPDATE packaged acceptance)' },
 });
 
 test('only reviewed desktop modules load network-capable builtins', () => {

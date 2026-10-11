@@ -115,8 +115,12 @@ describe('incremental whole-manifest extraction', () => {
     expect(canonical(extractTs(base.map((file) => ({ ...file, cache: 'unknown' })), { incremental: true }))).toEqual(canonical(extractTs(base)))
   })
 
-  it('retains syntax rejection with reusable neighbours', () => {
+  it('publishes a per-file syntax verdict with reusable neighbours and no SUCCESS claim (D4)', () => {
     const first = extractTs(base, { incremental: true })
-    expect(() => extractTs(seed([...base, { path: 'bad.ts', content: 'export function {' }], first), { incremental: true })).toThrow()
+    const result = extractTs(seed([...base, { path: 'bad.ts', content: 'export function {' }], first), { incremental: true })
+    expect(result.fileOutcomes).toEqual(expect.arrayContaining([{ path: 'bad.ts', status: 'FAILED', reason: 'TS_SYNTAX_ERROR' }]))
+    expect(result.fileOutcomes?.filter((outcome) => outcome.path !== 'bad.ts').every((outcome) => outcome.status !== 'SUCCESS')).toBe(true)
+    expect(result.nodes.some((node) => node.filePath === 'bad.ts')).toBe(false)
+    expect(result.routes).toEqual([]); expect(result.endpoints).toEqual([])
   })
 })

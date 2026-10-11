@@ -13,6 +13,7 @@ const path = require('node:path');
 const { REVIEWED_SCHEMA } = require('./backup-export-policy.cjs');
 const { openUpdateCheckpoints } = require('./update-checkpoint.cjs');
 const { createUpdateService, loadUpdateKeys, electronRequest, createProcessRunner } = require('./update-service.cjs');
+const { validationUpdateFeed, feedUpdateConfig, feedRequest, feedRunner } = require('./update-validation-feed.cjs');
 
 const TARGET_FLYWAY = Math.max(...REVIEWED_SCHEMA.migrations.map(migration => migration.version));
 const KEYS_FILE = path.join(__dirname, '..', 'build', 'update-keys.json');
@@ -31,11 +32,16 @@ async function currentBundle({ app, runningBuild, runtimeRoot, execPath, resourc
     asarSha256: await hashFile(path.join(resourcesPath, 'app.asar')) };
 }
 
-async function openUpdateStartup({ electron, safety, userData, runningBuild, runtimeRoot, execPath, resourcesPath, stopRuntime, quit }) {
+async function openUpdateStartup({ electron, safety, userData, runningBuild, runtimeRoot, execPath, resourcesPath, stopRuntime, quit,
+  metadata = null }) {
   const { app, dialog, shell, net, Menu } = electron;
   const checkpoints = await openUpdateCheckpoints({ userData, runningBuild, targetFlyway: TARGET_FLYWAY,
     bundle: await currentBundle({ app, runningBuild, runtimeRoot, execPath, resourcesPath }) });
-  const config = await loadUpdateKeys(KEYS_FILE);
+  // Validation candidates may carry a build-time loopback feed (update-validation-feed.cjs); every other
+  // build reads the pinned key file packed into the asar, and an empty key set keeps the updater disabled.
+  const feed = validationUpdateFeed(metadata);
+  const config = feed ? feedUpdateConfig(feed) : await loadUpdateKeys(KEYS_FILE);
+  const tools = feed ? feedRunner(feed) : null;
   let service;
 
   async function offerRecovery(open) {
@@ -95,7 +101,8 @@ async function openUpdateStartup({ electron, safety, userData, runningBuild, run
     service = createUpdateService({ config, userData,
       running: Object.freeze({ product: config.product, bundleId: config.bundleId, teamId: config.teamId, platform: process.platform,
         arch: process.arch, osVersion: process.getSystemVersion(), buildSequence: runningBuild, schemaFlyway: TARGET_FLYWAY, safetyJournalMajor: 1 }),
-      request: electronRequest(net), runner: createProcessRunner(), readState: () => safety.updateState(),
+      request: feed ? feedRequest(feed) : electronRequest(net), runner: tools ? tools.runner : createProcessRunner(),
+      readState: () => safety.updateState(),
       readCheckpoint: () => checkpoints.retained(),
       recordAccepted: verified => safety.recordAcceptedManifest(verified),
       sanctionRollback: verified => safety.sanctionRecoveryRollback(verified),
@@ -109,12 +116,13 @@ async function openUpdateStartup({ electron, safety, userData, runningBuild, run
       quit });
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       { role: 'appMenu', submenu: [{ role: 'about' }, { type: 'separator' },
-        { label: 'Check for Updates…', click: () => { checkForUpdates(); } }, { type: 'separator' },
+        { id: 'check-for-updates', label: 'Check for Updates…', click: () => { checkForUpdates(); } }, { type: 'separator' },
         { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
         { type: 'separator' }, { role: 'quit' }] },
       { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
   }
-  return Object.freeze({ beforeRuntime, afterHealthy, onStartupFailure, updateStatus: () => service?.status() ?? null });
+  return Object.freeze({ beforeRuntime, afterHealthy, onStartupFailure, checkForUpdates: () => (service ? checkForUpdates() : Promise.resolve()),
+    updateStatus: () => (service ? { ...service.status(), validationFeed: Boolean(feed), simulatedIdentity: tools ? [...new Set(tools.simulated)] : [] } : null) });
 }
 
 module.exports = Object.freeze({ openUpdateStartup, currentBundle, TARGET_FLYWAY });

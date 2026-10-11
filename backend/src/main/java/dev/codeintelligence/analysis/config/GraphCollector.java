@@ -3,6 +3,7 @@ package dev.codeintelligence.analysis.config;
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.EdgeConfidence;
+import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphEdgeType;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
@@ -16,6 +17,12 @@ final class GraphCollector {
     private final Map<String, GraphNodeDraft> nodes = new LinkedHashMap<>();
     private final List<GraphEdgeDraft> edges = new ArrayList<>();
     private final List<AnalyzerEvidence> evidences = new ArrayList<>();
+    private final Map<String, FileAnalysisOutcome> outcomes = new LinkedHashMap<>();
+
+    /** Per-file parse verdict of a config/SQL analyzer (06 P cells); later records replace earlier ones. */
+    void outcome(FileAnalysisOutcome outcome) {
+        outcomes.put(outcome.path(), outcome);
+    }
 
     void put(GraphNodeDraft node) {
         GraphNodeDraft existing = nodes.get(node.naturalKey());
@@ -38,6 +45,10 @@ final class GraphCollector {
     }
 
     AnalysisResult toResult() {
-        return new AnalysisResult(List.copyOf(nodes.values()), List.copyOf(edges), List.copyOf(evidences));
+        return new AnalysisResult(
+                List.copyOf(nodes.values()),
+                List.copyOf(edges),
+                List.copyOf(evidences),
+                List.copyOf(outcomes.values()));
     }
 }

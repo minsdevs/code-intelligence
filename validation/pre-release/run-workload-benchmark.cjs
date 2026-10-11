@@ -151,13 +151,16 @@ async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new 
     if (diagnosticOnly && (sample.powerSource !== 'AC' || !['OPEN', 'CLOSED'].includes(sample.lidState))) {
       throw new Error('WORKLOAD_DIAGNOSTIC_ENVIRONMENT_UNSAFE');
     }
-    if (diagnosticOnly || (sample.loadAverage[0] < 4 && sample.mdworkers <= 6 && sample.powerSource === 'AC' && sample.lidState === 'OPEN')) observations.push(sample);
+    // 2026-10-11 user decision (05 section 4): the lid state is recorded with every observation but no longer
+    // required to be OPEN; AC power, load1 < 4 and mdworker_shared <= 6 for three observations 30 s apart are.
+    if (diagnosticOnly || (sample.loadAverage[0] < 4 && sample.mdworkers <= 6 && sample.powerSource === 'AC')) observations.push(sample);
     else { observations = []; rejectedObservations++; }
     // No final sleep: the admitting observation immediately precedes launch.
     if (diagnosticOnly || observations.length === 3) {
       const availableBytes = readFreeBytes();
       if (!Number.isSafeInteger(availableBytes) || availableBytes < requiredFreeBytes) throw new Error('DISK_SPACE_LOW');
-      return { status: diagnosticOnly ? 'DIAGNOSTIC_ONLY' : 'ADMITTED', loadAverageLimit: 4, mdworkerLimit: 6, freeBytes: availableBytes, requiredFreeBytes,
+      return { status: diagnosticOnly ? 'DIAGNOSTIC_ONLY' : 'ADMITTED', loadAverageLimit: 4, mdworkerLimit: 6, powerRequired: 'AC',
+        lidPolicy: 'RECORDED_NOT_REQUIRED', lidStates: observations.map(item => item.lidState), freeBytes: availableBytes, requiredFreeBytes,
         sampleIntervalMs: diagnosticOnly ? null : 30000, waitedMs: Math.round(performance.now() - started), rejectedObservations, observations,
         timingValidity: diagnosticOnly ? (sample.loadAverage[0] >= 4 || sample.mdworkers > 6 ? 'INVALID_LOAD' : 'NOT_APPLICABLE_DIAGNOSTIC') : 'QUIET_HOST_OBSERVED_AT_LAUNCH' };
     }
@@ -250,7 +253,7 @@ async function main(argv = process.argv.slice(2)) {
       powerObservationScope: 'Series start, quiet-admission samples and both boundaries of each run; not continuous monitoring',
       loadObservationScope: options.diagnosticOnly
         ? 'Diagnostic opt-in: one actual AC/lid/load observation before every launch; no performance or RSS release acceptance'
-        : 'Three AC/open-lid/quiet observations 30 seconds apart after fixture preparation and before every app launch; not continuous monitoring' },
+        : 'Three AC/quiet observations (load1 < 4, mdworker_shared <= 6) 30 seconds apart after fixture preparation and before every app launch; lid state recorded, not required (2026-10-11); not continuous monitoring' },
     warmup: null, runs: [] };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   const sampleFile = path.join(evidence, 'resource-samples.csv'), fd = fs.openSync(sampleFile, 'wx', 0o600);
