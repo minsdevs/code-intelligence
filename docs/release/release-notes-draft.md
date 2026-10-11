@@ -1,14 +1,15 @@
 # Release notes — draft (not a release; verdict NO_GO as of 2026-10-11)
 
-These notes are written ahead of the first signed macOS release so that the published text, the bundle
-hashes and the gate evidence can be matched line by line (07 stage 7). Values in angle brackets are filled
-only from the final candidate's `build/result.json`, the signed artifact and the gate table; nothing here is a
-claim that those steps have happened.
+These are engineering notes for a retained Validation candidate, not an announcement of a signed release.
+The signed artifact, publisher Team ID and notarization record are **NOT_AVAILABLE**; they require the
+owner inputs and acceptance recorded in the gate table. No download is offered by this document.
 
-## Code Intelligence <version> for macOS (Apple Silicon)
+## Retained Validation candidate mQ5nbO (Apple Silicon)
 
-Build sequence <buildSequence> · app.asar SHA-256 <asarSha256> · runtime manifest SHA-256 <manifestSha256>
-Artifact: <Code Intelligence-<version>-arm64.dmg|zip> SHA-256 <artifactSha256> · Team ID <teamId> · notarized <date>
+Product source: `da580ad362a770316fd959e0886ecad7cc968be5`; build sequence `1791660490966`.
+app.asar SHA-256: `948b9c152b4d807b513fc7f07694580abdfd7ea57235544f7a00f035efca9321`.
+Runtime manifest SHA-256: `e5e8ffe3a1f10b35e26894ea16a76fa8365eb3432cddd9c9cb353f36fca29af8`.
+The bundle is ad-hoc signed for local validation only; it is not a distributable release artifact.
 
 ### What it does
 
@@ -29,8 +30,9 @@ Artifact: <Code Intelligence-<version>-arm64.dmg|zip> SHA-256 <artifactSha256> �
 - Updater: the product updater, pre-migration checkpoint and started-build floor were exercised end to end
   on a Validation candidate (install → verified update → refusals → interrupted upgrade → restore → signed
   recovery rollback). Developer ID, notarization and a real update host remain to be exercised.
-- Memory: the backend returns committed heap between pipeline steps so the TypeScript analyzer worker does
-  not run beside an analysis-time-sized heap; the incremental phase now carries the class's RSS ceiling.
+- Memory: the backend requests heap release between pipeline steps/jobs with a JVM heap-shrink policy;
+  the incremental phase now carries the class RSS ceiling. Large diagnostic runs stayed below 6 GiB,
+  but the second medium run exceeded 4 GiB. This is not performance or memory acceptance.
 - Accuracy evidence: Java abstentions carry call-site lines, inheritance edges carry clause spans, inherited
   method stubs no longer claim a file, SQL migrations publish per-file parse verdicts and statement/column
   lines, a TypeScript file with syntax errors no longer rejects the whole project (it is reported FAILED and
@@ -38,14 +40,15 @@ Artifact: <Code Intelligence-<version>-arm64.dmg|zip> SHA-256 <artifactSha256> �
 
 ### Measured on the reference machine
 
-<Fill from the final 20-run series only. Until then: "Performance targets in 05 §4 are development goals;
-the 20-run series was NOT RUN / recorded as …". Diagnostic runs on a loaded host are not listed as results.>
+The final 20-run series was **NOT_RUN**. Performance targets in 05 §4 remain development goals.
+Loaded-host smoke diagnostics, including phase RSS, belong to the engineering audit and are not SLO acceptance.
 
 ### Known limitations
 
 - Intel Macs, Windows and Linux are not part of this release.
 - Accuracy cells are measured on development material only; independent evaluation annotations and the
-  blind real-repository review are pending (G-ACCURACY BLOCKED).
+  blind real-repository review are pending (G-ACCURACY BLOCKED). The 81-case development baseline has
+  two remaining failures: TypeScript inferred call candidates and one SQL table span boundary.
 - Large repositories: structure exploration up to 50k files / 200 MiB with per-capability limits and a
   15-minute hard timeout; above the hard limits the import is refused with a diagnostic.
 - Updates are user-initiated; there is no background check and no in-place swap.

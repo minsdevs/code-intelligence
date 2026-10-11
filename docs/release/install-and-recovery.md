@@ -40,8 +40,10 @@ a clean-machine acceptance.
 5. The first start of the new build takes a **pre-upgrade checkpoint** (a copy of the database) before it
    migrates, and only after a healthy start records the new build as the minimum allowed version.
 
-If the dialog says "No verified update", nothing was downloaded or installed; the reason code (for example
-`UPDATE_SIGNATURE_INVALID`, `UPDATE_ARTIFACT_HASH`, `UPDATE_APP_NOT_NOTARIZED`) is what to report.
+If the dialog says "No verified update", nothing was installed. Manifest refusals happen before a download;
+an artifact hash or identity failure may happen after download, and the rejected artifact is not offered
+for installation. Report the reason code, for example `UPDATE_SIGNATURE_INVALID`, `UPDATE_ARTIFACT_HASH`
+or `UPDATE_APP_NOT_NOTARIZED`.
 
 ## 4. Recovery
 

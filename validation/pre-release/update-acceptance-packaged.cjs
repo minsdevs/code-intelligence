@@ -24,7 +24,9 @@ const { execFileSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 const { ensureOutputParent } = require('./owned-output.cjs');
 const { validateRuntimeManifest } = require('../../desktop/src/runtime-manifest.cjs');
-const { observeStartup } = require('../../desktop/scripts/native-acceptance-electron.cjs');
+const { observeStartup, closeOwnedApplication } = require('../../desktop/scripts/native-acceptance-electron.cjs');
+const { bounded } = require('../../desktop/scripts/packaged-keychain-acceptance.cjs');
+const { captureOwnedApplication } = require('../backup-compatibility/interruption-hooks.cjs');
 const manifests = require('../../desktop/src/update-manifest.cjs');
 const { validationUpdateFeed } = require('../../desktop/src/update-validation-feed.cjs');
 const { checkpointIdFor } = require('../../desktop/src/update-checkpoint.cjs');
@@ -43,12 +45,22 @@ function listRecords(userData) {
   return fs.readdirSync(root).filter(name => name !== 'schema.json').sort()
     .map(id => ({ id, ...readJson(path.join(root, id, 'record.json')) }));
 }
-function journalText(userData) {
+function journalRecords(userData) {
   const file = path.join(userData, 'safety', 'ai-journal', 'events.log');
-  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  if (!fs.existsSync(file)) return [];
+  const bytes = fs.readFileSync(file), events = [];
+  for (let offset = 0; offset < bytes.length;) {
+    assert.ok(bytes.length - offset >= 4, 'JOURNAL_TORN_HEADER');
+    const length = bytes.readUInt32BE(offset);
+    assert.ok(length > 0 && length <= bytes.length - offset - 4, 'JOURNAL_TORN_FRAME');
+    const record = JSON.parse(bytes.subarray(offset + 4, offset + 4 + length).toString('utf8'));
+    assert.equal(record.major, 1); assert.equal(record.sequence, events.length + 1);
+    events.push(record.event); offset += 4 + length;
+  }
+  return events;
 }
 function journalEvents(userData, type) {
-  return journalText(userData).split('\n').filter(line => line.includes(`"type":"${type}"`)).length;
+  return journalRecords(userData).filter(event => event.type === type).length;
 }
 
 // Fixture HTTPS server: routes are set per scenario; every request is logged for the report.
@@ -125,7 +137,7 @@ async function main(argv = process.argv.slice(2)) {
   const runs = path.join(work, 'runs'); fs.mkdirSync(runs, { mode: 0o700 });
   const env = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: os.homedir(), LANG: 'C', LC_ALL: 'C' };
   const server = await startFeedServer(fixture, feed);
-  let plan = null, userData = null;
+  let plan = null, userData = null, active = null;
 
   // One profile across launches: each launch gets its own isolated-run root, and the previous run's
   // userData directory (database, vault, journal, checkpoints) is moved into it (same device, same inodes).
@@ -144,10 +156,11 @@ async function main(argv = process.argv.slice(2)) {
     const electronApp = await electron.launch({ executablePath: path.join(bundle, 'Contents/MacOS', EXECUTABLE),
       args: ['--use-mock-keychain', '--isolated-run-claim=' + current.claimFile], cwd: repo, env, timeout: 120000 });
     const child = electronApp.process(); const stop = observeStartup(child, entry, save);
+    active = { owner: captureOwnedApplication(electronApp), stop, entry };
     const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
     // Script native dialogs before startup reaches them; every dialog and reveal is logged to the owned output dir.
     await electronApp.evaluate(({ dialog, shell }, { script, log }) => {
-      const fsMain = require('node:fs');
+      const fsMain = process.getBuiltinModule('node:fs');
       const record = value => fsMain.appendFileSync(log, JSON.stringify({ at: Date.now(), ...value }) + '\n', { mode: 0o600 });
       dialog.showMessageBox = async (...args) => {
         const options = args.length > 1 ? args[1] : args[0];
@@ -172,8 +185,8 @@ async function main(argv = process.argv.slice(2)) {
       }
     }
     const waitExit = async (timeoutMs = 120000) => {
-      const result = await Promise.race([exited, sleep(timeoutMs).then(() => null)]);
-      assert.ok(result, 'APP_EXIT_TIMEOUT'); stop(); entry.exit = result; entry.finishedAt = new Date().toISOString(); save(); return result;
+      const result = await bounded(() => exited, timeoutMs, 'APP_EXIT_TIMEOUT');
+      stop(); active = null; entry.exit = result; entry.finishedAt = new Date().toISOString(); save(); return result;
     };
     const quit = async () => { await electronApp.evaluate(({ app }) => app.quit()); const result = await waitExit(); assert.equal(result.code, 0, 'UNCLEAN_EXIT'); return result; };
     const clickCheck = async () => assert.equal(await electronApp.evaluate(({ Menu }) => {
@@ -261,7 +274,7 @@ async function main(argv = process.argv.slice(2)) {
       const dialogs = readDialogs().slice(-3); const revealed = dialogs.find(item => item.kind === 'reveal');
       const artifactFile = revealed?.file;
       const stored = artifactFile && fs.existsSync(artifactFile) ? sha256(fs.readFileSync(artifactFile)) : null;
-      const accepted = journalText(userData).includes('"serial":10') && journalEvents(userData, 'MANIFEST_ACCEPTED') === 1;
+      const accepted = journalRecords(userData).some(event => event.type === 'MANIFEST_ACCEPTED' && event.serial === 10) && journalEvents(userData, 'MANIFEST_ACCEPTED') === 1;
       const ok = exit.code === 0 && stored === sha256(nextZip) && accepted && artifactFile.startsWith(path.join(userData, 'updates', '10') + path.sep);
       row('U1', 'Verified update: downloaded, hash/identity verified, user-confirmed hand-off reveals the artifact, serial recorded, app quits', ok ? 'PASS' : 'FAIL',
         { exit, requests: requestsSince(mark), revealed: artifactFile, storedSha256: stored, expectedSha256: sha256(nextZip), manifestAccepted: accepted,
@@ -276,25 +289,25 @@ async function main(argv = process.argv.slice(2)) {
     // ---- Phase B: "install" N+1 (the verified artifact's bundle) on the same profile; then N is refused by the floor (U6b).
     session = await launch(next.app, { script: [], label: 'B: build N+1 first start' });
     const schema1 = readJson(path.join(userData, 'update-checkpoints', 'schema.json'));
-    const floorRaised = schema1.build === next.buildSequence && journalText(userData).includes(`{"build":"${next.buildSequence}","type":"BUILD_STARTED"}`);
+    const floorRaised = schema1.build === next.buildSequence && journalRecords(userData).filter(event => event.type === 'BUILD_STARTED').at(-1)?.build === next.buildSequence;
     await session.quit();
     row('U1b', 'Build N+1 starts on the data of N, records its schema and raises the floor', floorRaised ? 'PASS' : 'FAIL', { schema: schema1 });
     {
       const older = await launch(app, { script: [], expectWindow: false, label: 'B2: build N after N+1 started' });
       const exit = await older.waitExit(300000);
       const errors = readDialogs().filter(item => item.kind === 'errorBox');
-      const startedAgain = journalText(userData).lastIndexOf(`{"build":"${manifest.buildSequence}","type":"BUILD_STARTED"}`) > journalText(userData).lastIndexOf(`{"build":"${next.buildSequence}","type":"BUILD_STARTED"}`);
+      const startedAgain = journalRecords(userData).filter(event => event.type === 'BUILD_STARTED').at(-1)?.build !== next.buildSequence;
       const ok = exit.code === 0 && errors.length === 1 && !startedAgain;
       row('U6b', 'An older build reinstalled after N+1 started cannot run normally (floor refusal, recovery-only)', ok ? 'PASS' : 'FAIL',
         { exit, errorBoxes: errors.map(item => item.title), startup: older.entry.startup ?? null, floorKeptAt: next.buildSequence });
     }
 
     // ---- Phase C: a failing upgrade (killed during migration) leaves the checkpoint open; restore returns the database (U9).
-    const schemaFile = path.join(userData, 'update-checkpoints', 'schema.json');
-    const liveBefore = path.join(userData, 'postgres');
-    fs.writeFileSync(schemaFile, JSON.stringify({ format: 1, build: manifest.buildSequence, flyway: TARGET_FLYWAY - 1, bundle: bundleN }) + '\n', { mode: 0o600 });
-    const sentinel = path.join(liveBefore, 'ci-update-acceptance-sentinel');
-    fs.writeFileSync(sentinel, 'pre-upgrade cluster marker\n', { mode: 0o600 });
+    // planFor moves userData at each launch; never retain an absolute profile path across launches.
+    const schemaFile = () => path.join(userData, 'update-checkpoints', 'schema.json');
+    const livePostgres = () => path.join(userData, 'postgres');
+    fs.writeFileSync(schemaFile(), JSON.stringify({ format: 1, build: manifest.buildSequence, flyway: TARGET_FLYWAY - 1, bundle: bundleN }) + '\n', { mode: 0o600 });
+    fs.writeFileSync(path.join(livePostgres(), 'ci-update-acceptance-sentinel'), 'pre-upgrade cluster marker\n', { mode: 0o600 });
     const expectedId = checkpointIdFor(manifest.buildSequence, next.buildSequence);
     {
       const upgrading = await launch(next.app, { script: [], expectWindow: false, label: 'C1: build N+1 migrating, killed' });
@@ -310,30 +323,33 @@ async function main(argv = process.argv.slice(2)) {
           imageHasSentinel: fs.existsSync(path.join(userData, 'update-checkpoints', expectedId, 'postgres', 'ci-update-acceptance-sentinel')) });
       // Let the killed tree's children (PostgreSQL) go away before the next start inspects postmaster.pid.
       for (const end = Date.now() + 60000; Date.now() < end; await sleep(500)) {
-        const pidFile = path.join(liveBefore, 'postmaster.pid'); if (!fs.existsSync(pidFile)) break;
+        const pidFile = path.join(livePostgres(), 'postmaster.pid'); if (!fs.existsSync(pidFile)) break;
         const pid = Number(fs.readFileSync(pidFile, 'utf8').split('\n')[0]); try { process.kill(pid, 0); } catch { break; }
       }
     }
-    fs.rmSync(sentinel, { force: true }); // the live cluster is about to be replaced by the image anyway
-    fs.writeFileSync(path.join(liveBefore, 'ci-update-acceptance-failed-marker'), 'post-kill cluster marker\n', { mode: 0o600 });
+    fs.rmSync(path.join(livePostgres(), 'ci-update-acceptance-sentinel'), { force: true });
+    fs.writeFileSync(path.join(livePostgres(), 'ci-update-acceptance-failed-marker'), 'post-kill cluster marker\n', { mode: 0o600 });
     {
+      const journalBeforeRecovery = fs.readFileSync(path.join(userData, 'safety', 'ai-journal', 'events.log'));
       const recovery = await launch(next.app, { script: [{ title: 'Data upgrade did not complete', response: 0 }, { title: 'Previous data restored', response: 0 }], expectWindow: false, label: 'C2: recovery-only start, restore' });
       const exit = await recovery.waitExit(300000);
       const record = listRecords(userData).find(item => item.id === expectedId);
       const dialogs = readDialogs().filter(item => item.kind === 'messageBox').map(item => ({ title: item.title, buttons: item.buttons, response: item.response }));
-      const schemaAfter = readJson(schemaFile);
+      const schemaAfter = readJson(schemaFile());
+      const journalAfterRecovery = fs.readFileSync(path.join(userData, 'safety', 'ai-journal', 'events.log'));
+      const journalPrefixPreserved = journalAfterRecovery.subarray(0, journalBeforeRecovery.length).equals(journalBeforeRecovery);
       const ok = exit.code === 0 && record?.state === 'RESTORED' && fs.existsSync(path.join(userData, 'postgres', 'ci-update-acceptance-sentinel'))
         && fs.existsSync(path.join(userData, 'update-checkpoints', expectedId, 'failed-postgres', 'ci-update-acceptance-failed-marker'))
-        && schemaAfter.build === manifest.buildSequence && schemaAfter.flyway === TARGET_FLYWAY - 1 && journalEvents(userData, 'BUILD_STARTED') === 2;
+        && schemaAfter.build === manifest.buildSequence && schemaAfter.flyway === TARGET_FLYWAY - 1 && journalEvents(userData, 'BUILD_STARTED') === 2 && journalPrefixPreserved;
       row('U9b', 'Next start is recovery-only; restoring returns the checkpoint database, keeps the failed cluster and the newest journal', ok ? 'PASS' : 'FAIL',
-        { exit, record: record ? { state: record.state, previousBundleBuild: record.previousBundle?.build } : null, dialogs, schemaAfter, restoredSentinel: fs.existsSync(path.join(userData, 'postgres', 'ci-update-acceptance-sentinel')), buildStartedRecords: journalEvents(userData, 'BUILD_STARTED') });
+        { exit, record: record ? { state: record.state, previousBundleBuild: record.previousBundle?.build } : null, dialogs, schemaAfter, restoredSentinel: fs.existsSync(path.join(userData, 'postgres', 'ci-update-acceptance-sentinel')), buildStartedRecords: journalEvents(userData, 'BUILD_STARTED'), journalPrefixPreserved });
     }
     fs.rmSync(path.join(userData, 'postgres', 'ci-update-acceptance-sentinel'), { force: true });
     // Retry the upgrade: a healthy N+1 start commits a fresh checkpoint of the same transition.
-    session = await launch(next.app, { script: [], label: 'C3: build N+1 retried upgrade' });
+    session = await launch(next.app, { script: acceptUpdate, label: 'C3: build N+1 retried upgrade' });
     const committed = listRecords(userData).find(item => item.id === expectedId);
-    row('U9c', 'The retried upgrade commits the checkpoint and the app is healthy again', committed?.state === 'COMMITTED' && readJson(schemaFile).build === next.buildSequence ? 'PASS' : 'FAIL',
-      { record: committed ? { state: committed.state, createdByBuild: committed.createdByBuild } : null, schema: readJson(schemaFile) });
+    row('U9c', 'The retried upgrade commits the checkpoint and the app is healthy again', committed?.state === 'COMMITTED' && readJson(schemaFile()).build === next.buildSequence ? 'PASS' : 'FAIL',
+      { record: committed ? { state: committed.state, createdByBuild: committed.createdByBuild } : null, schema: readJson(schemaFile()) });
 
     // ---- Phase D: signed recovery manifest bound to the retained checkpoint: sanctioned rollback to N (U7).
     {
@@ -346,17 +362,21 @@ async function main(argv = process.argv.slice(2)) {
       const exit = await session.waitExit(600000);
       const dialogs = readDialogs().slice(-4).map(item => ({ kind: item.kind, title: item.title, message: item.message, response: item.response }));
       const record = listRecords(userData).find(item => item.id === expectedId);
-      const sanctioned = journalEvents(userData, 'ROLLBACK_SANCTIONED') === 1 && journalText(userData).includes('"serial":20');
+      const sanctioned = journalEvents(userData, 'ROLLBACK_SANCTIONED') === 1 && journalRecords(userData).some(event => event.type === 'ROLLBACK_SANCTIONED' && event.serial === 20 && event.targetBuild === manifest.buildSequence && event.checkpointId === expectedId);
       const ok = exit.code === 0 && record?.state === 'RESTORED' && sanctioned && dialogs.some(item => item.kind === 'reveal');
       row('U7', 'Signed recovery manifest bound to the retained checkpoint: data restored, rollback sanctioned once, artifact revealed', ok ? 'PASS' : 'FAIL',
         { exit, requests: requestsSince(mark), record: record ? { state: record.state } : null, rollbackSanctioned: sanctioned, dialogs });
     }
     // Build N may run again: the sanctioned floor admits it and the restored database is at the previous schema.
     session = await launch(app, { script: [], label: 'D2: build N after sanctioned rollback' });
-    const schemaBack = readJson(schemaFile);
-    const reopened = journalText(userData).lastIndexOf(`{"build":"${manifest.buildSequence}","type":"BUILD_STARTED"}`) > journalText(userData).lastIndexOf(`{"build":"${next.buildSequence}","type":"BUILD_STARTED"}`);
+    const schemaBack = readJson(schemaFile());
+    // The recovery event already lowers the floor to N; a normal N start must not raise it again.
+    const floorEvent = journalRecords(userData).filter(event => ['BUILD_STARTED', 'ROLLBACK_SANCTIONED'].includes(event.type)).at(-1);
+    const runtimeBack = await session.page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus());
+    const reopened = runtimeBack.ready && !runtimeBack.recoveryOnly && !runtimeBack.error
+      && floorEvent?.type === 'ROLLBACK_SANCTIONED' && floorEvent.targetBuild === manifest.buildSequence && floorEvent.serial === 20;
     await session.quit();
-    row('U7b', 'After the sanctioned rollback the previous build starts normally and records its start again', reopened && schemaBack.build === manifest.buildSequence ? 'PASS' : 'FAIL', { schema: schemaBack, reopened });
+    row('U7b', 'After the sanctioned rollback the previous build starts normally at the sanctioned floor', reopened && schemaBack.build === manifest.buildSequence ? 'PASS' : 'FAIL', { schema: schemaBack, reopened, floorEvent });
     // Replaying the consumed recovery serial is refused.
     session = await launch(app, { script: [noVerified], label: 'D3: recovery serial replay' });
     {
@@ -371,10 +391,16 @@ async function main(argv = process.argv.slice(2)) {
     row('U10b', 'N+1 re-signed with another Team ID or ad-hoc is refused before launch', 'BLOCKED', { note: 'Validation runner simulates the Team ID observation (ad-hoc builds have none); needs Developer ID material (O2).' });
 
     report.status = report.rows.some(item => item.status === 'FAIL') ? 'FAIL' : 'ROWS_RECORDED_NOT_GATE_PASS';
+    if (report.status === 'FAIL') process.exitCode = 1;
   } catch (error) {
     report.status = 'FAIL'; report.failure = error.code || error.message; report.failureStack = String(error.stack || '').split('\n').slice(0, 6);
     throw error;
   } finally {
+    if (active) {
+      try { await closeOwnedApplication(active.owner); active.entry.cleanupConfirmed = true; }
+      catch (error) { report.cleanupFailure = error.message; report.status = 'FAIL'; process.exitCode = 1; }
+      finally { active.stop(); active = null; }
+    }
     await server.close().catch(() => {});
     report.dialogs = plan ? readDialogs().map(item => ({ kind: item.kind, title: item.title, response: item.response })) : [];
     report.candidateUnchanged = hashFile(manifestFile) === report.manifestSha256 && hashFile(path.join(app, 'Contents/Resources/app.asar')) === report.appAsarSha256;
