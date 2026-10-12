@@ -315,10 +315,22 @@ test('cross-installation evidence and a lower running build fail closed without 
   const f = await fixture(t); await f.begin(); await f.records.close(); const before = await disk(f.root);
   await rejects(f.open({ installationId: 'other-installation' }), 'BACKUP_RECOVERY_INVALID');
   await rejects(f.open({ runningBuild: '2' }), 'BACKUP_RECOVERY_UNSUPPORTED'); assert.deepEqual(await disk(f.root), before);
+  // A journal floor above the running build does not admit it either (no sanctioned rollback happened).
+  await rejects(f.open({ runningBuild: '2', journalFloor: '3' }), 'BACKUP_RECOVERY_UNSUPPORTED'); assert.deepEqual(await disk(f.root), before);
+});
+
+test('records a newer build wrote stay readable to an older build the safety journal floor admits (sanctioned rollback)', async t => {
+  const f = await fixture(t); await f.begin(); await f.records.close(); const before = await disk(f.root);
+  const reopened = await f.open({ runningBuild: '2', journalFloor: '2' });
+  const state = await reopened.read(); assert.equal(state.active?.kind, 'RESTORE'); assert.deepEqual(await disk(f.root), before);
+  await reopened.close();
+  const again = await f.open({ runningBuild: '2', journalFloor: '1' });
+  assert.equal((await again.read()).active?.kind, 'RESTORE'); await again.close();
 });
 
 for (const change of [
   { runningBuild: '03' }, { runningBuild: '3\n' }, { runningBuild: 3 }, { runningBuild: '9223372036854775808' },
+  { journalFloor: '03' }, { journalFloor: 3 }, { journalFloor: '' },
   { installationId: 'value\n' }, { installationId: '' }, { initialize: 1 }, { verifyCompletion: true }, { unexpected: true },
 ]) {
   test(`factory rejects malformed exact options ${JSON.stringify(change)}`, async t => {
