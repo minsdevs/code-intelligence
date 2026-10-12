@@ -1,5 +1,5 @@
 import { Node, Project, type SourceFile, SyntaxKind, ts } from 'ts-morph'
-import type { AnalyzeFile, AnalyzeResponse, ApiCallHit, EndpointHit, RouteHit, SymbolHit } from './types'
+import type { AnalyzeFile, AnalyzeResponse, FileCapabilityOutcome, ApiCallHit, EndpointHit, RouteHit, SymbolHit } from './types'
 import { isTsJs } from './paths'
 import { extractGeneric } from './generic-extractor'
 import { extractSemanticGraph, phaseRecorder, type SliceScope } from './semantic-extractor'
@@ -92,7 +92,18 @@ function withSyntaxRejections(response: AnalyzeResponse, allTsFiles: AnalyzeFile
     if (!outcome) return { path: file.path, status: 'UNMEASURED' as const, reason: 'ANALYZER_OUTCOME_MISSING' }
     return outcome.status === 'SUCCESS' ? { path: file.path, status: 'PARTIAL' as const, reason: SYNTAX_NEIGHBOUR_REASON } : outcome
   })
-  return { ...response, fileOutcomes, routes: [], endpoints: [] }
+  // Rejected files have no symbol, call or framework outcome but FAILED; the analysed files keep S and C,
+  // while their framework facts were withheld (F PARTIAL).
+  const byFile = new Map<string, FileCapabilityOutcome[]>()
+  for (const outcome of response.capabilityOutcomes ?? []) byFile.set(outcome.path, [...(byFile.get(outcome.path) ?? []), outcome])
+  const capabilityOutcomes = allTsFiles.flatMap((file): FileCapabilityOutcome[] => {
+    if (rejected.has(file.path)) return (['S', 'C', 'F'] as const).map((capability) => ({ path: file.path, capability, status: 'FAILED', reason: SYNTAX_REJECTED_REASON }))
+    const own = byFile.get(file.path)
+    if (!own) return (['S', 'C', 'F'] as const).map((capability) => ({ path: file.path, capability, status: 'UNMEASURED', reason: 'ANALYZER_OUTCOME_MISSING' }))
+    return own.map((outcome) => outcome.capability === 'F' && outcome.status === 'SUCCESS'
+      ? { ...outcome, status: 'PARTIAL', reason: SYNTAX_NEIGHBOUR_REASON } : outcome)
+  })
+  return { ...response, fileOutcomes, capabilityOutcomes, routes: [], endpoints: [] }
 }
 
 export type ProgramOutput = {
@@ -181,6 +192,14 @@ export function assembleResponse(tsFiles: AnalyzeFile[], output: ProgramOutput):
       status: unresolvedFiles.has(file.path) ? 'PARTIAL' : 'SUCCESS',
       reason: unresolvedFiles.has(file.path) ? 'UNRESOLVED_CALLS' : 'TS_PARSED',
     })),
+    // Every program file passed the declaration (S), call (C) and framework (F) passes; a file whose
+    // call sites include published abstentions is PARTIAL for C only (03 coverage invariants).
+    capabilityOutcomes: tsFiles.flatMap((file): FileCapabilityOutcome[] => [
+      { path: file.path, capability: 'S', status: 'SUCCESS', reason: 'TS_DECLARATIONS' },
+      { path: file.path, capability: 'C', status: unresolvedFiles.has(file.path) ? 'PARTIAL' : 'SUCCESS',
+        reason: unresolvedFiles.has(file.path) ? 'UNRESOLVED_CALLS' : 'TS_CALLS_RESOLVED' },
+      { path: file.path, capability: 'F', status: 'SUCCESS', reason: 'TS_FRAMEWORK_VISITED' },
+    ]),
     routes,
     components: output.components,
     hooks: output.hooks,

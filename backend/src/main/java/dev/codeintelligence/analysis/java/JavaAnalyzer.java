@@ -48,6 +48,7 @@ import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
 import dev.codeintelligence.analysis.core.EdgeConfidence;
 import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
+import dev.codeintelligence.analysis.core.FileCapabilityOutcome;
 import dev.codeintelligence.analysis.core.FileInventory;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphEdgeType;
@@ -175,6 +176,8 @@ public class JavaAnalyzer implements CodeAnalyzer {
                     collector.evidence(parseFailure(file, failure, ctx.clonePath()));
                     collector.outcomes.put(
                             file.path(), new FileAnalysisOutcome(file.path(), "FAILED", "JAVA_PARSE_FAILED"));
+                    collector.capability(new FileCapabilityOutcome(file.path(), "S", "FAILED", "JAVA_PARSE_FAILED"));
+                    collector.capability(new FileCapabilityOutcome(file.path(), "C", "FAILED", "JAVA_PARSE_FAILED"));
                     continue;
                 }
                 collector.recording = new ArrayList<>();
@@ -238,15 +241,24 @@ public class JavaAnalyzer implements CodeAnalyzer {
                             phase == 1
                                     ? new FilePhases(entry.blob, entry.declarations, entry.types, tape, entry.calls)
                                     : new FilePhases(entry.blob, entry.declarations, entry.types, entry.members, tape));
-                    if (phase == 2)
+                    if (phase == 2) {
+                        boolean unresolved = collector.unresolvedFiles.contains(file.path());
                         collector.outcomes.put(
                                 file.path(),
                                 new FileAnalysisOutcome(
                                         file.path(),
-                                        collector.unresolvedFiles.contains(file.path()) ? "PARTIAL" : "SUCCESS",
-                                        collector.unresolvedFiles.contains(file.path())
-                                                ? "UNRESOLVED_CALLS"
-                                                : "JAVA_PARSED"));
+                                        unresolved ? "PARTIAL" : "SUCCESS",
+                                        unresolved ? "UNRESOLVED_CALLS" : "JAVA_PARSED"));
+                        // Declarations were registered (S); every call site was resolved or published as an
+                        // abstention (C: PARTIAL when the file holds abstentions).
+                        collector.capability(
+                                new FileCapabilityOutcome(file.path(), "S", "SUCCESS", "JAVA_DECLARATIONS"));
+                        collector.capability(new FileCapabilityOutcome(
+                                file.path(),
+                                "C",
+                                unresolved ? "PARTIAL" : "SUCCESS",
+                                unresolved ? "UNRESOLVED_CALLS" : "JAVA_CALLS_RESOLVED"));
+                    }
                 }
             }
         }
@@ -1237,7 +1249,12 @@ public class JavaAnalyzer implements CodeAnalyzer {
         private final List<GraphEdgeDraft> edges = new ArrayList<>();
         private final List<AnalyzerEvidence> evidences = new ArrayList<>();
         private final Map<String, FileAnalysisOutcome> outcomes = new LinkedHashMap<>();
+        private final Map<String, FileCapabilityOutcome> capabilityOutcomes = new LinkedHashMap<>();
         private final Set<String> unresolvedFiles = new java.util.HashSet<>();
+
+        void capability(FileCapabilityOutcome outcome) {
+            capabilityOutcomes.put(outcome.path() + "\n" + outcome.capability(), outcome);
+        }
         /** Published abstentions (calls with no project target) by caller method key, in visit order. */
         private final Map<String, List<Map<String, Object>>> unresolvedCalls = new LinkedHashMap<>();
 
@@ -1381,7 +1398,11 @@ public class JavaAnalyzer implements CodeAnalyzer {
             }
             all.addAll(identityCandidates);
             return GraphIdentityGuard.sanitize(new AnalysisResult(
-                    all, List.copyOf(edges), List.copyOf(evidences), List.copyOf(outcomes.values())));
+                    all,
+                    List.copyOf(edges),
+                    List.copyOf(evidences),
+                    List.copyOf(outcomes.values()),
+                    List.copyOf(capabilityOutcomes.values())));
         }
     }
 

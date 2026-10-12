@@ -81,6 +81,55 @@ test('call-site metadata selects the call expression; a changed stored hash is r
   assert.deepEqual(audit.evidence.hashInvalid, ['source/Calls.java']);
 });
 
+test('an SQL table declaration spans CREATE TABLE through its terminating semicolon; columns drop their comma', t => {
+  const { fixtures } = corpusFor(t, ['dev-todo-fullstack-mini']), fixture = fixtures[0];
+  const sql = 'source/backend/src/main/resources/db/migration/V1__create_todos.sql', source = fixture.sources.get(sql);
+  const dump = { path: 'BACKEND_PIPELINE_HARNESS', executionState: 'COMPLETED', failureCode: null,
+    consumedSources: [{ path: sql, sha256: source.meta.sha256, bytes: source.meta.bytes }],
+    files: [{ path: sql, size: source.bytes.length, contentHash: gitBlobSha1(source.bytes), analysisStatus: 'SUCCESS', analysisReason: 'SQL_PARSED' }],
+    // The product publishes the statement's content lines (1-5); the terminator shares the last line here.
+    nodes: [{ type: 'DB_TABLE', key: 'table:todos', path: sql, lineStart: 1, lineEnd: 5, area: 'DATABASE',
+      metadata: { columns: [{ name: 'id', type: 'bigserial', lineStart: 2, lineEnd: 2 }] } }],
+    edges: [], endpoints: [], entities: [], routes: [] };
+  const text = fact => source.bytes.subarray(fact.source.start, fact.source.end).toString('utf8');
+  const { run } = convertFixture(fixture, dump);
+  const table = run.facts.find(fact => fact.cellId === 'SQL-S' && fact.targets[0] === 'sql:todos');
+  assert.equal(text(table), source.bytes.toString('utf8').trimEnd());
+  assert.ok(text(table).endsWith(');'));
+  assert.deepEqual([table.source.start, table.source.end], [0, 118]);
+  const column = run.facts.find(fact => fact.cellId === 'SQL-S' && fact.targets[0] === 'sql:todos#id');
+  assert.equal(text(column), 'id bigserial PRIMARY KEY');
+  // Published lines that stop before the closing line are projected as published: no terminator is invented.
+  const short = convertFixture(fixture, { ...dump, nodes: [{ ...dump.nodes[0], lineEnd: 4 }] }).run.facts.find(fact => fact.targets?.[0] === 'sql:todos');
+  assert.equal(text(short).endsWith('DEFAULT false'), true);
+  assert.equal(short.source.end, 115);
+});
+
+test('recorded per-file capability rows drive the S/C/F/X coverage outcomes; without them the parser outcome is projected and audited', t => {
+  const { fixtures } = corpusFor(t, ['dev-t00-java-calls']), fixture = fixtures[0];
+  const withRows = convertFixture(fixture, javaDump(fixture, { dump: dump => {
+    dump.files[0].analysisStatus = 'PARTIAL'; dump.files[0].analysisReason = 'UNRESOLVED_CALLS';
+    // The call capability was fully resolved by the adapter even though the parser outcome is PARTIAL for
+    // another reason: the recorded C row decides the J-C coverage outcome, P keeps its own verdict.
+    dump.capabilityOutcomes = [
+      { path: 'source/Calls.java', capability: 'S', status: 'SUCCESS', reason: 'JAVA_DECLARATIONS' },
+      { path: 'source/Calls.java', capability: 'C', status: 'SUCCESS', reason: 'JAVA_CALLS_RESOLVED' },
+      { path: 'source/Invalid.java', capability: 'S', status: 'FAILED', reason: 'JAVA_PARSE_FAILED' },
+      { path: 'source/Invalid.java', capability: 'C', status: 'TARGETED', reason: 'JAVA_PARSER_STARTED' }];
+  } }));
+  const outcome = (run, cell, file) => run.outcomes.find(item => item.cellId === cell && item.path === 'source/' + file);
+  assert.deepEqual([outcome(withRows.run, 'J-C', 'Calls.java').status, outcome(withRows.run, 'J-C', 'Calls.java').reasonCode], ['SUCCESS', null]);
+  assert.equal(outcome(withRows.run, 'J-P', 'Calls.java').status, 'SUCCESS');
+  // Ineligible (file, cell) pairs stay EXCLUDED regardless of recorded rows.
+  assert.equal(outcome(withRows.run, 'J-C', 'Invalid.java').status, 'EXCLUDED');
+  assert.equal(withRows.audit.capabilityOutcomes.recordedRows, 4);
+  assert.equal(withRows.audit.capabilityOutcomes.usedForCells, 1);
+  const legacy = convertFixture(fixture, javaDump(fixture, { dump: dump => { dump.files[0].analysisStatus = 'PARTIAL'; dump.files[0].analysisReason = 'UNRESOLVED_CALLS'; } }));
+  assert.equal(outcome(legacy.run, 'J-C', 'Calls.java').status, 'PARTIAL');
+  assert.deepEqual(legacy.audit.capabilityOutcomes, { recordedRows: 0, usedForCells: 0, parserProjected: legacy.audit.capabilityOutcomes.parserProjected });
+  assert.ok(legacy.audit.capabilityOutcomes.parserProjected > 0);
+});
+
 test('a written bundle is unique across fixtures, derives its digest and passes the runner contract with attestation', t => {
   const { temp, corpus, fixtures } = corpusFor(t, ['dev-t00-java-calls', 'dev-t00-typescript-calls']);
   const ts = fixtures[1], tsDump = { path: 'BACKEND_PIPELINE_HARNESS', executionState: 'FAILED', failureCode: 'TS_SYNTAX_ERROR',

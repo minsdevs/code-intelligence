@@ -242,7 +242,8 @@ final class TsGraphMapper {
                     confidence(semanticEdge.confidence()).name(),
                     metadata));
         }
-        return GraphIdentityGuard.sanitize(new AnalysisResult(nodes, edges, evidences, response.fileOutcomes()));
+        return GraphIdentityGuard.sanitize(
+                new AnalysisResult(nodes, edges, evidences, response.fileOutcomes(), response.capabilityOutcomes()));
     }
 
     private static void addSymbol(

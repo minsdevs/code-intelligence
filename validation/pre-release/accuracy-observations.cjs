@@ -35,6 +35,9 @@ const gitBlobSha1 = bytes => crypto.createHash('sha1').update(Buffer.concat([Buf
 const languageOf = file => /\.java$/i.test(file) ? 'java' : /\.(?:[cm]?ts|tsx)$/i.test(file) ? 'ts'
   : /\.(?:[cm]?js|jsx)$/i.test(file) ? 'js' : /\.sql$/i.test(file) ? 'sql' : 'other';
 const PARSER_CELL = { java: 'J-P', ts: 'T-P', js: 'JS-P', sql: 'SQL-P' };
+// Capability letter of each T00 cell (validation/t00/lib/policy.cjs): the product records S/C/F/X per file.
+const CELL_CAPABILITY = { 'J-P': 'P', 'J-S': 'S', 'J-C': 'C', 'J-F': 'F', 'J-D': 'F', 'T-P': 'P', 'T-S': 'S', 'T-C': 'C', 'T-F': 'F',
+  'T-UI': 'F', 'JS-P': 'P', 'JS-S': 'S', 'JS-C': 'C', 'JS-UI': 'F', 'SQL-P': 'P', 'SQL-S': 'S', 'X-HTTP': 'X', 'X-DATA': 'X' };
 const SYMBOL_CELL = { java: 'J-S', ts: 'T-S', js: 'JS-S', sql: 'SQL-S' };
 const CALL_CELL = { java: 'J-C', ts: 'T-C', js: 'JS-C' };
 const UI_CELL = { ts: 'T-UI', js: 'JS-UI' };
@@ -181,9 +184,19 @@ function convertFixture(fixture, dump, idPrefix = 'p') {
       emit(cellId, file, whole, { kind: 'PARSER', relationKind: 'PARSE', resolution: 'NOT_APPLICABLE', valid: false, diagnostics: ['SYNTAX_ERROR'] }, 'file');
     } else bump(audit.projections, 'parser-no-verdict-' + row.analysisStatus + (row.analysisReason ? '-' + row.analysisReason : ''));
   }
-  // Trim one trailing byte (',' or ';') from a projected span: statement/column text without its separator.
+  // Trim one trailing byte (',') from a projected span: column text without its separator.
   const withoutTrailing = (span, byte) => span && span.end > span.start + 1 && sources.get(currentFile)?.bytes[span.end - 1] === byte
     ? { start: span.start, end: span.end - 1 } : span;
+  // Extend a projected span over its terminator byte (';') when that byte already ends it or is the next
+  // non-blank byte after it; a span whose statement has no terminator is left as published.
+  const throughTerminator = (span, byte) => {
+    const bytes = sources.get(currentFile)?.bytes;
+    if (!span || !bytes) return span;
+    if (bytes[span.end - 1] === byte) return span;
+    let index = span.end;
+    while (index < bytes.length && [0x20, 0x09, 0x0d, 0x0a].includes(bytes[index])) index++;
+    return index < bytes.length && bytes[index] === byte ? { start: span.start, end: index + 1 } : span;
+  };
   let currentFile = null;
   // Abstention evidence shared by the TS and Java paths: the call expression on its line (06 C cells).
   function unresolvedCallFacts(cellId, file, calls) {
@@ -212,9 +225,11 @@ function convertFixture(fixture, dump, idPrefix = 'p') {
       emit(SYMBOL_CELL[language], node.path, nodeSpan(node), { kind: 'FACT', relationKind: 'SYMBOL', resolution: 'STATIC_RESOLVED', targets: [node.key] }, 'node');
       unresolvedCallFacts(CALL_CELL[language], node.path, node.metadata?.unresolvedCalls ?? []);
     } else if (language === 'sql' && node.type === 'DB_TABLE') {
-      // The CREATE TABLE statement lines without the terminating ';' (06 SQL-S schema-table).
+      // The CREATE TABLE statement through its terminating ';' (ANNOTATING.md SQL-S table: `CREATE TABLE name (`
+      // through `);`). The product publishes the statement's content lines; the separator is included when it is
+      // the next non-blank byte after them (same line or the line below), never anything after it.
       const table = 'sql:' + node.key.replace(/^table:/, '');
-      emit('SQL-S', node.path, withoutTrailing(nodeSpan(node), 0x3b), { kind: 'FACT', relationKind: 'SYMBOL', resolution: 'STATIC_RESOLVED', targets: [table] }, 'node');
+      emit('SQL-S', node.path, throughTerminator(nodeSpan(node), 0x3b), { kind: 'FACT', relationKind: 'SYMBOL', resolution: 'STATIC_RESOLVED', targets: [table] }, 'node');
       for (const column of node.metadata?.columns ?? []) {
         const file = column.path ?? node.path, source = sources.get(file);
         if (column.lineStart == null || !source) { bump(audit.unmappedByType, 'sql-column-without-span'); continue; }
@@ -332,12 +347,25 @@ function convertFixture(fixture, dump, idPrefix = 'p') {
     if (targets.length > 5) audit.candidateSetsOverFive++;
     emit(item.cellId, item.file, item.span, { kind: 'CANDIDATES', relationKind: item.relationKind, resolution: 'INFERRED', targets }, 'candidate-set');
   }
-  // Coverage: exactly one outcome per declared (file, capability) pair.
+  // Coverage: exactly one outcome per declared (file, capability) pair. Capability P is the file's recorded
+  // parser outcome; S/C/F/X come from the product's per-file capability rows (V30 file_capability_outcomes,
+  // E-12) when the dump carries them, else the legacy projection of the parser outcome is used and audited.
+  const capabilityRows = new Map((dump.capabilityOutcomes ?? []).map(row => [row.path + '\n' + row.capability, row]));
+  audit.capabilityOutcomes = { recordedRows: capabilityRows.size, usedForCells: 0, parserProjected: 0 };
   const outcomes = manifest.eligibility.map(item => {
     const row = files.get(item.path), parser = item.cellId.endsWith('-P');
     const base = { path: item.path, cellId: item.cellId, owner: item.owner };
     if (!item.eligible) return { ...base, status: 'EXCLUDED', bytesRead: 0, reasonCode: item.exclusionReason };
     if (!row) return { ...base, status: 'FAILED', bytesRead: 0, reasonCode: 'NOT_INVENTORIED' };
+    const recorded = !parser && dump.capabilityOutcomes ? capabilityRows.get(item.path + '\n' + CELL_CAPABILITY[item.cellId]) : undefined;
+    if (recorded) {
+      audit.capabilityOutcomes.usedForCells++;
+      const bytesRead = Number(row.size), reasonCode = REASON.test(recorded.reason ?? '') ? recorded.reason : 'PRODUCT_REASON_UNAVAILABLE';
+      if (['SUCCESS', 'PARTIAL', 'FAILED', 'UNSUPPORTED'].includes(recorded.status)) return { ...base, status: recorded.status, bytesRead, reasonCode: recorded.status === 'SUCCESS' ? null : reasonCode };
+      if (recorded.status === 'TARGETED') return { ...base, status: 'PENDING', bytesRead, reasonCode: 'PRODUCT_OUTCOME_PENDING' };
+      return { ...base, status: 'PARTIAL', bytesRead, reasonCode: 'PRODUCT_OUTCOME_UNMEASURED' };
+    }
+    if (!parser) audit.capabilityOutcomes.parserProjected++;
     const bytesRead = Number(row.size), reason = REASON.test(row.analysisReason ?? '') ? row.analysisReason : 'PRODUCT_REASON_UNAVAILABLE';
     if (row.analysisStatus === 'SUCCESS' || (parser && row.analysisStatus === 'PARTIAL')) return { ...base, status: 'SUCCESS', bytesRead, reasonCode: null };
     if (parser && row.analysisStatus === 'FAILED' && SYNTAX_REASONS.has(row.analysisReason)) return { ...base, status: 'SUCCESS', bytesRead, reasonCode: null };

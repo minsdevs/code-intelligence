@@ -4,6 +4,7 @@ import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.EdgeConfidence;
 import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
+import dev.codeintelligence.analysis.core.FileCapabilityOutcome;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphEdgeType;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
@@ -18,10 +19,16 @@ final class GraphCollector {
     private final List<GraphEdgeDraft> edges = new ArrayList<>();
     private final List<AnalyzerEvidence> evidences = new ArrayList<>();
     private final Map<String, FileAnalysisOutcome> outcomes = new LinkedHashMap<>();
+    private final Map<String, FileCapabilityOutcome> capabilityOutcomes = new LinkedHashMap<>();
 
     /** Per-file parse verdict of a config/SQL analyzer (06 P cells); later records replace earlier ones. */
     void outcome(FileAnalysisOutcome outcome) {
         outcomes.put(outcome.path(), outcome);
+    }
+
+    /** Per-file outcome of one owned capability (S/C/F/X); later records replace earlier ones. */
+    void capability(FileCapabilityOutcome outcome) {
+        capabilityOutcomes.put(outcome.path() + "\n" + outcome.capability(), outcome);
     }
 
     void put(GraphNodeDraft node) {
@@ -49,6 +56,7 @@ final class GraphCollector {
                 List.copyOf(nodes.values()),
                 List.copyOf(edges),
                 List.copyOf(evidences),
-                List.copyOf(outcomes.values()));
+                List.copyOf(outcomes.values()),
+                List.copyOf(capabilityOutcomes.values()));
     }
 }

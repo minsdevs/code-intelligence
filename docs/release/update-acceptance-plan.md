@@ -65,6 +65,8 @@ disk, never real. Synthetic artifact bytes. Host `updates.example.invalid`, Team
 | Restore never lowers high-water (reference state) | "high-water state is monotonic…" | PASS |
 | Canonical encoding ambiguity | "canonical encoding rejects values…" | PASS |
 | **Product** area-B floor: older build refused after a recorded floor, B not reset, older restore keeps the floor | `update-anti-rollback.test.cjs` "downgrade after a recorded high-water…" (real `safety-lifecycle`/`purpose-keyring`/`safety-journal` on a synthetic profile) | PASS |
+| **Product** older backup restored on N+1 keeps the floor at N+1 and N stays refused (U8, packaged) | `validation/pre-release/update-acceptance-packaged.cjs` U8a/U8 on candidate 1OW40e: `data:backup` on N, `data:restore` on N+1 with scripted native pickers, journal `RESTORE_BEGIN.minimumVersion` = N+1, then U6b refusal | PASS (2026-10-12, Validation candidate; U10b stays BLOCKED) |
+| **Product** after a sanctioned rollback the older build reads the maintenance records the newer build wrote | `backup-recovery-records.test.cjs` "records a newer build wrote stay readable…"; packaged U7b on 1OW40e | PASS (fixed 2026-10-12; the first run on xtq4U4 failed with `BACKUP_RECOVERY_UNSUPPORTED`) |
 | **Product** corrupted journal fails closed to recovery-only | "a corrupted safety journal fails closed…" | PASS |
 | **Product** older build refused after a newer build merely *started* | "after a newer build has started…" | `todo` — fails today (NU-03) |
 | Schema-migration failure/crash → restore bundle + DB + source, newest vault/journal kept | — | NOT RUN: no update path or pre-update checkpoint exists (NU-02). User-initiated restore crash recovery is owned by gate-recovery (`backup-*`, `restore-interruption` audits). |

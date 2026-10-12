@@ -97,6 +97,25 @@ class JavaFrameworkReuseTest {
             edges.addAll(result.edges());
             evidences.addAll(result.evidences());
         }
-        return new AnalysisResult(nodes, edges, evidences);
+        // The framework capability (F) per Java file (V30 capability outcomes): parse failures first in file
+        // order, then every file the four visitors walked, as the analyzer records them.
+        var javaFiles = context.inventory().files().stream()
+                .filter(JavaParseSupport::isJava)
+                .toList();
+        var failed = new java.util.ArrayList<dev.codeintelligence.analysis.core.FileCapabilityOutcome>();
+        var visited = new java.util.ArrayList<dev.codeintelligence.analysis.core.FileCapabilityOutcome>();
+        try (var parsed = JavaParseSupport.parseAhead(context, javaFiles)) {
+            for (var file : javaFiles) {
+                if (parsed.next().value() == null) {
+                    failed.add(new dev.codeintelligence.analysis.core.FileCapabilityOutcome(
+                            file.path(), "F", "FAILED", "JAVA_PARSE_FAILED"));
+                } else {
+                    visited.add(new dev.codeintelligence.analysis.core.FileCapabilityOutcome(
+                            file.path(), "F", "SUCCESS", "JAVA_FRAMEWORK_VISITED"));
+                }
+            }
+        }
+        failed.addAll(visited);
+        return new AnalysisResult(nodes, edges, evidences, List.of(), failed);
     }
 }

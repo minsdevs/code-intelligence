@@ -157,6 +157,7 @@ function stateMachine(installationId, runningBuild, allowLegacy = false) {
         const v26 = s.schema.migrations.length === 26;
         if (v26Files !== undefined && v26Files !== v26) fail('SUMMARY');
         if (v26 && counts.snapshot_inventory_measurements !== 0) fail('SUMMARY');
+        if (s.schema.migrations.length < 30 && counts.file_capability_outcomes !== 0) fail('SUMMARY');
         if (s.rowCount !== String(rows)) fail('SUMMARY');
         for (const { name } of s.schema.tables) if (s.tableCounts?.[name] !== String(counts[name])
             || s.tableSha256?.[name] !== hashes[name].digest('hex')) fail('SUMMARY');

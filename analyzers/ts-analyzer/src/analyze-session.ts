@@ -15,7 +15,7 @@ export const SESSION_IDLE_MS = 60_000
 export const SESSION_MAX_OPEN = 2
 
 const RESULT_KEYS = [
-  'fileOutcomes', 'routes', 'components', 'hooks', 'stores', 'apiCalls',
+  'fileOutcomes', 'capabilityOutcomes', 'routes', 'components', 'hooks', 'stores', 'apiCalls',
   'imports', 'symbols', 'endpoints', 'nodes', 'edges', 'unresolvedCalls',
   'cache',
 ] as const
@@ -217,7 +217,8 @@ function manifestOf(command: SessionCommand): Manifest {
 
 /** Splits a result into pages of at most 1 MiB JSON; concatenating the pages restores it in order. */
 export function paginate(result: AnalyzeResponse, limit = SESSION_PAGE_BYTES): ResultPage[] {
-  const empty = (): ResultPage => Object.fromEntries(RESULT_KEYS.filter((key) => key !== 'cache' || result.cache !== undefined).map((key) => [key, []])) as unknown as ResultPage
+  const empty = (): ResultPage => Object.fromEntries(RESULT_KEYS.filter((key) => (key !== 'cache' || result.cache !== undefined)
+    && (key !== 'capabilityOutcomes' || result.capabilityOutcomes !== undefined)).map((key) => [key, []])) as unknown as ResultPage
   const overhead = Buffer.byteLength(JSON.stringify({ session: { id: '0'.repeat(32), op: 'analyze', page: 0, pages: 0 }, ...empty() }))
     + 64
   const pages: ResultPage[] = []

@@ -2,6 +2,7 @@ package dev.codeintelligence.analysis.tree;
 
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
+import dev.codeintelligence.analysis.core.FileCapabilityOutcome;
 import dev.codeintelligence.analysis.core.InvalidFilePathException;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.SafeRelativePath;
@@ -129,6 +130,13 @@ public class TreeParsingStep implements JobStep {
                         batch.stream().map(TreeAnalyzeDtos.FilePayload::path)::iterator,
                         "FAILED",
                         "ANALYZER_REQUEST_FAILED");
+                FileCapabilityOutcome.recordFiles(
+                        jdbc,
+                        snapshotId,
+                        batch.stream().map(TreeAnalyzeDtos.FilePayload::path)::iterator,
+                        List.of("S"),
+                        "FAILED",
+                        "ANALYZER_REQUEST_FAILED");
                 throw failure;
             }
             AnalysisResult result = TreeGraphMapper.toGraph(response);
@@ -146,6 +154,20 @@ public class TreeParsingStep implements JobStep {
                     snapshotId,
                     batch.stream().map(TreeAnalyzeDtos.FilePayload::path)::iterator,
                     response.fileOutcomes());
+            FileCapabilityOutcome.recordResponse(
+                    jdbc,
+                    snapshotId,
+                    batch.stream().map(TreeAnalyzeDtos.FilePayload::path)::iterator,
+                    List.of("S"),
+                    (response.fileOutcomes() == null ? List.<FileAnalysisOutcome>of() : response.fileOutcomes())
+                            .stream()
+                                    .filter(outcome -> outcome != null
+                                            && outcome.path() != null
+                                            && outcome.status() != null
+                                            && !"TARGETED".equals(outcome.status()))
+                                    .map(outcome -> new FileCapabilityOutcome(
+                                            outcome.path(), "S", outcome.status(), outcome.reason()))
+                                    .toList());
             ctx.updateProgress(20 + Math.min(75, (75 * end) / payloads.size()));
             start = end;
         }
@@ -156,6 +178,9 @@ public class TreeParsingStep implements JobStep {
     private void recordAll(long snapshotId, List<InventoriedFile> files, String status, String reason) {
         FileAnalysisOutcome.recordFiles(
                 jdbc, snapshotId, files.stream().map(InventoriedFile::path)::iterator, status, reason);
+        // The tree analyzer owns the structure/symbol capability (S) of its languages with its parse outcome.
+        FileCapabilityOutcome.recordFiles(
+                jdbc, snapshotId, files.stream().map(InventoriedFile::path)::iterator, List.of("S"), status, reason);
     }
 
     private void recordOne(long snapshotId, InventoriedFile file, String status, String reason) {

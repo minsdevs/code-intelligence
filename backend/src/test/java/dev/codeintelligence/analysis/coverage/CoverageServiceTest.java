@@ -197,6 +197,23 @@ class CoverageServiceTest {
                     snapshotId,
                     "fixture-" + i);
         }
+        // Symbol outcomes recorded by owning adapters (V30): one terminal/pending row per file and capability.
+        String[][] symbolRows = {
+            {"fixture-0", "SUCCESS", "JAVA_DECLARATIONS"},
+            {"fixture-1", "FAILED", "JAVA_PARSE_FAILED"},
+            {"fixture-2", "TARGETED", "JAVA_PARSER_STARTED"},
+            {"fixture-3", "UNSUPPORTED", "CAPABILITY_NOT_OWNED_FOR_LANGUAGE"},
+            {"fixture-4", "UNMEASURED", "ANALYZER_OUTCOME_MISSING_OR_INVALID"}
+        };
+        for (String[] row : symbolRows) {
+            jdbc.update(
+                    "insert into file_capability_outcomes(file_id,capability,status,reason) "
+                            + "select id,'S',?,? from files where snapshot_id=? and path=?",
+                    row[1],
+                    row[2],
+                    snapshotId,
+                    row[0]);
+        }
         CoverageReport report = service.getReport(projectId, userId, snapshotId);
         assertThat(report.capabilityOutcomes())
                 .extracting(CoverageReport.CapabilityOutcome::capability)
@@ -207,18 +224,22 @@ class CoverageServiceTest {
                 .isEqualTo(new CoverageReport.CapabilityOutcome("P", "PER_FILE_RECORDED", 5, 1, 1, 1, 1, 1, 2));
         assertThat(parse.eligibleFiles() + parse.unmeasuredFiles())
                 .isEqualTo(report.fileCoverage().inventoriedFiles());
-        assertThat(report.capabilityOutcomes().subList(1, 5)).allSatisfy(capability -> {
-            assertThat(capability.measurementStatus()).isEqualTo("NOT_RECORDED");
-            assertThat(capability.eligibleFiles()).isNull();
-            assertThat(capability.successfulFiles()).isNull();
-            assertThat(capability.failedFiles()).isNull();
-            assertThat(capability.unmeasuredFiles()).isNull();
+        int rows = report.fileCoverage().inventoriedFiles();
+        CoverageReport.CapabilityOutcome symbols = report.capabilityOutcomes().get(1);
+        assertThat(symbols)
+                .isEqualTo(new CoverageReport.CapabilityOutcome("S", "PER_FILE_RECORDED", 4, 1, 0, 1, 1, 1, rows - 4));
+        // Capabilities no adapter reported for this snapshot are recorded as wholly unmeasured, never as success.
+        assertThat(report.capabilityOutcomes().subList(2, 5)).allSatisfy(capability -> {
+            assertThat(capability.measurementStatus()).isEqualTo("PER_FILE_RECORDED");
+            assertThat(capability.eligibleFiles()).isZero();
+            assertThat(capability.successfulFiles()).isZero();
+            assertThat(capability.unmeasuredFiles()).isEqualTo(rows);
         });
         JsonNode wire = json.readTree(json.writeValueAsString(report));
         assertThat(wire.path("capabilityOutcomes").get(0).path("eligibleFiles").asInt())
                 .isEqualTo(5);
-        assertThat(wire.path("capabilityOutcomes").get(1).get("successfulFiles").isNull())
-                .isTrue();
+        assertThat(wire.path("capabilityOutcomes").get(1).path("pendingFiles").asInt())
+                .isEqualTo(1);
 
         CoverageReport old = service.getReport(projectId, userId, snapshot());
         assertThat(old.capabilityOutcomes()).hasSize(5).allSatisfy(capability -> {

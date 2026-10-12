@@ -16,7 +16,7 @@ const POLICY = createBackupExportPolicy(REVIEWED_SCHEMA);
 const SEQUENCES = TABLES.flatMap(t => t.columns.filter(c => c.generation !== 'none')
   .map(c => ({ table: t.name, column: c.name, key: `${t.name}.${c.name}`, name: `${t.name}_${c.name}_seq` })));
 // Restore-only reviewed inventories (see backup-export-policy). Their catalogs come from pinned SQL only.
-const LEGACY_CATALOGS = [26, 27];
+const LEGACY_CATALOGS = [26, 27, 29];
 const FINANCIAL = new Set(['ai_budget_gate', 'ai_request_ledger', 'ai_usage_evidence']);
 const FUNCTIONS = ['guard_ai_cost_immutability', 'protect_sealed_source_entry', 'protect_snapshot_source_identity',
   'protect_source_blob', 'protect_source_manifest', 'reject_local_source_input_update'];
@@ -227,7 +227,7 @@ function validateHeader(value, migrations, needsOwner) {
 function orderBy(table) {
   const composite = { snapshot_inventory_measurements: ['snapshot_id'], source_blobs: ['project_id', 'sha256'], source_manifest_entries: ['manifest_id', 'path'],
     user_ai_preferences: ['user_id'], ai_budget_gate: ['installation_id'], ai_request_ledger: ['request_id'],
-    ai_usage_evidence: ['request_id', 'proof_sha256'] };
+    ai_usage_evidence: ['request_id', 'proof_sha256'], file_capability_outcomes: ['file_id', 'capability'] };
   return (composite[table.name] || ['id']).map(quote).join(',');
 }
 function tableSql(table) {
@@ -654,6 +654,8 @@ async function createBackupPostgres(options) {
     let heldBytes = 0, ownerSeen = false, sourceComplete = false, readbackEnded = false, offSeen = false;
     const targetCounts = { ...expected.tableCounts }, targetHashes = { ...expected.tableSha256 };
     if (v26) { targetCounts.snapshot_inventory_measurements = '0'; targetHashes.snapshot_inventory_measurements = digest(''); }
+    // Tables added after the archive's inventory restore empty: V30 added file_capability_outcomes.
+    if (inputPolicy.schema.migrations.length < 30) { targetCounts.file_capability_outcomes = '0'; targetHashes.file_capability_outcomes = digest(''); }
     let inputRows = 0, readTable = null, readIndex = -1, readCount = 0, readHash, headerSeen = false;
     const accepted = deferred(), verified = deferred();
     function retain(value) { heldBytes += Buffer.byteLength(canonical(value)); if (heldBytes > LIMITS.accountingBytes) fail('LIMIT'); }

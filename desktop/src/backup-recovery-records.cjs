@@ -211,7 +211,7 @@ async function createBackupRecoveryRecords(options) {
     if (process.platform === 'win32' ? !options?.windowsBoundary : !constants.O_NOFOLLOW || !constants.O_DIRECTORY || typeof process.getuid !== 'function') fail('BACKUP_RECOVERY_UNSUPPORTED');
     if (!options || typeof options !== 'object' || types.isProxy(options) || Array.isArray(options)
         || ![Object.prototype, null].includes(Object.getPrototypeOf(options))) fail('BACKUP_RECOVERY_ARGUMENT');
-    const allowed = ['root', 'installationId', 'runningBuild', 'keyProvider', 'verifyCompletion', 'verifyCollection', 'initialize', 'windowsBoundary'];
+    const allowed = ['root', 'installationId', 'runningBuild', 'keyProvider', 'verifyCompletion', 'verifyCollection', 'initialize', 'windowsBoundary', 'journalFloor'];
     const descriptors = Object.getOwnPropertyDescriptors(options);
     if (Reflect.ownKeys(descriptors).some(name => !allowed.includes(name) || !Object.hasOwn(descriptors[name], 'value')
         || !descriptors[name].enumerable)) fail('BACKUP_RECOVERY_ARGUMENT');
@@ -221,6 +221,7 @@ async function createBackupRecoveryRecords(options) {
         || Buffer.byteLength(root) > 4096 || path.parse(root).root === root
         || typeof config.installationId !== 'string' || config.installationId.length < 1 || config.installationId.length > 128
         || !/^[A-Za-z0-9_-]+$/.test(config.installationId) || !validBuild(config.runningBuild)
+        || (config.journalFloor !== undefined && !validBuild(config.journalFloor))
         || (config.initialize !== undefined && typeof config.initialize !== 'boolean')
         || (config.verifyCompletion !== undefined && typeof config.verifyCompletion !== 'function')
         || (config.verifyCollection !== undefined && typeof config.verifyCollection !== 'function')) fail('BACKUP_RECOVERY_ARGUMENT');
@@ -292,7 +293,13 @@ async function createBackupRecoveryRecords(options) {
       if (size < 2 || size > MAX_HEADER || bytes.length < 12 + size) fail('BACKUP_RECOVERY_INVALID');
       const header = ownData(parseCanonical(bytes.subarray(12, 12 + size)), ['core', 'wrappedDek', 'nonce', 'tag'], 'BACKUP_RECOVERY_INVALID');
       const core = ownData(header.core, ['version', 'identityHash', 'rootId', 'role', 'name', 'keyId', 'minimumBuild', 'plainBytes', 'plainSha256'], 'BACKUP_RECOVERY_INVALID');
-      if (core.version !== VERSION || !validBuild(core.minimumBuild) || BigInt(core.minimumBuild) > BigInt(config.runningBuild)) fail('BACKUP_RECOVERY_UNSUPPORTED');
+      // A record written by a newer build is refused by an older running build (anti-rollback) unless the
+      // safety journal's started-build floor already admits this build: that floor is lowered only by a
+      // verified signed recovery manifest (sanctioned rollback), after which the older build must be able
+      // to read the records the newer build left behind. The format version stays a hard requirement.
+      const admittedByJournal = config.journalFloor !== undefined && BigInt(config.journalFloor) <= BigInt(config.runningBuild);
+      if (core.version !== VERSION || !validBuild(core.minimumBuild)
+          || (BigInt(core.minimumBuild) > BigInt(config.runningBuild) && !admittedByJournal)) fail('BACKUP_RECOVERY_UNSUPPORTED');
       if (core.identityHash !== identityHash || !validHex(core.rootId, 32, HEX32) || (rootId && core.rootId !== rootId)
           || core.role !== fileRole(name) || core.name !== name || !validHex(core.keyId, 32, HEX32)
           || !Number.isSafeInteger(core.plainBytes) || core.plainBytes < 2 || core.plainBytes > MAX_PLAIN

@@ -171,8 +171,10 @@ async function copySelectedFile(selected, destination, created) {
   if (initialize && (initial.pendingRestore || initial.pendingMaintenance || initial.maintenanceReceipt)) fail();
   const verifier = createMaintenanceVerifier({ installationId, readProjection: adapter.readProjection });
   const retentionHistory = new Map();
+  // The journal's started-build floor admits this build (a sanctioned rollback lowers it); records a newer
+  // build wrote before such a rollback stay readable to the admitted older build.
   const records = await createBackupRecoveryRecords({ root: recordsRoot, installationId, runningBuild, windowsBoundary,
-    keyProvider, initialize, verifyCompletion: async (_record, { transactionId, receipt }) => {
+    keyProvider, initialize, journalFloor: initial.minimumVersion, verifyCompletion: async (_record, { transactionId, receipt }) => {
       const snapshot = journal.snapshot();
       if (snapshot.pendingRestore || snapshot.pendingMaintenance || snapshot.aiOff !== true
           || receipt?.transactionId !== transactionId || !same(snapshot.maintenanceReceipt, receipt)) return false;
@@ -650,6 +652,9 @@ async function copySelectedFile(selected, destination, created) {
       if (expected.summary.schema.migrations.length === 26
           && (observed.value.summary.tableCounts.snapshot_inventory_measurements !== '0'
           || observed.value.summary.tableSha256.snapshot_inventory_measurements !== crypto.createHash('sha256').digest('hex'))) fail();
+      if (expected.summary.schema.migrations.length < 30
+          && (observed.value.summary.tableCounts.file_capability_outcomes !== '0'
+          || observed.value.summary.tableSha256.file_capability_outcomes !== crypto.createHash('sha256').digest('hex'))) fail();
       await ports.prepareResume({ transactionId, restored: true, recovery: true });
       if (active.phase !== 'COMPLETED') await records.append({ transactionId, phase: 'HEALTH_VERIFIED', data: { checked: true } });
       const finalize = async () => {

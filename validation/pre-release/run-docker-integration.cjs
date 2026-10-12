@@ -35,7 +35,10 @@ function testEnvironment(root, endpoint, home) {
   assert(endpoint === 'unix://' + path.join(home, '.docker/run/docker.sock') || endpoint === 'unix:///var/run/docker.sock', 'LOCAL_DOCKER_REQUIRED');
   return { PATH: '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin', HOME: home, LANG: 'C', LC_ALL: 'C',
     DOCKER_HOST: endpoint, DOCKER_CONFIG: path.join(root, 'docker'), CI_DOCKER_TEST_ROOT: root,
-    TESTCONTAINERS_REUSE_ENABLE: 'false', TESTCONTAINERS_RYUK_DISABLED: 'false', TESTCONTAINERS_CHECKS_DISABLE: 'false' };
+    TESTCONTAINERS_REUSE_ENABLE: 'false', TESTCONTAINERS_RYUK_DISABLED: 'false', TESTCONTAINERS_CHECKS_DISABLE: 'false',
+    // Host toolchain passthrough only: the sidecar `node` the suites spawn must load the same dynamic
+    // libraries as the caller's node (a Homebrew dependency relink on a shared host otherwise breaks it).
+    ...(process.env.DYLD_LIBRARY_PATH ? { DYLD_LIBRARY_PATH: process.env.DYLD_LIBRARY_PATH } : {}) };
 }
 function countCorpusFiles(inventory) {
   assert(Array.isArray(inventory?.entries), 'CORPUS_INVENTORY_REQUIRED');

@@ -8,6 +8,7 @@ import dev.codeintelligence.evidence.NewEvidence;
 import dev.codeintelligence.job.JobCancellation;
 import dev.codeintelligence.job.JobContext;
 import dev.codeintelligence.job.JobStep;
+import java.util.List;
 import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
@@ -85,6 +86,17 @@ public class FileInventoryStep implements JobStep {
                         values (:snapshotId, :path, :language, :size, :lineCount, :contentHash, :status, :reason)
                         """, batch);
             }
+            // Capabilities no adapter owns for a measured language are UNSUPPORTED from inventory on; languages
+            // without a per-file contract stay unmeasured for every capability (03 coverage invariants).
+            List<FileCapabilityOutcome> unsupported = new java.util.ArrayList<>();
+            for (InventoriedFile file : result.files()) {
+                if (!FileCapabilityOutcome.measured(file.language())) continue;
+                for (String capability : FileCapabilityOutcome.unsupportedCapabilities(file.language())) {
+                    unsupported.add(new FileCapabilityOutcome(
+                            file.path(), capability, "UNSUPPORTED", "CAPABILITY_NOT_OWNED_FOR_LANGUAGE"));
+                }
+            }
+            FileCapabilityOutcome.recordAll(jdbc, snapshotId, unsupported);
             jdbc.sql("""
                     insert into snapshot_inventory_measurements
                     (snapshot_id, discovered_files, excluded_for_count, excluded_for_size, excluded_binary, excluded_submodules)
