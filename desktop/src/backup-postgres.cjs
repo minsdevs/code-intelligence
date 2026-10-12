@@ -227,7 +227,7 @@ function validateHeader(value, migrations, needsOwner) {
 function orderBy(table) {
   const composite = { snapshot_inventory_measurements: ['snapshot_id'], source_blobs: ['project_id', 'sha256'], source_manifest_entries: ['manifest_id', 'path'],
     user_ai_preferences: ['user_id'], ai_budget_gate: ['installation_id'], ai_request_ledger: ['request_id'],
-    ai_usage_evidence: ['request_id', 'proof_sha256'] };
+    ai_usage_evidence: ['request_id', 'proof_sha256'], file_capability_outcomes: ['file_id', 'capability'] };
   return (composite[table.name] || ['id']).map(quote).join(',');
 }
 function tableSql(table) {

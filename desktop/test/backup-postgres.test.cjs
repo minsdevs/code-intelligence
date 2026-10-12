@@ -281,6 +281,12 @@ test('read-only snapshot waits for catalog and owner validation before selecting
   assert(!c.args.join(' ').includes('select')); assert.equal(c.options.env.PGPASSWORD, 'private-password');
   for (const key of ['PATH', 'HOME', 'PGOPTIONS', 'PGSERVICE', 'NODE_OPTIONS']) assert.equal(c.options.env[key], undefined);
   assert.match(c.chunks.join(''), /from public\."snapshot_inventory_measurements" order by "snapshot_id"/);
+  // V30: the per-file capability table has a composite key and no id column; its export orders by that key.
+  assert.match(c.chunks.join(''), /from public\."file_capability_outcomes" order by "file_id","capability"/);
+  // Every reviewed table without an id column must export by an explicit key, never by a missing "id".
+  for (const table of REVIEWED_SCHEMA.tables.filter(t => !t.columns.some(column => column.name === 'id') && policy.columnsFor(t.name).length)) {
+    assert.doesNotMatch(c.chunks.join(''), new RegExp(`from public\\."${table.name}" order by "id"`), table.name);
+  }
   assert(Object.isFrozen(result)); assert(Object.isFrozen(rows[0].values));
 });
 for (const [name, mutate, code] of [
