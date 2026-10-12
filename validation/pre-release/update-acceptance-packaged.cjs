@@ -338,8 +338,11 @@ async function main(argv = process.argv.slice(2)) {
         assert.ok(Date.now() < end, 'RESTORE_TIMEOUT'); await sleep(1000);
       }
       const status = await session.waitReady();
-      const begins = journalRecords(userData).filter(event => event.type === 'RESTORE_BEGIN');
-      const receipts = journalRecords(userData).filter(event => event.type === 'RESTORE_RECEIPT');
+      // The product backup taken on N (U8a) already merged the journal with the N-era floor; only the merges this
+      // restore appended are judged, and the earlier ones are kept as the floor history.
+      const earlierBegins = journalRecords(userData).filter(event => event.type === 'RESTORE_BEGIN').slice(0, beginBefore);
+      const begins = journalRecords(userData).filter(event => event.type === 'RESTORE_BEGIN').slice(beginBefore);
+      const receipts = journalRecords(userData).filter(event => event.type === 'RESTORE_RECEIPT').slice(beginBefore);
       const started = journalRecords(userData).filter(event => event.type === 'BUILD_STARTED');
       const schemaAfterRestore = readJson(path.join(userData, 'update-checkpoints', 'schema.json'));
       const picker = readDialogs().find(item => item.kind === 'openDialog' && item.title === restorePicker.title);
@@ -347,7 +350,9 @@ async function main(argv = process.argv.slice(2)) {
         && begins.every(event => event.minimumVersion === next.buildSequence)
         && started.at(-1)?.build === next.buildSequence && started.filter(event => event.build === manifest.buildSequence).length === 1
         && schemaAfterRestore.build === next.buildSequence && Boolean(picker) && status.ready;
-      restoreDetail = { elapsedMs: Date.now() - mark, restoreBegins: begins.map(event => ({ restoreId: event.restoreId, inputMinimumVersion: event.inputMinimumVersion, minimumVersion: event.minimumVersion, obligationCount: event.obligationCount })),
+      restoreDetail = { elapsedMs: Date.now() - mark, olderBackup: { file: olderBackup, sha256: sha256(fs.readFileSync(olderBackup)), takenOnBuild: manifest.buildSequence },
+        floorHistoryBeforeRestore: earlierBegins.map(event => ({ restoreId: event.restoreId, minimumVersion: event.minimumVersion })),
+        restoreBegins: begins.map(event => ({ restoreId: event.restoreId, inputMinimumVersion: event.inputMinimumVersion, minimumVersion: event.minimumVersion, obligationCount: event.obligationCount })),
         restoreReceipts: receipts.length, buildStarted: started.map(event => event.build), schemaAfterRestore, picker: picker ? { properties: picker.properties, filePaths: picker.filePaths } : null, runtime: { ready: status.ready, recoveryOnly: status.recoveryOnly ?? null } };
     }
     await session.quit();
