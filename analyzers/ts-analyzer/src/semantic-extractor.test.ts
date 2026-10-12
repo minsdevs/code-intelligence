@@ -450,3 +450,71 @@ describe('semantic target and route provenance', () => {
     expect(result.unresolvedCalls).toContainEqual(expect.objectContaining({ reason: 'UNRESOLVED_GLOBAL_PREFIX' }))
   })
 })
+
+describe('interface dispatch candidates (T-C dynamic-unresolved)', () => {
+  const calls = [
+    '// café: CRLF and non-ASCII bytes are intentional.',
+    'type Action = { run(): void };',
+    'const first: Action = { run() {} };',
+    'const second: Action = { run() {} };',
+    'export function twice(value: number) { return value * 2; }',
+    'export function direct() { return twice(2); }',
+    'export function indirect(action: Action) { action.run(); }',
+    'declare const receiver: any;',
+    'export function dynamic(name: string) { receiver[name](); }',
+  ].join('\r\n') + '\r\n'
+
+  it('publishes object-literal implementations of a type alias as POSSIBLE candidates, never CONFIRMED', () => {
+    const result = extractTs([{ path: 'source/calls.ts', content: calls }])
+    const members = result.nodes.filter((node) => node.metadata.declarationKind === 'OBJECT_LITERAL_METHOD')
+    expect(members.map((node) => [node.key, node.type, node.lineStart, node.metadata.implements])).toEqual([
+      ['ts:source/calls.ts#first.run', 'METHOD', 3, 'ts:source/calls.ts#Action'],
+      ['ts:source/calls.ts#second.run', 'METHOD', 4, 'ts:source/calls.ts#Action'],
+    ])
+    const dispatch = result.edges.filter((edge) => edge.sourceKey === 'ts:source/calls.ts#indirect' && edge.type === 'CALLS')
+    expect(dispatch.map((edge) => [edge.targetKey, edge.confidence, edge.lineStart, edge.metadata.expression])).toEqual([
+      ['ts:source/calls.ts#first.run', 'POSSIBLE', 7, 'action.run'],
+      ['ts:source/calls.ts#second.run', 'POSSIBLE', 7, 'action.run'],
+    ])
+    expect(dispatch[0].metadata.targetCandidates).toEqual(['ts:source/calls.ts#first.run', 'ts:source/calls.ts#second.run'])
+    expect(result.unresolvedCalls.map((call) => [call.expression, call.reason])).toEqual([['receiver[name]', 'DYNAMIC_MEMBER']])
+    // The direct call keeps its static resolution.
+    expect(result.edges.find((edge) => edge.sourceKey === 'ts:source/calls.ts#direct')?.confidence).toBe('CONFIRMED')
+  })
+
+  it('counts class implementations in the declaring module and the calling module only', () => {
+    const files = [
+      { path: 'src/port.ts', content: 'export interface Port { send(): void }\nexport class LocalPort implements Port { send() {} }\n' },
+      { path: 'src/use.ts', content: 'import { Port } from "./port";\nclass OwnPort implements Port { send() {} }\nexport function run(port: Port) { port.send(); }\n' },
+      { path: 'src/far.ts', content: 'import { Port } from "./port";\nexport class FarPort implements Port { send() {} }\n' },
+    ]
+    const result = extractTs(files)
+    const dispatch = result.edges.filter((edge) => edge.sourceKey === 'ts:src/use.ts#run' && edge.type === 'CALLS')
+    expect(dispatch.map((edge) => [edge.targetKey, edge.confidence])).toEqual([
+      ['ts:src/port.ts#LocalPort.send', 'POSSIBLE'],
+      ['ts:src/use.ts#OwnPort.send', 'POSSIBLE'],
+    ])
+    expect(result.unresolvedCalls).toEqual([])
+  })
+
+  it('abstains when no implementation is visible, when the member is not declared on the type, and above five candidates', () => {
+    const none = extractTs([{ path: 'a.ts', content: 'interface Job { go(): void }\nexport function f(job: Job) { job.go(); job.stop?.(); }\n' }])
+    expect(none.edges.filter((edge) => edge.type === 'CALLS')).toEqual([])
+    expect(none.unresolvedCalls.map((call) => [call.expression, call.reason])).toEqual([['job.go', 'UNRESOLVED_TARGET'], ['job.stop', 'UNRESOLVED_TARGET']])
+    const impls = Array.from({ length: 6 }, (_, index) => `const i${index}: Job = { go() {} };`).join('\n')
+    const many = extractTs([{ path: 'b.ts', content: `interface Job { go(): void }\n${impls}\nexport function f(job: Job) { job.go(); }\n` }])
+    expect(many.edges.filter((edge) => edge.type === 'CALLS')).toEqual([])
+    expect(many.unresolvedCalls.map((call) => [call.expression, call.reason])).toEqual([['job.go', 'CANDIDATES_EXCEEDED']])
+    expect(many.nodes.filter((node) => node.metadata.declarationKind === 'OBJECT_LITERAL_METHOD')).toHaveLength(6)
+  })
+
+  it('reports an unresolved receiver annotation import so a slice re-runs with that module, and an unannotated literal declares nothing', () => {
+    const result = extractTs([
+      { path: 'src/types.ts', content: 'export interface Port { send(): void }\nexport const fallback: Port = { send() {} };\n' },
+      { path: 'src/use.ts', content: 'import { Port } from "./types";\nconst plain = { send() {} };\nexport function run(port: Port) { port.send(); plain.send(); }\n' },
+    ])
+    expect(result.nodes.filter((node) => node.key === 'ts:src/use.ts#plain.send')).toEqual([])
+    expect(result.edges.filter((edge) => edge.type === 'CALLS').map((edge) => [edge.targetKey, edge.confidence]))
+      .toEqual([['ts:src/types.ts#fallback.send', 'POSSIBLE']])
+  })
+})

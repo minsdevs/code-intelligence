@@ -49,10 +49,10 @@ test('packaged bundle record hashes app.asar through original-fs under Electron'
     asarSha256: sha(path.join(resources, 'app.asar')) });
 });
 
-test('pre-migration checkpoint target is the reviewed backup schema head and the newest bundled migration (V29)', () => {
+test('pre-migration checkpoint target is the reviewed backup schema head and the newest bundled migration (V30)', () => {
   const { exports } = loadStartup();
   const migrations = fs.readdirSync(path.resolve(__dirname, '../../backend/src/main/resources/db/migration'))
     .filter(name => name.endsWith('.sql')).map(name => Number(/^V([0-9]+)__/.exec(name)[1]));
-  assert.equal(exports.TARGET_FLYWAY, 29);
+  assert.equal(exports.TARGET_FLYWAY, 30);
   assert.equal(exports.TARGET_FLYWAY, Math.max(...migrations));
 });

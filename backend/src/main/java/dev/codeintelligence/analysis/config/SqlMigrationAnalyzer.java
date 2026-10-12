@@ -7,6 +7,7 @@ import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
 import dev.codeintelligence.analysis.core.EdgeConfidence;
 import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
+import dev.codeintelligence.analysis.core.FileCapabilityOutcome;
 import dev.codeintelligence.analysis.core.FileInventory;
 import dev.codeintelligence.analysis.core.GraphEdgeType;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
@@ -132,9 +133,12 @@ public class SqlMigrationAnalyzer implements CodeAnalyzer {
                 throw new IllegalStateException("no SQL statements applied");
             }
             collector.outcome(new FileAnalysisOutcome(file.file.path(), "SUCCESS", "SQL_PARSED"));
+            // Table and column declarations are this analyzer's symbol capability (06 SQL-S).
+            collector.capability(new FileCapabilityOutcome(file.file.path(), "S", "SUCCESS", "SQL_SCHEMA_SYMBOLS"));
         } catch (Exception e) {
             // Per-file parse verdict (06 SQL-P): the migration stays a file-level fact, nothing is resolved.
             collector.outcome(new FileAnalysisOutcome(file.file.path(), "FAILED", "SQL_PARSE_FAILED"));
+            collector.capability(new FileCapabilityOutcome(file.file.path(), "S", "FAILED", "SQL_PARSE_FAILED"));
             collector.evidence(new AnalyzerEvidence(
                     migrationKey,
                     EvidenceKind.FILE_LINE,

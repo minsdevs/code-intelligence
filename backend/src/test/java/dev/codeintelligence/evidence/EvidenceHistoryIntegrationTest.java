@@ -601,7 +601,53 @@ class EvidenceHistoryIntegrationTest {
                     .isZero();
             assertThat(report.localImport()).isNotNull();
             assertThat(report.localImport().acceptedFiles()).isEqualTo(manifest);
-            partitions.put(snapshot, outcomes);
+            // E-12: every capability's recorded outcomes partition the same inventory, and the partition equals the
+            // language manifest: files of a measured language are eligible (owned capability -> adapter outcome,
+            // unowned -> UNSUPPORTED), files without a per-file contract stay unmeasured for every capability.
+            var languages = jdbc.queryForList("select language from files where snapshot_id=?", String.class, snapshot);
+            Map<String, Object> capabilities = new LinkedHashMap<>();
+            for (var capability : report.capabilityOutcomes()) {
+                assertThat(capability.measurementStatus()).isEqualTo("PER_FILE_RECORDED");
+                assertThat(capability.eligibleFiles() + capability.unmeasuredFiles())
+                        .as("capability %s partitions the inventory", capability.capability())
+                        .isEqualTo(rows);
+                assertThat(capability.eligibleFiles())
+                        .isEqualTo(capability.successfulFiles()
+                                + capability.partialFiles()
+                                + capability.failedFiles()
+                                + capability.unsupportedFiles()
+                                + capability.pendingFiles());
+                assertThat(capability.pendingFiles())
+                        .as("no capability left pending after a completed job")
+                        .isZero();
+                if (!"P".equals(capability.capability())) {
+                    String id = capability.capability();
+                    long measured = languages.stream()
+                            .filter(dev.codeintelligence.analysis.core.FileCapabilityOutcome::measured)
+                            .count();
+                    long owned = languages.stream()
+                            .filter(language ->
+                                    dev.codeintelligence.analysis.core.FileCapabilityOutcome.ownedCapabilities(language)
+                                            .contains(id))
+                            .count();
+                    assertThat(capability.eligibleFiles())
+                            .as("capability %s eligible files equal the measured-language inventory", id)
+                            .isEqualTo((int) measured);
+                    assertThat(capability.unsupportedFiles())
+                            .as("capability %s unsupported files are the measured languages no adapter owns it for", id)
+                            .isEqualTo((int) (measured - owned));
+                    assertThat(capability.successfulFiles() + capability.partialFiles() + capability.failedFiles())
+                            .as("capability %s adapter outcomes cover every owned file", id)
+                            .isEqualTo((int) owned);
+                }
+                capabilities.put(capability.capability(), capability);
+            }
+            var byLanguage = jdbc.queryForList(
+                    "select f.language, o.capability, o.status, count(*) as files from files f "
+                            + "join file_capability_outcomes o on o.file_id=f.id where f.snapshot_id=? "
+                            + "group by f.language, o.capability, o.status order by 1,2,3",
+                    snapshot);
+            partitions.put(snapshot, Map.of("files", outcomes, "capabilities", capabilities, "byLanguage", byLanguage));
         }
         REPORT.put("C06-14 coveragePartitions", partitions);
     }

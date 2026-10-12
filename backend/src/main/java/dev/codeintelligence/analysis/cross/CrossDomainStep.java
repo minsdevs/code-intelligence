@@ -3,6 +3,7 @@ package dev.codeintelligence.analysis.cross;
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.EdgeConfidence;
+import dev.codeintelligence.analysis.core.FileCapabilityOutcome;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphEdgeType;
 import dev.codeintelligence.analysis.core.NaturalKeys;
@@ -48,6 +49,8 @@ public class CrossDomainStep implements JobStep {
         long snapshotId =
                 ctx.snapshotId().orElseThrow(() -> new IllegalStateException("no snapshot attached to the job"));
         refreshPlannerStatistics();
+        List<FileCapabilityOutcome> pending = crossDomainOutcomes(snapshotId, "TARGETED", "CROSS_DOMAIN_STARTED");
+        FileCapabilityOutcome.recordAll(jdbc, snapshotId, pending);
         ctx.updateProgress(15);
         List<GraphEdgeDraft> edges = new ArrayList<>();
         List<AnalyzerEvidence> evidences = new ArrayList<>();
@@ -57,7 +60,37 @@ public class CrossDomainStep implements JobStep {
         ctx.updateProgress(70);
         linkReadsWrites(snapshotId, edges);
         persistence.persist(ctx.projectId(), snapshotId, new AnalysisResult(List.of(), edges, evidences));
+        FileCapabilityOutcome.recordAll(jdbc, snapshotId, crossDomainOutcomes(snapshotId, null, null));
         ctx.updateProgress(100);
+    }
+
+    /**
+     * The cross-domain capability (X) of every file whose language adapter owns it: it links the facts the
+     * parsers published, so its outcome follows the file's parse outcome (a file that did not parse contributed
+     * nothing to link). With a status given, that status is recorded for all owned files (pending at step start).
+     */
+    private List<FileCapabilityOutcome> crossDomainOutcomes(long snapshotId, String status, String reason) {
+        return jdbc
+                .sql("select path, language, analysis_status from files where snapshot_id=:sid order by path")
+                .param("sid", snapshotId)
+                .query((rs, n) -> {
+                    String path = rs.getString("path");
+                    if (!FileCapabilityOutcome.ownedCapabilities(rs.getString("language"))
+                            .contains("X")) return null;
+                    if (status != null) return new FileCapabilityOutcome(path, "X", status, reason);
+                    return switch (rs.getString("analysis_status")) {
+                        case "SUCCESS", "PARTIAL" ->
+                            new FileCapabilityOutcome(path, "X", "SUCCESS", "CROSS_DOMAIN_LINKED");
+                        case "FAILED" -> new FileCapabilityOutcome(path, "X", "FAILED", "SOURCE_NOT_PARSED");
+                        case "UNSUPPORTED" ->
+                            new FileCapabilityOutcome(path, "X", "UNSUPPORTED", "SOURCE_LANGUAGE_UNSUPPORTED");
+                        default -> new FileCapabilityOutcome(path, "X", "UNMEASURED", "SOURCE_NOT_MEASURED");
+                    };
+                })
+                .list()
+                .stream()
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     /**

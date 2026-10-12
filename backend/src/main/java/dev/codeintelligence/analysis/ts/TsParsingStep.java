@@ -2,6 +2,7 @@ package dev.codeintelligence.analysis.ts;
 
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
+import dev.codeintelligence.analysis.core.FileCapabilityOutcome;
 import dev.codeintelligence.analysis.core.InvalidFilePathException;
 import dev.codeintelligence.analysis.core.InventoriedFile;
 import dev.codeintelligence.analysis.core.SafeRelativePath;
@@ -131,8 +132,17 @@ public class TsParsingStep implements JobStep {
                 snapshotId,
                 input.paths().stream().filter(TsParsingStep::isPrimarySource)::iterator,
                 result.fileOutcomes());
+        FileCapabilityOutcome.recordResponse(
+                jdbc,
+                snapshotId,
+                input.paths().stream().filter(TsParsingStep::isPrimarySource)::iterator,
+                TS_CAPABILITIES,
+                result.capabilityOutcomes());
         ctx.updateProgress(100);
     }
+
+    /** The sidecar owns the symbol, call and framework capabilities of its files; X is the cross-domain step's. */
+    private static final List<String> TS_CAPABILITIES = List.of("S", "C", "F");
 
     private static boolean isPrimarySource(String path) {
         return path.toLowerCase(Locale.ROOT).matches(".*\\.(?:[cm]?ts|tsx|[cm]?js|jsx)$");
@@ -145,11 +155,19 @@ public class TsParsingStep implements JobStep {
                 files.stream().map(InventoriedFile::path).filter(TsParsingStep::isPrimarySource)::iterator,
                 status,
                 reason);
+        FileCapabilityOutcome.recordFiles(
+                jdbc,
+                snapshotId,
+                files.stream().map(InventoriedFile::path).filter(TsParsingStep::isPrimarySource)::iterator,
+                TS_CAPABILITIES,
+                status,
+                reason);
     }
 
     private void recordOne(long snapshotId, InventoriedFile file, String status, String reason) {
         if (!isPrimarySource(file.path())) return;
         FileAnalysisOutcome.record(jdbc, snapshotId, file.path(), status, reason);
+        FileCapabilityOutcome.recordFiles(jdbc, snapshotId, List.of(file.path()), TS_CAPABILITIES, status, reason);
     }
 
     private List<InventoriedFile> loadTsFiles(long snapshotId) {

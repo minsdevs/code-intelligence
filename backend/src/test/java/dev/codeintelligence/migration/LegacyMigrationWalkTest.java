@@ -68,7 +68,10 @@ class LegacyMigrationWalkTest {
             19,
             List.of(
                     "insert into finding_judgments(id,user_id,project_id,stable_key,status,reason,rule_id,rule_version,"
-                            + "evidence_fingerprint) values (8106,9001,8001,'legacy-key','ACCEPTED','keep judgment','rule','1','fp')"));
+                            + "evidence_fingerprint) values (8106,9001,8001,'legacy-key','ACCEPTED','keep judgment','rule','1','fp')"),
+            30,
+            List.of("insert into file_capability_outcomes(file_id,capability,status,reason) "
+                    + "values (8004,'S','SUCCESS','legacy-capability')"));
 
     private static final Map<String, String> PROJECTIONS = new LinkedHashMap<>();
 
@@ -78,6 +81,9 @@ class LegacyMigrationWalkTest {
         PROJECTIONS.put("snapshot", "select to_jsonb(t) from snapshots t where id=8002");
         PROJECTIONS.put("job", "select to_jsonb(t) - 'updated_at' from analysis_jobs t where id=8003");
         PROJECTIONS.put("file", "select to_jsonb(t) from files t where id=8004");
+        PROJECTIONS.put(
+                "fileCapability",
+                "select to_jsonb(t) from file_capability_outcomes t where file_id=8004 and capability='S'");
         PROJECTIONS.put("evidence", "select to_jsonb(t) from evidences t where id=8005");
         PROJECTIONS.put("node", "select to_jsonb(t) from graph_nodes t where id=8006");
         PROJECTIONS.put("finding", "select to_jsonb(t) from analysis_findings t where id=8007");
@@ -103,7 +109,8 @@ class LegacyMigrationWalkTest {
             Map.entry("task", 13),
             Map.entry("taskGoal", 13),
             Map.entry("aiSetting", 15),
-            Map.entry("findingJudgment", 19));
+            Map.entry("findingJudgment", 19),
+            Map.entry("fileCapability", 30));
 
     @Test
     void everyFlywayStepPreservesSentinelsAndLegacyResultsStayUnmeasured() throws Exception {

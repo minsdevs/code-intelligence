@@ -29,6 +29,8 @@ const functions = ['guard_ai_cost_immutability', 'protect_sealed_source_entry', 
 // Mirrors the reviewed inventories: V27 lacks the V29 scope columns, V26 also the V27 outcome columns/table.
 function legacyCatalog(current, version) {
   const catalog = copy(current);
+  catalog.tables = catalog.tables.filter(t => t.name !== 'file_capability_outcomes');
+  if (version === 29) return catalog;
   for (const table of catalog.tables.filter(t => ['local_source_approvals', 'job_local_source_inputs'].includes(t.name))) {
     table.columns = table.columns.filter(c => c.name !== 'scope');
   }
@@ -271,7 +273,7 @@ test('read-only snapshot waits for catalog and owner validation before selecting
   const f = await fixture(t); const rows = [];
   const result = await f.adapter.exportRows({ writeRow: row => rows.push(row) });
   assert.deepEqual(rows, [user()]); assert.equal(result.ownerUserId, ID); assert.equal(result.rowCount, '1');
-  assert.equal(Object.keys(result.tableCounts).length, 53); assert.equal(Object.keys(result.tableSha256).length, 53);
+  assert.equal(Object.keys(result.tableCounts).length, 54); assert.equal(Object.keys(result.tableSha256).length, 54);
   assert.equal(result.catalogSha256, sha(canonical(f.originalHeader.catalog)));
   const c = f.calls[0]; assert.match(c.chunks[0], /repeatable read read only/); assert.match(c.chunks[1], /'kind','header'/);
   assert(!c.chunks[1].includes("'kind','row'")); assert(c.args.includes('-X')); assert(c.args.includes('--file=-'));
@@ -625,6 +627,7 @@ function legacySummary(h, rows) {
   const result = summaryFor(h, rows); result.schema = REVIEWED_V26_SCHEMA;
   result.catalogSha256 = sha(canonical(legacyCatalog(h.catalog, 26)));
   delete result.tableCounts.snapshot_inventory_measurements; delete result.tableSha256.snapshot_inventory_measurements;
+  delete result.tableCounts.file_capability_outcomes; delete result.tableSha256.file_capability_outcomes;
   return result;
 }
 test('V26 restore authenticates legacy catalog and original hashes, then reads back only honest V27 defaults', async t => {
@@ -652,6 +655,7 @@ test('V26 restore rejects current catalog masquerading as legacy and preserves o
 function v27Summary(h, rows) {
   const result = summaryFor(h, rows); result.schema = REVIEWED_V27_SCHEMA;
   result.catalogSha256 = sha(canonical(legacyCatalog(h.catalog, 27)));
+  delete result.tableCounts.file_capability_outcomes; delete result.tableSha256.file_capability_outcomes;
   return result;
 }
 test('V27 restore authenticates the pinned V27 catalog and loads unchanged rows into the V29 schema', async t => {
@@ -697,7 +701,7 @@ test('staging requires exactly the pinned V26 then V27 legacy catalogs before th
       { code: 'BACKUP_PG_STAGING' });
   }
   const f = await staging(t);
-  assert.match(f.calls[0].chunks.join(''), /'kind','legacyCatalog','version',26,[\s\S]*'kind','legacyCatalog','version',27,/);
+  assert.match(f.calls[0].chunks.join(''), /'kind','legacyCatalog','version',26,[\s\S]*'kind','legacyCatalog','version',27,[\s\S]*'kind','legacyCatalog','version',29,/);
 });
 
 // Opt-in native compatibility proof: a fresh private cluster, never an existing profile/port.
@@ -824,7 +828,7 @@ test('native V27 exporter payload restores unchanged into V29 with the V28 index
   }
   assert.equal(sql(targetDb, "select analysis_status||':'||analysis_reason||':'||analysis_targeted::text from files;"), 'PARTIAL:PARSE_ERROR:true');
   assert.equal(sql(targetDb, 'select discovered_files from snapshot_inventory_measurements;'), '7');
-  assert.equal(sql(targetDb, "select count(*) from flyway_schema_history where success;"), '29');
+  assert.equal(sql(targetDb, "select count(*) from flyway_schema_history where success;"), String(REVIEWED_SCHEMA.migrations.length));
   assert.equal(sql(targetDb, `select count(*) from pg_indexes where schemaname='public' and indexname in ('idx_graph_edges_source_node_id',
     'idx_graph_edges_target_node_id','idx_graph_nodes_file_id','idx_feature_links_node_id','idx_flows_entry_node_id','idx_flow_steps_node_id',
     'idx_flow_steps_edge_id','idx_analysis_findings_node_id','idx_ai_conversations_snapshot_id');`), '9');

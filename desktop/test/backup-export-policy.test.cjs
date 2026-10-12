@@ -34,6 +34,7 @@ const overrides = {
   pr_review_comments: { severity: 'INFO' },
   user_ai_settings: { provider: 'openai' },
   finding_judgments: { status: 'ACCEPTED' },
+  file_capability_outcomes: { capability: 'S', status: 'SUCCESS' },
   source_manifests: { source_kind: 'LOCAL' },
   analysis_generations: { status: 'FAILED' },
   ai_budget_gate: { policy_sha256: hash, journal_hash: hash, journal_projection_sha256: hash },
@@ -196,7 +197,7 @@ for (const table of excluded) {
   });
 }
 
-test('all 50 permitted table projections accept a bounded typed synthetic row', () => {
+test('all 51 permitted table projections accept a bounded typed synthetic row', () => {
   let count = 0;
   for (const { name } of REVIEWED_SCHEMA.tables) {
     if (excluded.includes(name)) continue;
@@ -206,7 +207,7 @@ test('all 50 permitted table projections accept a bounded typed synthetic row', 
     assert.deepEqual(output.values, before); assert.ok(Object.isFrozen(output.values));
     count++;
   }
-  assert.equal(count, 50);
+  assert.equal(count, 51);
 });
 
 const omittedColumns = {
@@ -868,28 +869,46 @@ test('V26 archive schemas remain explicitly incompatible; no historical outcomes
   rejects(() => createBackupExportPolicy(old), 'SCHEMA_MISMATCH');
 });
 
-test('V28/V29 are pinned: export is V29 only, V27 is an exact restore-only inventory and unknown migrations are refused', () => {
-  const { createBackupRestorePolicy, REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA } = require('../src/backup-export-policy.cjs');
+test('V28/V29/V30 are pinned: export is V30 only, V29 and V27 are exact restore-only inventories and unknown migrations are refused', () => {
+  const { createBackupRestorePolicy, REVIEWED_V29_SCHEMA, REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA } = require('../src/backup-export-policy.cjs');
   assert.deepEqual(REVIEWED_SCHEMA.migrations.slice(26).map(item => item.filename),
-    ['V27__file_analysis_outcomes.sql', 'V28__foreign_key_lookup_indexes.sql', 'V29__local_source_scope.sql']);
+    ['V27__file_analysis_outcomes.sql', 'V28__foreign_key_lookup_indexes.sql', 'V29__local_source_scope.sql', 'V30__file_capability_outcomes.sql']);
+  // V30 adds one data table; every earlier reviewed inventory lacks it.
+  assert.deepEqual(definition('file_capability_outcomes').columns.map(column => column.name), ['file_id', 'capability', 'status', 'reason']);
+  assert.deepEqual(policy.columnsFor('file_capability_outcomes'), ['file_id', 'capability', 'status', 'reason']);
+  for (const legacy of [REVIEWED_V29_SCHEMA, REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA]) {
+    assert.equal(legacy.tables.some(item => item.name === 'file_capability_outcomes'), false);
+  }
+  assert.deepEqual(REVIEWED_V29_SCHEMA.tables.map(table => table.name), REVIEWED_SCHEMA.tables.map(table => table.name).filter(name => name !== 'file_capability_outcomes'));
   for (const table of ['local_source_approvals', 'job_local_source_inputs']) {
     assert.deepEqual(definition(table).columns.at(-1), { name: 'scope', type: 'text', nullable: true, generation: 'none' });
     assert.deepEqual(policy.columnsFor(table), []);
     rejects(() => policy.projectRow(table, {}), 'TABLE_EXCLUDED');
+    assert.deepEqual(REVIEWED_V29_SCHEMA.tables.find(item => item.name === table).columns, definition(table).columns);
     for (const legacy of [REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA]) {
       assert.deepEqual(legacy.tables.find(item => item.name === table).columns, definition(table).columns.slice(0, -1));
     }
   }
-  // V27 rows are V29 rows: the same tables select the same columns with the same projection.
+  // V27 and V29 rows are V30 rows: the same tables select the same columns with the same projection.
   const v27 = createBackupRestorePolicy(structuredClone(REVIEWED_V27_SCHEMA));
-  assert.equal(v27.schema, REVIEWED_V27_SCHEMA);
-  assert.deepEqual(REVIEWED_V27_SCHEMA.tables.map(table => table.name), REVIEWED_SCHEMA.tables.map(table => table.name));
-  for (const { name } of REVIEWED_SCHEMA.tables) assert.deepEqual(v27.columnsFor(name), policy.columnsFor(name));
+  const v29 = createBackupRestorePolicy(structuredClone(REVIEWED_V29_SCHEMA));
+  assert.equal(v27.schema, REVIEWED_V27_SCHEMA); assert.equal(v29.schema, REVIEWED_V29_SCHEMA);
+  assert.deepEqual(REVIEWED_V27_SCHEMA.tables.map(table => table.name), REVIEWED_V29_SCHEMA.tables.map(table => table.name));
+  for (const { name } of REVIEWED_V29_SCHEMA.tables) {
+    assert.deepEqual(v27.columnsFor(name), policy.columnsFor(name));
+    assert.deepEqual(v29.columnsFor(name), policy.columnsFor(name));
+  }
   for (const table of ['files', 'snapshot_inventory_measurements', 'notes']) {
     assert.deepEqual(v27.projectRow(table, fixture(table)), policy.projectRow(table, fixture(table)));
+    assert.deepEqual(v29.projectRow(table, fixture(table)), policy.projectRow(table, fixture(table)));
+  }
+  for (const legacy of [v27, v29]) {
+    rejects(() => legacy.columnsFor('file_capability_outcomes'), 'TABLE_UNKNOWN');
+    rejects(() => legacy.projectRow('file_capability_outcomes', fixture('file_capability_outcomes')), 'TABLE_UNKNOWN');
   }
   assert.equal(createBackupRestorePolicy(structuredClone(REVIEWED_SCHEMA)).schema, REVIEWED_SCHEMA);
   rejects(() => createBackupExportPolicy(structuredClone(REVIEWED_V27_SCHEMA)), 'SCHEMA_MISMATCH');
+  rejects(() => createBackupExportPolicy(structuredClone(REVIEWED_V29_SCHEMA)), 'SCHEMA_MISMATCH');
   const hybrids = [
     input => { input.migrations.push(structuredClone(REVIEWED_SCHEMA.migrations[27])); },
     input => { input.tables = structuredClone(REVIEWED_SCHEMA.tables); },
@@ -903,12 +922,14 @@ test('V28/V29 are pinned: export is V29 only, V27 is an exact restore-only inven
   const unscoped = schema();
   for (const table of unscoped.tables.filter(item => ['local_source_approvals', 'job_local_source_inputs'].includes(item.name))) table.columns.pop();
   rejects(() => createBackupRestorePolicy(unscoped), 'SCHEMA_MISMATCH');
-  for (const version of [28, 29]) {
+  for (const version of [28, 29, 30]) {
     const changed = schema(); changed.migrations[version - 1].sha256 = '0'.repeat(64);
     rejects(() => createBackupExportPolicy(changed), 'SCHEMA_MISMATCH');
     rejects(() => createBackupRestorePolicy(changed), 'SCHEMA_MISMATCH');
   }
-  const future = schema(); future.migrations.push({ version: 30, filename: 'V30__unreviewed.sql', sha256: hash });
+  const hybridV29 = structuredClone(REVIEWED_V29_SCHEMA); hybridV29.tables = structuredClone(REVIEWED_SCHEMA.tables);
+  rejects(() => createBackupRestorePolicy(hybridV29), 'SCHEMA_MISMATCH');
+  const future = schema(); future.migrations.push({ version: 31, filename: 'V31__unreviewed.sql', sha256: hash });
   rejects(() => createBackupExportPolicy(future), 'SCHEMA_MISMATCH');
   rejects(() => createBackupRestorePolicy(future), 'SCHEMA_MISMATCH');
   const v28 = schema(); v28.migrations.pop();

@@ -149,6 +149,11 @@ const MIGRATIONS = [
     "version": 29,
     "filename": "V29__local_source_scope.sql",
     "sha256": "e98df3f29116fc5a27647a67bd52199c95c48a23290b9b84ca0cdff8c966b8ac"
+  },
+  {
+    "version": 30,
+    "filename": "V30__file_capability_outcomes.sql",
+    "sha256": "32a33a000a3ada4475fbd4b7c72bd24789a7feff8c7053e58072e9133c12978e"
   }
 ];
 
@@ -255,6 +260,12 @@ const TABLE_DEFINITIONS = [
     ["excluded_for_size", "integer", false, "none", "keep"],
     ["excluded_binary", "integer", false, "none", "keep"],
     ["excluded_submodules", "integer", false, "none", "keep"],
+  ]],
+  ["file_capability_outcomes", "data", [
+    ["file_id", "bigint", false, "none", "keep"],
+    ["capability", "varchar(1)", false, "none", "keep"],
+    ["status", "varchar(32)", false, "none", "keep"],
+    ["reason", "varchar(128)", true, "none", "keep"],
   ]],
   ["project_areas", "data", [
     ["id", "bigint", false, "serial", "keep"],
@@ -769,13 +780,18 @@ const TABLES = new Map(TABLE_DEFINITIONS.map(([name, kind, columns]) => [name, {
   names: Object.freeze(columns.filter(column => column[4] === 'keep').map(column => column[0])),
 }]));
 
-// The only legacy readers are the reviewed V27 and V26 inventories. Export stays V29.
-// V28 adds only indexes and V29 only nullable columns of excluded tables, so V27 rows project unchanged.
+// The only legacy readers are the reviewed V29, V27 and V26 inventories. Export stays V30.
+// V30 adds only the file_capability_outcomes table, V28 only indexes and V29 only nullable columns of
+// excluded tables, so V27 and V29 rows project unchanged into V30 (the new table stays empty).
+const V30_TABLES = ['file_capability_outcomes'];
+const V29_TABLES = new Map([...TABLES].filter(([name]) => !V30_TABLES.includes(name)));
+const REVIEWED_V29_SCHEMA = deepFreeze({ migrations: MIGRATIONS.slice(0, 29),
+  tables: REVIEWED_SCHEMA.tables.filter(t => !V30_TABLES.includes(t.name)) });
 const SCOPE_TABLES = ['local_source_approvals', 'job_local_source_inputs'];
-const V27_TABLES = new Map([...TABLES].map(([name, table]) => [name, SCOPE_TABLES.includes(name)
+const V27_TABLES = new Map([...V29_TABLES].map(([name, table]) => [name, SCOPE_TABLES.includes(name)
   ? { ...table, columns: table.columns.filter(c => c[0] !== 'scope') } : table]));
 const REVIEWED_V27_SCHEMA = deepFreeze({ migrations: MIGRATIONS.slice(0, 27),
-  tables: REVIEWED_SCHEMA.tables.map(t => SCOPE_TABLES.includes(t.name)
+  tables: REVIEWED_V29_SCHEMA.tables.map(t => SCOPE_TABLES.includes(t.name)
     ? { ...t, columns: t.columns.filter(c => c.name !== 'scope') } : t),
 });
 // V26 -> V27 is the reviewed additive file-outcome migration; V26 rows are upgraded on restore.
@@ -789,7 +805,8 @@ const REVIEWED_V26_SCHEMA = deepFreeze({ migrations: MIGRATIONS.slice(0, 26),
   tables: REVIEWED_V27_SCHEMA.tables.filter(t => t.name !== 'snapshot_inventory_measurements').map(t =>
     t.name === 'files' ? { ...t, columns: t.columns.filter(c => !OUTCOME_COLUMNS.includes(c.name)) } : t),
 });
-const LEGACY_SCHEMAS = new Map([[26, [REVIEWED_V26_SCHEMA, V26_TABLES]], [27, [REVIEWED_V27_SCHEMA, V27_TABLES]]]);
+const LEGACY_SCHEMAS = new Map([[26, [REVIEWED_V26_SCHEMA, V26_TABLES]], [27, [REVIEWED_V27_SCHEMA, V27_TABLES]],
+  [29, [REVIEWED_V29_SCHEMA, V29_TABLES]]]);
 function upgradeV26FileRow(row) {
   const values = exactRecord(row, V26_TABLES.get('files').names, 'INVALID_ROW');
   return projectRow('files', { ...Object.fromEntries(values), analysis_status: 'LEGACY_UNMEASURED',
@@ -801,9 +818,13 @@ function createBackupRestorePolicy(schema) {
   const legacy = LEGACY_SCHEMAS.get(arrayValues(root.get('migrations'), 'SCHEMA_MISMATCH', MIGRATIONS.length).length);
   validateSchema(schema, legacy ? legacy[0].migrations : MIGRATIONS, legacy ? legacy[1] : TABLES);
   if (!legacy) return Object.freeze({ ...createBackupExportPolicy(schema), schema: REVIEWED_SCHEMA });
-  // V27 and V29 select the same columns of the same tables; only the excluded-table inventory differs.
-  if (legacy[0] === REVIEWED_V27_SCHEMA) {
-    return Object.freeze({ schema: REVIEWED_V27_SCHEMA, columnsFor(name) { return tableDefinition(name).names; }, projectRow });
+  // V27, V29 and V30 select the same columns of the same tables; the inventories differ only by excluded-table
+  // columns (V29) and the V30-only table, which a legacy archive cannot carry.
+  if (legacy[0] === REVIEWED_V27_SCHEMA || legacy[0] === REVIEWED_V29_SCHEMA) {
+    const tables = legacy[1];
+    return Object.freeze({ schema: legacy[0],
+      columnsFor(name) { const t = tables.get(name); if (!t) fail('TABLE_UNKNOWN'); return t.names; },
+      projectRow(name, values) { if (!tables.has(name)) fail('TABLE_UNKNOWN'); return projectRow(name, values); } });
   }
   return Object.freeze({ schema: REVIEWED_V26_SCHEMA,
     columnsFor(name) { const t = V26_TABLES.get(name); if (!t) fail('TABLE_UNKNOWN'); return t.names; },
@@ -824,6 +845,8 @@ const ENUMS = deepFreeze({
   'projects.source_type': ['GITHUB', 'LOCAL'],
   'snapshots.status': ['ANALYZING', 'READY', 'FAILED'],
   'files.analysis_status': ['LEGACY_UNMEASURED', 'UNMEASURED', 'TARGETED', 'SUCCESS', 'PARTIAL', 'FAILED', 'UNSUPPORTED'],
+  'file_capability_outcomes.capability': ['S', 'C', 'F', 'X'],
+  'file_capability_outcomes.status': ['TARGETED', 'SUCCESS', 'PARTIAL', 'FAILED', 'UNSUPPORTED', 'UNMEASURED'],
   'analysis_jobs.type': ['IMPORT', 'REANALYZE'],
   'analysis_jobs.status': ['QUEUED', 'RUNNING', 'CANCELLING', 'DONE', 'FAILED', 'CANCELLED'],
   'analysis_job_steps.status': ['PENDING', 'RUNNING', 'DONE', 'FAILED', 'SKIPPED'],
@@ -1177,4 +1200,4 @@ function createBackupExportPolicy(schemaInventory) {
   });
 }
 
-module.exports = Object.freeze({ createBackupExportPolicy, createBackupRestorePolicy, upgradeV26FileRow, REVIEWED_SCHEMA, REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA, POLICY_LIMITS, BackupExportPolicyError });
+module.exports = Object.freeze({ createBackupExportPolicy, createBackupRestorePolicy, upgradeV26FileRow, REVIEWED_SCHEMA, REVIEWED_V29_SCHEMA, REVIEWED_V27_SCHEMA, REVIEWED_V26_SCHEMA, POLICY_LIMITS, BackupExportPolicyError });

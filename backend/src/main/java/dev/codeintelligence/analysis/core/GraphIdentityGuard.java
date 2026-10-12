@@ -110,6 +110,7 @@ public final class GraphIdentityGuard {
                 input.evidences().stream()
                         .filter(evidence -> !blocked.contains(evidence.subjectNaturalKey()))
                         .toList(),
-                List.copyOf(outcomes.values()));
+                List.copyOf(outcomes.values()),
+                input.capabilityOutcomes());
     }
 }

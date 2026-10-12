@@ -650,6 +650,9 @@ async function copySelectedFile(selected, destination, created) {
       if (expected.summary.schema.migrations.length === 26
           && (observed.value.summary.tableCounts.snapshot_inventory_measurements !== '0'
           || observed.value.summary.tableSha256.snapshot_inventory_measurements !== crypto.createHash('sha256').digest('hex'))) fail();
+      if (expected.summary.schema.migrations.length < 30
+          && (observed.value.summary.tableCounts.file_capability_outcomes !== '0'
+          || observed.value.summary.tableSha256.file_capability_outcomes !== crypto.createHash('sha256').digest('hex'))) fail();
       await ports.prepareResume({ transactionId, restored: true, recovery: true });
       if (active.phase !== 'COMPLETED') await records.append({ transactionId, phase: 'HEALTH_VERIFIED', data: { checked: true } });
       const finalize = async () => {

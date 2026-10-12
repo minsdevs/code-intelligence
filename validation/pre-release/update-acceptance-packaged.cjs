@@ -5,8 +5,9 @@
 // boundaries on one isolated profile, with a fixture HTTPS server on 127.0.0.1 and fixture Ed25519
 // manifests. Rows follow C14 U1–U10 of docs/release/update-acceptance-plan.md §5. Not exercised: Developer
 // ID signing, notarization, stapling (simulated by the Validation tool runner and listed in the report),
-// a real update host, a clean Mac, and U8 (older backup restore). A PASS here is row-level evidence, not
-// G-UPDATE PASS (O2 stays BLOCKED).
+// a real update host and a clean Mac. U8 (an older backup restored on N+1 keeps the started-build floor) runs
+// through the product backup/restore path (data:backup / data:restore IPC, native open dialogs scripted). A PASS
+// here is row-level evidence, not G-UPDATE PASS (O2 stays BLOCKED).
 //
 //   with-native-lock.sh <name> node validation/pre-release/update-acceptance-packaged.cjs \
 //     --app <repo>/.native-product-<id>/Code Intelligence Validation.app --fixture <fixture directory>
@@ -164,13 +165,21 @@ async function main(argv = process.argv.slice(2)) {
       const record = value => fsMain.appendFileSync(log, JSON.stringify({ at: Date.now(), ...value }) + '\n', { mode: 0o600 });
       dialog.showMessageBox = async (...args) => {
         const options = args.length > 1 ? args[1] : args[0];
-        const answer = script.find(item => item.title === options.title);
+        const answer = script.find(item => item.kind !== 'open' && item.title === options.title);
         record({ kind: 'messageBox', title: options.title, message: options.message, detail: options.detail, buttons: options.buttons,
           response: answer ? answer.response : null });
         if (!answer) throw new Error('UNSCRIPTED_DIALOG');
         return { response: answer.response, checkboxChecked: false };
       };
       dialog.showErrorBox = (title, content) => { record({ kind: 'errorBox', title, content }); };
+      // Native folder/file pickers of the product backup and restore paths answer with the scripted selection.
+      dialog.showOpenDialog = async (...args) => {
+        const options = args.length > 1 ? args[1] : args[0];
+        const answer = script.find(item => item.kind === 'open' && item.title === options.title);
+        record({ kind: 'openDialog', title: options.title, properties: options.properties, filePaths: answer ? answer.filePaths : null });
+        if (!answer) throw new Error('UNSCRIPTED_DIALOG');
+        return { canceled: false, filePaths: answer.filePaths };
+      };
       shell.showItemInFolder = file => { record({ kind: 'reveal', file }); };
       return true;
     }, { script, log: dialogLog() });
@@ -199,7 +208,14 @@ async function main(argv = process.argv.slice(2)) {
         assert.ok(Date.now() < end, 'DIALOG_TIMEOUT ' + title); await sleep(500);
       }
     };
-    return { electronApp, child, page, waitExit, quit, clickCheck, waitDialog, entry };
+    const waitReady = async (timeoutMs = 300000) => {
+      for (const end = Date.now() + timeoutMs; ;) {
+        const status = await page.evaluate(() => window.codeIntelligenceDesktop.runtimeStatus()).catch(() => null);
+        if (status?.ready && !status.recoveryOnly && !status.error) return status;
+        assert.ok(Date.now() < end, 'RUNTIME_NOT_READY'); await sleep(1000);
+      }
+    };
+    return { electronApp, child, page, waitExit, quit, clickCheck, waitDialog, waitReady, entry };
   }
 
   const bodyBase = (changes = {}) => {
@@ -229,13 +245,32 @@ async function main(argv = process.argv.slice(2)) {
       artifact: { kind: 'zip', url: `https://${feed.host}/stable/next.zip`, size: nextZip.length, sha256: sha256(nextZip) }, ...changes });
 
     // ---- Phase A: build N on a fresh profile; refusals, then the verified update hand-off (U1–U4, U6a, U10a).
-    let session = await launch(app, { script: [noVerified, ...acceptUpdate], label: 'A: build N fresh profile' });
+    const backupParent = path.join(work, 'older-backup'); fs.mkdirSync(backupParent, { mode: 0o700 });
+    const backupPicker = { kind: 'open', title: 'Choose where to save an encrypted backup', filePaths: [backupParent] };
+    let session = await launch(app, { script: [noVerified, ...acceptUpdate, backupPicker], label: 'A: build N fresh profile' });
     const schema0 = readJson(path.join(userData, 'update-checkpoints', 'schema.json'));
     assert.equal(schema0.build, manifest.buildSequence); assert.equal(schema0.flyway, TARGET_FLYWAY);
     assert.equal(journalEvents(userData, 'BUILD_STARTED'), 1);
     row('U0', 'Healthy first start records the schema and raises the started-build floor', 'PASS', { schema: schema0, buildStarted: 1,
       updateMenu: await session.electronApp.evaluate(({ Menu }) => Boolean(Menu.getApplicationMenu()?.getMenuItemById('check-for-updates'))) });
     const bundleN = schema0.bundle;
+    // U8 (1/3): the product backup of build N, taken through data:backup with the native folder picker scripted.
+    let olderBackup = null;
+    {
+      const mark = Date.now();
+      await session.page.evaluate(() => { window.codeIntelligenceDesktop.backup().catch(() => {}); return true; });
+      for (const end = Date.now() + 600000; ;) {
+        const roots = fs.existsSync(backupParent) ? fs.readdirSync(backupParent).filter(name => name.startsWith('CodeIntelligence-')) : [];
+        const file = roots.map(name => path.join(backupParent, name, 'backup.cibackup')).find(candidate => fs.existsSync(candidate));
+        if (file) { olderBackup = file; break; }
+        assert.ok(Date.now() < end, 'BACKUP_TIMEOUT'); await sleep(1000);
+      }
+      await session.waitReady();
+      const picker = readDialogs().find(item => item.kind === 'openDialog' && item.title === backupPicker.title);
+      row('U8a', 'Build N writes an encrypted product backup through the native backup path', olderBackup && picker ? 'PASS' : 'FAIL',
+        { backup: olderBackup, sha256: olderBackup ? sha256(fs.readFileSync(olderBackup)) : null, bytes: olderBackup ? fs.statSync(olderBackup).size : null,
+          elapsedMs: Date.now() - mark, picker: picker ? { properties: picker.properties, filePaths: picker.filePaths } : null, journalRestoreEvents: journalEvents(userData, 'RESTORE_BEGIN') });
+    }
 
     const refusal = async (id, title, body, privateKey, artifact, expectedCode, expectedRequests) => {
       const mark = server.requests.length; const before = readDialogs().length;
@@ -287,11 +322,35 @@ async function main(argv = process.argv.slice(2)) {
     await session.quit();
 
     // ---- Phase B: "install" N+1 (the verified artifact's bundle) on the same profile; then N is refused by the floor (U6b).
-    session = await launch(next.app, { script: [], label: 'B: build N+1 first start' });
+    const restorePicker = { kind: 'open', title: 'Choose an encrypted backup from this installation', filePaths: [olderBackup] };
+    session = await launch(next.app, { script: [restorePicker], label: 'B: build N+1 first start' });
     const schema1 = readJson(path.join(userData, 'update-checkpoints', 'schema.json'));
     const floorRaised = schema1.build === next.buildSequence && journalRecords(userData).filter(event => event.type === 'BUILD_STARTED').at(-1)?.build === next.buildSequence;
-    await session.quit();
     row('U1b', 'Build N+1 starts on the data of N, records its schema and raises the floor', floorRaised ? 'PASS' : 'FAIL', { schema: schema1 });
+    // U8 (2/3): restore the older (build N) backup on N+1 through data:restore; the journal merge must keep the
+    // started-build floor at N+1 (restore merges never lower minimumVersion), and N+1 must resume healthy.
+    let restoreKept = false, restoreDetail = null;
+    {
+      const mark = Date.now(), beginBefore = journalEvents(userData, 'RESTORE_BEGIN');
+      await session.page.evaluate(() => { window.codeIntelligenceDesktop.restore().catch(() => {}); return true; });
+      for (const end = Date.now() + 600000; ;) {
+        if (journalEvents(userData, 'RESTORE_RECEIPT') > beginBefore && journalEvents(userData, 'RESTORE_BEGIN') > beginBefore) break;
+        assert.ok(Date.now() < end, 'RESTORE_TIMEOUT'); await sleep(1000);
+      }
+      const status = await session.waitReady();
+      const begins = journalRecords(userData).filter(event => event.type === 'RESTORE_BEGIN');
+      const receipts = journalRecords(userData).filter(event => event.type === 'RESTORE_RECEIPT');
+      const started = journalRecords(userData).filter(event => event.type === 'BUILD_STARTED');
+      const schemaAfterRestore = readJson(path.join(userData, 'update-checkpoints', 'schema.json'));
+      const picker = readDialogs().find(item => item.kind === 'openDialog' && item.title === restorePicker.title);
+      restoreKept = begins.length > 0 && receipts.length === begins.length
+        && begins.every(event => event.minimumVersion === next.buildSequence)
+        && started.at(-1)?.build === next.buildSequence && started.filter(event => event.build === manifest.buildSequence).length === 1
+        && schemaAfterRestore.build === next.buildSequence && Boolean(picker) && status.ready;
+      restoreDetail = { elapsedMs: Date.now() - mark, restoreBegins: begins.map(event => ({ restoreId: event.restoreId, inputMinimumVersion: event.inputMinimumVersion, minimumVersion: event.minimumVersion, obligationCount: event.obligationCount })),
+        restoreReceipts: receipts.length, buildStarted: started.map(event => event.build), schemaAfterRestore, picker: picker ? { properties: picker.properties, filePaths: picker.filePaths } : null, runtime: { ready: status.ready, recoveryOnly: status.recoveryOnly ?? null } };
+    }
+    await session.quit();
     {
       const older = await launch(app, { script: [], expectWindow: false, label: 'B2: build N after N+1 started' });
       const exit = await older.waitExit(300000);
@@ -300,6 +359,9 @@ async function main(argv = process.argv.slice(2)) {
       const ok = exit.code === 0 && errors.length === 1 && !startedAgain;
       row('U6b', 'An older build reinstalled after N+1 started cannot run normally (floor refusal, recovery-only)', ok ? 'PASS' : 'FAIL',
         { exit, errorBoxes: errors.map(item => item.title), startup: older.entry.startup ?? null, floorKeptAt: next.buildSequence });
+      // U8 (3/3): after the older backup was restored on N+1 the floor is still N+1 and N stays refused.
+      row('U8', 'Restore an older backup on N+1: high-water stays N+1 and the older build is still refused', restoreKept && ok ? 'PASS' : 'FAIL',
+        { ...restoreDetail, olderBuildRefusedAfterRestore: ok, journalBuildStartedAfterRefusal: journalRecords(userData).filter(event => event.type === 'BUILD_STARTED').map(event => event.build) });
     }
 
     // ---- Phase C: a failing upgrade (killed during migration) leaves the checkpoint open; restore returns the database (U9).
@@ -387,7 +449,6 @@ async function main(argv = process.argv.slice(2)) {
       row('U7c', 'The consumed recovery serial cannot be replayed', reason === 'UPDATE_MANIFEST_REPLAYED' ? 'PASS' : 'FAIL', { reason, requests: requestsSince(mark) });
     }
     await session.quit();
-    row('U8', 'Restore an older backup on N+1: high-water stays N+1', 'NOT_RUN', { note: 'Needs the backup restore flow on this profile; covered by update-anti-rollback unit tests only.' });
     row('U10b', 'N+1 re-signed with another Team ID or ad-hoc is refused before launch', 'BLOCKED', { note: 'Validation runner simulates the Team ID observation (ad-hoc builds have none); needs Developer ID material (O2).' });
 
     report.status = report.rows.some(item => item.status === 'FAIL') ? 'FAIL' : 'ROWS_RECORDED_NOT_GATE_PASS';

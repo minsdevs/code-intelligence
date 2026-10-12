@@ -6,9 +6,13 @@ import {
   type Decorator,
   type Expression,
   type FunctionDeclaration,
+  type InterfaceDeclaration,
   type MethodDeclaration,
   type Project,
+  type PropertyAccessExpression,
   type SourceFile,
+  type Type,
+  type TypeAliasDeclaration,
   SyntaxKind,
   ts,
 } from 'ts-morph'
@@ -172,7 +176,7 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[], sco
     bindingsByFile.set(filePath, collectImportBindings(source))
     if (!scope || scope.owned.has(filePath)) within(3, filePath, () => collectResolvedImports(source, filePath, resolveImport, imports))
   }
-  const { classesByName, declarationsByFileAndName, methodsByOwnerAndName } =
+  const { classesByName, declarationsByFileAndName, methodsByOwnerAndName, implementations } =
     collectDeclarations(sourceFiles, bindingsByFile, within, addNode, addEdge)
   for (const [key, method] of scope?.manifest?.providerMethods ?? []) {
     if (!methodsByOwnerAndName.has(key)) methodsByOwnerAndName.set(key, method)
@@ -250,6 +254,7 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[], sco
             addNode,
             addEdge,
             unresolvedCalls,
+            { bindings, implementations },
           )
         }
       }
@@ -257,7 +262,7 @@ export function extractSemanticGraph(project: Project, files: AnalyzeFile[], sco
         const name = declaration.getName()
         if (!name || !declaration.getBody()) continue
         collectCallableCalls(declaration, '', symbolKey(filePath, name), filePath, new Map(), new Map(),
-          resolveImport, declarationsByFileAndName, addNode, addEdge, unresolvedCalls)
+          resolveImport, declarationsByFileAndName, addNode, addEdge, unresolvedCalls, { bindings, implementations })
       }
     
     })
@@ -364,10 +369,13 @@ function collectDeclarations(
   classesByName: Map<string, DeclarationRef[]>
   declarationsByFileAndName: Map<string, DeclarationRef>
   methodsByOwnerAndName: Map<string, DeclarationRef>
+  /** Implementations of a project interface/type-alias member by `<type key>.<member>`, in program order. */
+  implementations: Map<string, DeclarationRef[]>
 } {
   const classesByName = new Map<string, DeclarationRef[]>()
   const declarationsByFileAndName = new Map<string, DeclarationRef>()
   const methodsByOwnerAndName = new Map<string, DeclarationRef>()
+  const implementations = new Map<string, DeclarationRef[]>()
   for (const source of sourceFiles) {
     const filePath = filePathOf(source)
     within(4, filePath, () => {
@@ -413,6 +421,51 @@ function collectDeclarations(
           addEdge(edge(key, methodKey, 'DECLARES', 'CONFIRMED', filePath, method, {}))
           methodsByOwnerAndName.set(`${key}.${methodName}`, { key: methodKey, name: methodName, filePath })
         }
+        // `implements` of a project interface: the class's instance methods implement that interface's members.
+        for (const clause of declaration.getImplements()) {
+          const target = projectTypeDeclaration(clause.getType())
+          if (!target) continue
+          const typeKey = symbolKey(filePathOf(target.getSourceFile()), target.getName())
+          for (const method of declaration.getMethods()) {
+            if (method.isStatic() || !method.getBody()) continue
+            const methodName = method.getName()
+            addRef(implementations, `${typeKey}.${methodName}`, { key: symbolKey(filePath, `${name}.${methodName}`), name: methodName, filePath })
+          }
+        }
+      }
+
+      // Module-level object literals annotated with a project interface/type alias implement its members
+      // (T-C dynamic-unresolved; provisional member grammar `ts:<file>#<const>.<member>`). Only function-valued
+      // members become METHOD nodes; data properties and unannotated literals are not declarations.
+      for (const declaration of source.getVariableDeclarations()) {
+        const nameNode = declaration.getNameNode()
+        const initializer = declaration.getInitializer()
+        if (!Node.isIdentifier(nameNode) || !declaration.getTypeNode() || !initializer) continue
+        const literal = unwrapExpression(initializer)
+        if (!Node.isObjectLiteralExpression(literal)) continue
+        const target = projectTypeDeclaration(declaration.getType())
+        if (!target) continue
+        const name = nameNode.getText()
+        const typeKey = symbolKey(filePathOf(target.getSourceFile()), target.getName())
+        for (const property of literal.getProperties()) {
+          let memberName: string | undefined
+          if (Node.isMethodDeclaration(property)) memberName = property.getName()
+          else if (Node.isPropertyAssignment(property)) {
+            const value = property.getInitializer()
+            const unwrapped = value ? unwrapExpression(value) : undefined
+            if (unwrapped && (Node.isArrowFunction(unwrapped) || Node.isFunctionExpression(unwrapped))) memberName = property.getName()
+          }
+          if (!memberName) continue
+          memberName = memberName.replace(/^(['"`])(.*)\1$/, '$2')
+          const memberKey = symbolKey(filePath, `${name}.${memberName}`)
+          addNode(hit(memberKey, 'METHOD', memberName, filePath, property, areaFor(filePath), {
+            declarationKind: 'OBJECT_LITERAL_METHOD',
+            implements: typeKey,
+            exported: declaration.isExported(),
+          }))
+          addEdge(edge(fileKey(filePath), memberKey, 'CONTAINS', 'CONFIRMED', filePath, property, { relation: 'DECLARES' }))
+          addRef(implementations, `${typeKey}.${memberName}`, { key: memberKey, name: memberName, filePath })
+        }
       }
 
       for (const declaration of source.getInterfaces()) {
@@ -453,7 +506,18 @@ function collectDeclarations(
     
     })
   }
-  return { classesByName, declarationsByFileAndName, methodsByOwnerAndName }
+  return { classesByName, declarationsByFileAndName, methodsByOwnerAndName, implementations }
+}
+
+/** The single project interface or type-alias declaration a type (or its alias) names, else undefined. */
+function projectTypeDeclaration(type: Type): InterfaceDeclaration | TypeAliasDeclaration | undefined {
+  const symbol = type.getAliasSymbol() ?? type.getSymbol()
+  const declarations = symbol?.getDeclarations() ?? []
+  if (declarations.length !== 1) return undefined
+  const declaration = declarations[0]
+  if (!Node.isInterfaceDeclaration(declaration) && !Node.isTypeAliasDeclaration(declaration)) return undefined
+  return declaration.getSourceFile().isFromExternalLibrary() || declaration.getSourceFile().isDeclarationFile()
+    ? undefined : declaration
 }
 
 function collectImportBindings(source: SourceFile): Map<string, ImportBinding> {
@@ -959,6 +1023,7 @@ function collectCallableCalls(
   addNode: (node: SemanticNodeHit) => void,
   addEdge: (edge: SemanticEdgeHit) => void,
   unresolvedCalls: UnresolvedCallHit[],
+  dispatch: { bindings: Map<string, ImportBinding>; implementations: Map<string, DeclarationRef[]> } = { bindings: new Map(), implementations: new Map() },
 ): void {
   for (const call of method.getDescendantsOfKind(SyntaxKind.CallExpression)) {
     // Nested callbacks/functions have their own execution owner. Until they have graph
@@ -1035,6 +1100,21 @@ function collectCallableCalls(
         continue
       }
     }
+    if (Node.isPropertyAccessExpression(expression)) {
+      const candidates = interfaceDispatch(expression, filePath, dispatch.bindings, resolveImport, dispatch.implementations)
+      if (candidates) {
+        if (candidates.refs.length > MAX_DISPATCH_CANDIDATES) {
+          unresolvedCalls.push({ sourceKey, expression: text, filePath, lineStart: startLine(call), reason: 'CANDIDATES_EXCEEDED' })
+          continue
+        }
+        const keys = candidates.refs.map((ref) => ref.key)
+        for (const ref of candidates.refs) {
+          addEdge(edge(sourceKey, ref.key, 'CALLS', 'POSSIBLE', filePath, call,
+            { ...callMetadata(call), dispatchType: candidates.typeKey, targetCandidates: keys }))
+        }
+        continue
+      }
+    }
     if (Node.isIdentifier(expression) || Node.isPropertyAccessExpression(expression) || Node.isElementAccessExpression(expression)) {
       unresolvedCalls.push({
         sourceKey,
@@ -1045,6 +1125,49 @@ function collectCallableCalls(
       })
     }
   }
+}
+
+/** Candidate sets above this size are not published as candidates (T00 candidate contract, as the Java analyzer). */
+const MAX_DISPATCH_CANDIDATES = 5
+
+/**
+ * Candidates of a call whose receiver is declared as a project interface or type alias (T-C
+ * dynamic-unresolved). Like the Java class-hierarchy candidates every target is CALLS/POSSIBLE, never
+ * CONFIRMED. The set is bounded to the implementations declared in the calling module and in the
+ * type's declaring module: both files belong to every slice program that owns the caller (the
+ * declaring module is an import target or the file itself), so a sliced extraction equals one
+ * whole-manifest program and the caller's incremental key already covers both files.
+ * Implementations elsewhere are not guessed; without a visible one the call stays an abstention.
+ */
+function interfaceDispatch(
+  expression: PropertyAccessExpression,
+  filePath: string,
+  bindings: Map<string, ImportBinding>,
+  resolveImport: Resolver,
+  implementations: Map<string, DeclarationRef[]>,
+): { typeKey: string; refs: DeclarationRef[] } | null {
+  const receiver = expression.getExpression()
+  const type = receiver.getType()
+  const target = projectTypeDeclaration(type)
+  if (!target) {
+    // An annotation naming an import the program does not hold resolves to nothing here; report the
+    // import so a slice is re-run with that module (whole-manifest equality).
+    const declared = receiver.getSymbol()?.getDeclarations()?.[0]
+    const typeNode = declared && Node.isTyped(declared) ? declared.getTypeNode() : undefined
+    if (typeNode && Node.isTypeReference(typeNode)) {
+      const head = typeNode.getTypeName().getText().split('.')[0]
+      const binding = bindings.get(head)
+      if (binding) resolveImport(binding.source, filePath)
+    }
+    return null
+  }
+  const member = expression.getName()
+  if (!type.getProperty(member)) return null
+  const declaringFile = filePathOf(target.getSourceFile())
+  const typeKey = symbolKey(declaringFile, target.getName())
+  const refs = (implementations.get(`${typeKey}.${member}`) ?? [])
+    .filter((ref) => ref.filePath === filePath || ref.filePath === declaringFile)
+  return refs.length > 0 ? { typeKey, refs } : null
 }
 
 function hasMethodThis(call: CallExpression, method: MethodDeclaration): boolean {

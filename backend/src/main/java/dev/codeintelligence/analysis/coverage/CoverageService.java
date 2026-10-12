@@ -132,8 +132,9 @@ public class CoverageService {
     }
 
     /**
-     * The recorded per-file outcome is the primary parser's, so it measures capability P only. Symbol, call, framework
-     * and cross-language outcomes are not persisted per file and stay unrecorded instead of borrowing P's counts.
+     * Capability P is the recorded per-file primary-parser outcome on files; S, C, F and X are the per-file rows
+     * their owning adapters recorded (V30 file_capability_outcomes). A file without a terminal or pending row for a
+     * capability is unmeasured for it, so eligible + unmeasured equals the file rows for every capability.
      */
     private List<CoverageReport.CapabilityOutcome> computeCapabilityOutcomes(long snapshotId, boolean measured) {
         List<CoverageReport.CapabilityOutcome> capabilities = new ArrayList<>();
@@ -142,7 +143,34 @@ public class CoverageService {
                 capabilities.add(
                         CoverageReport.CapabilityOutcome.unrecorded(capability, CoverageReport.LEGACY_UNMEASURED));
             } else if (!"P".equals(capability)) {
-                capabilities.add(CoverageReport.CapabilityOutcome.unrecorded(capability, CoverageReport.NOT_RECORDED));
+                capabilities.add(jdbc.sql("""
+                                select count(*) filter (where o.status='SUCCESS') as successful,
+                                       count(*) filter (where o.status='PARTIAL') as partial,
+                                       count(*) filter (where o.status='FAILED') as failed,
+                                       count(*) filter (where o.status='UNSUPPORTED') as unsupported,
+                                       count(*) filter (where o.status='TARGETED') as pending,
+                                       count(*) filter (where o.status is null or o.status='UNMEASURED') as unmeasured
+                                from files f left join file_capability_outcomes o
+                                  on o.file_id=f.id and o.capability=:capability
+                                where f.snapshot_id=:sid
+                                """)
+                        .param("sid", snapshotId)
+                        .param("capability", capability)
+                        .query((rs, n) -> new CoverageReport.CapabilityOutcome(
+                                capability,
+                                "PER_FILE_RECORDED",
+                                rs.getInt("successful")
+                                        + rs.getInt("partial")
+                                        + rs.getInt("failed")
+                                        + rs.getInt("unsupported")
+                                        + rs.getInt("pending"),
+                                rs.getInt("successful"),
+                                rs.getInt("partial"),
+                                rs.getInt("failed"),
+                                rs.getInt("unsupported"),
+                                rs.getInt("pending"),
+                                rs.getInt("unmeasured")))
+                        .single());
             } else {
                 capabilities.add(jdbc.sql("""
                                 select count(*) filter (where analysis_status='SUCCESS') as successful,

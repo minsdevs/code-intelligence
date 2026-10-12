@@ -6,6 +6,7 @@ import dev.codeintelligence.analysis.core.AnalysisInputFingerprint;
 import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
+import dev.codeintelligence.analysis.core.FileCapabilityOutcome;
 import dev.codeintelligence.analysis.core.FileInventory;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphNodeDraft;
@@ -73,6 +74,7 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
                 })
                 .toList();
         Map<String, Entry> current = new LinkedHashMap<>();
+        List<FileCapabilityOutcome> frameworkOutcomes = new ArrayList<>();
         int reused = 0;
         try (var parsed = JavaParseSupport.parseAhead(context, changed)) {
             Set<String> changedPaths = new HashSet<>();
@@ -85,7 +87,10 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
                     continue;
                 }
                 JavaParseSupport.ParsedJavaFile unit = parsed.next().value();
-                if (unit == null) continue;
+                if (unit == null) {
+                    frameworkOutcomes.add(new FileCapabilityOutcome(file.path(), "F", "FAILED", "JAVA_PARSE_FAILED"));
+                    continue;
+                }
                 var singleton = List.of(unit);
                 List<AnalysisResult> results = List.of(
                         jpa.analyzeFiles(singleton),
@@ -124,6 +129,10 @@ public final class JavaFrameworkAnalyzer implements CodeAnalyzer {
         cache = Map.copyOf(bounded);
         environment = input == null ? null : input.environment();
         log.info("Java framework reuse: parsed={}, reused={}, retainedBytes={}", changed.size(), reused, bytes);
-        return new AnalysisResult(nodes, edges, evidences);
+        // Every parsed or reused Java file passed the JPA/Kafka/layer/Spring visitors: its framework capability (F).
+        for (String path : current.keySet()) {
+            frameworkOutcomes.add(new FileCapabilityOutcome(path, "F", "SUCCESS", "JAVA_FRAMEWORK_VISITED"));
+        }
+        return new AnalysisResult(nodes, edges, evidences, List.of(), frameworkOutcomes);
     }
 }

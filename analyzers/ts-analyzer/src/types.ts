@@ -114,9 +114,19 @@ export type UnresolvedCallHit = {
   reason: string
 }
 
+export type FileCapabilityOutcome = {
+  path: string
+  /** S symbols, C calls, F framework facts; X (cross-domain) is the backend's. */
+  capability: 'S' | 'C' | 'F'
+  status: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'UNMEASURED'
+  reason: string
+}
+
 export type AnalyzeResponse = {
   cache?: string[]
   fileOutcomes?: { path: string; status: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'UNMEASURED'; reason: string }[]
+  /** One outcome per analysed TS/JS file and owned capability (03 FileOutcome); absent only on legacy paths. */
+  capabilityOutcomes?: FileCapabilityOutcome[]
   routes: RouteHit[]
   components: SymbolHit[]
   hooks: SymbolHit[]

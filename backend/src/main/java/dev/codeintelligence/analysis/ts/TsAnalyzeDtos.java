@@ -3,6 +3,7 @@ package dev.codeintelligence.analysis.ts;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
+import dev.codeintelligence.analysis.core.FileCapabilityOutcome;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -201,7 +202,41 @@ public final class TsAnalyzeDtos {
             List<UnresolvedCallHit> unresolvedCalls,
             List<FileAnalysisOutcome> fileOutcomes,
             SessionReply session,
-            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> cache) {
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> cache,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<FileCapabilityOutcome> capabilityOutcomes) {
+        public Response(
+                List<RouteHit> routes,
+                List<SymbolHit> components,
+                List<SymbolHit> hooks,
+                List<SymbolHit> stores,
+                List<ApiCallHit> apiCalls,
+                List<ImportHit> imports,
+                List<SymbolHit> symbols,
+                List<EndpointHit> endpoints,
+                List<SemanticNodeHit> nodes,
+                List<SemanticEdgeHit> edges,
+                List<UnresolvedCallHit> unresolvedCalls,
+                List<FileAnalysisOutcome> fileOutcomes,
+                SessionReply session,
+                List<String> cache) {
+            this(
+                    routes,
+                    components,
+                    hooks,
+                    stores,
+                    apiCalls,
+                    imports,
+                    symbols,
+                    endpoints,
+                    nodes,
+                    edges,
+                    unresolvedCalls,
+                    fileOutcomes,
+                    session,
+                    cache,
+                    List.of());
+        }
+
         public Response(
                 List<RouteHit> routes,
                 List<SymbolHit> components,
@@ -296,6 +331,7 @@ public final class TsAnalyzeDtos {
         public Response {
             cache = cache == null ? List.of() : List.copyOf(cache);
             fileOutcomes = fileOutcomes == null ? List.of() : List.copyOf(fileOutcomes);
+            capabilityOutcomes = capabilityOutcomes == null ? List.of() : List.copyOf(capabilityOutcomes);
             routes = routes == null ? List.of() : List.copyOf(routes);
             components = components == null ? List.of() : List.copyOf(components);
             hooks = hooks == null ? List.of() : List.copyOf(hooks);
@@ -325,7 +361,8 @@ public final class TsAnalyzeDtos {
                     flatten(pages, Response::unresolvedCalls),
                     flatten(pages, Response::fileOutcomes),
                     null,
-                    flatten(pages, Response::cache));
+                    flatten(pages, Response::cache),
+                    flatten(pages, Response::capabilityOutcomes));
         }
 
         private static <T> List<T> flatten(List<Response> pages, java.util.function.Function<Response, List<T>> part) {

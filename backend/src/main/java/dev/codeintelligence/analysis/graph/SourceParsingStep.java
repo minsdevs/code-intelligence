@@ -6,6 +6,7 @@ import dev.codeintelligence.analysis.core.AnalysisResult;
 import dev.codeintelligence.analysis.core.AnalyzerEvidence;
 import dev.codeintelligence.analysis.core.CodeAnalyzer;
 import dev.codeintelligence.analysis.core.FileAnalysisOutcome;
+import dev.codeintelligence.analysis.core.FileCapabilityOutcome;
 import dev.codeintelligence.analysis.core.FileInventory;
 import dev.codeintelligence.analysis.core.GraphEdgeDraft;
 import dev.codeintelligence.analysis.core.GraphIdentityGuard;
@@ -92,15 +93,15 @@ public class SourceParsingStep implements JobStep {
             ctx.updateProgress(100);
             return;
         }
-        FileAnalysisOutcome.recordFiles(
-                jdbc,
-                snapshotId,
-                inventory.files().stream()
-                        .filter(file -> "java".equalsIgnoreCase(file.language())
-                                || file.path().endsWith(".java"))
-                        .map(InventoriedFile::path)::iterator,
-                "TARGETED",
-                "JAVA_PARSER_STARTED");
+        List<String> javaPaths = inventory.files().stream()
+                .filter(file ->
+                        "java".equalsIgnoreCase(file.language()) || file.path().endsWith(".java"))
+                .map(InventoriedFile::path)
+                .toList();
+        FileAnalysisOutcome.recordFiles(jdbc, snapshotId, javaPaths, "TARGETED", "JAVA_PARSER_STARTED");
+        // The Java symbol, call and framework capabilities are pending until their analyzers report (03 FileOutcome).
+        FileCapabilityOutcome.recordFiles(
+                jdbc, snapshotId, javaPaths, List.of("S", "C", "F"), "TARGETED", "JAVA_PARSER_STARTED");
         AnalysisContext analysis = new AnalysisContext(ctx.projectId(), snapshotId, ctx.clonePath(), inventory);
         AnalysisInputFingerprint.Snapshot input = matching.stream()
                         .anyMatch(
@@ -141,8 +142,10 @@ public class SourceParsingStep implements JobStep {
             helper.shutdownNow();
         }
         ctx.updateProgress(70);
-        persistence.persist(ctx.projectId(), snapshotId, acc.toResult());
+        AnalysisResult merged = acc.toResult();
+        persistence.persist(ctx.projectId(), snapshotId, merged);
         FileAnalysisOutcome.recordAll(jdbc, snapshotId, acc.outcomes.values());
+        FileCapabilityOutcome.recordAll(jdbc, snapshotId, merged.capabilityOutcomes());
         failures.addAll(acc.snapshotFailures());
         persistFailures(ctx.projectId(), snapshotId, failures);
         ctx.updateProgress(100);
@@ -242,10 +245,14 @@ public class SourceParsingStep implements JobStep {
         private final List<GraphEdgeDraft> edges = new ArrayList<>();
         private final List<AnalyzerEvidence> evidences = new ArrayList<>();
         private final Map<String, FileAnalysisOutcome> outcomes = new LinkedHashMap<>();
+        private final Map<String, FileCapabilityOutcome> capabilityOutcomes = new LinkedHashMap<>();
         private final List<NewEvidence> snapshotFailures = new ArrayList<>();
 
         void add(AnalysisResult result) {
             for (FileAnalysisOutcome outcome : result.fileOutcomes()) outcomes.put(outcome.path(), outcome);
+            for (FileCapabilityOutcome outcome : result.capabilityOutcomes()) {
+                capabilityOutcomes.put(outcome.path() + "\n" + outcome.capability(), outcome);
+            }
             nodes.addAll(result.nodes());
             edges.addAll(result.edges());
             for (AnalyzerEvidence evidence : result.evidences()) {
@@ -273,7 +280,11 @@ public class SourceParsingStep implements JobStep {
             Map<String, GraphNodeDraft> merged = new LinkedHashMap<>();
             for (GraphNodeDraft node : safe.nodes()) merged.merge(node.naturalKey(), node, Accumulator::merge);
             return new AnalysisResult(
-                    List.copyOf(merged.values()), safe.edges(), safe.evidences(), safe.fileOutcomes());
+                    List.copyOf(merged.values()),
+                    safe.edges(),
+                    safe.evidences(),
+                    safe.fileOutcomes(),
+                    List.copyOf(capabilityOutcomes.values()));
         }
 
         private static GraphNodeDraft merge(GraphNodeDraft existing, GraphNodeDraft incoming) {

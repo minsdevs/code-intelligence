@@ -528,6 +528,7 @@ test('a delayed beforeWrite cannot bypass file identity checks or write to a rep
 function legacyRecords(rows) {
   const database = summary(rows); database.schema = clone(REVIEWED_V26_SCHEMA);
   delete database.tableCounts.snapshot_inventory_measurements; delete database.tableSha256.snapshot_inventory_measurements;
+  delete database.tableCounts.file_capability_outcomes; delete database.tableSha256.file_capability_outcomes;
   return [header(), ...rows.map(row => ({ kind: 'ROW', row })), { kind: 'DATABASE', summary: database }];
 }
 test('reader accepts only exact V26 rows/schema while writer remains V27-only', async t => {
@@ -561,6 +562,7 @@ test('legacy reader rejects forged migration, partial outcome columns, hybrid ta
 
 function v27Records(rows) {
   const database = summary(rows); database.schema = clone(REVIEWED_V27_SCHEMA);
+  delete database.tableCounts.file_capability_outcomes; delete database.tableSha256.file_capability_outcomes;
   return [header(), ...rows.map(row => ({ kind: 'ROW', row })), { kind: 'DATABASE', summary: database }];
 }
 test('reader accepts an exact V27 archive with unchanged rows while the writer stays V29-only', async t => {

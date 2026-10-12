@@ -1180,11 +1180,12 @@ test('review regression accepts an already removed registered payload only under
 });
 
 function v27Summary(rows) {
-  const result = summary(rows); result.schema = REVIEWED_V27_SCHEMA; return result;
+  const result = summary(rows); result.schema = REVIEWED_V27_SCHEMA; delete result.tableCounts.file_capability_outcomes; delete result.tableSha256.file_capability_outcomes; return result;
 }
 function v26Summary(rows) {
   const result = summary(rows); result.schema = REVIEWED_V26_SCHEMA;
   delete result.tableCounts.snapshot_inventory_measurements; delete result.tableSha256.snapshot_inventory_measurements;
+  delete result.tableCounts.file_capability_outcomes; delete result.tableSha256.file_capability_outcomes;
   return result;
 }
 test('V26 encrypted archive restores retained sources without mutating the selected archive', async t => {

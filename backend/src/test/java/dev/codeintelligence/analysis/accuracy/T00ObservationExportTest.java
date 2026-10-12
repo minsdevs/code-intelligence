@@ -182,6 +182,11 @@ class T00ObservationExportTest {
                        analysis_reason as "analysisReason", analysis_targeted as "analysisTargeted"
                 from files where snapshot_id = ? order by path
                 """, snapshot));
+        dump.put("capabilityOutcomes", rows("""
+                select f.path, o.capability, o.status, o.reason
+                from file_capability_outcomes o join files f on f.id = o.file_id
+                where f.snapshot_id = ? order by f.path, o.capability
+                """, snapshot));
         dump.put("nodes", rows("""
                 select n.node_type as "type", n.natural_key as "key", n.name, f.path, n.line_start as "lineStart",
                        n.line_end as "lineEnd", n.area_type as "area", n.metadata::text as "metadataJson"
