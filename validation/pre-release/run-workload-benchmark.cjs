@@ -139,8 +139,16 @@ function observeQuietHost() {
     powerSource: observePowerSource(), lidState };
 }
 
+// Power policies for diagnostic admission. AC_REQUIRED is the default and the only policy that admits a
+// performance measurement. BATTERY_RECORDED_USER_DECISION_2026_10_13 is the owner's 2026-10-13 decision for the
+// large canonical comparison on a host that could not be charged: a diagnostic may start on battery, the power
+// source is recorded with every observation, and the timing validity is INVALID_POWER so no timing is accepted.
+const POWER_POLICIES = ['AC_REQUIRED', 'BATTERY_RECORDED_USER_DECISION_2026_10_13'];
+
 async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new Promise(resolve => setTimeout(resolve, ms)),
-  requiredFreeBytes = 0, readFreeBytes = () => freeBytes('/private/tmp'), diagnosticOnly = false } = {}) {
+  requiredFreeBytes = 0, readFreeBytes = () => freeBytes('/private/tmp'), diagnosticOnly = false, powerPolicy = 'AC_REQUIRED' } = {}) {
+  assert(POWER_POLICIES.includes(powerPolicy), 'WORKLOAD_POWER_POLICY_UNKNOWN');
+  const batteryAdmitted = diagnosticOnly && powerPolicy !== 'AC_REQUIRED';
   const started = performance.now();
   let observations = [], rejectedObservations = 0;
   for (;;) {
@@ -148,7 +156,8 @@ async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new 
     if (!Array.isArray(sample.loadAverage) || sample.loadAverage.length !== 3
       || !sample.loadAverage.every(value => Number.isFinite(value) && value >= 0)
       || !Number.isSafeInteger(sample.mdworkers) || sample.mdworkers < 0) throw new Error('WORKLOAD_HOST_OBSERVATION_FAILED');
-    if (diagnosticOnly && (sample.powerSource !== 'AC' || !['OPEN', 'CLOSED'].includes(sample.lidState))) {
+    if (diagnosticOnly && (!['OPEN', 'CLOSED'].includes(sample.lidState)
+      || (sample.powerSource !== 'AC' && !(batteryAdmitted && sample.powerSource === 'BATTERY')))) {
       throw new Error('WORKLOAD_DIAGNOSTIC_ENVIRONMENT_UNSAFE');
     }
     // 2026-10-11 user decision (05 section 4): the lid state is recorded with every observation but no longer
@@ -160,9 +169,9 @@ async function waitForQuietHost({ observe = observeQuietHost, pause = ms => new 
       const availableBytes = readFreeBytes();
       if (!Number.isSafeInteger(availableBytes) || availableBytes < requiredFreeBytes) throw new Error('DISK_SPACE_LOW');
       return { status: diagnosticOnly ? 'DIAGNOSTIC_ONLY' : 'ADMITTED', loadAverageLimit: 4, mdworkerLimit: 6, powerRequired: 'AC',
-        lidPolicy: 'RECORDED_NOT_REQUIRED', lidStates: observations.map(item => item.lidState), freeBytes: availableBytes, requiredFreeBytes,
+        powerPolicy, powerSources: observations.map(item => item.powerSource), lidPolicy: 'RECORDED_NOT_REQUIRED', lidStates: observations.map(item => item.lidState), freeBytes: availableBytes, requiredFreeBytes,
         sampleIntervalMs: diagnosticOnly ? null : 30000, waitedMs: Math.round(performance.now() - started), rejectedObservations, observations,
-        timingValidity: diagnosticOnly ? (sample.loadAverage[0] >= 4 || sample.mdworkers > 6 ? 'INVALID_LOAD' : 'NOT_APPLICABLE_DIAGNOSTIC') : 'QUIET_HOST_OBSERVED_AT_LAUNCH' };
+        timingValidity: diagnosticOnly ? (sample.powerSource !== 'AC' ? 'INVALID_POWER' : sample.loadAverage[0] >= 4 || sample.mdworkers > 6 ? 'INVALID_LOAD' : 'NOT_APPLICABLE_DIAGNOSTIC') : 'QUIET_HOST_OBSERVED_AT_LAUNCH' };
     }
     await pause(30000);
   }
@@ -771,5 +780,5 @@ async function main(argv = process.argv.slice(2)) {
   return report;
 }
 
-module.exports = { argumentsFor, instantMs, stepTimings, jobTimings, waitForQuietHost, CLASS_SETTINGS, CANCEL_TRIGGER, main };
+module.exports = { argumentsFor, instantMs, stepTimings, jobTimings, waitForQuietHost, POWER_POLICIES, CLASS_SETTINGS, CANCEL_TRIGGER, main };
 if (require.main === module) main().catch(() => { console.error('WORKLOAD_BENCHMARK_PREFLIGHT_FAILED'); process.exitCode = 1; });
