@@ -495,6 +495,11 @@ async function startPostgres({ recoveryOnly = false } = {}) {
     '-p', String(runtime.ports.postgres),
     '-c', 'listen_addresses=127.0.0.1',
     '-c', 'max_connections=40',
+    // Single-user desktop (2026-10-13): the 128 MB default shared_buffers is touched by every backend and
+    // auxiliary process, so the per-process RSS sum that the G-PERF cap measures counted it 7–8 times
+    // (0.7–1.0 GiB of PostgreSQL children at the incremental peak). 32 MB keeps the working set in the OS
+    // page cache instead; the cap, the measured processes and the sample window are unchanged.
+    '-c', 'shared_buffers=32MB',
     '-c', 'ssl=on',
     '-c', 'ssl_min_protocol_version=TLSv1.2',
     '-c', 'unix_socket_directories=',
