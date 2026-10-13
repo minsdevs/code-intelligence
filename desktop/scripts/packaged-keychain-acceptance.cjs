@@ -365,7 +365,8 @@ async function main(argv = process.argv.slice(2)) {
     phase('ui-owned-folder-import');
     await perform(() => page.evaluate(() => { history.pushState(null, '', '/import'); dispatchEvent(new PopStateEvent('popstate')); }));
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true }); await perform(() => expect(picker).toBeVisible());
-    const preview = page.getByRole('button', { name: '가져올 파일 미리보기', exact: true });
+    // A fresh profile renders the product's default language (English); a stored choice may be Korean.
+    const preview = page.getByRole('button', { name: /^(가져올 파일 미리보기|Preview files to import)$/ });
     // Keyboard-driven like the UX pilot: the focused "Choose folder" button opens folder:pick.
     if (humanPicker) {
       // The real OS dialog opens for the person; they must choose exactly this fixture folder.
@@ -381,10 +382,10 @@ async function main(argv = process.argv.slice(2)) {
     }
     save();
     await perform(() => preview.click());
-    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
+    await perform(() => expect(page.getByRole('region', { name: /^(확인할 가져오기 미리보기|Import preview to review)$/ })).toBeVisible());
     const [response] = await perform(() => Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local' && r.request().method() === 'POST'),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click(),
+      page.getByRole('button', { name: /^(확인한 파일 가져오기 및 분석|Import and analyze the reviewed files)$/ }).click(),
     ]));
     assert.ok(response.ok()); const created = await perform(() => response.json(), 20000, 'OWNED_IMPORT_RESPONSE_TIMEOUT'); projectId = created.project.id;
     await perform(() => waitFor(async () => {
