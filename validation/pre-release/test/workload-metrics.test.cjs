@@ -338,6 +338,32 @@ test('diagnostic admission never becomes a performance admission even on a quiet
   assert.equal(admission.timingValidity, 'NOT_APPLICABLE_DIAGNOSTIC');
 });
 
+test('the recorded battery policy admits a diagnostic on battery as INVALID_POWER and nothing else', async () => {
+  const policy = 'BATTERY_RECORDED_USER_DECISION_2026_10_13';
+  const sample = { loadAverage: [1, 1, 1], mdworkers: 0, powerSource: 'BATTERY', lidState: 'OPEN' };
+  const admission = await waitForQuietHost({ diagnosticOnly: true, powerPolicy: policy, observe: () => sample,
+    pause: async () => assert.fail('diagnostics use one fresh observation') });
+  assert.equal(admission.status, 'DIAGNOSTIC_ONLY');
+  assert.equal(admission.powerPolicy, policy);
+  assert.deepEqual(admission.powerSources, ['BATTERY']);
+  assert.equal(admission.timingValidity, 'INVALID_POWER');
+  const onAc = await waitForQuietHost({ diagnosticOnly: true, powerPolicy: policy, observe: () => ({ ...sample, powerSource: 'AC' }),
+    pause: async () => assert.fail('diagnostics use one fresh observation') });
+  assert.equal(onAc.timingValidity, 'NOT_APPLICABLE_DIAGNOSTIC');
+  for (const blocked of [{ powerSource: 'UNKNOWN' }, { lidState: 'UNKNOWN' }]) {
+    await assert.rejects(waitForQuietHost({ diagnosticOnly: true, powerPolicy: policy, observe: () => ({ ...sample, ...blocked }),
+      pause: async () => assert.fail('unsafe diagnostics must fail immediately') }), /WORKLOAD_DIAGNOSTIC_ENVIRONMENT_UNSAFE/);
+  }
+  // The policy never reaches a performance admission: battery observations are rejected as before.
+  let index = 0;
+  const quiet = { loadAverage: [1, 1, 1], mdworkers: 0, powerSource: 'AC', lidState: 'OPEN' };
+  const series = [{ ...quiet, powerSource: 'BATTERY' }, quiet, quiet, quiet];
+  const performance = await waitForQuietHost({ powerPolicy: policy, observe: () => series[index++], pause: async () => {} });
+  assert.equal(performance.status, 'ADMITTED');
+  assert.equal(performance.rejectedObservations, 1);
+  await assert.rejects(waitForQuietHost({ diagnosticOnly: true, powerPolicy: 'BATTERY_OK', observe: () => sample }), /WORKLOAD_POWER_POLICY_UNKNOWN/);
+});
+
 test('diagnostic admission retains AC, observable lid, and disk-space protections', async () => {
   const valid = { loadAverage: [5, 5, 5], mdworkers: 8, powerSource: 'AC', lidState: 'CLOSED' };
   for (const blocked of [{ powerSource: 'BATTERY' }, { powerSource: 'UNKNOWN' }, { lidState: 'UNKNOWN' }]) {
