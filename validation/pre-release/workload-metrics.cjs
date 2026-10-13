@@ -125,10 +125,10 @@ function startPhaseSampler(ownerPid, fd, sequence, started, { read, now = () => 
   let stopped = false, timer, releaseSleep, phase = initialPhase, lastAt = null, stoppedAt, csvBytes = 0;
   const observed = new Set();
   const phases = {};
-  const result = { samples: 0, peakRssKiB: 0, maximumGapMs: 0, maximumReadMs: 0, missingOwnerSamples: 0,
+  const result = { samples: 0, peakRssKiB: 0, maximumGapMs: 0, maximumReadMs: 0, maximumWriteMs: 0, missingOwnerSamples: 0,
     requestedIntervalMs: intervalMs, failure: null, failureDetail: null, phases,
     scope: 'Read-only owner tree plus exclusive packaged-bundle XPC scope; processes born and gone between samples are not observed' };
-  const enter = name => { phases[name] ??= { samples: 0, peakRssKiB: 0, maximumGapMs: 0, maximumReadMs: 0,
+  const enter = name => { phases[name] ??= { samples: 0, peakRssKiB: 0, maximumGapMs: 0, maximumReadMs: 0, maximumWriteMs: 0,
     maximumSchedulingDelayMs: 0, startedAtMs: now() - started, endedAtMs: null, firstAtMs: null, lastAtMs: null }; };
   const finishPhase = at => {
     const entry = phases[phase];
@@ -157,6 +157,11 @@ function startPhaseSampler(ownerPid, fd, sequence, started, { read, now = () => 
         if (result.samples >= maxSamples || csvBytes + Buffer.byteLength(text) > maxCsvBytes) { result.failure = 'MEMORY_EVIDENCE_LIMIT'; break; }
         operation = 'WRITE';
         fs.writeSync(fd, text); csvBytes += Buffer.byteLength(text);
+        // The segment after the observation (owner-tree aggregation and the synchronous CSV write) is not covered
+        // by maximumReadMs or maximumSchedulingDelayMs; a stall here shows up only as a gap unless it is measured.
+        const written = now();
+        result.maximumWriteMs = Math.max(result.maximumWriteMs, written - at);
+        entry.maximumWriteMs = Math.max(entry.maximumWriteMs, written - at);
         const gap = lastAt === null ? at - started : at - lastAt;
         result.maximumGapMs = Math.max(result.maximumGapMs, gap);
         lastAt = at; result.samples++; result.peakRssKiB = Math.max(result.peakRssKiB, value.rssKiB);

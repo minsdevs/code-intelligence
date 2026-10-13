@@ -178,6 +178,21 @@ test('an unreadable or absent owner is a sampling failure and writes no row', as
   assert.equal(fs.readFileSync(file, 'utf8'), '');
 });
 
+test('the segment after an observation (aggregation and CSV write) is measured per phase', async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'workload-sampler-test-')));
+  const file = path.join(root, 'samples.csv'), fd = fs.openSync(file, 'wx', 0o600);
+  t.after(() => { fs.closeSync(fd); fs.rmSync(root, { recursive: true, force: true }); });
+  // Every clock read advances by 7 ms, so the write segment (one clock read after the observation) is 7 ms.
+  let clock = 0, reads = 0;
+  const sampler = startPhaseSampler(10, fd, 1, 0, { intervalMs: 1000, now: () => (clock += 7), stopTimeoutMs: 20,
+    read: async () => { reads++; return reads === 1 ? [{ pid: 10, ppid: 1, rssKiB: 100 }] : new Promise(() => {}); } });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  const memory = await sampler.stop();
+  assert.equal(memory.samples, 1);
+  assert.equal(memory.maximumWriteMs, 7); assert.equal(memory.phases.STARTUP.maximumWriteMs, 7);
+  assert.equal(memory.maximumReadMs, 7); assert.equal(memory.phases.STARTUP.maximumReadMs, 7);
+});
+
 test('phase sampling completeness requires samples, no failure and bounded gaps', () => {
   const memory = { failure: null, missingOwnerSamples: 0, phases: { ANALYSIS: { samples: 10, maximumGapMs: 120 } } };
   assert.equal(phaseSamplingComplete(memory, 'ANALYSIS'), true);

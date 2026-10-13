@@ -7,7 +7,10 @@
 //
 //   (cd analyzers/ts-analyzer && npx tsc -p tsconfig.json --outDir <dist>)
 //   NODE_PATH=analyzers/ts-analyzer/node_modules \
-//     node validation/pre-release/workload-ts-memory.cjs --dist <dist> --class medium [--single]
+//     node validation/pre-release/workload-ts-memory.cjs --dist <dist> --class medium [--single] [--slice-bytes <n>]
+//
+// --slice-bytes overrides the slice program budget (ts-slices SLICE_PROGRAM_BYTES) for comparison runs; the
+// digest shows whether the result stayed equal to the default budget's result.
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { SIZE_CLASSES, planWorkload } = require('./workload-fixture.cjs');
@@ -23,6 +26,11 @@ if (!dist || !Object.hasOwn(SIZE_CLASSES, sizeClass ?? '')) {
   console.error('usage: workload-ts-memory.cjs --dist <built ts-analyzer dist> --class small|medium|large [--single]');
   process.exit(2);
 }
+const sliceBytes = option('--slice-bytes') === undefined ? undefined : Number(option('--slice-bytes'));
+if (sliceBytes !== undefined && !(Number.isSafeInteger(sliceBytes) && sliceBytes > 0)) {
+  console.error('--slice-bytes must be a positive integer');
+  process.exit(2);
+}
 const { extractTs } = require(path.resolve(dist, 'ts-extractor.js'));
 const input = planWorkload({ ...SIZE_CLASSES[sizeClass], seed: 'g-perf-1' }).files
   .filter((file) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(file.path))
@@ -32,10 +40,11 @@ const timer = setInterval(() => { peak = Math.max(peak, process.memoryUsage().rs
 const started = Date.now();
 try {
   // --single forces one whole-manifest program (the pre-slicing behavior) for comparison.
-  const result = extractTs(input, process.argv.includes('--single') ? { singleProgramBytes: Number.MAX_SAFE_INTEGER } : {});
+  const result = extractTs(input, process.argv.includes('--single') ? { singleProgramBytes: Number.MAX_SAFE_INTEGER }
+    : sliceBytes === undefined ? {} : { sliceProgramBytes: sliceBytes });
   peak = Math.max(peak, process.memoryUsage().rss);
   console.log(JSON.stringify({
-    sizeClass, files: input.length, mib: +(input.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0) / 1048576).toFixed(1),
+    sizeClass, sliceProgramBytes: sliceBytes ?? null, files: input.length, mib: +(input.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0) / 1048576).toFixed(1),
     ms: Date.now() - started, peakRssMiB: Math.round(peak / 1048576),
     digest: crypto.createHash('sha256').update(JSON.stringify(result)).digest('hex'),
     nodes: result.nodes.length, edges: result.edges.length, endpoints: result.endpoints.length, routes: result.routes.length,
