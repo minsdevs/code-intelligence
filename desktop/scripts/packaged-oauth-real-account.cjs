@@ -178,8 +178,16 @@ async function main(argv = process.argv.slice(2)) {
   async function request(route, init = {}) {
     return perform(() => page.evaluate(async ({ route, init }) => {
       const desktop = window.codeIntelligenceDesktop;
-      const response = await fetch(desktop.apiBaseUrl + route, { credentials: 'include', signal: AbortSignal.timeout(20000), method: init.method ?? 'GET',
-        headers: { 'X-Code-Intelligence-Token': desktop.apiToken, ...(init.body ? { 'Content-Type': 'application/json' } : {}) },
+      const headers = { 'X-Code-Intelligence-Token': desktop.apiToken, ...(init.body ? { 'Content-Type': 'application/json' } : {}) };
+      const method = init.method ?? 'GET';
+      if (method !== 'GET') {
+        // Mutations carry the product's CSRF token exactly as the renderer does: prime, then echo the cookie.
+        const primed = await fetch(desktop.apiBaseUrl + '/api/csrf', { credentials: 'include', signal: AbortSignal.timeout(20000), headers: { 'X-Code-Intelligence-Token': desktop.apiToken } });
+        if (!primed.ok) return { ok: false, status: primed.status, json: null };
+        const cookie = document.cookie.split('; ').find(entry => entry.startsWith('XSRF-TOKEN='));
+        if (cookie) headers['X-XSRF-TOKEN'] = decodeURIComponent(cookie.slice('XSRF-TOKEN='.length));
+      }
+      const response = await fetch(desktop.apiBaseUrl + route, { credentials: 'include', signal: AbortSignal.timeout(20000), method, headers,
         body: init.body ? JSON.stringify(init.body) : undefined });
       const text = await response.text();
       let json = null; try { json = text ? JSON.parse(text) : null; } catch { json = null; }
