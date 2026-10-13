@@ -88,6 +88,49 @@ async function waitFor(action, timeout, code, interval = 200) {
   throw new Error(code);
 }
 
+async function closePackagedApplication({ child, closeWindow, quitApplication, disconnect },
+  { requestTimeoutMs = 5000, normalExitTimeoutMs = 30000, killGraceMs = 5000 } = {}) {
+  const record = { pid: child.pid ?? null, normalWindowCloseRequested: false, normalApplicationQuitRequested: false,
+    signalsRequested: [], terminationConfirmed: false, processExitedZero: false, disconnected: !disconnect, errors: [] };
+  const exited = () => child.exitCode !== null || child.signalCode !== null;
+  const errorCode = error => /^[A-Z][A-Z0-9_]+$/.test(error?.message) ? error.message : 'PACKAGE_CLEANUP_FAILED';
+  // Forward every signal and event to this one owned ChildProcess. The existing
+  // bounded cleanup waits for actual exit after SIGTERM and SIGKILL as well.
+  const owned = {
+    get exitCode() { return child.exitCode; }, get signalCode() { return child.signalCode; },
+    once: (...args) => child.once(...args), removeListener: (...args) => child.removeListener(...args),
+    kill(signal) { record.signalsRequested.push(signal); return child.kill(signal); },
+  };
+  try {
+    if (!Number.isSafeInteger(child.pid) || child.pid <= 0) throw new Error('PACKAGE_NOT_SPAWNED');
+    await closeOwnedApplication({ process: () => owned, close: async () => {
+      if (exited()) return;
+      let requested = false;
+      if (closeWindow) {
+        record.normalWindowCloseRequested = true;
+        try { await bounded(closeWindow, requestTimeoutMs, 'PACKAGE_WINDOW_CLOSE_TIMEOUT'); requested = true; }
+        catch (error) { record.errors.push(errorCode(error)); }
+      }
+      if (!exited() && !requested) {
+        record.normalApplicationQuitRequested = true;
+        await bounded(quitApplication, requestTimeoutMs, 'PACKAGE_QUIT_REQUEST_TIMEOUT');
+      }
+      if (!exited()) await waitFor(exited, normalExitTimeoutMs, 'PACKAGE_SHUTDOWN_TIMEOUT');
+    } }, { timeoutMs: 2 * requestTimeoutMs + normalExitTimeoutMs, killGraceMs });
+  } catch (error) { record.errors.push(errorCode(error)); }
+  finally {
+    // CDP disconnect must never prevent termination of the owned process.
+    if (disconnect) {
+      try { await bounded(disconnect, requestTimeoutMs, 'PACKAGE_CDP_DISCONNECT_TIMEOUT'); record.disconnected = true; }
+      catch (error) { record.errors.push(errorCode(error)); }
+    }
+    record.exitCode = child.exitCode ?? null; record.signalCode = child.signalCode ?? null;
+    record.terminationConfirmed = Number.isSafeInteger(child.pid) && child.pid > 0 && exited();
+    record.processExitedZero = record.terminationConfirmed && record.exitCode === 0 && record.signalCode === null;
+  }
+  return record;
+}
+
 async function main(argv = process.argv.slice(2)) {
   assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64'); assert.ok(process.getuid() > 0);
   process.umask(0o077);
@@ -155,11 +198,16 @@ async function main(argv = process.argv.slice(2)) {
     report.launches.push(launchRecord); save();
     child.on('error', () => { report.launchError = launched.pid ? 'PACKAGE_PROCESS_ERROR' : 'PACKAGE_SPAWN_FAILED'; launchRecord.error = report.launchError; save(); });
     stopObservation = observeStartup(child, report, save);
+    // The real Keychain may ask the person to allow access; the product then stays in CREDENTIALS until they answer.
+    const askedAt = Date.now(); let keychainHint = false;
     await perform(() => waitFor(async () => {
       assert.ok(!report.launchError, report.launchError); assert.ok(alive(), 'PACKAGE_EXITED_BEFORE_READY');
       assert.notEqual(report.startup?.state, 'FAILED', 'PACKAGE_STARTUP_FAILED');
+      if (!keychainHint && report.startup?.phase === 'CREDENTIALS' && Date.now() - askedAt > 15000) {
+        keychainHint = true; announce({ status: 'AWAITING_HUMAN_KEYCHAIN_DIALOG', hint: 'Allow the Validation app to use its Keychain item if macOS asks.' });
+      }
       return report.startup?.phase === 'READY';
-    }, 90000, 'PACKAGE_READY_TIMEOUT'), 90000, 'PACKAGE_READY_TIMEOUT');
+    }, 300000, 'PACKAGE_READY_TIMEOUT'), 300000, 'PACKAGE_READY_TIMEOUT');
     const listener = execFileSync('/usr/sbin/lsof', ['-nP', '-a', '-p', String(child.pid), '-iTCP:' + port, '-sTCP:LISTEN', '-Fn'], { encoding: 'utf8', timeout: 5000 });
     assert.ok(listener.split('\n').includes('n127.0.0.1:' + port), 'Owned loopback debugging listener required');
     phase('attach-existing-renderer');
@@ -171,13 +219,25 @@ async function main(argv = process.argv.slice(2)) {
     await perform(() => waitFor(async () => (await request('/api/auth/github/connection')).ok, 60000, 'OWNED_API_NOT_READY', 1000), 60000, 'OWNED_API_NOT_READY');
     launchRecord.readyMs = report.startup?.readyMs ?? null; save();
   }
-  async function close() {
-    if (!child) return;
-    const closing = child; child = null;
-    stopObservation?.(); stopObservation = null;
-    try { await browser?.close(); } catch { /* the product owns the window */ }
-    browser = null; page = null;
-    await perform(() => closeOwnedApplication(closing, report, save), 60000, 'PACKAGE_CLOSE_TIMEOUT');
+  function close() {
+    if (closePromise) return closePromise;
+    if (!child) return Promise.resolve();
+    const owned = child, attachedPage = page, attachedBrowser = browser, launchRecord = report.launches.at(-1);
+    closePromise = (async () => {
+      const record = await closePackagedApplication({ child: owned,
+        closeWindow: attachedPage && !attachedPage.isClosed() ? () => attachedPage.close({ runBeforeUnload: true }) : undefined,
+        quitApplication: () => execFileSync('/usr/bin/osascript', ['-l', 'JavaScript', '-e',
+          `ObjC.import('AppKit'); $.NSRunningApplication.runningApplicationWithProcessIdentifier(${owned.pid}).terminate;`],
+        { timeout: 5000, stdio: 'pipe', env: environment }),
+        disconnect: attachedBrowser ? () => attachedBrowser.close() : undefined,
+      });
+      record.launch = launchRecord.sequence; (report.cleanup ??= []).push(record);
+      stopObservation?.(); stopObservation = null; browser = null; page = null;
+      if (record.terminationConfirmed || !Number.isSafeInteger(owned.pid)) child = null;
+      save();
+      if (!record.processExitedZero || record.errors.length || record.signalsRequested.length) throw new Error(record.errors[0] || 'PACKAGE_CLEANUP_FAILED');
+    })();
+    return closePromise;
   }
 
   let failure;
