@@ -65,7 +65,7 @@ embedding/summary/review/task/playground/what-if와 retry 모두 같은 egress g
 
 기준 장비: Apple Silicon M1급 4 performance core 이상/16GiB RAM/SSD, macOS 지원목록, 전원 연결. 측정은 Electron/backend/DB/Redis/모든 worker 합계 process-tree RSS, cold OS cache와 warm cache를 구별한다. 아래는 **미측정 개발 목표**이며 지금 통과한 수치가 아니다.
 
-**정식 측정 admission(2026-10-11, 사용자 결정 1안):** 20회 정식 측정의 필수 조건은 AC 전원, load1<4, mdworker_shared≤6을 30초 간격 3회 연속 관측하는 것이다. 덮개(lid) 상태는 매 관측과 함께 **기록**하되 OPEN을 필수로 요구하지 않는다(`run-workload-benchmark.cjs` admission `lidPolicy=RECORDED_NOT_REQUIRED`). 이 결정 이후의 측정만 정식 비교 대상이며, 이전의 닫힌 덮개·고부하 진단 수치(DIAGNOSTIC_ONLY/INVALID_LOAD)는 PASS로 바꾸지 않는다. 배터리 전원·load/indexer 초과·관측 불가 조건은 그대로 admission을 거부한다. [기록](../audit/install-update-2026-10-11.md).
+**정식 측정 admission(2026-10-11, 사용자 결정 1안):** 20회 정식 측정의 필수 조건은 AC 전원, load1<4, mdworker_shared≤6을 30초 간격 3회 연속 관측하는 것이다. 덮개(lid) 상태는 매 관측과 함께 **기록**하되 OPEN을 필수로 요구하지 않는다(`run-workload-benchmark.cjs` admission `lidPolicy=RECORDED_NOT_REQUIRED`). 이 결정 이후의 측정만 정식 비교 대상이며, 이전의 닫힌 덮개·고부하 진단 수치(DIAGNOSTIC_ONLY/INVALID_LOAD)는 PASS로 바꾸지 않는다. 배터리 전원·load/indexer 초과·관측 불가 조건은 그대로 admission을 거부한다. [기록](../audit/install-update-2026-10-11.md). **진단 전원 정책(2026-10-13, 사용자 결정):** 호스트를 충전할 수 없을 때 결과 동일성 진단(large canonical)만 명시적 정책 `BATTERY_RECORDED_USER_DECISION_2026_10_13`으로 배터리에서 시작할 수 있다. 전원은 매 관측·launch마다 기록되고 timingValidity는 INVALID_POWER로 어떤 시간도 수용하지 않으며, 정식 20회 admission의 AC 필수는 바뀌지 않는다. [기록](../audit/release-blockers-2026-10-12.md) §3.6.
 
 | 작업/fixture | 목표 SLO/상한 | 초과 시 동작 |
 |---|---|---|

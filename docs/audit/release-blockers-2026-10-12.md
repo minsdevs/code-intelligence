@@ -102,7 +102,7 @@ large는 직전(5,398,048/5,167,312 KiB, 524.7/521.7s, 404.4/388.0s)과 같은 �
 | 1 | 171.280 | 72.705 | 3,510,064 | 3,936,416 | 이내(−252MiB) | 1,317 / 823 / 717 / 959 |
 | 2 | 144.647 | 55.937 | 3,477,008 | 4,135,456 | 이내(−57MiB) | 1,330 / 765 / 948 / 968 |
 
-1회차 시간(171/72.7s)은 실행 직전 load1 8.9·실행 중 36까지 오른 고부하 구간의 관측이며, 2회차는 직전 후보와 같은 범위다. 증분 peak는 xtq4U4와 같이 두 회차 모두 상한 이내이고, JVM 765~823MiB·PostgreSQL 자식 717~948MiB의 구성도 같다. **large smoke-2와 large canonical은 1OW40e에서 실행하지 못했다**: 러너 admission이 디스크 부족으로 거부했다(`large-1OW40e-blocked-disk.log`: 가용 4,065,619,968 < 필요 6,442,450,944바이트; §1 디스크 항 참조). 이 세션은 승인 없이 더 정리하지 않았고, AC와 가용 7.5GB가 관측되면 실행하는 대기 작업을 걸어 두었다(`large-canonical-when-ready.sh`). 실행되지 않으면 xtq4U4의 large smoke·직전 라운드의 canonical PASS를 1OW40e로 복사하지 않고 NOT_RUN(DISK_SPACE_LOW)으로 남긴다.
+1회차 시간(171/72.7s)은 실행 직전 load1 8.9·실행 중 36까지 오른 고부하 구간의 관측이며, 2회차는 직전 후보와 같은 범위다. 증분 peak는 xtq4U4와 같이 두 회차 모두 상한 이내이고, JVM 765~823MiB·PostgreSQL 자식 717~948MiB의 구성도 같다. **large smoke-2와 large canonical은 2026-10-12 시점에는 1OW40e에서 실행하지 못했다**: 러너 admission이 디스크 부족으로 거부했다(`large-1OW40e-blocked-disk.log`: 가용 4,065,619,968 < 필요 6,442,450,944바이트; §1 디스크 항 참조). 이 세션은 승인 없이 더 정리하지 않았고, AC와 가용 7.5GB가 관측되면 실행하는 대기 작업을 걸어 두었다(`large-canonical-when-ready.sh`). 그 뒤의 실제 실행은 §3.6에 기록했다.
 
 ### 3.5 업데이트 수용(C)·packaged import-evidence·C06 매트릭스
 
@@ -112,12 +112,31 @@ packaged import-evidence `native-A8ejj6`(1OW40e): 14검사 PASS, 후보 해시 �
 
 행별 매트릭스 `c06-matrix-1OW40e.json`(backend-ShGgDe + native-A8ejj6, `make-c06-matrix-v2.cjs`): **15 PASS·0 FAIL·2 NOT_RUN**. E-12는 C06-14의 capability별 분할 증거(§3.3)로 PASS가 됐다(제한: synthetic C06 corpus와 개발 기준선; tree 분석기 비활성 시 python/go S는 unmeasured). E-14는 V1→V30 30단계·sentinel 15개. E-16(R2 SFC)·E-17(AI 증거 수용)은 NOT_RUN 유지, 독립 real-repo 수용·실제 OS picker 사람 클릭은 미수용.
 
+### 3.6 2026-10-13 추가 실행: large smoke-2·large canonical(1OW40e)
+
+PR #118 병합(53356eb)과 r2 증거 보관 뒤, 사용자 승인으로 미사용 Docker 이미지 27개를 제거해(`docker-image-prune-20261013.json`; 프로젝트가 쓰는 `pgvector/pgvector:pg16`·`redis:7-alpine`·`node:24`·ryuk 0.14와 종료된 컨테이너가 참조하는 이미지는 유지) 가용 디스크가 3→16GiB가 됐고, AC가 연결된 뒤 대기 작업이 실행됐다.
+
+large `run-uyUKW5`(1OW40e, AC, 실행 직전 load1 10.5/23.4 → **DIAGNOSTIC_ONLY / INVALID_LOAD**): warm-up 및 2회차 기능 PASS, 종료 확인. 1회차는 샘플 최대 간격 631ms(허용 500ms 초과)로 수집 INCOMPLETE, 2회차는 183ms로 COMPLETE. `large-1OW40e-verification.json`이 CSV 합계/phase peak·XPC 소유·후보 해시를 재검증했고 measurementStatus는 **INCOMPLETE**로 남긴다(1회차 peak 값은 간격이 넓은 구간의 관측이므로 하한으로만 읽는다).
+
+| large 회차 | 초기 분석(s) | 1% refresh(s) | 분석 RSS(KiB) | 증분 RSS(KiB) | 증분 6GiB 상한 | 증분 peak 구성(MiB: worker/JVM/PostgreSQL/Electron) | 수집 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 530.809 | 432.968 | 4,682,544 | 5,316,864 | 이내 | 1,731 / 1,370 / 1,008 / 1,055 | INCOMPLETE(631ms) |
+| 2 | 569.344 | 436.164 | 4,613,776 | 5,253,488 | 이내 | 1,738 / 1,381 / 908 / 1,076 | COMPLETE(183ms) |
+
+증분 peak는 xtq4U4(5,324,080/5,460,208)와 같은 범위로 두 회차 모두 상한 이내이며, 구성도 같다(TS worker ≈1.7GiB·JVM 1.37~1.38GiB·PostgreSQL 자식 0.9~1.0GiB·Electron ≈1.05GiB). 시간(531/569s, 433/436s)은 load1 10~23의 고부하 관측이다. 러너는 1회차 간격 초과 때문에 fixture·profile을 FAILURE_EVIDENCE로 보존했고(4.7GB), 이 디렉터리는 아래 canonical 재시도를 위해 사용자 승인으로 제거했다(`retire-scratch-20261013.json`; result.json·samples CSV·treeSha256은 유지).
+
+large canonical 1차 `canonical-large-hIA3j4`(AC, load1 25.7): 초기 가져오기·분석 launch PASS 뒤 두 번째 launch admission에서 **FAIL DISK_SPACE_LOW**(첫 admission 가용 11.7GB; 작업 디렉터리 4.4GB·large smoke 보존 4.7GB·export 1.4GB가 쌓여 6GiB 미만). 두 번째 시도는 시작 시 약 12GiB가 필요했고, 사용자 승인으로 1차 작업 디렉터리·large smoke 보존분·10-12 stage5 러너 scratch(총 12.5GiB)를 정리했다(`retire-scratch-20261013.json`).
+
+**large canonical 2차 `canonical-large-lCjl3h` PASS — 배터리 전원, 사용자 결정 기록.** 호스트를 충전할 수 없는 상태에서 사용자가 배터리 실행을 지시했다. 러너(`run-workload-benchmark.cjs` diagnostic admission)와 로컬 드라이버(`run-canonical-large.cjs`)는 배터리에서 중단하도록 돼 있었으므로, 기본값을 바꾸지 않고 **명시적 정책 `BATTERY_RECORDED_USER_DECISION_2026_10_13`**을 추가했다(하네스 커밋 08b1f3e; 제품 트리는 9212b9d와 동일, 테스트 28 PASS): 진단 실행만 배터리에서 시작할 수 있고, 전원은 매 관측·launch마다 기록되며, timingValidity는 **INVALID_POWER**로 어떤 시간도 수용하지 않는다. 정식(ADMITTED) admission은 종전대로 배터리를 거부한다. 결과: 실제 packaged large 증분 결과와 변경된 동일 fixture를 새 프로필로 처음부터 분석한 결과가 **21범주의 개수·정규화 SHA-256 모두 일치**(`resultEqualsFull=true`; 파일 49,999·노드 768,168·간선 1,351,932·evidence 695,657). 삭제 파일의 옛 snapshot 존재/새 결과 부재와 변경 전파 확인, 두 launch 모두 exit 0·cleanupConfirmed, 후보 app.asar·manifest 해시 실행 전후 동일(05:03:36–05:34:26Z, 배터리 94→62%). 이 비교는 결과 동일성 진단이며 성능·전원 조건 수용이 아니다.
+
+ledger `ledger-v7.json`은 위 결과로 재생성했다(large DIAGNOSTIC_ONLY/INCOMPLETE, canonicalLarge PASS + powerPolicy·1차 FAIL 기록; 이전 판은 `ledger-v7-before-large.json`·`ledger-v7-before-canonical2.json`). 증거는 r2 보관소의 addendum `release-blockers-20261012-1OW40e-r3`에 보관한다.
+
 ## 4. 미실행·차단·판정
 
 **출시 판정 NO_GO 유지.** 네 항목의 로컬 결함은 해소됐지만 필수 게이트의 사람·자격·장비 조건은 그대로다.
 
 - 네 항목: A 정확도 개발 기준선 81사례 실패 0(제품 TS 후보 + 도구 span; 독립 주석·blind review BLOCKED), B medium 증분 RSS 두 후보 네 회차 4GiB 이내(고부하 진단, 정식 20회 NOT_RUN; 1회차 여유 35~57MiB로 얇음 — TS 슬라이스 예산·PostgreSQL 설정은 다음 선택지), C U8 20행 PASS(U10b O2 BLOCKED), D E-12 PASS(매트릭스 15 PASS·0 FAIL·2 NOT_RUN).
-- 미실행: 1OW40e의 large smoke-2·large canonical(디스크 부족 DISK_SPACE_LOW; 대기 작업 등록, 미실행 시 NOT_RUN 유지). 정식 20회 NOT_RUN. 전원 손실·OS picker 사람 클릭·전체 복구 매트릭스 NOT RUN.
+- large(2026-10-13 추가, §3.6): large smoke-2 `run-uyUKW5` 두 회차 증분 6GiB 이내이나 1회차 수집 INCOMPLETE(DIAGNOSTIC_ONLY/INVALID_LOAD); large canonical 2차 PASS(21범주 일치) — 배터리 전원에서 사용자 결정 정책으로 실행, INVALID_POWER로 시간 수용 없음. 정식 20회 NOT_RUN. 전원 손실·OS picker 사람 클릭·전체 복구 매트릭스 NOT RUN.
 - 차단(자격·장비·사람): Developer ID 서명·공증·staple·clean Mac/최소OS·실제 update host·U10b 실제 Team ID 재서명(O2), 실제 Keychain·GitHub 전체 수명주기·실계정, 독립 보안 검토·사람 UX 8명/VoiceOver·법률/발행자/운영 승인.
 - 호스트: 다른 세션의 Homebrew 재링크로 brew node 26이 깨진 상태는 사용자 조치(`brew reinstall node` 또는 relink)로 남긴다. 이 라운드의 node 24 실행과 DYLD 통과는 결과에 기록했다.
 - 유료 AI·실계정·실제 Keychain·정식 서명/공증·GitHub Actions dispatch는 사용하지 않았다. 사용자 원본 파일, 기존 보관본·실패 증거, INT의 `.native-update-*` 네 디렉터리는 보존했다.

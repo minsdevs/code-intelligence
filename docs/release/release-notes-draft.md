@@ -36,7 +36,10 @@ The bundle is ad-hoc signed for local validation only; it is not a distributable
   started-build floor; after a signed recovery rollback the older build can read the maintenance records the
   newer build wrote. Archives of the previous reviewed schema (V29) still restore.
 - Memory: the backend JVM keeps less free heap committed between analysis steps; the medium incremental
-  diagnostic stayed below 4 GiB on both runs of the two latest candidates (loaded host, not acceptance).
+  diagnostic stayed below 4 GiB on both runs of the two latest candidates and the large incremental diagnostic
+  below 6 GiB (loaded host, one large run with an incomplete sample series; not acceptance).
+- Incremental correctness: on the final candidate the large incremental result equalled a fresh full analysis of
+  the same changed tree in all 21 compared categories (diagnostic run on battery, recorded as such; no timing accepted).
 
 ### Changes in the 2026-10-11 candidate (engineering summary)
 
@@ -78,4 +81,5 @@ statements (Redis, FFmpeg, EPL-2.0 components, the JRE offer wording) await coun
 The gate table in `docs/multilanguage-plan-2026-10-02/07-delivery-release-gates.md` §3 and the audit
 `docs/audit/release-blockers-2026-10-12.md` (and the earlier `docs/audit/install-update-2026-10-11.md`) list
 every gate with PASS / FAIL / NOT RUN / BLOCKED and the raw evidence paths. The large-class memory diagnostic
-and the large incremental-vs-full comparison were not run on the final candidate (host disk space). A release is published only when the human gates there are closed and the owner records GO.
+and the large incremental-vs-full comparison ran on the final candidate on 2026-10-13 (audit §3.6); the 20-run
+series was not run. A release is published only when the human gates there are closed and the owner records GO.
