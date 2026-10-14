@@ -1,8 +1,32 @@
-# Release notes — draft (not a release; verdict NO_GO as of 2026-10-11)
+# Release notes — draft (not a release; verdict NO_GO as of 2026-10-13)
 
 These are engineering notes for a retained Validation candidate, not an announcement of a signed release.
 The signed artifact, publisher Team ID and notarization record are **NOT_AVAILABLE**; they require the
 owner inputs and acceptance recorded in the gate table. No download is offered by this document.
+
+## Retained Validation candidate Wz3Rs9 (Apple Silicon, 2026-10-13)
+
+Product source: `9f2583cb8e457f4fecd0c26c95588ec24fccb3f2`; build sequence `1791898658172`.
+app.asar SHA-256: `e69c01208c509fc935e9e4aa6b59fffbf986bdd746f40be1de5c794fbbdb4788`.
+Runtime manifest SHA-256: `b8f1ee33ea0f8632aa29f665e40f3bbd31aa15c97ad4c363bf1be52dcb0c158c`.
+The bundle is ad-hoc signed for local validation only; it is not a distributable release artifact. The owner's
+distribution decision is a web download (not the App Store), which still requires Developer ID signing and
+notarization that are not available yet.
+
+### Changes since the previous candidate (engineering summary, 2026-10-13)
+
+- Memory: the TypeScript analyzer builds its slice programs from 8 MiB of source instead of 12 MiB (same results,
+  about 490 MiB lower peak in the standalone extraction of the medium and large fixtures), and the bundled PostgreSQL
+  runs with `shared_buffers=32MB` so its shared pages are no longer counted once per backend. On the loaded host the
+  medium incremental diagnostic peaked at about 3.1 GiB on both runs (previous candidate 3.9–4.1 GiB) and the large
+  incremental diagnostic at about 4.4–4.5 GiB (previous candidate 5.1–5.3 GiB; the second large run's sampling was
+  incomplete under host load). The large canonical comparison passed with all 21 categories identical. Not acceptance.
+- Validation runners: the resource sampler records the time spent after each observation, an owner-run real-account
+  GitHub device-flow runner and a human-picker mode of the real-Keychain runner were added. The real Keychain and the
+  OS folder picker were accepted by a person on a product-identical bundle, and the real-account GitHub device-flow
+  lifecycle (authorize, list, import, restart persistence, revocation reported as TOKEN_REJECTED, disconnect) passed on
+  the same bundle with the owner's account; no signed installation yet.
+- The formal 20-run series was **not started** on the owner's instruction.
 
 ## Retained Validation candidate mQ5nbO (Apple Silicon)
 
