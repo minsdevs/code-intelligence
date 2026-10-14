@@ -284,7 +284,12 @@ async function main(argv = process.argv.slice(2)) {
     report.repositoryList = { count: items.length }; report.lifecycle.repositoryList = items.length > 0 ? 'PASS' : 'EMPTY'; check('repository-list-read');
 
     phase('github-import');
-    const created = await request('/api/projects', { method: 'POST', body: { repoOwner, repoName, url: 'https://github.com/' + repoOwner + '/' + repoName, branch: null } });
+    // Mirror the product's import step: list the repository's branches, then create with repoOwner/repoName + branch
+    // (the backend rejects a request that carries both a url and coordinates; run-0HMeur failed that way on 2026-10-14).
+    const branches = expectOk(await request('/api/github/repos/' + encodeURIComponent(repoOwner) + '/' + encodeURIComponent(repoName) + '/branches'), 'BRANCH_LIST_FAILED');
+    const branch = importBranch(branches); report.importBranchPresent = branch !== null; save();
+    const created = await request('/api/projects', { method: 'POST', body: importRequestBody(repoOwner, repoName, branch) });
+    if (!created.ok) report.importFailure = { status: created.status, detail: redactProblem(created.json) };
     const project = expectOk(created, 'GITHUB_IMPORT_CREATE_FAILED');
     const projectId = project?.project?.id, jobId = project?.jobId; assert.ok(Number.isSafeInteger(projectId) && Number.isSafeInteger(jobId), 'PROJECT_ID_MISSING');
     report.import = { projectId, jobId, created: new Date().toISOString() }; save();
@@ -304,7 +309,7 @@ async function main(argv = process.argv.slice(2)) {
 
     if (options.externalRevoke) {
       phase('external-revocation-waiting');
-      announce({ status: 'AWAITING_HUMAN_REVOCATION', revocationHost: persisted.revocationHost, hint: 'Revoke the OAuth app grant on GitHub (Settings > Applications > Authorized OAuth Apps).' });
+      announce({ status: 'AWAITING_HUMAN_REVOCATION', revocationHost: persisted.revocationHost, hint: 'Revoke the authorization on GitHub: Settings > Applications > Authorized GitHub Apps (https://github.com/settings/apps/authorizations); the Authorized OAuth Apps tab only for an OAuth App client.' });
       let observed = null;
       await perform(() => waitFor(async () => {
         await request('/api/github/repos?page=1&perPage=1');
@@ -330,5 +335,22 @@ async function main(argv = process.argv.slice(2)) {
   if (failure) process.exitCode = 1;
 }
 
-module.exports = { argumentsFor, redactConnection };
+// The product's import request shape: coordinates plus the chosen branch, never a url alongside them.
+function importRequestBody(repoOwner, repoName, branch) {
+  assert.ok(typeof repoOwner === 'string' && repoOwner && typeof repoName === 'string' && repoName, 'REPOSITORY_COORDINATES_REQUIRED');
+  return { repoOwner, repoName, branch: typeof branch === 'string' && branch ? branch : null };
+}
+// First branch the product lists (the product's own picker shows that list); null when the list is empty.
+function importBranch(response) {
+  const items = Array.isArray(response?.items) ? response.items : [];
+  const name = items.find(item => typeof item?.name === 'string' && item.name)?.name;
+  return name ?? null;
+}
+// Problem details kept for a failed mutation: status-like fields only, truncated, never headers or bodies that may carry identity.
+function redactProblem(json) {
+  if (!json || typeof json !== 'object') return null;
+  const pick = key => (typeof json[key] === 'string' ? json[key].slice(0, 160) : typeof json[key] === 'number' ? json[key] : undefined);
+  return { title: pick('title'), detail: pick('detail'), code: pick('code'), status: pick('status') };
+}
+module.exports = { argumentsFor, redactConnection, importRequestBody, importBranch, redactProblem };
 if (require.main === module) main().catch(error => { console.error(String(error?.message ?? error)); process.exitCode = 1; });
