@@ -679,7 +679,7 @@ async function main(argv = process.argv.slice(2)) {
       } else if (!launchAttempted) run.cleanupConfirmed = true;
       else { run.cleanupFailure = 'NO_CAPTURED_CHILD'; failure ||= 'STARTUP_SDK_TIMEOUT'; }
       stopObserving?.();
-      run.memory = memory ? { samples: memory.samples, peakRssKiB: memory.peakRssKiB, maximumGapMs: Math.round(memory.maximumGapMs),
+      run.memory = memory ? { samples: memory.samples, peakRssKiB: memory.peakRssKiB, maximumGapMs: Math.round(memory.maximumGapMs), maximumWriteMs: Math.round(memory.maximumWriteMs ?? 0),
         maximumReadMs: Math.round(memory.maximumReadMs), failure: memory.failure, failureDetail: memory.failureDetail,
         missingOwnerSamples: memory.missingOwnerSamples,
         trailingGapMs: memory.trailingGapMs === null ? null : Math.round(memory.trailingGapMs),

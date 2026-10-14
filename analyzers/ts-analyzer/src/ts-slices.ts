@@ -32,7 +32,9 @@ import { CACHE_DECODED_BYTES, CACHE_LISTS, CACHE_TOTAL_BYTES, cacheKeys, encodeC
  * emission order, and duplicate graph keys keep the first emission in that order, exactly as one
  * program emits them.
  */
-export const SLICE_PROGRAM_BYTES = 12 * 1024 * 1024
+// 12 MiB → 8 MiB (2026-10-13): the standalone extraction of the medium and large G-PERF subsets peaked about
+// 490 MiB lower at 8 MiB with identical result digests and 2–10% more wall time (workload-ts-memory.cjs).
+export const SLICE_PROGRAM_BYTES = 8 * 1024 * 1024
 
 type Range = { phase: number; filePath: string; start: number; end: number }
 type SliceRun = { output: ProgramOutput; ranges: Map<unknown[], Range[]>; outside: Set<string> }

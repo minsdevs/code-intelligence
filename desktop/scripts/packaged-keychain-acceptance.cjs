@@ -200,7 +200,10 @@ function allProcessesExitedZero(launches, cleanup) {
 async function main(argv = process.argv.slice(2)) {
   assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64');
   assert.ok(process.getuid() > 0);
-  assert.ok(argv.length === 2 && argv[0] === '--app', 'Use --app with a retained Validation bundle');
+  // --human-picker (owner acceptance): the product's own OS folder picker is left to a person; no main-process
+  // inspector is opened and the driver only waits for the preview the person's choice produces.
+  const humanPicker = argv[2] === '--human-picker';
+  assert.ok((argv.length === 2 || (argv.length === 3 && humanPicker)) && argv[0] === '--app', 'Use --app with a retained Validation bundle [--human-picker]');
   process.umask(0o077);
   const root = fs.realpathSync(path.resolve(__dirname, '../..'));
   const app = fs.realpathSync(argv[1]);
@@ -233,6 +236,7 @@ async function main(argv = process.argv.slice(2)) {
     appArchiveSha256, executableSha256,
     appRebuilt: false, mockKeychain: false, electronLoaderInjected: false,
     keychainIdentity: plan.appIdentity.name, profile: plan.paths.userData, claim: plan.claimFile,
+    nativePickerInteraction: humanPicker ? 'HUMAN' : 'CONTROLLED_SINGLE_USE_ANSWER',
     realAccountVerified: false, originalProfileAccessed: false, signedInstallation: false,
     phase: 'prepared', checks: [], launches: [], cleanup: [] };
   const save = () => fs.writeFileSync(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
@@ -348,7 +352,7 @@ async function main(argv = process.argv.slice(2)) {
   }
   save(); console.log(JSON.stringify({ status: 'RUNNING', evidence, profile: plan.paths.userData, appRebuilt: false }));
   try {
-    await launch({ mainInspector: true }); phase('fresh-owned-profile');
+    await launch({ mainInspector: !humanPicker }); phase('fresh-owned-profile');
     assert.deepEqual(await request('/api/projects'), []);
     originalUser = await request('/api/auth/me');
     assert.equal(originalUser.authenticated, true); assert.equal(originalUser.credentialKind, 'LOCAL');
@@ -361,17 +365,27 @@ async function main(argv = process.argv.slice(2)) {
     phase('ui-owned-folder-import');
     await perform(() => page.evaluate(() => { history.pushState(null, '', '/import'); dispatchEvent(new PopStateEvent('popstate')); }));
     const picker = page.getByRole('button', { name: 'Choose folder', exact: true }); await perform(() => expect(picker).toBeVisible());
-    const preview = page.getByRole('button', { name: '가져올 파일 미리보기', exact: true });
+    // A fresh profile renders the product's default language (English); a stored choice may be Korean.
+    const preview = page.getByRole('button', { name: /^(가져올 파일 미리보기|Preview files to import)$/ });
     // Keyboard-driven like the UX pilot: the focused "Choose folder" button opens folder:pick.
-    report.folderImport = await perform(() => importThroughFolderPicker(() => attachMainProcess(inspectPort), fixture, async () => {
-      await picker.focus(); await page.keyboard.press('Enter'); await expect(preview).toBeVisible();
-    }), 60000, 'OWNED_FOLDER_PICKER_TIMEOUT');
+    if (humanPicker) {
+      // The real OS dialog opens for the person; they must choose exactly this fixture folder.
+      console.log(JSON.stringify({ status: 'AWAITING_HUMAN_PICKER', chooseFolder: fixture, timeoutMs: 600000 }));
+      await perform(() => picker.focus()); await perform(() => page.keyboard.press('Enter'));
+      const askedAt = Date.now();
+      await perform(() => expect(preview).toBeVisible({ timeout: 600000 }), 600000, 'HUMAN_PICKER_TIMEOUT');
+      report.folderImport = { importPath: 'os-picker-human', pickerCalls: null, messageBoxes: null, dropDispatched: false, humanWaitMs: Date.now() - askedAt };
+    } else {
+      report.folderImport = await perform(() => importThroughFolderPicker(() => attachMainProcess(inspectPort), fixture, async () => {
+        await picker.focus(); await page.keyboard.press('Enter'); await expect(preview).toBeVisible();
+      }), 60000, 'OWNED_FOLDER_PICKER_TIMEOUT');
+    }
     save();
     await perform(() => preview.click());
-    await perform(() => expect(page.getByRole('region', { name: '확인할 가져오기 미리보기', exact: true })).toBeVisible());
+    await perform(() => expect(page.getByRole('region', { name: /^(확인할 가져오기 미리보기|Import preview to review)$/ })).toBeVisible());
     const [response] = await perform(() => Promise.all([
       page.waitForResponse(r => new URL(r.url()).pathname === '/api/projects/local' && r.request().method() === 'POST'),
-      page.getByRole('button', { name: '확인한 파일 가져오기 및 분석', exact: true }).click(),
+      page.getByRole('button', { name: /^(확인한 파일 가져오기 및 분석|Import and analyze the reviewed files)$/ }).click(),
     ]));
     assert.ok(response.ok()); const created = await perform(() => response.json(), 20000, 'OWNED_IMPORT_RESPONSE_TIMEOUT'); projectId = created.project.id;
     await perform(() => waitFor(async () => {
