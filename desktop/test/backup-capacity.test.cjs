@@ -135,3 +135,44 @@ test('measurement bounds entry count and recursion depth', async t => {
   await reject(measureBackupTree({ root: f.roots.source, maxEntries: 1 }), 'LIMIT');
   await reject(measureBackupTree({ root: f.roots.source, maxDepth: 1 }), 'LIMIT');
 });
+// Protocol model only: the native boundary refuses `workspace` sessions on roots that are
+// not private user-owned directories, such as an installed or staged runtime bundle.
+function windowsModel(sharedRoots) {
+  const opened = [], ids = new Map();
+  const stat = (file, directory) => {
+    if (!ids.has(file)) ids.set(file, ids.size + 1);
+    const id = ids.get(file), size = directory ? '0' : '5';
+    return { platform: 'win32', volume: '7', identity: `WI1:7:0:${id}`, token: `WS1:7:0:${id}:${size}:4096:1:1`,
+      size, allocationSize: directory ? '0' : '4096' };
+  };
+  const windowsBoundary = {
+    async openStorage(root, { mode }) {
+      opened.push([root, mode]);
+      if (mode === 'workspace' && sharedRoots.includes(root)) throw Object.assign(new Error('synthetic refusal'), { code: 'WINDOWS_STORAGE_REFUSED' });
+      return {
+        async stat(file = '', { directory = false } = {}) { return stat(`${root}/${file}`, directory); },
+        async *entries(file = '') { if (file === '') yield { name: 'runtime.bin', directory: false }; },
+        async capacity() { return { available: 10n ** 15n, total: 10n ** 15n }; },
+        async close() {},
+      };
+    },
+  };
+  return { opened, windowsBoundary };
+}
+test('Windows measures a shared runtime bundle read-only and refuses it as a private workspace', async () => {
+  const bundle = path.resolve('/synthetic-runtime-bundle'), model = windowsModel([bundle]);
+  await assert.rejects(measureBackupTree({ root: bundle, windowsBoundary: model.windowsBoundary }), { code: 'WINDOWS_STORAGE_REFUSED' });
+  const measured = await measureBackupTree({ root: bundle, windowsBoundary: model.windowsBoundary, readOnly: true });
+  assert.equal(measured.logicalBytes, '5'); assert.equal(measured.entries, 2);
+  assert.deepEqual(model.opened, [[bundle, 'workspace'], [bundle, 'source']]);
+  await reject(measureBackupTree({ root: bundle, windowsBoundary: model.windowsBoundary, readOnly: 'yes' }), 'INVALID');
+});
+test('Windows capacity opens only the runtime bundle read-only; writable roots stay private workspaces', async () => {
+  const roots = Object.fromEntries(['postgres', 'recovery', 'source', 'bundle', 'destination']
+    .map(name => [name, path.resolve(`/synthetic-capacity-${name}`)]));
+  const model = windowsModel([roots.bundle]);
+  const capacity = await createBackupCapacity({ roots, windowsBoundary: model.windowsBoundary });
+  const lease = await capacity.begin(planBackupCapacity(input()));
+  await lease.close(); await capacity.close();
+  assert.deepEqual(model.opened, Object.entries(roots).map(([name, root]) => [root, name === 'bundle' ? 'source' : 'workspace']));
+});

@@ -415,7 +415,7 @@ async function copySelectedFile(selected, destination, created) {
     if (!fixedRoots || Object.keys(fixedRoots).sort().join(',') !== 'bundle,postgres,source') fail();
     const sizes = await database.readSizes({ transactionId });
     const source = await measureBackupTree({ root: fixedRoots.source, windowsBoundary });
-    const bundle = await measureBackupTree({ root: fixedRoots.bundle, windowsBoundary });
+    const bundle = await measureBackupTree({ root: fixedRoots.bundle, windowsBoundary, readOnly: true });
     const exported = await ports.openExport(); let measurement;
     try { measurement = await exported.measureExport(); } finally { await exported.close(); }
     const max = (...values) => values.reduce((a, b) => a > b ? a : b, 0n);
