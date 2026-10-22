@@ -9,6 +9,7 @@ const path = require('node:path');
 const { PassThrough, Writable } = require('node:stream');
 const { spawnSync } = require('node:child_process');
 const test = require('node:test');
+const vm = require('node:vm');
 const { createAiEgressPostgres, AiEgressPostgresError, LIMITS } = require('../src/ai-egress-postgres.cjs');
 const HASH = 'a'.repeat(64), OTHER = 'b'.repeat(64), ZERO = '0'.repeat(64);
 const NOW = Date.parse('2026-10-03T12:00:00Z');
@@ -100,6 +101,38 @@ function assertInstallationOwnerPredicate(sql, installationId) {
   assert.match(sql, /u\.local_key\s*=\s*\(select value->>'installationId' from params\)/);
   assert.equal(decoded(sql).installationId, installationId);
 }
+
+test('psql file admission distinguishes Windows metadata from POSIX executable permissions', async () => {
+  const source = await fs.readFile(path.join(__dirname, '../src/ai-egress-postgres.cjs'), 'utf8');
+  // Evaluate the real adapter with OS metadata at the boundary; no foreign
+  // executable or database is launched by these platform contract checks.
+  for (const scenario of [
+    { platform: 'win32', mode: 0o100666, accepted: true },
+    { platform: 'win32', mode: 0o100444, accepted: true },
+    { platform: 'win32', mode: 0o040777, directory: true },
+    { platform: 'win32', mode: 0o120777, symlink: true },
+    { platform: 'darwin', mode: 0o100644 },
+    { platform: 'linux', mode: 0o100644 },
+    { platform: 'darwin', mode: 0o100755, accepted: true },
+    { platform: 'linux', mode: 0o100755, accepted: true },
+  ]) {
+    const module = { exports: {} };
+    vm.runInNewContext(source, { module, process: { platform: scenario.platform }, Buffer,
+      require(name) {
+        if (name === 'node:fs/promises') return { lstat: async () => ({ mode: scenario.mode,
+          isFile: () => !scenario.directory && !scenario.symlink, isSymbolicLink: () => !!scenario.symlink }) };
+        if (name === 'node:path') return scenario.platform === 'win32' ? path.win32 : path.posix;
+        return require(name);
+      } });
+    const pending = module.exports.createAiEgressPostgres({
+      psqlPath: scenario.platform === 'win32' ? 'C:\\verified runtime\\postgres\\bin\\psql.exe' : '/verified-runtime/postgres/bin/psql',
+      installationId: 'fixture', connection: { host: '127.0.0.1', port: 6543, user: 'codeintel', database: 'codeintel' },
+      env: { PGPASSWORD: 'synthetic-password' }, spawn: () => assert.fail('Admission must not launch psql'),
+    });
+    if (scenario.accepted) await (await pending).close();
+    else await assert.rejects(pending, { code: 'AI_COST_PG_INVALID' });
+  }
+});
 
 test('fixed psql command uses stdin, isolated environment and a repeatable read snapshot', async t => {
   const f = await fixture(t);

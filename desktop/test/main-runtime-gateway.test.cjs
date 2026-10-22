@@ -1021,6 +1021,22 @@ for (const phase of ['adapterFailure', 'gatewayFailure']) test(`startup ${phase}
   assert.equal(h.children.length, 0); assert.equal(h.browser.length, 0); assert.equal(h.run('runtime.recoveryRequired'), true);
   assert.equal(h.dialogs.length > 0, true); if (phase === 'gatewayFailure') assert.equal(h.events.includes('adapter.close'), true);
 });
+for (const code of ['AI_COST_PG_INVALID', 'AI_COST_PG_PRIVATE_SENTINEL']) test(`adapter initialization reports only the reviewed safety failure code: ${code}`, async t => {
+  const h = await harness(t, { modules: { './ai-egress-postgres.cjs': {
+    async createAiEgressPostgres() {
+      throw Object.assign(new Error('private-sentinel /private/secrets'), { code });
+    },
+  } } });
+  const logs = []; h.context.console = { ...console, error: line => logs.push(line) };
+  await h.start(); await h.shutdown();
+  const expectedCode = code === 'AI_COST_PG_INVALID' ? code : 'MAIN_STARTUP_FAILED';
+  const { parseStartupLine } = require('../src/startup-diagnostics.cjs');
+  const trace = logs.map(parseStartupLine).filter(Boolean);
+  assert.deepEqual(trace.at(-1), { phase: 'SAFETY', state: 'FAILED', code: expectedCode });
+  assert.equal(h.events.includes('safety.open'), false);
+  assert.equal(h.children.length, 0); assert.equal(h.browser.length, 0);
+  assert.doesNotMatch(JSON.stringify(logs), /private-sentinel|private\/secrets|PRIVATE_SENTINEL/);
+});
 for (const buildSequence of [undefined, '01', '-1', '9223372036854775808']) test(`invalid build ${String(buildSequence)} stops before secrets/gateway/adapter`, async t => {
   const h = await harness(t, { buildSequence }); await h.start(); await h.shutdown();
   assert.equal(h.events.includes('secrets.load'), false); assert.equal(h.events.includes('adapter.open'), false);

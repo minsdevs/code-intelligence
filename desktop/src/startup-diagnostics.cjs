@@ -33,7 +33,7 @@ const diagnosticNodeCodes = new Set([...Object.keys(nodeCodes), 'ERR_STREAM_WRIT
 const errnoCodes = new Set(Object.keys(require('node:os').constants.errno));
 const diagnosticKinds = new Set(['Error', 'TypeError', 'RangeError', 'AbortError', 'RuntimeIntegrityError']);
 const startupCodes = new Set(['EACCES', 'ENOENT', 'SAFETY_RECOVERY_REQUIRED',
-  'SAFETY_STORAGE_UNAVAILABLE', 'SAFETY_OWNER_LOST', 'MAIN_STARTUP_FAILED', ...INTEGRITY_CODES]);
+  'SAFETY_STORAGE_UNAVAILABLE', 'SAFETY_OWNER_LOST', 'AI_COST_PG_INVALID', 'MAIN_STARTUP_FAILED', ...INTEGRITY_CODES]);
 const phases = new Set(['MANIFEST', 'PROFILE', 'CREDENTIALS', 'PRIVATE_IPC', 'TLS', 'OWNER_LOCKS',
   'SAFETY', 'GATEWAY', 'BACKUP', 'AUTHORIZED_ROOTS', 'POSTGRES', 'CACHE_AND_ANALYZER', 'BACKEND',
   'BACKEND_SOURCES', 'BACKEND_PROCESS', 'BACKEND_HEALTH', 'BACKEND_ROOTS', 'WINDOW', 'READY']);

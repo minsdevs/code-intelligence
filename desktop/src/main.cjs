@@ -1406,13 +1406,13 @@ async function startApplication() {
       onLost: loseRuntimeOwnership
     });
     async function openSafety(recoveryMode) {
+      noteStartup('SAFETY');
       aiPostgres = await createAiEgressPostgres({ psqlPath: binary('postgres', 'bin', 'psql'),
       installationId: secrets.localIdentity,
       connection: { host: '127.0.0.1', port: runtime.ports.postgres, user: 'codeintel', database: 'codeintel' },
       env: postgresEnvironment() });
     const maintenanceVerifier = runtimeManifest.backupProtocol === 3
       ? createMaintenanceVerifier({ installationId: secrets.localIdentity, readProjection: aiPostgres.readProjection }) : undefined;
-      noteStartup('SAFETY');
       safetyLifecycle = await openSafetyLifecycle({ userData, safeStorage, windowsBoundary, electronApp: app,
       installationId: secrets.localIdentity, runningBuild, recoveryMode, ...(ownerLocks ? { ownerLocks } : {}),
       createGateway: async ({ openJournal, freshEnrollmentAllowed, recoveryMode: gatewayRecoveryMode }) => {
