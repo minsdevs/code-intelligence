@@ -3,6 +3,7 @@ package dev.codeintelligence.backup;
 import static dev.codeintelligence.backup.SourceProtocol.*;
 
 import dev.codeintelligence.common.SourceAccess;
+import dev.codeintelligence.common.WindowsStorage;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -12,6 +13,7 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -131,6 +133,35 @@ public final class BackupSourceWorker {
         }
     }
 
+    /**
+     * Coarse progress marker reported with {@code SOURCE_FAILURE}. Fixed names only, so a hosted
+     * failure names the step that threw without ever carrying a path, message or stack trace.
+     */
+    static final class Stage {
+        static final Set<String> NAMES =
+                Set.of("SCOPE", "EXISTING", "INSPECT", "SCRATCH", "RECONSTRUCT", "FINISH", "GRAPH", "STAGE", "CLEANUP");
+        private volatile String current = "SCOPE";
+
+        void set(String name) {
+            if (!NAMES.contains(name)) throw new IllegalArgumentException("unknown stage");
+            current = name;
+        }
+
+        String get() {
+            return current;
+        }
+    }
+
+    /** Exception category for {@code SOURCE_FAILURE}: a fixed vocabulary, never the exception itself. */
+    static String causeOf(Throwable error) {
+        if (error instanceof WindowsStorage.Refused) return "STORAGE_REFUSED";
+        if (error instanceof AccessDeniedException) return "ACCESS_DENIED";
+        if (error.getClass().getName().startsWith("org.eclipse.jgit.")) return "JGIT";
+        if (error instanceof IOException) return "IO";
+        if (error instanceof RuntimeException) return "RUNTIME";
+        return "OTHER";
+    }
+
     /** Static framed errors only; never print an exception, path, source text or submitted JSON. */
     public static int run(String[] args, InputStream input, OutputStream output) {
         SystemReader previous = SystemReader.getInstance();
@@ -144,6 +175,7 @@ public final class BackupSourceWorker {
 
     private static int execute(String[] args, InputStream input, OutputStream output) {
         DataOutputStream target = new DataOutputStream(output);
+        Stage stage = new Stage();
         try {
             if (args.length != 1 || !FLAG.equals(args[0])) throw failure("SOURCE_ARGUMENT_INVALID");
             DataInputStream source = new DataInputStream(input);
@@ -198,7 +230,7 @@ public final class BackupSourceWorker {
                             "workspace"));
                 if (operation.equals("EXPORT")) {
                     eof(source);
-                    exportSource(text(request.get("reposRoot")), project, selection, target, budget);
+                    exportSource(text(request.get("reposRoot")), project, selection, target, budget, stage);
                 } else if (operation.equals("EXPORT_RETAINED")) {
                     int count = (int) number(
                             request.get("retainedCount"), selection.snapshots().size());
@@ -211,7 +243,8 @@ public final class BackupSourceWorker {
                             count,
                             source,
                             target,
-                            budget);
+                            budget,
+                            stage);
                 } else {
                     importSource(
                             text(request.get("stageRoot")),
@@ -220,7 +253,8 @@ public final class BackupSourceWorker {
                             Receipt.parse(request.get("expected")),
                             source,
                             target,
-                            budget);
+                            budget,
+                            stage);
                 }
             } finally {
                 for (int index = scopes.size() - 1; index >= 0; index--)
@@ -233,8 +267,13 @@ public final class BackupSourceWorker {
                     : error instanceof MissingObjectException || error instanceof java.nio.file.NoSuchFileException
                             ? "SOURCE_MISSING"
                             : "SOURCE_FAILURE";
+            Map<String, Object> frame = map("version", 1, "kind", "ERROR", "code", code);
+            if (code.equals("SOURCE_FAILURE")) {
+                frame.put("stage", stage.get());
+                frame.put("cause", causeOf(error));
+            }
             try {
-                write(target, map("version", 1, "kind", "ERROR", "code", code));
+                write(target, frame);
             } catch (Exception ignored) {
                 /* Broken private pipe: exit failure, never an alternate output. */
             }
@@ -243,9 +282,10 @@ public final class BackupSourceWorker {
     }
 
     private static void exportSource(
-            String root, String project, SourceSelection selection, DataOutputStream output, Budget budget)
+            String root, String project, SourceSelection selection, DataOutputStream output, Budget budget, Stage stage)
             throws IOException {
         budget.check();
+        stage.set("INSPECT");
         Path repos = SourceFiles.root(root, false);
         if (selection.snapshots().isEmpty()
                 && selection.commits().isEmpty()
@@ -259,6 +299,7 @@ public final class BackupSourceWorker {
         Object repoKey = SourceFiles.directory(repo).fileKey();
         Path git = repo.resolve(".git");
         Map<Path, SourceFiles.Stamp> before = SourceFiles.inspect(git, budget);
+        stage.set("GRAPH");
         try (ObjectDatabase objects = objectDatabase(git);
                 ObjectReader reader = objects.newReader()) {
             SourceGraph graph = new SourceGraph(reader, budget);
@@ -350,16 +391,20 @@ public final class BackupSourceWorker {
             int count,
             DataInputStream input,
             DataOutputStream output,
-            Budget budget)
+            Budget budget,
+            Stage stage)
             throws IOException {
         budget.check();
+        stage.set("SCRATCH");
         Path repos = SourceFiles.root(root, false);
         Path scratch = SourceFiles.root(scratchRoot, true);
         if (scratch.startsWith(repos) || repos.startsWith(scratch)) throw failure("SOURCE_UNSAFE_PATH");
         Object scratchKey = SourceFiles.directory(scratch).fileKey();
         // No adoption or cleanup of any preceding invocation's child, including after a crash.
         Path temporary = scratch.resolve(project);
+        stage.set("EXISTING");
         try (ExistingSource existing = new ExistingSource(repos, project, budget)) {
+            stage.set("SCRATCH");
             SourceFiles.mkdir(temporary);
             Object key = SourceFiles.directory(temporary).fileKey();
             try {
@@ -367,6 +412,7 @@ public final class BackupSourceWorker {
                 SourceFiles.mkdir(git);
                 try (ObjectDatabase generated = objectDatabase(git)) {
                     generated.create();
+                    stage.set("RECONSTRUCT");
                     long previousId = 0;
                     long[] generatedBytes = {0, 0};
                     for (int i = 0; i < count; i++) {
@@ -398,7 +444,9 @@ public final class BackupSourceWorker {
                         reconstruct(header, snapshot, generated, existing.reader, generatedBytes, input, budget);
                     }
                     eof(input);
+                    stage.set("FINISH");
                     SourceFiles.finish(temporary, key, budget);
+                    stage.set("GRAPH");
                     try (ObjectReader reader = generated.newReader()) {
                         SourceGraph graph = new SourceGraph(reader, existing.reader, budget);
                         graph.select(selection);
@@ -437,6 +485,7 @@ public final class BackupSourceWorker {
             } finally {
                 // Preserve cancellation while allowing the owned-root cleanup fsync to finish.
                 boolean interrupted = Thread.interrupted();
+                stage.set("CLEANUP");
                 try {
                     if (!scratchKey.equals(SourceFiles.directory(scratch).fileKey()))
                         throw failure("SOURCE_UNSAFE_PATH");
@@ -587,10 +636,12 @@ public final class BackupSourceWorker {
             Receipt expected,
             DataInputStream input,
             DataOutputStream output,
-            Budget budget)
+            Budget budget,
+            Stage stage)
             throws IOException {
         budget.check();
         if (!selection.digest().equals(expected.selectionSha256())) throw failure("SOURCE_SELECTION_INVALID");
+        stage.set("STAGE");
         Path staging = SourceFiles.root(root, true);
         Path repo = staging.resolve(project);
         // Exclusive creation is the authorization to clean this one child on failure. Existing data is never adopted.
@@ -608,6 +659,7 @@ public final class BackupSourceWorker {
             SourceFiles.mkdir(git.resolve("refs/heads"));
             TreeMap<String, SourceGraph.Meta> received = new TreeMap<>();
             long bytes = 0;
+            stage.set("RECONSTRUCT");
             try (ObjectDatabase objects = objectDatabase(git)) {
                 objects.create();
                 try (ObjectInserter inserter = objects.newInserter()) {
@@ -677,6 +729,7 @@ public final class BackupSourceWorker {
                     if (!graph.objects.equals(received)) throw failure("SOURCE_SELECTION_INVALID");
                 }
             }
+            stage.set("STAGE");
             SourceFiles.fresh(
                     git.resolve("HEAD"),
                     (selection.headOid() == null ? "ref: refs/heads/backup-empty\n" : selection.headOid() + "\n")
@@ -693,11 +746,15 @@ public final class BackupSourceWorker {
                 }
                 SourceFiles.fresh(ref, (branch.headOid() + "\n").getBytes(StandardCharsets.US_ASCII));
             }
+            stage.set("FINISH");
             SourceFiles.finish(repo, key, budget);
             completed = true;
             write(output, expected.wire("RESTORED", project));
         } finally {
-            if (!completed) SourceFiles.removeOwned(repo, key);
+            if (!completed) {
+                stage.set("CLEANUP");
+                SourceFiles.removeOwned(repo, key);
+            }
         }
     }
 
