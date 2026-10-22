@@ -6,6 +6,9 @@ Cross-platform build preparation (2026-10-22): native build paths now cover macO
 Windows x64 and Linux x64 (Ubuntu 22.04+). See [desktop packaging](#native-desktop-packaging).
 Windows/Linux packages and installation were not executed on the development Mac;
 this source preparation does not change the production release verdict below.
+Hosted Windows native acceptance (unsigned development runtime) passed native boundaries,
+startup, import/analysis and encrypted restart, but the encrypted backup still fails at
+its capacity check (`CAPACITY` / `WINDOWS_STORAGE_REFUSED`); Windows backup/restore is unresolved.
 
 Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
 
@@ -822,7 +825,7 @@ and blockers in [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md).
 | Local browser + Spring Boot backend | Supported development path |
 | Docker Compose PostgreSQL/Redis/sidecars | Supported local infrastructure |
 | macOS arm64 Electron runtime | Host-local product/Keychain/backup/recovery/restart and native window sizes verified; ad-hoc package integrity and VM startup verified; signed release acceptance pending |
-| Windows native installer | x64 staging, unsigned directory and signed NSIS build paths prepared; fresh-machine installer acceptance remains unverified |
+| Windows native installer | x64 staging, unsigned directory and signed NSIS build paths prepared; hosted unsigned-runtime acceptance fails at encrypted backup (`CAPACITY` / `WINDOWS_STORAGE_REFUSED`); fresh-machine installer acceptance remains unverified |
 | Linux native package | Ubuntu 22.04+ x64 runtime supply and AppImage/DEB build paths prepared; native build/install not executed |
 | Production hosted deployment | Deployment-specific; no release workflow is included |
 
