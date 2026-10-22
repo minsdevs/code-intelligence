@@ -237,6 +237,25 @@ test('subprocess stderr is bounded and never returned or logged', async t => {
   await failed(f.export(), 'STDERR_LIMIT');
 });
 
+test('a staged SOURCE_FAILURE frame maps to a fixed stage/cause code and anything else is a protocol error', async t => {
+  const f = await fixture(t);
+  f.control.output = [{ version: 1, kind: 'ERROR', code: 'SOURCE_FAILURE', stage: 'FINISH', cause: 'STORAGE_REFUSED' }];
+  await failed(f.export(), 'SOURCE_FAILURE_FINISH_STORAGE_REFUSED'); assert.deepEqual(f.received, []);
+  const g = await fixture(t); g.control.output = [{ version: 1, kind: 'ERROR', code: 'SOURCE_FAILURE' }];
+  await failed(g.export(), 'SOURCE_FAILURE');
+  for (const frame of [
+    { version: 1, kind: 'ERROR', code: 'SOURCE_FAILURE', stage: 'private-sentinel', cause: 'IO' },
+    { version: 1, kind: 'ERROR', code: 'SOURCE_FAILURE', stage: 'FINISH', cause: '/Users/private-sentinel' },
+    { version: 1, kind: 'ERROR', code: 'SOURCE_MISSING', stage: 'FINISH', cause: 'IO' },
+    { version: 1, kind: 'ERROR', code: 'SOURCE_FAILURE', stage: 'FINISH' },
+    { version: 2, kind: 'ERROR', code: 'SOURCE_FAILURE', stage: 'FINISH', cause: 'IO' }]) {
+    const h = await fixture(t); h.control.output = [frame]; await failed(h.export(), 'PROTOCOL');
+  }
+  const r = await fixture(t);
+  r.control.output = [{ version: 1, kind: 'ERROR', code: 'SOURCE_FAILURE', stage: 'CLEANUP', cause: 'JGIT' }];
+  await failed(r.restore(), 'SOURCE_FAILURE_CLEANUP_JGIT');
+});
+
 test('static worker policy failures remain actionable without source disclosure', async t => {
   const f = await fixture(t); f.control.output = [{ version: 1, kind: 'ERROR', code: 'SOURCE_SECRET_DETECTED' }];
   await failed(f.export(), 'SOURCE_SECRET_DETECTED'); assert.deepEqual(f.received, []);
