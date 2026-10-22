@@ -244,6 +244,32 @@ test('private native closure preserves transitive dylibs and runs without the bu
   assert.deepEqual(read('postgres'), read('redis'), 'Closure copies remain byte-identical for the publication collision gate');
 });
 
+test('native profile expectation follows launched metadata and preserves packaged name overrides', () => {
+  const { applicationProfileName } = require('../scripts/native-acceptance-electron.cjs');
+  const source = { name: 'code-intelligence-desktop', productName: 'Code Intelligence' };
+  const bundle = path.join(os.tmpdir(), 'Code Intelligence Validation.app');
+  for (const [metadata, expected] of [
+    [{ name: 'code-intelligence-validation', productName: 'Code Intelligence Validation' }, 'Code Intelligence Validation'],
+    [{ name: 'code-intelligence-validation' }, 'code-intelligence-validation'],
+    [{ name: 'code-intelligence-desktop', productName: 'Code Intelligence' }, 'Code Intelligence'],
+  ]) {
+    let calls = 0;
+    const name = applicationProfileName(source, bundle, (archive, entry) => {
+      calls++;
+      assert.equal(archive, path.join(bundle, 'Contents', 'Resources', 'app.asar'));
+      assert.equal(entry, 'package.json');
+      return Buffer.from(JSON.stringify(metadata));
+    });
+    assert.equal(name, expected); assert.equal(calls, 1);
+  }
+  assert.equal(applicationProfileName(source), 'Code Intelligence');
+  assert.equal(applicationProfileName({ name: ' code-intelligence-desktop ' }), 'code-intelligence-desktop');
+  assert.throws(() => applicationProfileName(source, bundle, () => { throw new Error('MISSING_PACKAGED_METADATA'); }),
+    /MISSING_PACKAGED_METADATA/);
+  for (const productName of ['', '.', '..', '../outside', 'path\\outside', 'invalid\nname'])
+    assert.throws(() => applicationProfileName({ ...source, productName }), /Invalid application profile name/);
+});
+
 test('direct native Electron runner refuses unauthenticated local use before importing or launching Electron', async () => {
   const { runProduct } = require('../scripts/native-acceptance-electron.cjs');
   await assert.rejects(runProduct({ env: { ...hosted(), GITHUB_ACTIONS: 'false' } }), /Hosted workflow required/);
@@ -358,6 +384,11 @@ test('Windows supply failures expose only fixed phases and compiler IDs', () => 
   assert.deepEqual(report.categories, ['dotnet-build']);
   assert.doesNotMatch(JSON.stringify(report), /private|secret/i);
   assert.deepEqual(buildDiagnostics('', record(failure).replaceAll('\n', '\r\n')).windowsSupply, [failure]);
+  const wrapper = { phase: 'invoke-provisioner', code: 'SUPPLY_PROCESS_FAILED' };
+  const wrapped = buildDiagnostics(record(wrapper), 'FullyQualifiedErrorId : NativeCommandError\nprivate-token');
+  assert.deepEqual(wrapped.windowsSupply, [wrapper]);
+  assert.deepEqual(wrapped.categories, ['powershell-native-stderr']);
+  assert.doesNotMatch(JSON.stringify(wrapped), /private|secret/i);
 });
 
 test('macOS provisioning failure report bounds log reads and records source versions without raw text', t => {

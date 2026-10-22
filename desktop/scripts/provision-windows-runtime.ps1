@@ -23,8 +23,26 @@ Set-Acl -LiteralPath $Private -AclObject $Acl
 # bounded developer environment; never initialize a second, implicit latest IDE.
 $Node = (Get-Command node.exe -CommandType Application).Source
 $Build = Join-Path $Private 'supply'
-& $Node (Join-Path $PSScriptRoot 'provision-windows-runtime.cjs') $Build
-if ($LASTEXITCODE -ne 0) { throw 'Windows supply preparation failed; retained private evidence' }
+# Windows PowerShell 5 can promote native stderr (including successful compiler
+# warnings) to NativeCommandError. Let the child's actual exit status decide;
+# forward stderr as text so bounded Node diagnostics remain machine-readable.
+$PreviousErrorActionPreference = $ErrorActionPreference
+$ProvisionExit = $null
+try {
+  $ErrorActionPreference = 'Continue'
+  $LASTEXITCODE = $null
+  & $Node (Join-Path $PSScriptRoot 'provision-windows-runtime.cjs') $Build 2>&1 | ForEach-Object { $_.ToString() }
+  $ProvisionExit = $LASTEXITCODE
+} catch {
+  Write-Output 'NATIVE_WINDOWS_SUPPLY {"phase":"invoke-provisioner","code":"SUPPLY_WRAPPER_FAILED"}'
+  throw
+} finally {
+  $ErrorActionPreference = $PreviousErrorActionPreference
+}
+if ($ProvisionExit -isnot [int] -or $ProvisionExit -ne 0) {
+  Write-Output 'NATIVE_WINDOWS_SUPPLY {"phase":"invoke-provisioner","code":"SUPPLY_PROCESS_FAILED"}'
+  throw 'Windows supply preparation failed; retained private evidence'
+}
 # Publication is namespace placement of rebuildable output, not a durable user-data commit.
 Move-Item -LiteralPath $Build -Destination $Destination
 # Absolute build paths must reflect the published supply root.

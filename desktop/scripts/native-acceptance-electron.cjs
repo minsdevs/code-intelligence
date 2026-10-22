@@ -131,6 +131,19 @@ async function verifyRevokedAuthority({ dataRoot, apiBaseUrl, apiToken, oldToken
   } finally { await client.close(); }
 }
 
+function applicationProfileName(sourceMetadata, appBundle, extractFile) {
+  // Electron initializes app.name from the launched package's productName, then
+  // name. Validation packaging overrides both, so source metadata is insufficient.
+  const metadata = appBundle
+    ? JSON.parse(extractFile(path.join(appBundle, 'Contents', 'Resources', 'app.asar'), 'package.json').toString('utf8'))
+    : sourceMetadata;
+  const value = metadata.productName ?? metadata.name;
+  assert.equal(typeof value, 'string', 'Application profile name must come from launch metadata');
+  const name = value.trim();
+  assert.ok(name && name !== '.' && name !== '..' && !/[\\/\x00-\x1f\x7f]/.test(name), 'Invalid application profile name');
+  return name;
+}
+
 async function runProduct({ source, owned, artifacts, report, env, phase }) {
   // Direct callers must prove the same execution boundary before loading Electron.
   const { recordFailure } = require('./native-acceptance.cjs');
@@ -157,7 +170,8 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   // ADR-01: an xpc-required bundle runs no persistent ts-analyzer child; a development app is legacy-http.
   const expectedServices = packaged ? adapterServices(report.appBundle) : ['backend', 'postgres', 'redis', 'ts-analyzer'];
   const desktopPackage = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8'));
-  const packageName = desktopPackage.name;
+  const packageName = applicationProfileName(desktopPackage, report.appBundle,
+    packaged ? createRequire(path.join(desktop, 'package.json'))('@electron/asar').extractFile : undefined);
   let validationPlan;
   if (context.kind === 'isolated-macos-host') {
     const runs = context.isolatedRunParent;
@@ -747,4 +761,4 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   }
   if (failure) throw failure;
 }
-module.exports = { runProduct, closeOwnedApplication, closeValidatedApplication, createDeadline, observeStartup, verifyRevokedAuthority };
+module.exports = { runProduct, closeOwnedApplication, closeValidatedApplication, createDeadline, observeStartup, verifyRevokedAuthority, applicationProfileName };

@@ -108,6 +108,7 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
     ['permission-denied', /\bEACCES\b|Permission denied/],
     ['network-resolution', /\bENOTFOUND\b|Could not resolve host/],
     ['dotnet-build', /\berror (?:CS|NU|NETSDK|MSB)[0-9]{4,5}:/],
+    ['powershell-native-stderr', /\bNativeCommandError\b/],
   ]) if (expression.test(text)) categories.push(name);
   const compilerCodes = [...new Set([...text.matchAll(/\b(?:error|fatal error) ((?:TS|CS|NU|NETSDK|MSB)[0-9]{4,5}|C[0-9]{4}|LNK[0-9]{4}):/g)].map(match => match[1]))].slice(0, 32);
   const policyCodes = ['MINIMUM_OS_EXCEEDED', 'NON_RELOCATABLE_REFERENCE', 'UNSUPPORTED_RPATH',
@@ -134,11 +135,12 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
     if (windowsPolicy.length === 12) break;
   }
   const windowsSupply = [];
-  const supplyPhases = new Set(['prepare', 'select-toolchain', 'select-native-assets', 'jre-link', 'pgvector-build',
+  const supplyPhases = new Set(['invoke-provisioner', 'prepare', 'select-toolchain', 'select-native-assets', 'jre-link', 'pgvector-build',
     'pgvector-stage', 'garnet-publish', 'garnet-stage', 'source-notices', 'postgres-stage', 'nuget-notices',
     'runtime-inventory', 'publish-metadata', ...['jdk', 'postgres', 'pgvector', 'dotnet', 'garnet', 'garnetNative']
       .flatMap(name => ['download-' + name, 'extract-' + name])]);
-  const supplyCodes = new Set(['ENOENT', 'EEXIST', 'EACCES', 'EPERM', 'ENOSPC', 'ETIMEDOUT', 'SUPPLY_BUILD_COMMAND_FAILED', 'SUPPLY_FAILED']);
+  const supplyCodes = new Set(['ENOENT', 'EEXIST', 'EACCES', 'EPERM', 'ENOSPC', 'ETIMEDOUT', 'SUPPLY_BUILD_COMMAND_FAILED',
+    'SUPPLY_FAILED', 'SUPPLY_WRAPPER_FAILED', 'SUPPLY_PROCESS_FAILED']);
   for (const match of text.matchAll(/^NATIVE_WINDOWS_SUPPLY (\{[^\r\n]{1,256}\})\r?$/gm)) {
     let item; try { item = JSON.parse(match[1]); } catch { continue; }
     if (!item || !supplyPhases.has(item.phase) || !supplyCodes.has(item.code)
