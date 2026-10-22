@@ -21,12 +21,16 @@ const REQUIRED = [
   { from: 'build/third-party-notices', to: 'legal/third-party' },
 ];
 
-test('macOS packaging copies Electron licence files and generated third-party notices into Contents/Resources/legal', () => {
+test('all desktop targets copy Electron licences and third-party notices alongside native runtime notices', () => {
   const build = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8')).build;
-  const mac = build.mac.extraResources || [];
-  for (const mapping of REQUIRED) assert.ok(mac.some(item => item.from === mapping.from && item.to === mapping.to), JSON.stringify(mapping));
-  // Windows keeps its own notice set (windows-runtime-notices.json); the shared list stays runtime-only.
-  assert.deepEqual(build.extraResources, [{ from: 'stage/runtime', to: 'runtime' }]);
+  for (const target of ['mac', 'win', 'linux']) {
+    const resources = [...build.extraResources, ...(build[target].extraResources || [])];
+    for (const mapping of [...REQUIRED, { from: 'stage/runtime', to: 'runtime' }]) {
+      assert.equal(resources.filter(item => item.from === mapping.from && item.to === mapping.to).length, 1,
+        target + ': ' + JSON.stringify(mapping));
+    }
+  }
+  // Windows/Linux native supply notices remain inside their separately inventoried runtime.
   // The SBOM generator attributes exactly these destinations; electron-builder only warns on a missing source.
   for (const mapping of REQUIRED) {
     const shipped = `Contents/Resources/${mapping.to}${mapping.to.endsWith('third-party') ? '/THIRD-PARTY-NOTICES.txt' : ''}`;

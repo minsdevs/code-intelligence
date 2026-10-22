@@ -229,8 +229,13 @@ if (process.platform === 'win32' && process.arch === 'x64') {
   stageWindowsRuntime({ desktop, buildSequence });
   process.exit(0);
 }
+if (process.platform === 'linux' && process.arch === 'x64') {
+  const { stageLinuxRuntime } = await import('./stage-linux-runtime.cjs');
+  await stageLinuxRuntime({ desktop, buildSequence });
+  process.exit(0);
+}
 if (process.platform !== 'darwin' || process.arch !== 'arm64') {
-  throw new Error('The verified desktop package target is currently macOS arm64 only.');
+  throw new Error('Native desktop staging supports macOS arm64, Windows x64 and Linux x64 build hosts.');
 }
 
 const stageTransaction = runtimeStage.createRuntimeStage(stageDirectory);

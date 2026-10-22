@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.net.URI;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,13 +58,39 @@ class IdeOpenServiceTest {
     @Test
     void generatesVscodeUri() {
         String uri = service.buildUri(IdeOpenService.Ide.VSCODE, "/home/user/project/src/Main.java", 42);
-        assertThat(uri).isEqualTo("vscode://file//home/user/project/src/Main.java:42");
+        assertThat(uri).isEqualTo("vscode://file/home/user/project/src/Main.java:42");
     }
 
     @Test
     void generatesCursorUri() {
         String uri = service.buildUri(IdeOpenService.Ide.CURSOR, "/home/user/project/src/Main.java", 10);
-        assertThat(uri).isEqualTo("cursor://file//home/user/project/src/Main.java:10");
+        assertThat(uri).isEqualTo("cursor://file/home/user/project/src/Main.java:10");
+    }
+
+    @Test
+    void generatesEncodedWindowsFileUrisWithoutDependingOnHostOs() {
+        for (IdeOpenService.Ide ide : new IdeOpenService.Ide[] {IdeOpenService.Ide.VSCODE, IdeOpenService.Ide.CURSOR}) {
+            String uri = service.buildUri(ide, "C:\\Users\\Test User\\project #1\\Main.java", 42);
+            URI parsed = URI.create(uri);
+            assertThat(uri).endsWith("/C:/Users/Test%20User/project%20%231/Main.java:42");
+            assertThat(parsed.getAuthority()).isEqualTo("file");
+            assertThat(parsed.getPath()).isEqualTo("/C:/Users/Test User/project #1/Main.java:42");
+            assertThat(parsed.getQuery()).isNull();
+            assertThat(parsed.getFragment()).isNull();
+        }
+    }
+
+    @Test
+    void keepsReservedCharactersAndUnicodeInsidePosixFilePath() {
+        String path = "/home/user/프로젝트/Main #1?100%.java";
+        for (IdeOpenService.Ide ide : new IdeOpenService.Ide[] {IdeOpenService.Ide.VSCODE, IdeOpenService.Ide.CURSOR}) {
+            String uri = service.buildUri(ide, path, 7);
+            URI parsed = URI.create(uri);
+            assertThat(uri).contains("%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8", "%20%231%3F100%25");
+            assertThat(parsed.getPath()).isEqualTo(path + ":7");
+            assertThat(parsed.getQuery()).isNull();
+            assertThat(parsed.getFragment()).isNull();
+        }
     }
 
     @Test

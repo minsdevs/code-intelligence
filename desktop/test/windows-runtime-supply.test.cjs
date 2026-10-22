@@ -8,6 +8,8 @@ const { parsePe, validateClosure, inventory, systemDll, verifyWindowsRuntime, RE
 const { zipEntries, extractZip, crc32 } = require('../scripts/windows-runtime-archive.cjs');
 const { validateRuntimeManifest } = require('../src/runtime-manifest.cjs');
 const { runWindowsProduct } = require('../scripts/native-acceptance-windows-product.cjs');
+const { stageWindowsBackend, stageWindowsRuntime } = require('../scripts/stage-windows-runtime.cjs');
+const { windowsReadiness, requireWindowsReadiness } = require('../scripts/windows-readiness.cjs');
 const supplies = require('../scripts/windows-runtime-supply.json');
 function temporary(t) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(path.resolve(__dirname, '..', '..')), '.windows-runtime-test-'));
@@ -105,6 +107,25 @@ test('PE provenance, required native modules and extension SQL are mandatory', t
   assert.throws(() => verifyWindowsRuntime({ root, provenance, supplies }), /REQUIRED_EXTENSION_CONTROL/);
   for (const name of ['vector', 'pg_trgm']) { put(root, `postgres/share/extension/${name}.control`, `default_version = '1.0'\nmodule_pathname = '$libdir/${name}'`); put(root, `postgres/share/extension/${name}--1.0.sql`, 'select 1;'); }
   assert.ok(verifyWindowsRuntime({ root, provenance, supplies }).native > 0);
+  put(root, 'windows-provenance.json', JSON.stringify(provenance));
+  const manifest = { format: 1, buildSequence: '1', backupProtocol: 3, ownershipProtocol: 1,
+    platform: 'win32', arch: 'x64', runtime: { cache: 'garnet-2.2.0', postgresBin: 'postgres/bin',
+      postgresLib: 'postgres/bin', postgresPkgLib: 'postgres/lib', postgresShare: 'postgres/share' },
+    files: Object.fromEntries([...inventory(root)].map(([name, value]) => [name, value.hash])) };
+  put(root, 'runtime-manifest.json', JSON.stringify(manifest));
+  // Synthetic PE fixtures verify policy only, never claim a real Windows build or native run.
+  const readiness = requireWindowsReadiness({ root, platform: 'win32', arch: 'x64' });
+  assert.equal(readiness.status, 'READY_TO_PACKAGE');
+  assert.equal(readiness.nativeWindowsValidation, false);
+  assert.equal(readiness.releaseValidation, 'NOT_RUN');
+  assert.ok(readiness.remainingValidation.length > 0);
+  for (const [platform, arch] of [['darwin', 'arm64'], ['linux', 'x64'], ['win32', 'arm64']]) {
+    assert.throws(() => requireWindowsReadiness({ root, platform, arch }), { code: 'WINDOWS_PACKAGING_NOT_READY' });
+  }
+  put(root, 'unexpected.txt', 'unlisted bytes');
+  assert.equal(windowsReadiness('win32', 'x64', root).runtimeInventory.status, 'FAIL');
+  assert.throws(() => requireWindowsReadiness({ root, platform: 'win32', arch: 'x64' }), { code: 'WINDOWS_PACKAGING_NOT_READY' });
+  fs.unlinkSync(path.join(root, 'unexpected.txt'));
   const configuration = path.join(root, 'cache/GarnetServer.runtimeconfig.json'), original = fs.readFileSync(configuration);
   put(root, 'cache/GarnetServer.runtimeconfig.json', JSON.stringify({ runtimeOptions: { tfm: 'net10.0', framework: { name: 'Microsoft.NETCore.App', version: '10.0.12' } } }));
   assert.throws(() => verifyWindowsRuntime({ root, provenance, supplies }), /CACHE_SELF_CONTAINED_REQUIRED/);
@@ -127,4 +148,23 @@ test('runtime manifest rejects Windows case collisions before any helper execute
 });
 test('Windows product runner cannot be used to launch local Electron', async () => {
   await assert.rejects(runWindowsProduct({ env: { GITHUB_ACTIONS: 'false' } }), /Hosted workflow required/);
+});
+test('Windows backend staging selects the boot jar when Gradle also produces the POSIX control jar', t => {
+  const root = temporary(t), incoming = path.join(root, 'incoming');
+  put(root, 'backend/build/libs/code-intelligence-0.1.0.jar', 'boot jar');
+  put(root, 'backend/build/libs/code-intelligence-0.1.0-plain.jar', 'plain jar');
+  put(root, 'backend/build/libs/code-intelligence-control.jar', 'control jar');
+  put(root, 'backend/src/main/resources/db/migration/V1__initial.sql', 'migration');
+  stageWindowsBackend(root, incoming);
+  assert.equal(fs.readFileSync(path.join(incoming, 'backend/code-intelligence.jar'), 'utf8'), 'boot jar');
+  assert.equal(fs.readFileSync(path.join(incoming, 'backend/backup-migrations/V1__initial.sql'), 'utf8'), 'migration');
+  assert.equal(fs.existsSync(path.join(incoming, 'backend/code-intelligence-control.jar')), false);
+  put(root, 'backend/build/libs/stale-boot.jar', 'stale boot jar');
+  assert.throws(() => stageWindowsBackend(root, path.join(root, 'ambiguous')), /exactly one backend boot jar/);
+  assert.equal(fs.existsSync(path.join(root, 'ambiguous')), false);
+});
+test('Windows staging rejects another host before creating any output', { skip: process.platform === 'win32' && process.arch === 'x64' }, t => {
+  const root = temporary(t), desktop = path.join(root, 'desktop');
+  assert.throws(() => stageWindowsRuntime({ desktop, buildSequence: '1' }), /Windows x64 native staging host required/);
+  assert.equal(fs.existsSync(desktop), false);
 });

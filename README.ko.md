@@ -2,6 +2,11 @@
 
 # Code Intelligence
 
+크로스플랫폼 빌드 준비(2026-10-22): macOS arm64, Windows x64, Linux x64
+(Ubuntu 22.04+)의 네이티브 빌드 경로를 추가·정리했습니다.
+[플랫폼별 패키징](#플랫폼별-데스크톱-패키징)을 참고하십시오.
+개발 맥에서 Windows/Linux 빌드·설치는 실행하지 않았으며, 아래 정식 릴리스 판정은 유지합니다.
+
 2026-10-05 제품 개편: 레포 개요·분석 시점별 검색 표·선택 주변 관계·보관 소스 탐색을 구현했습니다. 학습 관리는 제거하고 기존 데이터는 보존했습니다. [현재 구현과 실제 앱 검증 범위](docs/multilanguage-plan-2026-10-02/11-first-implementation.md)에 최초 native FAIL/후속 PASS, 계정 연결 관리, 검토된 V26→V27 백업 호환성을 구분했습니다. Developer ID 서명·공증·정식 배포는 아직 완료하지 않았습니다. 아래 날짜별 감사 기록은 과거 범위를 유지합니다.
 
 최신 패키징 후보는 [출시 게이트 단위와 LA8ZS9](docs/audit/release-gate-units-la8zs9-2026-10-07.md)와 그 앞의
@@ -116,9 +121,9 @@ POSIX 파일 상태 조회 세 개의 대기를 겹치도록 수정했습니다.
 
 이 저장소는 현재 Spring Boot 백엔드와 선택적 analyzer sidecar를 갖춘
 브라우저 기반 로컬 워크스페이스와 `desktop/`의 Electron 데스크톱 runtime을
-제공합니다. 데스크톱 경로는 backend, analyzer, JRE, PostgreSQL, Redis를
-staging하고 OS 보호 저장소에 runtime credential을 보관하는 macOS arm64 RC
-surface입니다. 서명/notarization된 프로덕션 배포나 자동 업데이트 채널은
+제공합니다. 데스크톱 경로는 backend, analyzer, JRE, PostgreSQL, Redis
+(Windows는 Garnet)를 staging하고 OS 보호 저장소에 runtime credential을 보관합니다.
+서명/notarization된 프로덕션 배포나 자동 업데이트 채널은
 아직 아닙니다.
 
 ## 원칙
@@ -169,7 +174,7 @@ openssl rand -base64 32
 (cd desktop && npm ci && npm run stage && npm start)
 ```
 
-`desktop/scripts/stage-runtime.mjs`는 현재 macOS arm64를 검증하고
+macOS에서 `desktop/scripts/stage-runtime.mjs`는 arm64를 검증하고
 frontend/analyzer/backend를 빌드하며, 로컬 PostgreSQL(pgvector 포함)과 Redis
 binary를 요구합니다. `pack:mac`은 로컬 directory package를 생성합니다.
 서명, notarization, 새 기기 설치 및 실제 OAuth는 여전히 release blocker입니다.
@@ -181,6 +186,63 @@ Homebrew 빌드는 이 검사를 통과하지 못할 수 있습니다.
 `share/postgresql/extension` 포함)를 `PGVECTOR_ROOT`로 지정해야 합니다.
 stage는 manifest 완성 뒤 이전 디렉터리를 보존하며 교체합니다. 중단된 트랜잭션은
 잠금·복구 marker를 남깁니다. 합성 중단 시험이 서명된 업데이트 복구를 증명하지는 않습니다.
+
+### 플랫폼별 데스크톱 패키징
+
+해당 OS에서 빌드합니다. 다른 OS용 패키징은 staging을 바꾸기 전에 거부합니다.
+Node.js 24를 설치하고 frontend, TypeScript analyzer, desktop에서 각각 `npm ci`를
+실행하십시오. `CODE_INTELLIGENCE_BUILD_SEQUENCE`에는 릴리스 소유자가 배정한 값을 지정합니다.
+모든 명령은 현재 소스를 빌드하고 runtime inventory를 검사하며, 자동 게시하지 않습니다.
+
+| 빌드 환경 | 로컬 directory package | 배포 파일 |
+|---|---|---|
+| macOS 13+ Apple Silicon, JDK 21, 위의 PostgreSQL/pgvector·Redis 공급품 | `npm --prefix desktop run pack:mac` | `dist:mac`: Developer ID 서명·공증 DMG/ZIP |
+| Windows x64, Visual Studio C++ x64 도구·Windows SDK·CMake | `npm --prefix desktop run pack:win` | `dist:win`: Authenticode 서명 NSIS |
+| Ubuntu 22.04 x64, 아래 빌드 도구 | `npm --prefix desktop run pack:linux` | `dist:linux`: AppImage/DEB |
+
+새 checkout에서는 `desktop/stage`를 먼저 만들고, 기존 폴더와 겹치지 않는 공급품
+경로를 사용합니다. Windows PowerShell:
+
+```powershell
+./desktop/scripts/provision-windows-runtime.ps1 -Destination "$PWD/desktop/stage/windows-supply"
+$env:CODE_INTELLIGENCE_WINDOWS_SUPPLY = "$PWD/desktop/stage/windows-supply"
+# $env:CODE_INTELLIGENCE_BUILD_SEQUENCE에 배정된 값을 지정합니다.
+npm --prefix desktop run pack:win
+```
+
+Linux Ubuntu 22.04 x64:
+
+```sh
+sudo apt-get install build-essential pkg-config libssl-dev zlib1g-dev patchelf binutils python3 bison flex
+sudo apt-get install libx11-6 libxext6 libxi6 libxrender1 libxtst6 libfreetype6 libfontconfig1 libasound2 libsecret-1-0
+node desktop/scripts/provision-linux-runtime.cjs "$PWD/desktop/stage/linux-supply"
+export CODE_INTELLIGENCE_LINUX_SUPPLY="$PWD/desktop/stage/linux-supply"
+# CODE_INTELLIGENCE_BUILD_SEQUENCE에 배정된 값을 export합니다.
+npm --prefix desktop run pack:linux
+```
+
+공급품은 고정 SHA-256으로 확인하며 시스템 서비스를 설치하지 않습니다. Windows는
+JDK/PostgreSQL/Garnet과 native helper·pgvector, Linux는 Java 21 및 TLS가 포함된
+PostgreSQL/pgvector/Redis와 필요한 라이브러리·고지를 묶습니다. Windows의 .NET 의존성
+복원에는 네트워크가 필요합니다. `pack:win`은 서명하지 않고, `dist:win`은 운영자가
+설정한 Authenticode 서명이 필요합니다. 제거 시 기존 앱 데이터는 보존합니다.
+
+Linux 런타임은 glibc 2.35 이상, 그래픽 세션, 잠금 해제된 Secret Service
+(예: GNOME Keyring) 또는 KWallet이 필요합니다. 저장소가 없거나 잠겨 있거나
+`basic_text`이면 시작을 거부합니다. AppImage는 배포판의 FUSE 호환 패키지가 필요할 수
+있으며 Ubuntu에서는 DEB도 사용할 수 있습니다. Alpine/musl, Linux arm64, Intel Mac,
+Windows ARM은 이번 패키징 대상에 포함하지 않습니다.
+
+[Desktop packages](.github/workflows/desktop-package.yml)는 수동 실행하는 GitHub Actions입니다.
+세 OS에서 공급품 준비·directory package 생성 후 권한을 보존하는 압축 파일과 SHA-256을
+보관합니다. 앱 실행·실계정 접근·릴리스 게시는 하지 않으며, 실제 제품 수용 검증과 별개입니다.
+이번 작업에서는 이 원격 워크플로도 실행하지 않았습니다.
+
+Windows/Linux 업데이트는 수동입니다. 기존 앱 내 서명 업데이트와 XPC 분석기 격리는
+macOS 전용이며, 기본 `legacy-http` 모드를 유지하고 다른 OS의 `xpc-required` 요청은
+거부합니다. Electron의 ASAR 무결성 보호도 [macOS/Windows 지원 범위](https://www.electronjs.org/docs/latest/tutorial/asar-integrity)이므로
+Linux에 동일한 코드 보호가 있다고 주장하지 않습니다. 정식 배포 전에는 의존성 보안·라이선스,
+플랫폼 서명, 새 기기 설치·실행 검토가 남습니다.
 
 macOS Electron의 기본 app-data 위치는
 `~/Library/Application Support/code-intelligence-desktop`입니다
@@ -409,8 +471,8 @@ AI 컨텍스트를 구성하기 전에 secret을 마스킹하지만, 사용자�
 | 로컬 브라우저 + Spring Boot backend | 지원되는 개발 경로 |
 | Docker Compose PostgreSQL/Redis/sidecar | 지원되는 로컬 인프라 |
 | macOS arm64 Electron runtime | 로컬 staging/package RC; unsigned/notarized acceptance 대기 |
-| Windows 네이티브 설치 프로그램 | x64 NSIS 설정 준비; native 안전 구현/runtime 완료 전 패키징 차단, 설치 미검증 |
-| Linux 네이티브 패키지 | 검증하지 않음 |
+| Windows 네이티브 설치 프로그램 | x64 staging·unsigned directory·서명 NSIS 빌드 경로 준비; 이번 작업에서 native 빌드·설치 미실행 |
+| Linux 네이티브 패키지 | Ubuntu 22.04+ x64 공급품·AppImage/DEB 빌드 경로 준비; native 빌드·설치 미실행 |
 | 프로덕션 호스팅 배포 | 배포별로 다름; 릴리스 워크플로가 포함되지 않음 |
 
 최신8단계 판정에 남은 내부 검증·운영 조건을 충족한 뒤 Developer ID 서명 →

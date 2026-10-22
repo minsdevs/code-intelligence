@@ -27,6 +27,8 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
     || BigInt(manifest.buildSequence) > 9223372036854775807n) invalid('RUNTIME_MANIFEST_BUILD');
   if (platform === 'win32' && (arch !== 'x64' || manifest.runtime?.cache !== 'garnet-2.2.0'
     || manifest.backupProtocol !== 3 || manifest.ownershipProtocol !== 1)) invalid('RUNTIME_MANIFEST_PROTOCOL');
+  if (platform === 'linux' && (arch !== 'x64' || manifest.minimumGlibc !== '2.35' || manifest.backupProtocol !== 3
+    || manifest.ownershipProtocol !== 1 || manifest.controlProtocol !== 1)) invalid('RUNTIME_MANIFEST_PROTOCOL');
   const paths = new Map(), expected = Object.entries(manifest.files);
   if (!expected.length || expected.length > 100000 || Object.hasOwn(manifest.files, 'runtime-manifest.json')) invalid();
   for (const [name, hash] of expected) {
@@ -132,6 +134,9 @@ async function validateRuntimeManifest(root, manifest, { platform = process.plat
   if (platform === 'win32') for (const name of ['native/windows/codeintel-boundary.exe', 'jre/bin/java.exe', 'cache/GarnetServer.exe',
     'cache/coreclr.dll', 'cache/GarnetServer.runtimeconfig.json', 'windows-provenance.json', 'backend/code-intelligence.jar',
     'postgres/bin/postgres.exe', 'postgres/lib/vector.dll', 'postgres/lib/pg_trgm.dll']) if (!seen.has(name)) invalid('RUNTIME_INVENTORY_MISSING');
+  if (platform === 'linux') for (const name of ['jre/bin/java', 'redis/bin/redis-server', 'linux-provenance.json',
+    'backend/code-intelligence.jar', 'postgres/bin/postgres', 'postgres/lib/vector.so', 'postgres/lib/pg_trgm.so'])
+    if (!seen.has(name)) invalid('RUNTIME_INVENTORY_MISSING');
   return manifest;
   } catch (error) {
     const failure = integrityError(error);

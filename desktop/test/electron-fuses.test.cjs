@@ -37,7 +37,7 @@ async function flipped(appId, electronPlatformName = 'darwin') {
   const packager = { appInfo: { id: appId }, generateFuseConfig: PlatformPackager.prototype.generateFuseConfig,
     addElectronFuses: async (context, config) => { calls.push({ context, config }); } };
   const context = { packager, electronPlatformName, appOutDir: '/synthetic/out' };
-  await require(path.join(desktop, pkg.build.afterPack))(context);
+  await require(path.join(desktop, pkg.build.afterPack)).applyProductFuses(context);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].context, context);
   return calls[0].config;

@@ -1,6 +1,8 @@
 package dev.codeintelligence.project;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -135,8 +137,18 @@ public class IdeOpenService {
 
     String buildUri(Ide ide, String absolutePath, int line) {
         return switch (ide) {
-            case VSCODE -> "vscode://file/" + absolutePath + ":" + line;
-            case CURSOR -> "cursor://file/" + absolutePath + ":" + line;
+            case VSCODE, CURSOR -> {
+                // URI paths always use slashes, including Windows drive paths. Encode the path
+                // as a component so spaces, Unicode, #, ? and % cannot change its meaning.
+                String path = absolutePath.replace('\\', '/');
+                if (!path.startsWith("/")) path = "/" + path;
+                try {
+                    yield new URI(ide == Ide.VSCODE ? "vscode" : "cursor", "file", path + ":" + line, null, null)
+                            .toASCIIString();
+                } catch (URISyntaxException e) {
+                    throw new InvalidPathException();
+                }
+            }
             case INTELLIJ ->
                 "jetbrains://idea/open?file=" + URLEncoder.encode(absolutePath, StandardCharsets.UTF_8) + "&line="
                         + line;

@@ -3,7 +3,6 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { runtimeRelativePath, runtimeFile, inheritedEnvironment, libraryEnvironment } = require('../src/runtime-platform.cjs');
 const { windowsReadiness, requireWindowsReadiness } = require('../scripts/windows-readiness.cjs');
-const beforePack = require('../scripts/desktop-build-gate.cjs');
 
 test('Windows executable resolution handles spaces and Unicode without changing script and jar names', () => {
   const root = 'C:\\Users\\테스트 이름\\AppData\\Local\\Code Intelligence\\resources\\runtime';
@@ -51,12 +50,11 @@ test('Windows child environment retains OS prerequisites but excludes keys and i
     {DYLD_LIBRARY_PATH:'/runtime/postgres/lib',LD_LIBRARY_PATH:'/runtime/postgres/lib'});
 });
 
-test('Windows release gate remains independent of unsigned native product acceptance', async () => {
+test('Windows packaging requires a native host and a verified runtime stage', () => {
   assert.equal(windowsReadiness('win32','x64').status,'BLOCKED');
   assert.equal(windowsReadiness('darwin','arm64').nativeWindowsValidation,false);
   assert.throws(requireWindowsReadiness,/Windows packaging is blocked/);
-  await assert.rejects(beforePack({electronPlatformName:'win32'}),/Windows packaging is blocked/);
-
+  assert.throws(() => requireWindowsReadiness({ platform: 'win32', arch: 'x64' }), { code: 'WINDOWS_PACKAGING_NOT_READY' });
 });
 
 

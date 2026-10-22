@@ -1,0 +1,115 @@
+name: Desktop packages (manual, no publish)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_sequence:
+        description: Assigned positive build sequence; builds native directory packages without launching the app
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-package-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mac
+            runner: macos-15
+            directory: mac-arm64
+          - target: win
+            runner: windows-2025
+            directory: win-unpacked
+          - target: linux
+            runner: ubuntu-22.04
+            directory: linux-unpacked
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      CODE_INTELLIGENCE_BUILD_SEQUENCE: ${{ inputs.build_sequence }}
+      # Reuse the existing source-only macOS provisioning helper on disposable hosts.
+      NATIVE_ACCEPTANCE_CONSENT: disposable-hosted-os
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Validate native host and sequence before provisioning
+        env:
+          PACKAGE_TARGET: ${{ matrix.target }}
+        run: node -e "require('./desktop/scripts/package-desktop.cjs').packagingPlan(['pack', process.env.PACKAGE_TARGET]); if (process.env.CODE_INTELLIGENCE_BUILD_SEQUENCE === '0') throw new Error('POSITIVE_BUILD_SEQUENCE_REQUIRED');"
+      - name: Install locked build dependencies
+        run: |
+          npm --prefix frontend ci --no-audit --no-fund
+          npm --prefix analyzers/ts-analyzer ci --no-audit --no-fund
+          npm --prefix desktop ci --no-audit --no-fund
+      - name: Provision macOS runtime from pinned sources
+        if: matrix.target == 'mac'
+        run: bash desktop/scripts/native-acceptance-macos.sh
+      - name: Provision Windows runtime from pinned sources
+        if: matrix.target == 'win'
+        shell: pwsh
+        run: |
+          $supply = Join-Path $env:RUNNER_TEMP 'windows-supply'
+          ./desktop/scripts/provision-windows-runtime.ps1 -Destination $supply
+          if ($LASTEXITCODE -ne 0) { throw 'Windows provisioning failed' }
+          "CODE_INTELLIGENCE_WINDOWS_SUPPLY=$supply" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Install Linux native build tools
+        if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev zlib1g-dev patchelf binutils python3 bison flex
+          sudo apt-get install -y --no-install-recommends libx11-6 libxext6 libxi6 libxrender1 libxtst6 libfreetype6 libfontconfig1 libasound2 libsecret-1-0
+      - name: Provision Linux runtime from pinned sources
+        if: matrix.target == 'linux'
+        run: |
+          node desktop/scripts/provision-linux-runtime.cjs "$RUNNER_TEMP/linux-supply"
+          echo "CODE_INTELLIGENCE_LINUX_SUPPLY=$RUNNER_TEMP/linux-supply" >> "$GITHUB_ENV"
+      - name: Stage current source and package without publishing
+        env:
+          PACKAGE_TARGET: ${{ matrix.target }}
+        run: node desktop/scripts/package-desktop.cjs pack ${{ matrix.target }}
+      - name: Archive package with permissions and checksum
+        shell: bash
+        env:
+          PACKAGE_DIRECTORY: ${{ matrix.directory }}
+          PACKAGE_TARGET: ${{ matrix.target }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
+          const { spawnSync } = require('node:child_process');
+          const directory = path.join(process.env.RUNNER_TEMP, 'desktop-package-artifacts');
+          fs.mkdirSync(directory);
+          const name = `code-intelligence-${process.env.PACKAGE_TARGET}-${process.env.GITHUB_RUN_ID}.tar.gz`;
+          const file = path.join(directory, name);
+          const result = spawnSync(process.platform === 'win32' ? 'tar.exe' : 'tar',
+            ['-czf', file, '-C', 'desktop/dist', process.env.PACKAGE_DIRECTORY], { stdio: 'inherit', shell: false });
+          if (result.error || result.status !== 0) throw new Error('PACKAGE_ARCHIVE_FAILED');
+          (async () => {
+            const hash = crypto.createHash('sha256');
+            for await (const bytes of fs.createReadStream(file)) hash.update(bytes);
+            fs.writeFileSync(file + '.sha256', `${hash.digest('hex')}  ${name}\n`);
+          })().catch(() => { process.exitCode = 1; });
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.target }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/desktop-package-artifacts/
+          if-no-files-found: error
+          retention-days: 7

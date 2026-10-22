@@ -9,13 +9,15 @@
     "test": "node --test test/*.test.cjs",
     "stage": "node scripts/stage-runtime.mjs",
     "start": "electron .",
-    "pack:mac": "npm run stage && electron-builder --mac dir --arm64 --publish never --config.mac.identity=- --config.mac.notarize=false",
+    "pack:mac": "node scripts/package-desktop.cjs pack mac",
     "accept:mac:local": "node scripts/native-acceptance-host.cjs",
     "pack:mac:validation": "npm run stage && electron-builder --mac dir --arm64 --publish never --config.mac.identity=- --config.mac.notarize=false --config.productName=\"Code Intelligence Validation\" --config.appId=dev.codeintelligence.desktop.validation --config.extraMetadata.name=code-intelligence-validation --config.extraMetadata.productName=\"Code Intelligence Validation\" --config.directories.output=dist-validation",
-    "dist:mac": "npm run stage && electron-builder --mac dmg zip --arm64 --publish never",
+    "dist:mac": "node scripts/package-desktop.cjs dist mac",
     "check:windows": "node scripts/windows-readiness.cjs",
-    "pack:win": "npm run check:windows && electron-builder --win dir --x64 --publish never",
-    "dist:win": "npm run check:windows && electron-builder --win nsis --x64 --publish never"
+    "pack:win": "node scripts/package-desktop.cjs pack win",
+    "dist:win": "node scripts/package-desktop.cjs dist win",
+    "pack:linux": "node scripts/package-desktop.cjs pack linux",
+    "dist:linux": "node scripts/package-desktop.cjs dist linux"
   },
   "dependencies": {
     "@peculiar/x509": "2.1.0",
@@ -45,17 +47,15 @@
       {
         "from": "stage/runtime",
         "to": "runtime"
-      }
+      },
+      { "from": "node_modules/electron/dist/LICENSE", "to": "legal/electron/LICENSE" },
+      { "from": "node_modules/electron/dist/LICENSES.chromium.html", "to": "legal/electron/LICENSES.chromium.html" },
+      { "from": "build/third-party-notices", "to": "legal/third-party" }
     ],
     "mac": {
       "minimumSystemVersion": "13.0",
       "target": ["dmg", "zip"],
       "category": "public.app-category.developer-tools",
-      "extraResources": [
-        { "from": "node_modules/electron/dist/LICENSE", "to": "legal/electron/LICENSE" },
-        { "from": "node_modules/electron/dist/LICENSES.chromium.html", "to": "legal/electron/LICENSES.chromium.html" },
-        { "from": "build/third-party-notices", "to": "legal/third-party" }
-      ],
       "hardenedRuntime": true,
       "type": "distribution",
       "forceCodeSigning": true,
@@ -71,7 +71,11 @@
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "requestedExecutionLevel": "asInvoker",
-      "forceCodeSigning": true
+      "forceCodeSigning": true,
+      "signtoolOptions": {
+        "sign": "./scripts/sign-windows-runtime.cjs",
+        "signingHashAlgorithms": ["sha256"]
+      }
     },
     "nsis": {
       "oneClick": true,
@@ -79,6 +83,15 @@
       "allowElevation": false,
       "packElevateHelper": false,
       "deleteAppDataOnUninstall": false
+    },
+    "linux": {
+      "target": [{ "target": "AppImage", "arch": ["x64"] }, { "target": "deb", "arch": ["x64"] }],
+      "executableName": "code-intelligence",
+      "category": "Development",
+      "maintainer": "minsdevs <154256470+minsdevs@users.noreply.github.com>"
+    },
+    "deb": {
+      "depends": ["libc6 (>= 2.35)", "libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1", "libsecret-1-0", "libgbm1", "libasound2"]
     },
     "artifactName": "${productName}-${version}-${arch}-${os}.${ext}"
   }
