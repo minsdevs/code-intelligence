@@ -9,8 +9,9 @@ const native = require('./backup-windows-io.cjs');
 const MAX_BYTES = 10 * 1024 ** 3 + 1024 ** 2;
 const refuse = () => { throw new Error('Backup protected IO refused.'); };
 async function createBackupPlatformIO(windowsBoundary, root) {
-  const sessions = new Map(), observed = new Map();
+  const sessions = new Map(), observed = new Map(), destinations = new Map();
   if (root) sessions.set('workspace:' + root, await windowsBoundary.openStorage(root, { mode: 'workspace' }));
+  const sameAuthority = (a, b) => native.sameIdentity(a, b) && a.volume === b.volume && a.owner === b.owner;
   function wrap(state) {
     if (!state) return null;
     return Object.freeze({ ...state, size: BigInt(state.size),
@@ -18,6 +19,11 @@ async function createBackupPlatformIO(windowsBoundary, root) {
   }
   async function session(file, { directory = false, source = false } = {}) {
     for (const value of sessions.values()) {
+      // The selected parent grants metadata access to itself, never access to its descendants.
+      if (value.mode === 'backup-output') {
+        if (file === value.root && directory && !source) return value;
+        continue;
+      }
       const relative = path.relative(value.root, file);
       if (relative === '' || relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative)) {
         if (source || value.mode !== 'source') return value;
@@ -63,18 +69,72 @@ async function createBackupPlatformIO(windowsBoundary, root) {
     const storage = await session(file, { directory: true });
     for (const entry of await native.entries(storage, file)) yield { ...entry, isDirectory: () => entry.directory, isFile: () => !entry.directory };
   }
+  async function prepareBackupDestination(selected, name) {
+    if (typeof root !== 'string' || typeof selected !== 'string' || typeof name !== 'string' || !/^[A-Za-z]:\\/.test(selected)
+        || path.win32.normalize(selected) !== selected || selected === path.win32.parse(selected).root
+        || !/^CodeIntelligence-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(name)) refuse();
+    const relative = path.win32.relative(root, selected);
+    if (relative === '' || relative !== '..' && !relative.startsWith('..\\') && !path.win32.isAbsolute(relative)) refuse();
+    const parentKey = 'backup-output:' + selected, output = path.win32.join(selected, name), childKey = 'workspace:' + output;
+    if (sessions.has(parentKey) || sessions.has(childKey) || destinations.has(output)) refuse();
+    const parent = await windowsBoundary.openStorage(selected, { mode: 'backup-output' });
+    let child, created, closed = false;
+    const close = async () => {
+      if (closed) return;
+      closed = true; sessions.delete(childKey); sessions.delete(parentKey); destinations.delete(output);
+      for (const file of observed.keys()) {
+        const inside = path.win32.relative(output, file);
+        if (file === selected || inside === '' || inside !== '..' && !inside.startsWith('..\\') && !path.win32.isAbsolute(inside)) observed.delete(file);
+      }
+      let error;
+      try { await child?.close(); } catch (cause) { error = cause; }
+      try { await parent.close(); } catch (cause) { error ||= cause; }
+      if (error) throw error;
+    };
+    try {
+      if (!sameAuthority(parent.rootState, await parent.stat('', { directory: true }))) refuse();
+      created = await parent.mkdir(name, { inherit: true });
+      child = await windowsBoundary.openStorage(output, { mode: 'workspace' });
+      if (!sameAuthority(created, child.rootState)
+          || !sameAuthority(parent.rootState, await parent.stat('', { directory: true }))) refuse();
+      sessions.set(parentKey, parent); sessions.set(childKey, child);
+      observed.set(selected, parent.rootState); observed.set(output, created);
+      destinations.set(output, { created, async discard(expected) {
+        if (closed || !sameAuthority(expected, created)) refuse();
+        await child.close(); child = null; sessions.delete(childKey);
+        await parent.discardOutput(created); observed.delete(output);
+      }, close });
+      return Object.freeze({ root: output, close });
+    } catch (error) {
+      // Never adopt or erase a replaced child. Native discard requires the exact fresh identity
+      // and an empty private directory; any uncertain output is preserved for inspection.
+      try { await child?.close(); child = null; if (created) await parent.discardOutput(created); } catch {}
+      try { await close(); } catch {}
+      throw error;
+    }
+  }
   return Object.freeze({
-    lstat, stat, open,
+    lstat, stat, open, prepareBackupDestination,
     async realpath(file) { await lstat(file); return file; },
     async mkdir(file) { const storage = await session(file); const value = await storage.mkdir(file, { inherit: true }); observed.set(file, value); },
     async readdir(file) { const result = []; for await (const entry of entries(file)) result.push(entry.name); return result; },
     opendir: async file => entries(file),
     async unlink(file) { const expected = observed.get(file); if (!expected || expected.kind !== 'file') refuse(); await (await session(file)).remove(file, expected); observed.delete(file); },
-    async rmdir(file) { const expected = observed.get(file); if (!expected || expected.kind !== 'directory') refuse(); await (await session(file)).remove(file, expected.identity, { directory: true }); observed.delete(file); },
+    async rmdir(file) {
+      const expected = observed.get(file); if (!expected || expected.kind !== 'directory') refuse();
+      const destination = destinations.get(file);
+      if (destination) return destination.discard(expected);
+      await (await session(file)).remove(file, expected.identity, { directory: true }); observed.delete(file);
+    },
     async syncNamespace(file) { return stat(file, { directory: true }); },
     async capacity(file) { return (await session(file, { directory: true })).capacity(); },
     async openSource(file) { const storage = await session(file, { source: true }); const value = await storage.stat(file); observed.set(file, value); return { stat: wrap(value), handle: await native.readHandle(storage, file, MAX_BYTES, value) }; },
-    async close() { let error; for (const value of sessions.values()) try { await value.close(); } catch (cause) { error ||= cause; } sessions.clear(); observed.clear(); if (error) throw error; },
+    async close() {
+      let error;
+      for (const value of [...destinations.values()]) try { await value.close(); } catch (cause) { error ||= cause; }
+      for (const value of sessions.values()) try { await value.close(); } catch (cause) { error ||= cause; }
+      sessions.clear(); observed.clear(); if (error) throw error;
+    },
   });
 }
 module.exports = Object.freeze({ createBackupPlatformIO });

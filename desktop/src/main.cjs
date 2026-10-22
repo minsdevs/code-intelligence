@@ -38,7 +38,8 @@ const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 const { writeStorageFile } = require('./windows-storage-files.cjs');
 const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
 const { RuntimeIntegrityError, integrityError, startupFailureCode,
-  integrityDiagnostic, formatIntegrityDiagnostic, formatRestoreDiagnostic } = require('./startup-diagnostics.cjs');
+  integrityDiagnostic, formatIntegrityDiagnostic, formatRestoreDiagnostic,
+  backupDiagnostic, formatBackupDiagnostic } = require('./startup-diagnostics.cjs');
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
 const { TEST_ONLY_MODE, adapterIsolationRuntimeMode, openAdapterIsolation } = require('./adapter-isolation.cjs');
 const { openAdapterControl } = require('./adapter-control.cjs');
@@ -1205,10 +1206,18 @@ function createBackup(selected) {
 }
 
 async function backupWithDialog() {
-  if (!backupRuntime) return createBackup();
-  assertSafetyReady();
-  const selected = await dialog.showOpenDialog(mainWindow, { title: 'Choose where to save an encrypted backup', properties: ['openDirectory'] });
-  return selected.canceled ? null : createBackup(selected.filePaths[0]);
+  let phase = 'ADMISSION';
+  try {
+    if (!backupRuntime) return createBackup();
+    assertSafetyReady(); phase = 'SELECTION';
+    const selected = await dialog.showOpenDialog(mainWindow, { title: 'Choose where to save an encrypted backup', properties: ['openDirectory'] });
+    phase = 'ADMISSION';
+    // Return the admitted promise directly: runtime reports it after its own cleanup.
+    return selected.canceled ? null : createBackup(selected.filePaths[0]);
+  } catch (error) {
+    try { const line = formatBackupDiagnostic(backupDiagnostic(phase, error)); if (line) console.error(line); } catch {}
+    throw error;
+  }
 }
 
 async function restoreWithDialog() {
@@ -1429,6 +1438,7 @@ async function startApplication() {
         backupRuntime = await createDesktopBackupRuntime({ ...hooks, userData,
           installationId: secrets.localIdentity, runningBuild, recoveryMode, windowsBoundary,
           onDiagnostic: value => { const line = formatRestoreDiagnostic(value); if (line) console.error(line); },
+          onBackupDiagnostic: value => { const line = formatBackupDiagnostic(value); if (line) console.error(line); },
           gateway: aiGateway, adapter: aiPostgres, ports: backupPorts() });
         return backupRuntime;
       } } : {}) });

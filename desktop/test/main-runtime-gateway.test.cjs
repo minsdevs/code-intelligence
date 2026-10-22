@@ -985,6 +985,43 @@ test('backup/restore IPC uses the native selection and stays serialized without 
   assert.equal(h.dialogs.filter(item => item.kind === 'open').length, 2);
 });
 
+test('backup IPC diagnoses pre-runtime refusal and selection failure without changing cancellation or rejection', async t => {
+  const h = await harness(t, { backupProtocol: 3 }); await h.start();
+  const logs = []; h.context.console = { ...console, error: line => logs.push(line) };
+  const { parseBackupLine } = require('../src/startup-diagnostics.cjs');
+  assert.equal(await h.handlers.get('data:backup')(h.rendererEvent()), null);
+  assert.deepEqual(logs, []); assert.equal(h.events.includes('backup.selected'), false);
+  const failure = Object.assign(new Error('synthetic-private picker detail'), { code: 'EACCES', path: '/private/source' });
+  Object.defineProperty(h.controls, 'selection', { configurable: true, get() { throw failure; } });
+  await assert.rejects(h.handlers.get('data:backup')(h.rendererEvent()), error => error === failure);
+  assert.deepEqual(logs.map(parseBackupLine), [{ phase: 'SELECTION', state: 'FAILED', code: 'EACCES' }]);
+  delete h.controls.selection;
+  h.run('runtime.recoveryRequired = true');
+  await assert.rejects(h.handlers.get('data:backup')(h.rendererEvent()), { code: 'SAFETY_RECOVERY_REQUIRED' });
+  assert.deepEqual(logs.map(parseBackupLine).at(-1), { phase: 'ADMISSION', state: 'FAILED', code: 'SAFETY_RECOVERY_REQUIRED' });
+  assert.doesNotMatch(JSON.stringify(logs), /synthetic-private|private\/source/);
+  assert.equal(h.events.includes('backup.selected'), false);
+  h.run('runtime.recoveryRequired = false');
+  Object.defineProperty(h.controls, 'selection', { configurable: true, get() { throw failure; } });
+  h.context.console.error = () => { throw new Error('synthetic-private diagnostic sink failure'); };
+  await assert.rejects(h.handlers.get('data:backup')(h.rendererEvent()), error => error === failure);
+  // Cleanup uses the same console, whose failure must not become a test fixture failure.
+  h.context.console = { ...console, error: line => logs.push(line) };
+});
+
+test('backup runtime diagnostics are forwarded once without replacing the runtime rejection', async t => {
+  const failure = new Error('synthetic-private runtime failure');
+  const h = await harness(t, { backupProtocol: 3, selection: '/synthetic/native-selection',
+    performBackup: async options => {
+      options.onBackupDiagnostic({ phase: 'DESTINATION', state: 'FAILED', code: 'WINDOWS_STORAGE_REFUSED' });
+      throw failure;
+    } });
+  await h.start();
+  const logs = []; h.context.console = { ...console, error: line => logs.push(line) };
+  await assert.rejects(h.handlers.get('data:backup')(h.rendererEvent()), error => error === failure);
+  assert.deepEqual(logs, ['DESKTOP_BACKUP DESTINATION FAILED WINDOWS_STORAGE_REFUSED']);
+});
+
 test('restore IPC exposes only the fixed incompatible result after a pre-maintenance refusal', async t => {
   const failure = Object.assign(new Error('synthetic-private-catalog-detail'), {
     code: 'BACKUP_RUNTIME_INCOMPATIBLE', recoveryRequired: false, detail: '/synthetic/private-backup',

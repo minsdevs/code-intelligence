@@ -6,7 +6,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
 const { createRequire } = require('node:module');
-const { parseStartupLine, parseShutdownLine, parseIntegrityLine, parseRestoreLine } = require('../src/startup-diagnostics.cjs');
+const { parseStartupLine, parseShutdownLine, parseIntegrityLine, parseRestoreLine, parseBackupLine } = require('../src/startup-diagnostics.cjs');
 const { expectedServices: adapterServices } = require('../../validation/pre-release/adapter-mode.cjs');
 const { withDropConfirmation } = require('../../validation/pre-release/drop-confirmation.cjs');
 
@@ -103,7 +103,25 @@ async function waitForRestoreReload({ diagnostics, report, perform, reload, conf
   } finally { diagnostics.off('restore-failure', onFailure); }
 }
 
-function observeStartup(child, report, save, now = () => performance.now(), restoreDiagnostics) {
+async function waitForBackupResult({ diagnostics, report, perform, start, result }) {
+  let rejectFailure;
+  const failure = new Promise((_, reject) => { rejectFailure = reject; });
+  failure.catch(() => {});
+  const onFailure = () => rejectFailure(new Error('NATIVE_BACKUP_FAILED'));
+  // Selection and admission can fail during the click, before the result wait.
+  diagnostics.on('backup-failure', onFailure);
+  const raceFailure = action => {
+    if (report.backupFailure) throw new Error('NATIVE_BACKUP_FAILED');
+    return Promise.race([Promise.resolve().then(action), failure]);
+  };
+  try {
+    await perform(() => raceFailure(start));
+    // Keep the original result assertion and its budget as the success gate.
+    return await perform(() => raceFailure(result), 120000, 'NATIVE_BACKUP_TIMEOUT');
+  } finally { diagnostics.off('backup-failure', onFailure); }
+}
+
+function observeStartup(child, report, save, now = () => performance.now(), maintenanceDiagnostics) {
   let line = '', dropping = false, shutdownStarted;
   const data = bytes => {
     for (const character of bytes.toString('utf8')) {
@@ -114,7 +132,11 @@ function observeStartup(child, report, save, now = () => performance.now(), rest
         if (integrity && !report.integrityFailure) { report.integrityFailure = integrity; save(); }
         const restore = dropping ? null : parseRestoreLine(line.replace(/\r$/, ''));
         if (restore && !report.restoreFailure) {
-          report.restoreFailure = restore; save(); restoreDiagnostics?.emit('restore-failure');
+          report.restoreFailure = restore; save(); maintenanceDiagnostics?.emit('restore-failure');
+        }
+        const backup = dropping ? null : parseBackupLine(line.replace(/\r$/, ''));
+        if (backup && !report.backupFailure) {
+          report.backupFailure = backup; save(); maintenanceDiagnostics?.emit('backup-failure');
         }
         const shutdown = dropping ? null : parseShutdownLine(line.replace(/\r$/, ''));
         if (shutdown) {
@@ -243,7 +265,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   const secret = crypto.randomBytes(32).toString('hex');
   const cipherPath = path.join(owned, 'safestorage-probe.enc');
   let app, ownedApplication, page, userData, projectId, snapshotId, stopObserving;
-  const restoreDiagnostics = new EventEmitter();
+  const maintenanceDiagnostics = new EventEmitter();
   let pageErrors = 0;
   const step = (name, action, timeoutMs = 30000) => {
     phase(name);
@@ -261,7 +283,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     delete report.startup;
     delete report.integrityFailure;
     delete report.shutdown; delete report.shutdownTrace;
-    stopObserving = observeStartup(ownedChild, report, () => phase(report.phase), undefined, restoreDiagnostics);
+    stopObserving = observeStartup(ownedChild, report, () => phase(report.phase), undefined, maintenanceDiagnostics);
     phase('electron-first-window');
     const remaining = Math.floor(startupEnds - performance.now());
     if (remaining <= 0) throw new Error('NATIVE_STARTUP_TIMEOUT');
@@ -490,7 +512,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       // Production resume rotates credentials and reloads the renderer before
       // replying to the old IPC caller. Observe that real navigation, not a
       // substituted restore return value or the now-destroyed JS context.
-      await waitForRestoreReload({ diagnostics: restoreDiagnostics, report, perform,
+      await waitForRestoreReload({ diagnostics: maintenanceDiagnostics, report, perform,
         reload: () => page.waitForEvent('domcontentloaded', { timeout: deadline.limit(120000) }),
         confirm: () => confirm.click() });
       await perform(() => expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible());
@@ -613,13 +635,15 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await sourceContent(first, snapshotId);
     report.checks.push('electron-safeStorage-api-decrypt-after-automation-restart', 'real-database-and-encrypted-source-persistence');
     phase('real-main-backup');
+    delete report.backupFailure;
     report.backupRestore = { status: 'RUNNING', filePicker: 'controlled-single-use-selection', nativePickerInteraction: false };
     const destination = path.join(owned, 'native-backup-destination'); fs.mkdirSync(destination, { mode: 0o700 });
     await navigate('/settings');
     const backupFile = await withArchivePicker('backup', destination, async () => {
-      await perform(() => page.getByRole('button', { name: /^(Create backup|백업 생성)$/ }).click());
       const result = page.locator('dd').filter({ hasText: /\.cibackup$/ });
-      await perform(() => expect(result).toHaveCount(1, { timeout: deadline.limit(120000) }), 120000, 'NATIVE_BACKUP_TIMEOUT');
+      await waitForBackupResult({ diagnostics: maintenanceDiagnostics, report, perform,
+        start: () => page.getByRole('button', { name: /^(Create backup|백업 생성)$/ }).click(),
+        result: () => expect(result).toHaveCount(1, { timeout: deadline.limit(120000) }) });
       await readyAfterMaintenance();
       return selectedArchive((await perform(() => result.textContent())).trim(), [destination]);
     });
@@ -810,4 +834,4 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   if (failure) throw failure;
 }
 module.exports = { runProduct, closeOwnedApplication, closeValidatedApplication, createDeadline, observeStartup, verifyRevokedAuthority,
-  applicationProfileName, nativeWindowGeometry, nativeDisplayGeometry, waitForRestoreReload };
+  applicationProfileName, nativeWindowGeometry, nativeDisplayGeometry, waitForRestoreReload, waitForBackupResult };

@@ -590,6 +590,31 @@ test('restore failure diagnostics preserve the original phase and reviewed code 
   assert.ok(f.trace.lastIndexOf('db.close') < f.trace.indexOf('diagnostic'));
 });
 
+test('backup destination refusal is diagnosed after scratch cleanup without entering maintenance', async t => {
+  const f = await fixture(t), diagnostics = [];
+  f.args.onBackupDiagnostic = value => { diagnostics.push(value); throw new Error('synthetic-private observer'); };
+  f.args.onDiagnostic = () => assert.fail('backup failure must not use the restore diagnostic');
+  await f.reopen();
+  await rejects(f.runtime.backup(f.userData), 'INPUT');
+  assert.deepEqual(diagnostics, [{ phase: 'DESTINATION', state: 'FAILED', code: 'BACKUP_RUNTIME_INPUT' }]);
+  assert.equal((await f.transactions()).length, 0);
+  assert.equal(f.trace.includes('gateway.begin'), false); assert.equal(f.trace.includes('failure'), false);
+  await f.intact();
+});
+
+test('backup export failure preserves the original diagnostic after independent cleanup', async t => {
+  const f = await fixture(t), diagnostics = [];
+  f.args.onBackupDiagnostic = async value => { diagnostics.push(value); f.trace.push('diagnostic');
+    throw new Error('synthetic-private observer rejection'); };
+  await f.reopen();
+  f.hooks.set('export.rows', () => { throw Object.assign(new Error('synthetic-private export'), { code: 'BACKUP_PG_TIMEOUT' }); });
+  await rejects(f.runtime.backup(f.destination));
+  assert.deepEqual(diagnostics, [{ phase: 'CHECKPOINT_EXPORT', state: 'FAILED', code: 'BACKUP_PG_TIMEOUT' }]);
+  before(f.trace, 'failure', 'diagnostic'); before(f.trace, 'product.close', 'diagnostic');
+  assert.ok(f.trace.lastIndexOf('db.close') < f.trace.indexOf('diagnostic'));
+  await f.intact(); assert.equal(f.databaseImage, 'original'); assert.equal(f.state.aiOff, true);
+});
+
 test('restore diagnostics do not report successful operations or leak unknown failures', async t => {
   const f = await fixture(t), diagnostics = [];
   f.args.onDiagnostic = async value => { diagnostics.push(value); throw new Error('synthetic-private observer rejection'); };

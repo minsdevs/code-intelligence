@@ -44,6 +44,9 @@ const restorePhases = new Set(['PREPARE', 'INPUT_COPY', 'INPUT_DECRYPT', 'INPUT_
   'MERGE', 'SEAL', 'STAGE_DATABASE', 'STAGE_SOURCES', 'STAGE_PROJECTION', 'SOURCE_PLAN', 'INVALIDATE',
   'SWAP_DATABASE', 'SWAP_SOURCES', 'REVOKE', 'ROTATE', 'PREPARE_RESUME', 'COMPLETE', 'RETENTION',
   'RELEASE', 'RESUME', 'CLEANUP']);
+const backupPhases = new Set(['ADMISSION', 'SELECTION', 'PREPARE', 'DESTINATION', 'MAINTENANCE', 'PAUSE',
+  'DATABASE', 'PRODUCT_ORIGIN', 'CAPACITY', 'CHECKPOINT_EXPORT', 'CHECKPOINT_ARCHIVE', 'MERGE', 'SEAL',
+  'OUTPUT_ARCHIVE', 'PREPARE_RESUME', 'COMPLETE', 'RETENTION', 'RELEASE', 'RESUME', 'CLEANUP']);
 // Literal code vocabularies only: an arbitrary error.code is no safer than its message.
 const restoreCodeGroups = {
   BACKUP_RUNTIME: 'BUSY CAPACITY INCOMPATIBLE INPUT RECOVERY_REQUIRED',
@@ -70,7 +73,7 @@ const restoreCodes = new Set(['UNKNOWN', 'BACKUP_NATIVE_CHANGED', 'WINDOWS_STORA
   ...Object.entries(restoreCodeGroups).flatMap(([prefix, values]) => values.split(' ').map(value => `${prefix}_${value}`)),
   ...errnoCodes, ...diagnosticNodeCodes]);
 
-function restoreDiagnostic(phase, error) {
+function maintenanceDiagnostic(phase, error, phases) {
   let code = 'UNKNOWN';
   try {
     const value = error?.code;
@@ -78,25 +81,31 @@ function restoreDiagnostic(phase, error) {
     else if (error instanceof TypeError) code = 'JS_TYPE_ERROR';
     else if (error instanceof RangeError) code = 'JS_RANGE_ERROR';
   } catch { /* A throwing getter cannot change the failure or reveal its contents. */ }
-  return Object.freeze({ phase: restorePhases.has(phase) ? phase : 'PREPARE', state: 'FAILED', code });
+  return Object.freeze({ phase: phases.has(phase) ? phase : 'PREPARE', state: 'FAILED', code });
 }
-function formatRestoreDiagnostic(value) {
+function restoreDiagnostic(phase, error) { return maintenanceDiagnostic(phase, error, restorePhases); }
+function backupDiagnostic(phase, error) { return maintenanceDiagnostic(phase, error, backupPhases); }
+function formatMaintenanceDiagnostic(value, prefix, phases) {
   try {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const keys = Reflect.ownKeys(value);
     if (keys.length !== 3 || !['phase', 'state', 'code'].every(key => keys.includes(key))) return null;
     const phase = value.phase, state = value.state, code = value.code;
-    if (!restorePhases.has(phase) || state !== 'FAILED' || !restoreCodes.has(code)) return null;
-    return `DESKTOP_RESTORE ${phase} FAILED ${code}`;
+    if (!phases.has(phase) || state !== 'FAILED' || !restoreCodes.has(code)) return null;
+    return `${prefix} ${phase} FAILED ${code}`;
   } catch { return null; }
 }
-function parseRestoreLine(line) {
+function formatRestoreDiagnostic(value) { return formatMaintenanceDiagnostic(value, 'DESKTOP_RESTORE', restorePhases); }
+function formatBackupDiagnostic(value) { return formatMaintenanceDiagnostic(value, 'DESKTOP_BACKUP', backupPhases); }
+function parseMaintenanceLine(line, prefix, phases) {
   if (typeof line !== 'string' || line.length > 256) return null;
   const parts = line.split(' ');
-  if (parts.length !== 4 || parts[0] !== 'DESKTOP_RESTORE' || !restorePhases.has(parts[1])
+  if (parts.length !== 4 || parts[0] !== prefix || !phases.has(parts[1])
       || parts[2] !== 'FAILED' || !restoreCodes.has(parts[3])) return null;
   return { phase: parts[1], state: 'FAILED', code: parts[3] };
 }
+function parseRestoreLine(line) { return parseMaintenanceLine(line, 'DESKTOP_RESTORE', restorePhases); }
+function parseBackupLine(line) { return parseMaintenanceLine(line, 'DESKTOP_BACKUP', backupPhases); }
 
 class RuntimeIntegrityError extends Error {
   constructor(code) {
@@ -226,4 +235,5 @@ function parseShutdownLine(line) {
 
 module.exports = Object.freeze({ RuntimeIntegrityError, integrityError, startupFailureCode, integrityDiagnostic,
   formatIntegrityDiagnostic, parseIntegrityLine, parseStartupLine, parseShutdownLine, restoreDiagnostic,
-  formatRestoreDiagnostic, parseRestoreLine, INTEGRITY_CODES, INTEGRITY_OPERATIONS });
+  formatRestoreDiagnostic, parseRestoreLine, backupDiagnostic, formatBackupDiagnostic, parseBackupLine,
+  INTEGRITY_CODES, INTEGRITY_OPERATIONS });

@@ -20,7 +20,7 @@ const { createBackupSourceSwap } = require('./backup-source-swap.cjs');
 const { createBackupRetention, validateRetentionManifest, retentionManifestSha256,
   isRetentionTopLevelName } = require('./backup-retention.cjs');
 const { createBackupCapacity, planBackupCapacity, measureBackupTree } = require('./backup-capacity.cjs');
-const { restoreDiagnostic } = require('./startup-diagnostics.cjs');
+const { restoreDiagnostic, backupDiagnostic } = require('./startup-diagnostics.cjs');
 const MAX_BYTES = 10 * 1024 * 1024 * 1024 + 1024 * 1024;
 const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]`
   : value && typeof value === 'object'
@@ -41,7 +41,8 @@ function fail(code) { throw new BackupRuntimeError(code); }
 
 
 async function createDesktopBackupRuntime(options) {
-  const { userData, installationId, runningBuild, keyProvider, journal, gateway, adapter, ports, windowsBoundary, onDiagnostic } = options;
+  const { userData, installationId, runningBuild, keyProvider, journal, gateway, adapter, ports, windowsBoundary,
+    onDiagnostic, onBackupDiagnostic } = options;
   const fs = windowsBoundary ? await createBackupPlatformIO(windowsBoundary, userData) : posixFs;
   try {
 async function missing(file) {
@@ -688,12 +689,13 @@ async function copySelectedFile(selected, destination, created) {
     let root, payload, currentExport, archived, liveProjection, prepared = false, sealed = false, swapAttempted = false;
     let maintenanceAttempted = false;
     let phase = 'PREPARE', diagnostic;
+    const observer = kind === 'RESTORE' ? onDiagnostic : onBackupDiagnostic;
     const diagnose = (failedPhase, error) => {
-      if (kind === 'RESTORE' && !diagnostic && typeof onDiagnostic === 'function') {
-        diagnostic = restoreDiagnostic(failedPhase, error);
+      if (!diagnostic && typeof observer === 'function') {
+        diagnostic = (kind === 'RESTORE' ? restoreDiagnostic : backupDiagnostic)(failedPhase, error);
       }
     };
-    let destinationRoot;
+    let destinationRoot, destinationLease;
     const owned = new Map();
     const ownDirectory = async (parent, name) => {
       const result = await fresh(parent, name);
@@ -727,11 +729,19 @@ async function copySelectedFile(selected, destination, created) {
         if (closed || identity(await fs.lstat(path.join(payload, 'payload.bin'), { bigint: true })) !== archived.payloadIdentity
             || await fileHash(path.join(payload, 'payload.bin')) !== archived.payloadSha256) fail('INPUT');
       } else {
-        const parent = await fs.realpath(selected); await directory(parent, false);
-        // Even an encrypted output must not enter application storage or source staging.
-        if (parent === userData || parent.startsWith(`${userData}${path.sep}`)) fail('INPUT');
-        destinationRoot = path.join(parent, `CodeIntelligence-${transactionId}`);
-        await fs.mkdir(destinationRoot, { mode: 0o700 }); await sync(parent, false); await directory(destinationRoot);
+        phase = 'DESTINATION';
+        if (windowsBoundary) {
+          // The selected parent retains its ACL. The bridge pins it and registers
+          // only this newly created private child as a writable backup workspace.
+          destinationLease = await fs.prepareBackupDestination(selected, `CodeIntelligence-${transactionId}`);
+          destinationRoot = destinationLease.root;
+        } else {
+          const parent = await fs.realpath(selected); await directory(parent, false);
+          // Even an encrypted output must not enter application storage or source staging.
+          if (parent === userData || parent.startsWith(`${userData}${path.sep}`)) fail('INPUT');
+          destinationRoot = path.join(parent, `CodeIntelligence-${transactionId}`);
+          await fs.mkdir(destinationRoot, { mode: 0o700 }); await sync(parent, false); await directory(destinationRoot);
+        }
         owned.set(destinationRoot, { directory: true, identity: identity(await directory(destinationRoot)) });
       }
       phase = 'MAINTENANCE';
@@ -783,6 +793,7 @@ async function copySelectedFile(selected, destination, created) {
       await handle.refreshProjection();
       await records.append({ transactionId, phase: 'SEALED', data: { receipt: journal.snapshot().pendingMaintenance } });
       if (kind === 'BACKUP') {
+        phase = 'OUTPUT_ARCHIVE';
         await encrypt(payload, destinationRoot, 'backup.cibackup', lease, 'externalOutput');
       } else {
         phase = 'STAGE_DATABASE';
@@ -888,7 +899,7 @@ async function copySelectedFile(selected, destination, created) {
       throw new BackupRuntimeError();
     } finally {
       let failed = false;
-      for (const resource of [sourceSwap, product, database, lease, capacity]) try { await resource?.close(); }
+      for (const resource of [sourceSwap, product, database, lease, capacity, destinationLease]) try { await resource?.close(); }
       catch (error) { diagnose('CLEANUP', error); failed = true; }
       busy = false;
       try {
@@ -896,7 +907,7 @@ async function copySelectedFile(selected, destination, created) {
       } finally {
         // Publish only after rollback and resource cleanup. A diagnostic consumer may
         // request shutdown; it must not interrupt the original failure handling.
-        if (diagnostic) try { Promise.resolve(onDiagnostic(diagnostic)).catch(() => {}); } catch {}
+        if (diagnostic) try { Promise.resolve(observer(diagnostic)).catch(() => {}); } catch {}
       }
     }
   }

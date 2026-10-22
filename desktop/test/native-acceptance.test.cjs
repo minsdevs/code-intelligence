@@ -335,20 +335,22 @@ test('startup evidence accepts fragmented static records but no raw details or o
   stop(); child.stderr.end();
 });
 
-test('restore observation retains only the first allowlisted phase and code without private stderr', () => {
+for (const kind of ['restore', 'backup']) test(kind + ' observation retains only the first allowlisted phase and code without private stderr', () => {
   const { EventEmitter } = require('node:events');
   const { PassThrough } = require('node:stream');
   const { observeStartup } = require('../scripts/native-acceptance-electron.cjs');
   const child = { stderr: new PassThrough() }, report = {}, diagnostics = new EventEmitter(); let failures = 0;
-  diagnostics.on('restore-failure', () => { failures++; });
+  diagnostics.on(kind + '-failure', () => { failures++; });
   const stop = observeStartup(child, report, () => {}, undefined, diagnostics);
-  for (const line of ['DESKTOP_RESTORE /private/path FAILED UNKNOWN',
-    'DESKTOP_RESTORE RESUME FAILED PRIVATE_TOKEN', 'DESKTOP_RESTORE RESUME FAILED UNKNOWN /private/path',
-    'x'.repeat(1024) + 'DESKTOP_RESTORE RESUME FAILED UNKNOWN']) child.stderr.write(line + '\n');
+  const prefix = 'DESKTOP_' + kind.toUpperCase();
+  for (const line of [prefix + ' /private/path FAILED UNKNOWN',
+    prefix + ' RESUME FAILED PRIVATE_TOKEN', prefix + ' RESUME FAILED UNKNOWN /private/path',
+    'x'.repeat(1024) + prefix + ' RESUME FAILED UNKNOWN']) child.stderr.write(line + '\n');
   assert.deepEqual(report, {}); assert.equal(failures, 0);
-  child.stderr.write('DESKTOP_RESTORE RES'); child.stderr.write('UME FAILED UNKNOWN\r\n');
-  child.stderr.write('DESKTOP_RESTORE PAUSE FAILED UNKNOWN\n');
-  assert.deepEqual(report.restoreFailure, { phase: 'RESUME', state: 'FAILED', code: 'UNKNOWN' });
+  child.stderr.write(prefix + ' RES'); child.stderr.write('UME FAILED UNKNOWN\r\n');
+  child.stderr.write(prefix + ' PAUSE FAILED UNKNOWN\n');
+  assert.deepEqual(report[kind + 'Failure'], { phase: 'RESUME', state: 'FAILED', code: 'UNKNOWN' });
+  assert.equal(report[kind === 'restore' ? 'backupFailure' : 'restoreFailure'], undefined);
   assert.equal(failures, 1); assert.doesNotMatch(JSON.stringify(report), /private|PRIVATE_TOKEN/);
   stop(); assert.equal(child.stderr.listenerCount('data'), 0); child.stderr.end();
 });
@@ -400,6 +402,66 @@ test('restore product deadline failure removes diagnostics listeners without adm
   }), /NATIVE_PRODUCT_DEADLINE/);
   assert.equal(diagnostics.listenerCount('restore-failure'), 0);
   diagnostics.emit('restore-failure');
+});
+
+for (const during of ['start', 'result']) test('observed backup failure during ' + during + ' rejects promptly and owns late rejection', async () => {
+  const { EventEmitter } = require('node:events');
+  const { PassThrough } = require('node:stream');
+  const { observeStartup, waitForBackupResult, createDeadline } = require('../scripts/native-acceptance-electron.cjs');
+  const child = { stderr: new PassThrough() }, report = {}, diagnostics = new EventEmitter();
+  const stop = observeStartup(child, report, () => {}, undefined, diagnostics);
+  const budget = createDeadline(1000); let rejectPending; const calls = [], limits = [];
+  const action = name => () => {
+    calls.push(name);
+    if (name === during) return new Promise((_, reject) => {
+      rejectPending = reject;
+      child.stderr.write('DESKTOP_BACKUP DESTINATION FAILED UNKNOWN\n');
+    });
+  };
+  await assert.rejects(waitForBackupResult({ diagnostics, report,
+    perform(action, maximum, code) { limits.push([maximum, code]); return budget.run(action, maximum, code); },
+    start: action('start'), result: action('result'),
+  }), /NATIVE_BACKUP_FAILED/);
+  assert.deepEqual(calls, during === 'start' ? ['start'] : ['start', 'result']);
+  assert.deepEqual(limits, during === 'start' ? [[undefined, undefined]]
+    : [[undefined, undefined], [120000, 'NATIVE_BACKUP_TIMEOUT']]);
+  assert.deepEqual(report.backupFailure, { phase: 'DESTINATION', state: 'FAILED', code: 'UNKNOWN' });
+  assert.equal(diagnostics.listenerCount('backup-failure'), 0);
+  rejectPending(new Error('synthetic late backup assertion timeout'));
+  await new Promise(resolve => setImmediate(resolve));
+  stop(); child.stderr.end();
+});
+
+test('backup success still waits for the result assertion after starting and removes its failure listener', async () => {
+  const { EventEmitter } = require('node:events');
+  const { waitForBackupResult } = require('../scripts/native-acceptance-electron.cjs');
+  const diagnostics = new EventEmitter(); let started, found, settled = false; const limits = [];
+  const operation = waitForBackupResult({ diagnostics, report: {},
+    perform(action, maximum, code) { limits.push([maximum, code]); return Promise.resolve().then(action); },
+    start: () => new Promise(resolve => { started = resolve; }),
+    result: () => new Promise(resolve => { found = resolve; }),
+  }).then(value => { settled = true; return value; });
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(found, undefined);
+  started(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(settled, false); found('archive-result'); assert.equal(await operation, 'archive-result');
+  assert.deepEqual(limits, [[undefined, undefined], [120000, 'NATIVE_BACKUP_TIMEOUT']]);
+  assert.equal(diagnostics.listenerCount('backup-failure'), 0); diagnostics.emit('backup-failure');
+});
+
+test('backup refuses an already observed failure and preserves the product deadline', async () => {
+  const { EventEmitter } = require('node:events');
+  const { waitForBackupResult, createDeadline } = require('../scripts/native-acceptance-electron.cjs');
+  const diagnostics = new EventEmitter(); let starts = 0;
+  await assert.rejects(waitForBackupResult({ diagnostics, report: { backupFailure: { code: 'UNKNOWN' } },
+    perform: action => Promise.resolve().then(action), start: () => { starts++; }, result: async () => {},
+  }), /NATIVE_BACKUP_FAILED/);
+  assert.equal(starts, 0); assert.equal(diagnostics.listenerCount('backup-failure'), 0);
+  const budget = createDeadline(10);
+  await assert.rejects(waitForBackupResult({ diagnostics, report: {},
+    perform: (action, maximum, code) => budget.run(action, maximum, code),
+    start: async () => {}, result: () => new Promise(() => {}),
+  }), /NATIVE_PRODUCT_DEADLINE/);
+  assert.equal(diagnostics.listenerCount('backup-failure'), 0); diagnostics.emit('backup-failure');
 });
 
 test('shutdown observation records bounded phase timings and preserves the first failure', () => {

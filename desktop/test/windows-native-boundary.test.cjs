@@ -325,3 +325,114 @@ test('native IPC-directory cleanup requires released handles, exact identity and
   fs.unlinkSync(file); boundary.removeDirectory(root, identity);
   assert.equal(fs.existsSync(root), false);
 });
+
+function backupOutputFixture(t) {
+  const f = fixture(t), anchor = path.join(f.root, 'user-folders'), parent = path.join(anchor, 'chosen output 한글');
+  f.boundary.createDirectory(anchor, { inherit: true }); fs.mkdirSync(parent);
+  const sentinel = path.join(parent, 'existing-sentinel.txt'); fs.writeFileSync(sentinel, 'existing user bytes');
+  // The selected parent deliberately has an inherited DACL, as an ordinary user folder does.
+  assert.throws(() => f.boundary.inspect(parent, { directory: true }));
+  const acl = () => {
+    const result = spawnSync(path.join(process.env.SystemRoot, 'System32', 'icacls.exe'), [parent], { encoding: 'utf8', windowsHide: true });
+    assert.ifError(result.error); assert.equal(result.status, 0); assert.equal(result.signal, null); return result.stdout;
+  };
+  return { ...f, parent, sentinel, acl, name: 'CodeIntelligence-' + require('node:crypto').randomUUID() };
+}
+function storageWireNumber(value) { const bytes = Buffer.alloc(4); bytes.writeUInt32BE(value); return bytes; }
+function storageWireField(value) { const bytes = Buffer.from(value, 'utf8'); return Buffer.concat([storageWireNumber(bytes.length), bytes]); }
+async function rawBackupOutput(f, operations) {
+  const child = f.ownChild(f.boundary.launch('storage'));
+  child.stdin.on('error', () => {}); // An intentionally refused frame can close the pipe before buffered input is consumed.
+  const stdout = []; child.stdout.on('data', bytes => stdout.push(bytes)); child.stderr.resume();
+  const closed = once(child, 'close');
+  child.stdin.end(Buffer.concat([storageWireField(f.parent), storageWireField('backup-output'),
+    ...operations.flatMap(({ operation, parts = [] }, index) => [storageWireField(operation), storageWireNumber(index + 1), ...parts])]));
+  const [code, signal] = await closed; return { code, signal, stdout: Buffer.concat(stdout) };
+}
+
+test('native backup-output retains an inherited parent and creates one private child without altering existing data or ACLs', { skip: !enabled }, async t => {
+  const f = backupOutputFixture(t), beforeAcl = f.acl(), target = path.join(f.parent, f.name);
+  const storage = await f.boundary.openStorage(f.parent, { mode: 'backup-output' });
+  try {
+    assert.equal((await storage.stat('', { directory: true })).identity, storage.rootState.identity);
+    const space = await storage.capacity(); assert.ok(space.available > 0n); assert.ok(space.total >= space.available);
+    assert.throws(() => fs.renameSync(f.parent, f.parent + '-moved'));
+    const created = await storage.mkdir(f.name, { inherit: true });
+    assert.equal(created.identity, 'WI1:' + f.boundary.inspect(target, { directory: true }));
+    const workspace = await f.boundary.openStorage(target, { mode: 'workspace' });
+    try {
+      const writer = await workspace.openWrite('synthetic-backup', { maxBytes: 32 }); await writer.write(Buffer.from('backup bytes'));
+      const written = await writer.commit(); await workspace.remove('synthetic-backup', written);
+    } finally { await workspace.close(); }
+    await storage.discardOutput(created); assert.equal(fs.existsSync(target), false);
+    await assert.rejects(storage.mkdir('CodeIntelligence-' + require('node:crypto').randomUUID(), { inherit: true }));
+    assert.equal(fs.readFileSync(f.sentinel, 'utf8'), 'existing user bytes'); assert.equal(f.acl(), beforeAcl);
+  } finally { await storage.close(); }
+  fs.renameSync(f.parent, f.parent + '-moved'); assert.equal(fs.existsSync(f.parent), false);
+  assert.equal(fs.readFileSync(path.join(f.parent + '-moved', 'existing-sentinel.txt'), 'utf8'), 'existing user bytes');
+});
+
+test('native backup-output never adopts an existing child', { skip: !enabled }, async t => {
+  const f = backupOutputFixture(t), target = path.join(f.parent, f.name), sentinel = path.join(target, 'keep');
+  fs.mkdirSync(target); fs.writeFileSync(sentinel, 'collision remains');
+  const storage = await f.boundary.openStorage(f.parent, { mode: 'backup-output' });
+  await assert.rejects(storage.mkdir(f.name, { inherit: true })); await assert.rejects(storage.close());
+  assert.equal(fs.readFileSync(sentinel, 'utf8'), 'collision remains');
+  assert.equal(fs.readFileSync(f.sentinel, 'utf8'), 'existing user bytes');
+});
+
+test('native backup-output rejects forbidden operations even when the JS client is bypassed', { skip: !enabled, timeout: 60000 }, async t => {
+  const f = backupOutputFixture(t), beforeAcl = f.acl();
+  for (const operation of ['open', 'read', 'write', 'lock', 'rename', 'remove', 'next', 'release', 'commit', 'check-lock']) {
+    const result = await rawBackupOutput(f, [{ operation }]); assert.notEqual(result.code, 0, operation); assert.equal(result.signal, null);
+  }
+  for (const parts of [
+    [storageWireField('existing-sentinel.txt'), storageWireNumber(0), storageWireNumber(0)],
+    [storageWireField(''), storageWireNumber(0), storageWireNumber(0)],
+    [storageWireField(''), storageWireNumber(1), storageWireNumber(1)],
+  ]) assert.notEqual((await rawBackupOutput(f, [{ operation: 'stat', parts }])).code, 0);
+  assert.notEqual((await rawBackupOutput(f, [{ operation: 'discard-output', parts: [storageWireField('WI1:1:2:3')] }])).code, 0);
+  assert.equal(fs.readFileSync(f.sentinel, 'utf8'), 'existing user bytes'); assert.equal(f.acl(), beforeAcl);
+});
+
+test('native backup-output independently rejects nested names, aliases, inheritance changes and a second mkdir', { skip: !enabled, timeout: 60000 }, async t => {
+  const f = backupOutputFixture(t);
+  for (const [name, inherit] of [['arbitrary', 1], [f.name.toUpperCase(), 1], [`..\\${f.name}`, 1], [`${f.name}\\nested`, 1], [f.name, 0], [f.name, 2]]) {
+    const result = await rawBackupOutput(f, [{ operation: 'mkdir', parts: [storageWireField(name), storageWireNumber(inherit)] }]);
+    assert.notEqual(result.code, 0); assert.equal(fs.existsSync(path.join(f.parent, f.name)), false);
+  }
+  const second = 'CodeIntelligence-' + require('node:crypto').randomUUID();
+  const result = await rawBackupOutput(f, [f.name, second].map(name => ({ operation: 'mkdir', parts: [storageWireField(name), storageWireNumber(1)] })));
+  assert.notEqual(result.code, 0); assert.equal(fs.existsSync(path.join(f.parent, f.name)), true); assert.equal(fs.existsSync(path.join(f.parent, second)), false);
+  assert.equal(fs.readFileSync(f.sentinel, 'utf8'), 'existing user bytes');
+});
+
+test('native backup-output cleanup rejects a foreign WI1 even after creating its own empty child', { skip: !enabled }, async t => {
+  const f = backupOutputFixture(t);
+  const result = await rawBackupOutput(f, [
+    { operation: 'mkdir', parts: [storageWireField(f.name), storageWireNumber(1)] },
+    { operation: 'discard-output', parts: [storageWireField('WI1:99999999999999:0:0')] },
+  ]);
+  assert.notEqual(result.code, 0); assert.equal(fs.existsSync(path.join(f.parent, f.name)), true);
+  assert.equal(fs.readFileSync(f.sentinel, 'utf8'), 'existing user bytes');
+});
+
+for (const mutation of ['replacement', 'nonempty', 'acl', 'live-workspace']) {
+  test(`native backup-output cleanup refuses ${mutation} and preserves the selected parent`, { skip: !enabled }, async t => {
+    const f = backupOutputFixture(t), target = path.join(f.parent, f.name), beforeAcl = f.acl();
+    const storage = await f.boundary.openStorage(f.parent, { mode: 'backup-output' });
+    const created = await storage.mkdir(f.name, { inherit: true }); let workspace;
+    if (mutation === 'replacement') { fs.renameSync(target, target + '-retained'); f.boundary.createDirectory(target, { inherit: true }); }
+    else if (mutation === 'nonempty') fs.writeFileSync(path.join(target, 'keep'), 'do not delete');
+    else if (mutation === 'acl') {
+      const result = spawnSync(path.join(process.env.SystemRoot, 'System32', 'icacls.exe'), [target, '/grant', '*S-1-1-0:(R)', '/q'], { encoding: 'utf8', windowsHide: true });
+      assert.ifError(result.error); assert.equal(result.status, 0);
+    } else workspace = await f.boundary.openStorage(target, { mode: 'workspace' });
+    try { await assert.rejects(storage.discardOutput(created)); await assert.rejects(storage.close()); }
+    finally { if (workspace) await workspace.close(); }
+    assert.equal(fs.existsSync(target), true);
+    if (mutation === 'replacement') assert.equal(fs.existsSync(target + '-retained'), true);
+    if (mutation === 'nonempty') assert.equal(fs.readFileSync(path.join(target, 'keep'), 'utf8'), 'do not delete');
+    assert.equal(fs.readFileSync(f.sentinel, 'utf8'), 'existing user bytes'); assert.equal(f.acl(), beforeAcl);
+  });
+}

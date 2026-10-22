@@ -478,6 +478,23 @@ test('restore failure protocol exposes only reviewed phases and codes', () => {
   assert.equal(reads, 1);
 });
 
+test('backup diagnostics use their own fixed wire and cover admission, selection and destination failures', () => {
+  for (const phase of ['ADMISSION', 'SELECTION', 'DESTINATION', 'OUTPUT_ARCHIVE', 'CLEANUP']) {
+    const value = diagnostics.backupDiagnostic(phase, { code: 'WINDOWS_STORAGE_REFUSED', message: 'synthetic-private' });
+    assert.deepEqual(value, { phase, state: 'FAILED', code: 'WINDOWS_STORAGE_REFUSED' });
+    const line = diagnostics.formatBackupDiagnostic(value);
+    assert.equal(line, `DESKTOP_BACKUP ${phase} FAILED WINDOWS_STORAGE_REFUSED`);
+    assert.deepEqual(diagnostics.parseBackupLine(line), value);
+    assert.equal(diagnostics.parseRestoreLine(line), null);
+  }
+  assert.equal(diagnostics.parseBackupLine('DESKTOP_RESTORE PAUSE FAILED UNKNOWN'), null);
+  assert.equal(diagnostics.parseBackupLine('DESKTOP_BACKUP DESTINATION FAILED PRIVATE_SENTINEL'), null);
+  assert.equal(diagnostics.parseBackupLine('DESKTOP_BACKUP DESTINATION FAILED UNKNOWN /private'), null);
+  assert.equal(diagnostics.formatBackupDiagnostic({ phase: 'INPUT_COPY', state: 'FAILED', code: 'UNKNOWN' }), null);
+  assert.deepEqual(diagnostics.backupDiagnostic('PRIVATE_SENTINEL', { code: 'PRIVATE_SENTINEL' }),
+    { phase: 'PREPARE', state: 'FAILED', code: 'UNKNOWN' });
+});
+
 test('integrity failure protocol exposes only fixed operation code and kind values', () => {
   const failure = Object.assign(new Error('private /Users/secret'), { code: 'EIO' });
   const value = diagnostics.integrityDiagnostic('STREAM', failure);
