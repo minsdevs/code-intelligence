@@ -511,7 +511,23 @@ abstract class CostEgressHarness {
 
         @Bean
         @Primary
-        DesktopPrivateBootstrap costEgressBootstrap(NodeRuntime runtime, JsonMapper json) {
+        DesktopPrivateBootstrap costEgressBootstrap(NodeRuntime runtime, JsonMapper json) throws Exception {
+            // Fixture startup includes PostgreSQL, journal and vault initialization. Wait for it
+            // before starting the production parser's unchanged three-second owned-pipe deadline.
+            Path ready = runtime.directory.resolve("ready");
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            while (!Files.exists(ready) && System.nanoTime() < deadline) {
+                assertThat(runtime.process.isAlive())
+                        .as("Synthetic cost-egress main must remain alive until bootstrap is ready")
+                        .isTrue();
+                Thread.sleep(20);
+            }
+            assertThat(runtime.process.isAlive())
+                    .as("Synthetic cost-egress main must remain alive after bootstrap is ready")
+                    .isTrue();
+            assertThat(ready)
+                    .as("Synthetic cost-egress main must prepare bootstrap within 30 seconds")
+                    .exists();
             return new DesktopPrivateBootstrap(runtime.process.getInputStream(), json, Duration.ofSeconds(3));
         }
     }
