@@ -414,9 +414,12 @@ test('Windows supply failures expose only fixed phases and compiler IDs', () => 
     + 'NATIVE_WINDOWS_SUPPLY garnet-publish\r\nSUPPLY_BUILD_COMMAND_FAILED\n'
     + 'NATIVE_WINDOWS_SUPPLY private-token SUPPLY_FAILED\nNATIVE_WINDOWS_SUPPLY wrapper-acl PRIVATE_SECRET\n'
     + 'NATIVE_WINDOWS_SUPPLY_LINE 42\nNATIVE_WINDOWS_SUPPLY_LINE 42\nNATIVE_WINDOWS_SUPPLY_LINE -1\n'
-    + 'NATIVE_WINDOWS_SUPPLY_LINE 123456\nNATIVE_WINDOWS_SUPPLY_LINE private');
+    + 'NATIVE_WINDOWS_SUPPLY_LINE 123456\nNATIVE_WINDOWS_SUPPLY_LINE private\n'
+    + 'NATIVE_WINDOWS_SUPPLY_HRESULT -2147024864\nNATIVE_WINDOWS_SUPPLY_HRESULT 2147483648\n'
+    + 'NATIVE_WINDOWS_SUPPLY_HRESULT -2147483649\nNATIVE_WINDOWS_SUPPLY_HRESULT private');
   assert.deepEqual(compact.windowsSupply, [{ phase: 'wrapper-publish', code: 'SUPPLY_WRAPPER_FAILED' }, failure]);
   assert.deepEqual(compact.windowsSupplyLines, [42]);
+  assert.deepEqual(compact.windowsSupplyHResults, [-2147024864]);
   assert.doesNotMatch(JSON.stringify(compact), /private|secret/i);
 });
 

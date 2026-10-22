@@ -59,5 +59,6 @@ Write-Output ('CODE_INTELLIGENCE_WINDOWS_SUPPLY=' + $Destination)
 } catch {
   [Console]::Out.WriteLine('NATIVE_WINDOWS_SUPPLY ' + $SupplyPhase + ' SUPPLY_WRAPPER_FAILED')
   [Console]::Out.WriteLine('NATIVE_WINDOWS_SUPPLY_LINE ' + [int]$_.InvocationInfo.ScriptLineNumber)
+  [Console]::Out.WriteLine('NATIVE_WINDOWS_SUPPLY_HRESULT ' + [int]($_.Exception.GetBaseException().HResult))
   throw
 }

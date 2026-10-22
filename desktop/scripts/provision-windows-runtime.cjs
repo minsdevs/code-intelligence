@@ -98,7 +98,9 @@ async function provision(destination) {
   for (const name of fs.readdirSync(path.join(vector, 'sql')).filter(name => /^vector--.*\.sql$/.test(name))) copy(path.join(vector, 'sql', name), path.join(pg, 'share', 'extension', name));
   const cache = path.join(runtime, 'cache');
   phase = 'garnet-publish';
-  command(path.join(dotnet, 'dotnet.exe'), ['publish', path.join(garnet, 'main', 'GarnetServer', 'GarnetServer.csproj'), '-c', 'Release', '-f', 'net10.0', '-r', 'win-x64', '--self-contained', 'true',
+  // Publication renames this private build tree. Persistent compiler/MSBuild
+  // servers would retain SDK/source handles and prevent that rename on Windows.
+  command(path.join(dotnet, 'dotnet.exe'), ['publish', path.join(garnet, 'main', 'GarnetServer', 'GarnetServer.csproj'), '--disable-build-servers', '-c', 'Release', '-f', 'net10.0', '-r', 'win-x64', '--self-contained', 'true',
     '-p:PublishSingleFile=false', '-p:PublishReadyToRun=false', '-p:RollForward=Disable', '-p:RuntimeFrameworkVersion=10.0.12', '-p:RestorePackagesWithLockFile=true', '-o', cache], garnet, env);
   phase = 'garnet-stage';
   // Upstream publishes a test PFX with every build. It must never ship as a usable credential.
