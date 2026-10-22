@@ -549,6 +549,48 @@ test('existing local data permits first source enrollment without a fresh paid-A
   assert.match(JSON.parse(h.written[0]).source.capability, /^[0-9a-f]{64}$/);
 });
 
+for (const existing of [false, true]) test(`Windows backend prepares protected inheritable repository storage before sources (existing=${existing})`, async t => {
+  const h = await harness(t), calls = [], directories = new Set(existing ? ['data', 'data/repos'] : []);
+  h.context.storageRuntime = { userData: h.paths.userData, windowsBoundary: {}, storage: {
+    async stat(name, options) {
+      calls.push(['stat', name, clone(options)]);
+      return directories.has(name) ? { kind: 'directory' } : null;
+    },
+    async mkdir(name, options) {
+      calls.push(['mkdir', name, clone(options)]); directories.add(name);
+    },
+  } };
+  h.context.sourcesCheckpoint = async () => {
+    assert.equal(directories.has('data/repos'), true);
+    calls.push(['sources']); throw Object.assign(new Error('synthetic source checkpoint'), { code: 'SOURCES_REACHED' });
+  };
+  h.run('runtime = storageRuntime; openProductionSources = sourcesCheckpoint');
+  await assert.rejects(h.run('spawnBackend()'), { code: 'SOURCES_REACHED' });
+  assert.deepEqual(calls, [
+    ['stat', 'data', { directory: true, missing: true }],
+    ...(existing ? [] : [['mkdir', 'data', { inherit: true }]]),
+    ['stat', 'data/repos', { directory: true, missing: true }],
+    ...(existing ? [] : [['mkdir', 'data/repos', { inherit: true }]]),
+    ['sources'],
+  ]);
+  assert.equal(h.children.length, 0);
+});
+
+test('Windows backend refuses invalid existing repository storage before sources or child launch', async t => {
+  const h = await harness(t); let mutations = 0, sources = 0;
+  h.context.storageRuntime = { userData: h.paths.userData, windowsBoundary: {}, storage: {
+    async stat(name) {
+      if (name === 'data/repos') throw Object.assign(new Error('synthetic protected storage refusal'), { code: 'WINDOWS_STORAGE_REFUSED' });
+      return { kind: 'directory' };
+    },
+    async mkdir() { mutations++; },
+  } };
+  h.context.sourcesCheckpoint = async () => { sources++; throw new Error('sources must stay closed'); };
+  h.run('runtime = storageRuntime; openProductionSources = sourcesCheckpoint');
+  await assert.rejects(h.run('spawnBackend()'), { code: 'WINDOWS_STORAGE_REFUSED' });
+  assert.equal(mutations, 0); assert.equal(sources, 0); assert.equal(h.children.length, 0);
+});
+
 test('actual main startup passes fresh enrollment before paths file and private bootstrap only to backend stdin', async t => {
   const h = await harness(t); await h.start(); await Promise.resolve();
   assert.equal(h.run('runtime.ready'), true); assert.equal(h.controls.gatewayOptions.freshEnrollmentAllowed, true);

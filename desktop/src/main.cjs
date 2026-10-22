@@ -692,6 +692,7 @@ async function spawnBackend({ maintenanceId = '', traceStartup = false } = {}) {
   const jar = binary('backend', 'code-intelligence.jar');
   if (traceStartup) noteStartup('BACKEND_SOURCES');
   const dataDir = await runtimeDirectory('data', true);
+  if (runtime.windowsBoundary) await runtimeDirectory('data/repos', true);
   await openProductionSources();
   if (traceStartup) noteStartup('BACKEND_PROCESS');
   await spawnManaged('backend', java, [...BACKEND_JVM_OPTIONS,
