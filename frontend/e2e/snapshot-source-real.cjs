@@ -34,6 +34,8 @@ async function main() {
     const apiHeaders = { 'X-Code-Intelligence-Token': args.token };
     const context = await browser.newContext({ viewport: { width: 1500, height: 1000 } });
     await context.addInitScript(({ baseUrl, token }) => {
+      // The source and approval assertions below use the Korean translation contract.
+      window.localStorage.setItem('code-intelligence.lang', 'ko');
       window.codeIntelligenceDesktop = { apiBaseUrl: baseUrl, apiToken: token };
     }, { baseUrl: args.baseUrl, token: args.token });
     const page = await context.newPage();
@@ -46,6 +48,7 @@ async function main() {
     const document = await page.goto(args.baseUrl);
     assert.equal(document.status(), 200, 'Public bootstrap HTML');
     await expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
 
     async function navigate(url) {
       await page.evaluate(url => { history.pushState(null, '', url); window.dispatchEvent(new PopStateEvent('popstate')); }, url);

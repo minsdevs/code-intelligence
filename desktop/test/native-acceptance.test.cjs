@@ -275,6 +275,27 @@ test('direct native Electron runner refuses unauthenticated local use before imp
   await assert.rejects(runProduct({ env: { ...hosted(), GITHUB_ACTIONS: 'false' } }), /Hosted workflow required/);
 });
 
+test('native size diagnostics retain constraints and display geometry without titles or labels', () => {
+  const { nativeWindowGeometry, nativeDisplayGeometry } = require('../scripts/native-acceptance-electron.cjs');
+  const bounds = { x: 0, y: 25, width: 980, height: 675, privateValue: 'do-not-record' };
+  const content = { ...bounds, y: 53, height: 647 };
+  const geometry = nativeWindowGeometry({
+    getBounds: () => bounds, getContentBounds: () => content,
+    getMinimumSize: () => [980, 700], getMaximumSize: () => [0, 0],
+    isResizable: () => true, isMaximized: () => false, isFullScreen: () => false,
+    webContents: { getZoomFactor: () => 1, getURL: () => 'do-not-record' },
+    getTitle: () => 'do-not-record',
+  });
+  assert.deepEqual(geometry, { bounds: { x: 0, y: 25, width: 980, height: 675 },
+    contentBounds: { x: 0, y: 53, width: 980, height: 647 }, minimumSize: [980, 700], maximumSize: [0, 0],
+    resizable: true, maximized: false, fullscreen: false, zoomFactor: 1 });
+  const displays = nativeDisplayGeometry({ screen: { getAllDisplays: () => [
+    { id: 'do-not-record', label: 'do-not-record', bounds, workArea: content, scaleFactor: 2 },
+  ] } });
+  assert.deepEqual(displays, [{ bounds: geometry.bounds, workArea: geometry.contentBounds, scaleFactor: 2 }]);
+  assert.equal(JSON.stringify({ geometry, displays }).includes('do-not-record'), false);
+});
+
 test('one product deadline survives successful steps and refuses late mutations', async t => {
   const { createDeadline } = require('../scripts/native-acceptance-electron.cjs');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-deadline-'));
@@ -389,6 +410,14 @@ test('Windows supply failures expose only fixed phases and compiler IDs', () => 
   assert.deepEqual(wrapped.windowsSupply, [wrapper]);
   assert.deepEqual(wrapped.categories, ['powershell-native-stderr']);
   assert.doesNotMatch(JSON.stringify(wrapped), /private|secret/i);
+  const compact = buildDiagnostics('prefix NATIVE_WINDOWS_SUPPLY wrapper-publish SUPPLY_WRAPPER_FAILED\r\n'
+    + 'NATIVE_WINDOWS_SUPPLY garnet-publish\r\nSUPPLY_BUILD_COMMAND_FAILED\n'
+    + 'NATIVE_WINDOWS_SUPPLY private-token SUPPLY_FAILED\nNATIVE_WINDOWS_SUPPLY wrapper-acl PRIVATE_SECRET\n'
+    + 'NATIVE_WINDOWS_SUPPLY_LINE 42\nNATIVE_WINDOWS_SUPPLY_LINE 42\nNATIVE_WINDOWS_SUPPLY_LINE -1\n'
+    + 'NATIVE_WINDOWS_SUPPLY_LINE 123456\nNATIVE_WINDOWS_SUPPLY_LINE private');
+  assert.deepEqual(compact.windowsSupply, [{ phase: 'wrapper-publish', code: 'SUPPLY_WRAPPER_FAILED' }, failure]);
+  assert.deepEqual(compact.windowsSupplyLines, [42]);
+  assert.doesNotMatch(JSON.stringify(compact), /private|secret/i);
 });
 
 test('macOS provisioning failure report bounds log reads and records source versions without raw text', t => {

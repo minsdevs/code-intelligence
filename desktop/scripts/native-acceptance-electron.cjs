@@ -144,6 +144,22 @@ function applicationProfileName(sourceMetadata, appBundle, extractFile) {
   return name;
 }
 
+// These callbacks also run inside Electron. Keep evidence numeric/boolean only:
+// never retain a window title, URL, display label or the complete native object.
+function nativeWindowGeometry(win) {
+  const rectangle = value => ({ x: value.x, y: value.y, width: value.width, height: value.height });
+  const size = value => [value[0], value[1]];
+  return { bounds: rectangle(win.getBounds()), contentBounds: rectangle(win.getContentBounds()),
+    minimumSize: size(win.getMinimumSize()), maximumSize: size(win.getMaximumSize()),
+    resizable: win.isResizable(), maximized: win.isMaximized(), fullscreen: win.isFullScreen(),
+    zoomFactor: win.webContents.getZoomFactor() };
+}
+function nativeDisplayGeometry({ screen }) {
+  const rectangle = value => ({ x: value.x, y: value.y, width: value.width, height: value.height });
+  return screen.getAllDisplays().slice(0, 8).map(display => ({ bounds: rectangle(display.bounds),
+    workArea: rectangle(display.workArea), scaleFactor: display.scaleFactor }));
+}
+
 async function runProduct({ source, owned, artifacts, report, env, phase }) {
   // Direct callers must prove the same execution boundary before loading Electron.
   const { recordFailure } = require('./native-acceptance.cjs');
@@ -370,9 +386,17 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     // Captures are only taken on project metadata pages, never source/secret/settings views.
     const window = await step('native-window-handle', () => app.browserWindow(page));
     for (const [width, height] of [[980, 700], [1280, 800], [1440, 900]]) {
+      const geometry = report.windowGeometry = { requested: [width, height],
+        before: await perform(() => window.evaluate(nativeWindowGeometry)),
+        displays: await perform(() => app.evaluate(nativeDisplayGeometry)) };
       await step('native-' + label + '-size-' + width + 'x' + height,
         () => window.evaluate((win, size) => { win.setContentSize(size.width, size.height); win.show(); }, { width, height }));
-      await perform(() => expect.poll(() => perform(() => page.evaluate(() => [innerWidth, innerHeight]))).toEqual([width, height]));
+      geometry.after = await perform(() => window.evaluate(nativeWindowGeometry));
+      await step('native-' + label + '-viewport-' + width + 'x' + height, () => expect.poll(async () => {
+        geometry.viewport = await perform(() => page.evaluate(() => [innerWidth, innerHeight]));
+        phase(report.phase);
+        return geometry.viewport;
+      }).toEqual([width, height]));
       await step('native-window-paint', () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
       assert.equal(await perform(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth)), false, 'Horizontal overflow');
       const image = await step('native-window-capture', () => window.evaluate(async win => (await win.capturePage()).toPNG({ scaleFactor: 1 }).toString('base64')));
@@ -761,4 +785,5 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   }
   if (failure) throw failure;
 }
-module.exports = { runProduct, closeOwnedApplication, closeValidatedApplication, createDeadline, observeStartup, verifyRevokedAuthority, applicationProfileName };
+module.exports = { runProduct, closeOwnedApplication, closeValidatedApplication, createDeadline, observeStartup, verifyRevokedAuthority,
+  applicationProfileName, nativeWindowGeometry, nativeDisplayGeometry };

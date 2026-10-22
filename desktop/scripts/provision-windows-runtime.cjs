@@ -191,7 +191,7 @@ async function provision(destination) {
   }
 }
 if (require.main === module) provision(path.resolve(process.argv[2] || '')).then(() => console.log('Windows runtime supply prepared; native product acceptance still required.')).catch(error => {
-  if (error.publicSupply) console.error('NATIVE_WINDOWS_SUPPLY ' + JSON.stringify(error.publicSupply));
+  if (error.publicSupply) console.error('NATIVE_WINDOWS_SUPPLY ' + error.publicSupply.phase + ' ' + error.publicSupply.code);
   if (error.publicPolicy) console.error('NATIVE_WINDOWS_POLICY ' + JSON.stringify(error.publicPolicy));
   console.error(error); process.exitCode = 1;
 });

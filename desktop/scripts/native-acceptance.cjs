@@ -135,7 +135,8 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
     if (windowsPolicy.length === 12) break;
   }
   const windowsSupply = [];
-  const supplyPhases = new Set(['invoke-provisioner', 'prepare', 'select-toolchain', 'select-native-assets', 'jre-link', 'pgvector-build',
+  const supplyPhases = new Set(['wrapper-prepare', 'wrapper-acl', 'wrapper-publish', 'wrapper-metadata',
+    'invoke-provisioner', 'prepare', 'select-toolchain', 'select-native-assets', 'jre-link', 'pgvector-build',
     'pgvector-stage', 'garnet-publish', 'garnet-stage', 'source-notices', 'postgres-stage', 'nuget-notices',
     'runtime-inventory', 'publish-metadata', ...['jdk', 'postgres', 'pgvector', 'dotnet', 'garnet', 'garnetNative']
       .flatMap(name => ['download-' + name, 'extract-' + name])]);
@@ -148,6 +149,17 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
     if (!windowsSupply.some(value => value.phase === item.phase && value.code === item.code)) windowsSupply.push(item);
     if (windowsSupply.length === 12) break;
   }
+  // PowerShell 5 may prefix or wrap ErrorRecord text. Compact fixed tokens remain
+  // readable without publishing any surrounding stderr, paths or messages.
+  for (const match of text.matchAll(/\bNATIVE_WINDOWS_SUPPLY[ \t]+([A-Za-z0-9-]{1,32})[ \t\r\n]+([A-Z_]{1,40})\b/g)) {
+    if (windowsSupply.length >= 12) break;
+    const item = { phase: match[1], code: match[2] };
+    if (!supplyPhases.has(item.phase) || !supplyCodes.has(item.code)) continue;
+    if (!windowsSupply.some(value => value.phase === item.phase && value.code === item.code)) windowsSupply.push(item);
+  }
+  // These are lines of the fixed public provision-windows-runtime.ps1 source.
+  const windowsSupplyLines = [...new Set([...text.matchAll(/\bNATIVE_WINDOWS_SUPPLY_LINE[ \t]+([1-9][0-9]{0,4})\b/g)]
+    .map(match => Number(match[1])))].slice(0, 8);
   const steps = [...stdout.matchAll(/^> (npm run build|\.\/gradlew bootJar|npm ci --omit=dev --ignore-scripts|[^\r\n]*\/bin\/jlink --add-modules[^\r\n]*)$/gm)]
     .map(match => match[1].startsWith('npm run') ? 'typescript-build' : match[1].startsWith('./gradlew')
       ? 'backend-boot-jar' : match[1].startsWith('npm ci') ? 'analyzer-production-dependencies' : 'jre-link');
@@ -188,7 +200,7 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
       .filter(flag => text.split(/\r?\n/).some(line => /^ld: (?:unknown|unrecognized) (?:options?|arguments?):/.test(line) && line.split(/\s+/).includes(flag))),
   };
   return { lastBuildStep: steps.at(-1) || null, categories, compilerCodes, policyCodes, javaSymbols, missingPackages, locations, nativeLink,
-    nativeClosure: nativeClosureDiagnostics(text), windowsPolicy, windowsSupply };
+    nativeClosure: nativeClosureDiagnostics(text), windowsPolicy, windowsSupply, windowsSupplyLines };
 }
 function run(command, args, cwd, env = process.env, options = {}) {
   const timeoutMs = options.timeoutMs ?? 8 * 60 * 1000;
