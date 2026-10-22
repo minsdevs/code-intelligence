@@ -13,6 +13,9 @@ const LIMITS = Object.freeze({ entries: 600000, depth: 64, inspectMs: 120000, wo
 const COMPONENTS = Object.freeze(['checkpointPayload', 'checkpointArchive', 'incomingArchive', 'incomingPayload',
   'stagedDatabase', 'stagedSource', 'externalOutput']);
 const ROOTS = ['postgres', 'recovery', 'source', 'bundle', 'destination'];
+// The bundle is the installed/staged runtime: admin- or installer-owned and only measured.
+// Windows opens it read-only; every root that can receive writes stays a private workspace.
+const READ_ONLY_ROOTS = new Set(['bundle']);
 const PLANS = new WeakSet();
 class BackupCapacityError extends Error {
   constructor(code = 'IO') { super(`Backup capacity: ${code}`); this.name = 'BackupCapacityError'; this.code = `BACKUP_CAPACITY_${code}`; }
@@ -80,13 +83,14 @@ async function directory(root) {
 }
 async function measureBackupTree(options) {
   plain(options);
-  if (Object.keys(options).some(key => !['root', 'maxBytes', 'maxEntries', 'maxDepth', 'timeoutMs', 'windowsBoundary'].includes(key))) fail('INVALID');
+  if (Object.keys(options).some(key => !['root', 'maxBytes', 'maxEntries', 'maxDepth', 'timeoutMs', 'windowsBoundary', 'readOnly'].includes(key))
+      || ![undefined, true, false].includes(options.readOnly)) fail('INVALID');
   const root = absolute(options.root), maxBytes = options.maxBytes === undefined ? MAX_BYTES : bytes(options.maxBytes);
   const maxEntries = options.maxEntries ?? LIMITS.entries, maxDepth = options.maxDepth ?? LIMITS.depth, timeoutMs = options.timeoutMs ?? LIMITS.inspectMs;
   for (const [value, cap] of [[maxEntries, LIMITS.entries], [maxDepth, LIMITS.depth], [timeoutMs, LIMITS.inspectMs]])
     if (!Number.isSafeInteger(value) || value < 1 || value > cap) fail('INVALID');
   if (options.windowsBoundary) {
-    const storage = await options.windowsBoundary.openStorage(root, { mode: 'workspace' });
+    const storage = await options.windowsBoundary.openStorage(root, { mode: options.readOnly ? 'source' : 'workspace' });
     try {
       const before = await storage.stat('', { directory: true }), started = performance.now();
       const seen = new Set(); let entries = 0, logical = 0n, allocated = 0n;
@@ -131,16 +135,18 @@ async function createBackupCapacity(options) {
   plain(options); exact(options, ['roots', ...(Object.hasOwn(options, 'statfs') ? ['statfs'] : []), ...(Object.hasOwn(options, 'windowsBoundary') ? ['windowsBoundary'] : [])]); exact(options.roots, ROOTS);
   const statfs = options.statfs ?? fs.statfs; if (typeof statfs !== 'function') fail('INVALID');
   const sessions = new Map();
-  const inspect = async root => {
+  const inspect = async (name, root) => {
     if (!options.windowsBoundary) return directory(root);
-    if (!sessions.has(root)) sessions.set(root, await options.windowsBoundary.openStorage(root, { mode: 'workspace' }));
+    if (!sessions.has(root)) {
+      sessions.set(root, await options.windowsBoundary.openStorage(root, { mode: READ_ONLY_ROOTS.has(name) ? 'source' : 'workspace' }));
+    }
     return sessions.get(root).stat('', { directory: true });
   };
   const roots = {}, originals = {}; let closed = false, busy = false, current = null;
   try {
     for (const name of ROOTS) {
       const root = options.roots[name]; if (name === 'destination' && root === null) { roots[name] = null; continue; }
-      roots[name] = absolute(root); originals[name] = await inspect(root);
+      roots[name] = absolute(root); originals[name] = await inspect(name, root);
       if (name === 'recovery' && !options.windowsBoundary) safe(originals[name], true, true);
     }
   } catch (error) { for (const session of sessions.values()) await session.close().catch(() => {}); if (error instanceof BackupCapacityError) throw error; fail('IO'); }
@@ -153,7 +159,7 @@ async function createBackupCapacity(options) {
     const groups = new Map();
     for (const name of ROOTS) {
       if (roots[name] === null) continue;
-      const now = await inspect(roots[name]); if (identity(now) !== identity(originals[name])) fail('CHANGED');
+      const now = await inspect(name, roots[name]); if (identity(now) !== identity(originals[name])) fail('CHANGED');
       const dev = volume(now); if (!groups.has(dev)) groups.set(dev, { root: roots[name], total: 0n, used: 0n });
     }
     if (plan.kind === 'BACKUP' && roots.destination === null || plan.kind === 'RESTORE' && roots.destination !== null) fail('INVALID');
@@ -176,7 +182,7 @@ async function createBackupCapacity(options) {
       volumes.push({ dev, remainingBytes: String(required), availableBytes: String(available) });
     }
     for (const name of ROOTS) if (roots[name] !== null) {
-      const now = await inspect(roots[name]); if (identity(now) !== identity(originals[name])) fail('CHANGED');
+      const now = await inspect(name, roots[name]); if (identity(now) !== identity(originals[name])) fail('CHANGED');
       if (name === 'recovery' && !options.windowsBoundary) safe(now, true, true);
     }
     return freeze({ version: 1, volumes });

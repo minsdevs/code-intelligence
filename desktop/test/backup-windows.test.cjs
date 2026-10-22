@@ -12,7 +12,7 @@ const { createBackupRecoveryRecords } = require('../src/backup-recovery-records.
 const { encryptFile, decryptFile } = require('../src/backup-archive.cjs');
 const { createBackupPayload, inspectBackupPayload } = require('../src/backup-payload.cjs');
 const { REVIEWED_SCHEMA, createBackupExportPolicy } = require('../src/backup-export-policy.cjs');
-const { measureBackupTree } = require('../src/backup-capacity.cjs');
+const { measureBackupTree, createBackupCapacity, planBackupCapacity } = require('../src/backup-capacity.cjs');
 const { createBackupSourceSwap } = require('../src/backup-source-swap.cjs');
 const { createBackupRetention } = require('../src/backup-retention.cjs');
 const { identity } = require('../src/backup-windows-io.cjs');
@@ -114,6 +114,21 @@ test('native capacity uses real allocated bytes; retention removes only authenti
     beginCollection: async value => authority.tombstones.push({ ...value, state: 'BEGUN' }),
     finishCollection: async value => { authority.tombstones.find(row => row.transactionId === value.transactionId).state = 'COMPLETED'; } }); f.resources.push(retention);
   assert.deepEqual((await retention.collect()).collected, [authority.completed[0].transactionId]); assert.deepEqual((await retention.collect()).collected, []);
+});
+test('native capacity measures an inherited runtime bundle read-only while writable roots stay private', { skip: !enabled }, async t => {
+  const f = await fixture(t), bundle = path.join(path.dirname(f.root), 'inherited runtime bundle');
+  await fs.mkdir(path.join(bundle, 'bin'), { recursive: true }); await fs.writeFile(path.join(bundle, 'bin', 'tool.dat'), Buffer.alloc(9, 1));
+  await assert.rejects(measureBackupTree({ root: bundle, windowsBoundary: f.windowsBoundary }));
+  const measured = await measureBackupTree({ root: bundle, windowsBoundary: f.windowsBoundary, readOnly: true });
+  assert.equal(measured.logicalBytes, '9'); assert.equal(measured.entries, 3);
+  for (const name of ['postgres', 'recovery', 'source']) await f.storage.mkdir(name, { inherit: true });
+  const roots = { postgres: path.join(f.root, 'postgres'), recovery: path.join(f.root, 'recovery'), source: path.join(f.root, 'source'),
+    bundle, destination: null };
+  const capacity = await createBackupCapacity({ roots, windowsBoundary: f.windowsBoundary }); f.resources.push(capacity);
+  const lease = await capacity.begin(planBackupCapacity({ kind: 'RESTORE', liveDatabaseBytes: '1', liveSourceBytes: '1',
+    previousBundleBytes: measured.allocatedBytes, checkpointPayloadLimitBytes: '1', incomingArchiveBytes: '0', incomingPayloadBytes: '0',
+    stagedDatabaseLimitBytes: '0', stagedSourceLimitBytes: '0' }));
+  await lease.close();
 });
 test('native platform writer creates fresh file and namespace cleanup requires caller-observed state', { skip: !enabled }, async t => {
   const f = await fixture(t); const io = await createBackupPlatformIO(f.windowsBoundary, f.root); f.resources.push(io);
