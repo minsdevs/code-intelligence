@@ -1,7 +1,6 @@
 package dev.codeintelligence.project;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import ch.qos.logback.classic.Logger;
@@ -605,23 +604,35 @@ class ImportSecretsCorpusIntegrationTest {
                 "A.ts and a.ts on a case-sensitive APFS volume",
                 t -> t.caseSensitiveRoot(),
                 "Local source contains colliding paths."));
-        // APFS is normalization-insensitive, so an NFC/NFD twin cannot exist on this platform; the NFD-created
-        // name is retained byte-for-byte. Code points are spelled out to keep the two forms unambiguous.
+        // Preserve a lone NFD name on every filesystem. Test normalized collisions separately where
+        // the filesystem permits both names; APFS aliases the two. Spell out their code points.
         String nfd = "cafe" + Character.toString(0x0301) + ".ts";
         String nfc = "caf" + Character.toString(0x00E9) + ".ts";
         cases.add(accept(
                 "C05-27",
                 "unicode",
-                "NFD-created name is retained once; its NFC twin is refused by the filesystem",
+                "NFD-created name is retained byte-for-byte",
                 t -> {
                     base.build(t);
                     t.text(nfd, "export const nfd = 1;\n");
-                    assertThatThrownBy(() ->
-                                    Files.writeString(t.path(nfc), "x", java.nio.file.StandardOpenOption.CREATE_NEW))
-                            .isInstanceOf(FileAlreadyExistsException.class);
                 },
                 List.of(nfd, main),
                 ex()));
+        cases.add(reject(
+                "C05-73",
+                "unicode",
+                "NFC/NFD twins are rejected when the filesystem permits distinct names",
+                t -> {
+                    base.build(t);
+                    t.text(nfd, "export const nfd = 1;\n");
+                    try {
+                        Files.writeString(t.path(nfc), "x", java.nio.file.StandardOpenOption.CREATE_NEW);
+                    } catch (FileAlreadyExistsException aliases) {
+                        assertThat(Files.isSameFile(t.path(nfd), t.path(nfc))).isTrue();
+                        Assumptions.assumeTrue(false, "Filesystem aliases NFC and NFD filenames");
+                    }
+                },
+                "Local source contains colliding paths."));
         cases.add(reject(
                 "C05-28",
                 "path",
