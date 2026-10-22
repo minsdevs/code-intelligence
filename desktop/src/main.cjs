@@ -38,7 +38,7 @@ const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 const { writeStorageFile } = require('./windows-storage-files.cjs');
 const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
 const { RuntimeIntegrityError, integrityError, startupFailureCode,
-  integrityDiagnostic, formatIntegrityDiagnostic } = require('./startup-diagnostics.cjs');
+  integrityDiagnostic, formatIntegrityDiagnostic, formatRestoreDiagnostic } = require('./startup-diagnostics.cjs');
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
 const { TEST_ONLY_MODE, adapterIsolationRuntimeMode, openAdapterIsolation } = require('./adapter-isolation.cjs');
 const { openAdapterControl } = require('./adapter-control.cjs');
@@ -1428,6 +1428,7 @@ async function startApplication() {
         noteStartup('BACKUP');
         backupRuntime = await createDesktopBackupRuntime({ ...hooks, userData,
           installationId: secrets.localIdentity, runningBuild, recoveryMode, windowsBoundary,
+          onDiagnostic: value => { const line = formatRestoreDiagnostic(value); if (line) console.error(line); },
           gateway: aiGateway, adapter: aiPostgres, ports: backupPorts() });
         return backupRuntime;
       } } : {}) });

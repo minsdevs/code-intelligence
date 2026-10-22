@@ -573,6 +573,48 @@ test('maintenance acquisition failure after durable OFF is recovery-required and
   assert.equal(f.state.maintenanceReceipt, null); await f.intact();
 });
 
+test('restore failure diagnostics preserve the original phase and reviewed code without changing rollback', async t => {
+  const f = await fixture(t), diagnostics = [];
+  f.args.onDiagnostic = value => { diagnostics.push(value); f.trace.push('diagnostic');
+    throw new Error('synthetic-private observer failure'); };
+  await f.reopen();
+  const archive = await f.archive();
+  f.hooks.set('prepareResume', () => { throw Object.assign(new Error('synthetic-private process details'),
+    { code: 'BACKUP_DATABASE_TIMEOUT', path: '/synthetic-private/archive', cause: 'synthetic-private cause' }); });
+  await rejects(f.runtime.restore(archive));
+  assert.deepEqual(diagnostics, [{ phase: 'PREPARE_RESUME', state: 'FAILED', code: 'BACKUP_DATABASE_TIMEOUT' }]);
+  assert.equal(Object.isFrozen(diagnostics[0]), true);
+  await f.intact(); assert.equal(f.databaseImage, 'original'); assert.ok(f.state.pendingMaintenance);
+  before(f.trace, 'failure', 'db.rollback'); assert.equal(f.trace.includes('resume'), false);
+  before(f.trace, 'db.rollback', 'diagnostic'); before(f.trace, 'product.close', 'diagnostic');
+  assert.ok(f.trace.lastIndexOf('db.close') < f.trace.indexOf('diagnostic'));
+});
+
+test('restore diagnostics do not report successful operations or leak unknown failures', async t => {
+  const f = await fixture(t), diagnostics = [];
+  f.args.onDiagnostic = async value => { diagnostics.push(value); throw new Error('synthetic-private observer rejection'); };
+  await f.reopen();
+  const archive = await f.archive();
+  await f.runtime.restore(archive); assert.deepEqual(diagnostics, []);
+  f.fail('journal.seal'); await rejects(f.runtime.restore(archive));
+  assert.deepEqual(diagnostics, [{ phase: 'SEAL', state: 'FAILED', code: 'UNKNOWN' }]);
+  assert.equal(JSON.stringify(diagnostics).includes('synthetic-private'), false);
+  assert.equal(f.state.aiOff, true);
+});
+
+test('restore cleanup failures are diagnosed after all independent resources close', async t => {
+  const f = await fixture(t), diagnostics = [];
+  f.args.onDiagnostic = value => { diagnostics.push(value); f.trace.push('diagnostic'); };
+  await f.reopen();
+  const archive = await f.archive();
+  f.hooks.set('product.close', () => { throw Object.assign(new Error('synthetic-private cleanup'), { code: 'EIO' }); });
+  await rejects(f.runtime.restore(archive));
+  assert.deepEqual(diagnostics, [{ phase: 'CLEANUP', state: 'FAILED', code: 'EIO' }]);
+  assert.equal(f.databaseImage, 'restored'); assert.equal(f.state.pendingMaintenance, null);
+  assert.ok(f.trace.lastIndexOf('db.close') < f.trace.indexOf('diagnostic'));
+  before(f.trace, 'failure', 'diagnostic');
+});
+
 for (const where of ['drain', 'db.quiescent', 'product.origin', 'export.rows', 'pg.prepare', 'merge', 'journal.seal']) {
   test(`failure at ${where} leaves live sources and DB intact, OFF, without a completion or automatic resume`, async t => {
     const f = await fixture(t); f.fail(where); await rejects(f.runtime.backup(f.destination)); await f.intact();

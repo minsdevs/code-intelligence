@@ -335,6 +335,73 @@ test('startup evidence accepts fragmented static records but no raw details or o
   stop(); child.stderr.end();
 });
 
+test('restore observation retains only the first allowlisted phase and code without private stderr', () => {
+  const { EventEmitter } = require('node:events');
+  const { PassThrough } = require('node:stream');
+  const { observeStartup } = require('../scripts/native-acceptance-electron.cjs');
+  const child = { stderr: new PassThrough() }, report = {}, diagnostics = new EventEmitter(); let failures = 0;
+  diagnostics.on('restore-failure', () => { failures++; });
+  const stop = observeStartup(child, report, () => {}, undefined, diagnostics);
+  for (const line of ['DESKTOP_RESTORE /private/path FAILED UNKNOWN',
+    'DESKTOP_RESTORE RESUME FAILED PRIVATE_TOKEN', 'DESKTOP_RESTORE RESUME FAILED UNKNOWN /private/path',
+    'x'.repeat(1024) + 'DESKTOP_RESTORE RESUME FAILED UNKNOWN']) child.stderr.write(line + '\n');
+  assert.deepEqual(report, {}); assert.equal(failures, 0);
+  child.stderr.write('DESKTOP_RESTORE RES'); child.stderr.write('UME FAILED UNKNOWN\r\n');
+  child.stderr.write('DESKTOP_RESTORE PAUSE FAILED UNKNOWN\n');
+  assert.deepEqual(report.restoreFailure, { phase: 'RESUME', state: 'FAILED', code: 'UNKNOWN' });
+  assert.equal(failures, 1); assert.doesNotMatch(JSON.stringify(report), /private|PRIVATE_TOKEN/);
+  stop(); assert.equal(child.stderr.listenerCount('data'), 0); child.stderr.end();
+});
+
+test('an observed restore failure rejects before navigation timeout and owns late navigation rejection', async () => {
+  const { EventEmitter } = require('node:events');
+  const { PassThrough } = require('node:stream');
+  const { observeStartup, waitForRestoreReload, createDeadline } = require('../scripts/native-acceptance-electron.cjs');
+  const child = { stderr: new PassThrough() }, report = {}, diagnostics = new EventEmitter();
+  const stop = observeStartup(child, report, () => {}, undefined, diagnostics);
+  const budget = createDeadline(1000); let rejectReload; const calls = [];
+  await assert.rejects(waitForRestoreReload({ diagnostics, report,
+    perform(action, maximum, code) {
+      assert.equal(maximum, 120000); assert.equal(code, 'NATIVE_RESTORE_TIMEOUT');
+      return budget.run(action, maximum, code);
+    },
+    reload() { calls.push('reload'); return new Promise((_, reject) => { rejectReload = reject; }); },
+    async confirm() { calls.push('confirm'); child.stderr.write('DESKTOP_RESTORE RESUME FAILED UNKNOWN\n'); },
+  }), /NATIVE_RESTORE_FAILED/);
+  assert.deepEqual(calls, ['reload', 'confirm']);
+  assert.deepEqual(report.restoreFailure, { phase: 'RESUME', state: 'FAILED', code: 'UNKNOWN' });
+  assert.equal(diagnostics.listenerCount('restore-failure'), 0);
+  rejectReload(new Error('synthetic late navigation timeout'));
+  await new Promise(resolve => setImmediate(resolve));
+  stop(); child.stderr.end();
+});
+
+test('restore success still requires real reload and confirmation and removes its failure listener', async () => {
+  const { EventEmitter } = require('node:events');
+  const { waitForRestoreReload } = require('../scripts/native-acceptance-electron.cjs');
+  const diagnostics = new EventEmitter(); let loaded, clicked, settled = false;
+  const result = waitForRestoreReload({ diagnostics, report: {}, perform: action => Promise.resolve().then(action),
+    reload: () => new Promise(resolve => { loaded = resolve; }),
+    confirm: () => new Promise(resolve => { clicked = resolve; }),
+  }).then(() => { settled = true; });
+  await new Promise(resolve => setImmediate(resolve)); loaded(); await Promise.resolve();
+  assert.equal(settled, false); clicked(); await result;
+  assert.equal(diagnostics.listenerCount('restore-failure'), 0);
+  diagnostics.emit('restore-failure');
+});
+
+test('restore product deadline failure removes diagnostics listeners without admitting later work', async () => {
+  const { EventEmitter } = require('node:events');
+  const { waitForRestoreReload, createDeadline } = require('../scripts/native-acceptance-electron.cjs');
+  const diagnostics = new EventEmitter(), budget = createDeadline(10);
+  await assert.rejects(waitForRestoreReload({ diagnostics, report: {},
+    perform: (action, maximum, code) => budget.run(action, maximum, code),
+    reload: () => new Promise(() => {}), confirm: async () => {},
+  }), /NATIVE_PRODUCT_DEADLINE/);
+  assert.equal(diagnostics.listenerCount('restore-failure'), 0);
+  diagnostics.emit('restore-failure');
+});
+
 test('shutdown observation records bounded phase timings and preserves the first failure', () => {
   const { PassThrough } = require('node:stream');
   const { observeStartup } = require('../scripts/native-acceptance-electron.cjs');

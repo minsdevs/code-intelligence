@@ -4,8 +4,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { EventEmitter } = require('node:events');
 const { createRequire } = require('node:module');
-const { parseStartupLine, parseShutdownLine, parseIntegrityLine } = require('../src/startup-diagnostics.cjs');
+const { parseStartupLine, parseShutdownLine, parseIntegrityLine, parseRestoreLine } = require('../src/startup-diagnostics.cjs');
 const { expectedServices: adapterServices } = require('../../validation/pre-release/adapter-mode.cjs');
 const { withDropConfirmation } = require('../../validation/pre-release/drop-confirmation.cjs');
 
@@ -84,7 +85,25 @@ function createDeadline(timeoutMs = 540000, now = () => performance.now()) {
   } };
 }
 
-function observeStartup(child, report, save, now = () => performance.now()) {
+async function waitForRestoreReload({ diagnostics, report, perform, reload, confirm }) {
+  let rejectFailure;
+  const failure = new Promise((_, reject) => { rejectFailure = reject; });
+  // A diagnostic may arrive before the deadline admits the action. Always own its
+  // rejection, including when the deadline has already stopped subsequent work.
+  failure.catch(() => {});
+  const onFailure = () => rejectFailure(new Error('NATIVE_RESTORE_FAILED'));
+  diagnostics.on('restore-failure', onFailure);
+  try {
+    return await perform(() => {
+      if (report.restoreFailure) throw new Error('NATIVE_RESTORE_FAILED');
+      // Register the real navigation before clicking; diagnostics can only fail
+      // this wait, never replace navigation as the successful restore condition.
+      return Promise.race([Promise.all([Promise.resolve().then(reload), Promise.resolve().then(confirm)]), failure]);
+    }, 120000, 'NATIVE_RESTORE_TIMEOUT');
+  } finally { diagnostics.off('restore-failure', onFailure); }
+}
+
+function observeStartup(child, report, save, now = () => performance.now(), restoreDiagnostics) {
   let line = '', dropping = false, shutdownStarted;
   const data = bytes => {
     for (const character of bytes.toString('utf8')) {
@@ -93,6 +112,10 @@ function observeStartup(child, report, save, now = () => performance.now()) {
         if (value && report.startup?.state !== 'FAILED') { report.startup = value; save(); }
         const integrity = dropping ? null : parseIntegrityLine(line.replace(/\r$/, ''));
         if (integrity && !report.integrityFailure) { report.integrityFailure = integrity; save(); }
+        const restore = dropping ? null : parseRestoreLine(line.replace(/\r$/, ''));
+        if (restore && !report.restoreFailure) {
+          report.restoreFailure = restore; save(); restoreDiagnostics?.emit('restore-failure');
+        }
         const shutdown = dropping ? null : parseShutdownLine(line.replace(/\r$/, ''));
         if (shutdown) {
           shutdownStarted ??= now();
@@ -220,6 +243,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   const secret = crypto.randomBytes(32).toString('hex');
   const cipherPath = path.join(owned, 'safestorage-probe.enc');
   let app, ownedApplication, page, userData, projectId, snapshotId, stopObserving;
+  const restoreDiagnostics = new EventEmitter();
   let pageErrors = 0;
   const step = (name, action, timeoutMs = 30000) => {
     phase(name);
@@ -237,7 +261,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     delete report.startup;
     delete report.integrityFailure;
     delete report.shutdown; delete report.shutdownTrace;
-    stopObserving = observeStartup(ownedChild, report, () => phase(report.phase));
+    stopObserving = observeStartup(ownedChild, report, () => phase(report.phase), undefined, restoreDiagnostics);
     phase('electron-first-window');
     const remaining = Math.floor(startupEnds - performance.now());
     if (remaining <= 0) throw new Error('NATIVE_STARTUP_TIMEOUT');
@@ -455,6 +479,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.deepEqual([...status.services].sort(), expectedServices);
   };
   const restoreArchive = async (file, expectedSource, expectedSnapshot) => {
+    delete report.restoreFailure;
     const recovery = path.join(report.productDataRoot, 'recovery');
     const before = new Set(fs.readdirSync(recovery));
     const oldToken = await perform(() => page.evaluate(() => window.codeIntelligenceDesktop.apiToken));
@@ -465,10 +490,9 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       // Production resume rotates credentials and reloads the renderer before
       // replying to the old IPC caller. Observe that real navigation, not a
       // substituted restore return value or the now-destroyed JS context.
-      await perform(() => Promise.all([
-        page.waitForEvent('domcontentloaded', { timeout: deadline.limit(120000) }),
-        confirm.click(),
-      ]), 120000, 'NATIVE_RESTORE_TIMEOUT');
+      await waitForRestoreReload({ diagnostics: restoreDiagnostics, report, perform,
+        reload: () => page.waitForEvent('domcontentloaded', { timeout: deadline.limit(120000) }),
+        confirm: () => confirm.click() });
       await perform(() => expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible());
       await readyAfterMaintenance();
     });
@@ -786,4 +810,4 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   if (failure) throw failure;
 }
 module.exports = { runProduct, closeOwnedApplication, closeValidatedApplication, createDeadline, observeStartup, verifyRevokedAuthority,
-  applicationProfileName, nativeWindowGeometry, nativeDisplayGeometry };
+  applicationProfileName, nativeWindowGeometry, nativeDisplayGeometry, waitForRestoreReload };
