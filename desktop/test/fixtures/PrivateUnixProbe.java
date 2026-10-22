@@ -28,6 +28,9 @@ class PrivateUnixProbe {
         String phase = "INPUT";
         boolean failed = false;
         try {
+            // Source-file compilation and JVM startup are outside the IPC budget.
+            System.err.println("WINDOWS_JAVA_PROBE_READY");
+            System.err.flush();
             request = System.in.readAllBytes();
             phase = "PATH";
             // Production socket paths arrive as UTF-8 private bootstrap bytes,
