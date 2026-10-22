@@ -345,6 +345,21 @@ test('Windows policy evidence keeps public binary identity but rejects private o
   assert.deepEqual(buildDiagnostics(many.map(record).join('')).windowsPolicy, many.slice(0, 12));
 });
 
+test('Windows supply failures expose only fixed phases and compiler IDs', () => {
+  const { buildDiagnostics } = require('../scripts/native-acceptance.cjs');
+  const record = value => 'NATIVE_WINDOWS_SUPPLY ' + JSON.stringify(value) + '\n';
+  const failure = { phase: 'garnet-publish', code: 'SUPPLY_BUILD_COMMAND_FAILED' };
+  const rejected = [{ ...failure, phase: 'private-token' }, { ...failure, code: 'PRIVATE_SECRET' },
+    { ...failure, path: 'C:\\private\\secret' }, { phase: 'download-garnet\nprivate', code: 'SUPPLY_FAILED' }];
+  const report = buildDiagnostics(record(failure).repeat(16) + rejected.map(record).join(''),
+    'private-token error NU1301: private-url\nerror NETSDK1045: private-path\nerror MSB1009: private-file\nerror CS0246: private-symbol');
+  assert.deepEqual(report.windowsSupply, [failure]);
+  assert.deepEqual(report.compilerCodes, ['NU1301', 'NETSDK1045', 'MSB1009', 'CS0246']);
+  assert.deepEqual(report.categories, ['dotnet-build']);
+  assert.doesNotMatch(JSON.stringify(report), /private|secret/i);
+  assert.deepEqual(buildDiagnostics('', record(failure).replaceAll('\n', '\r\n')).windowsSupply, [failure]);
+});
+
 test('macOS provisioning failure report bounds log reads and records source versions without raw text', t => {
   const { recordProvisioningFailure } = require('../scripts/native-acceptance.cjs');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-provision-diagnostics-'));

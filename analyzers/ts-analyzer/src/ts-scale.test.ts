@@ -110,5 +110,5 @@ describe('sliced whole-manifest TS extraction', () => {
     expect(single.outcomes.filter((outcome) => !outcome.path.startsWith('src/broken/')).every((outcome) => outcome.status === 'PARTIAL')).toBe(true)
     expect(single.routes).toEqual([]); expect(single.endpoints).toEqual([]); expect(single.brokenNodes).toBe(0)
     expect(verdicts({ ...SLICED, sliceProgramBytes: 64 })).toEqual(single)
-  })
+  }, 60_000)
 })

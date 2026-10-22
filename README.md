@@ -822,7 +822,7 @@ and blockers in [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md).
 | Local browser + Spring Boot backend | Supported development path |
 | Docker Compose PostgreSQL/Redis/sidecars | Supported local infrastructure |
 | macOS arm64 Electron runtime | Host-local product/Keychain/backup/recovery/restart and native window sizes verified; ad-hoc package integrity and VM startup verified; signed release acceptance pending |
-| Windows native installer | x64 staging, unsigned directory and signed NSIS build paths prepared; native build/install not executed in this change |
+| Windows native installer | x64 staging, unsigned directory and signed NSIS build paths prepared; fresh-machine installer acceptance remains unverified |
 | Linux native package | Ubuntu 22.04+ x64 runtime supply and AppImage/DEB build paths prepared; native build/install not executed |
 | Production hosted deployment | Deployment-specific; no release workflow is included |
 

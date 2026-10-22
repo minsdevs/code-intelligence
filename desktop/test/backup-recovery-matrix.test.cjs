@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const https = require('node:https');
+const os = require('node:os');
 const path = require('node:path');
 const tls = require('node:tls');
 const vm = require('node:vm');
@@ -23,7 +24,7 @@ function frame(type, extra = {}) {
 }
 
 async function profileFixture(t) {
-  const parent = fs.realpathSync(fs.mkdtempSync('/private/tmp/cirm-test-'));
+  const parent = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cirm-test-')));
   const profile = path.join(parent, 'desktop-run-synthetic');
   fs.mkdirSync(profile, { mode: 0o700 });
   for (const dir of ['safety', 'safety/ai-journal', 'backup-maintenance', 'data', 'data/repos', 'data/sources', 'recovery',

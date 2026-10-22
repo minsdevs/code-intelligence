@@ -289,6 +289,10 @@ tasks.named<BootJar>("bootJar") {
 }
 // Explicit opt-in gate: requires installed frontend dependencies and local Playwright Chromium.
 tasks.test {
+    // Integration tests retain distinct Spring contexts, including their connection pools.
+    // Bound that cache and the test worker independently of the product runtime heap.
+    maxHeapSize = "1g"
+    systemProperty("spring.test.context.cache.maxSize", "4")
     exclude("**/SnapshotSourceContractIntegrationTest.class")
     // Needs the real sidecar supplied by accuracyTest, never an in-process analyzer fake.
     exclude("**/ReactRouteBindingIntegrationTest.class")

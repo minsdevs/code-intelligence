@@ -107,8 +107,9 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
     ['missing-file', /\bENOENT\b/],
     ['permission-denied', /\bEACCES\b|Permission denied/],
     ['network-resolution', /\bENOTFOUND\b|Could not resolve host/],
+    ['dotnet-build', /\berror (?:CS|NU|NETSDK|MSB)[0-9]{4,5}:/],
   ]) if (expression.test(text)) categories.push(name);
-  const compilerCodes = [...new Set([...text.matchAll(/\b(?:error|fatal error) (TS[0-9]{4,5}|C[0-9]{4}|LNK[0-9]{4}):/g)].map(match => match[1]))].slice(0, 32);
+  const compilerCodes = [...new Set([...text.matchAll(/\b(?:error|fatal error) ((?:TS|CS|NU|NETSDK|MSB)[0-9]{4,5}|C[0-9]{4}|LNK[0-9]{4}):/g)].map(match => match[1]))].slice(0, 32);
   const policyCodes = ['MINIMUM_OS_EXCEEDED', 'NON_RELOCATABLE_REFERENCE', 'UNSUPPORTED_RPATH',
     'UNRESOLVED_NATIVE_REFERENCE', 'BASENAME_COLLISION', 'ARCHITECTURE_MISMATCH',
     'JAVA_MAJOR_MISMATCH', 'REQUIRED_MODULE_MISSING', 'REQUIRED_EXECUTABLE_MISSING',
@@ -131,6 +132,19 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
         || (item.reference !== undefined && (typeof item.reference !== 'string' || !/^[A-Za-z0-9_.-]{1,240}\.dll$/i.test(item.reference)))) continue;
     if (!windowsPolicy.some(value => JSON.stringify(value) === JSON.stringify(item))) windowsPolicy.push(item);
     if (windowsPolicy.length === 12) break;
+  }
+  const windowsSupply = [];
+  const supplyPhases = new Set(['prepare', 'select-toolchain', 'select-native-assets', 'jre-link', 'pgvector-build',
+    'pgvector-stage', 'garnet-publish', 'garnet-stage', 'source-notices', 'postgres-stage', 'nuget-notices',
+    'runtime-inventory', 'publish-metadata', ...['jdk', 'postgres', 'pgvector', 'dotnet', 'garnet', 'garnetNative']
+      .flatMap(name => ['download-' + name, 'extract-' + name])]);
+  const supplyCodes = new Set(['ENOENT', 'EEXIST', 'EACCES', 'EPERM', 'ENOSPC', 'ETIMEDOUT', 'SUPPLY_BUILD_COMMAND_FAILED', 'SUPPLY_FAILED']);
+  for (const match of text.matchAll(/^NATIVE_WINDOWS_SUPPLY (\{[^\r\n]{1,256}\})\r?$/gm)) {
+    let item; try { item = JSON.parse(match[1]); } catch { continue; }
+    if (!item || !supplyPhases.has(item.phase) || !supplyCodes.has(item.code)
+        || Object.keys(item).some(key => !['phase', 'code'].includes(key))) continue;
+    if (!windowsSupply.some(value => value.phase === item.phase && value.code === item.code)) windowsSupply.push(item);
+    if (windowsSupply.length === 12) break;
   }
   const steps = [...stdout.matchAll(/^> (npm run build|\.\/gradlew bootJar|npm ci --omit=dev --ignore-scripts|[^\r\n]*\/bin\/jlink --add-modules[^\r\n]*)$/gm)]
     .map(match => match[1].startsWith('npm run') ? 'typescript-build' : match[1].startsWith('./gradlew')
@@ -172,7 +186,7 @@ function buildDiagnostics(stdout = '', stderr = '', sourceRoot = null) {
       .filter(flag => text.split(/\r?\n/).some(line => /^ld: (?:unknown|unrecognized) (?:options?|arguments?):/.test(line) && line.split(/\s+/).includes(flag))),
   };
   return { lastBuildStep: steps.at(-1) || null, categories, compilerCodes, policyCodes, javaSymbols, missingPackages, locations, nativeLink,
-    nativeClosure: nativeClosureDiagnostics(text), windowsPolicy };
+    nativeClosure: nativeClosureDiagnostics(text), windowsPolicy, windowsSupply };
 }
 function run(command, args, cwd, env = process.env, options = {}) {
   const timeoutMs = options.timeoutMs ?? 8 * 60 * 1000;

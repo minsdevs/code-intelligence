@@ -471,7 +471,7 @@ AI 컨텍스트를 구성하기 전에 secret을 마스킹하지만, 사용자�
 | 로컬 브라우저 + Spring Boot backend | 지원되는 개발 경로 |
 | Docker Compose PostgreSQL/Redis/sidecar | 지원되는 로컬 인프라 |
 | macOS arm64 Electron runtime | 로컬 staging/package RC; unsigned/notarized acceptance 대기 |
-| Windows 네이티브 설치 프로그램 | x64 staging·unsigned directory·서명 NSIS 빌드 경로 준비; 이번 작업에서 native 빌드·설치 미실행 |
+| Windows 네이티브 설치 프로그램 | x64 staging·unsigned directory·서명 NSIS 빌드 경로 준비; 새 기기 설치 프로그램 수용 검증 미완료 |
 | Linux 네이티브 패키지 | Ubuntu 22.04+ x64 공급품·AppImage/DEB 빌드 경로 준비; native 빌드·설치 미실행 |
 | 프로덕션 호스팅 배포 | 배포별로 다름; 릴리스 워크플로가 포함되지 않음 |
 

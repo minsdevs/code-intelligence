@@ -384,6 +384,8 @@ function loadMain(metadata) {
     process: { env: { PATH: '/synthetic/bin' }, argv: ['electron', '.'], pid: 4242, platform: 'darwin', arch: 'arm64',
       execPath: '/synthetic/electron', resourcesPath: '/synthetic/resources', getuid: process.getuid.bind(process) },
     require: name => name === 'electron' ? electron : name === '../package.json' ? metadata
+      : name === './adapter-isolation.cjs' ? { ...require('../src/adapter-isolation.cjs'),
+        openAdapterIsolation: options => openAdapterIsolation({ ...options, platform: 'darwin' }) }
       : require(name.startsWith('./') ? path.join(sourceRoot, name) : name),
     setTimeout, clearTimeout });
   vm.runInContext(fs.readFileSync(path.join(sourceRoot, 'main.cjs'), 'utf8'), context);

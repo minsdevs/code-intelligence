@@ -10,7 +10,8 @@ const SUPPLIES = require('./windows-runtime-supply.json');
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 function command(binary, args, cwd, env = process.env) {
   const result = spawnSync(binary, args, { cwd, env, stdio: 'inherit', windowsHide: true, timeout: 1200000 });
-  if (result.error || result.status !== 0) throw new Error(`Runtime build failed: ${path.basename(binary)}`, { cause: result.error });
+  if (result.error || result.status !== 0) throw Object.assign(new Error(`Runtime build failed: ${path.basename(binary)}`, { cause: result.error }),
+    { code: 'SUPPLY_BUILD_COMMAND_FAILED' });
 }
 function fresh(directory) {
   if (!path.isAbsolute(directory) || fs.existsSync(directory)) throw new Error('Windows runtime output must be a fresh absolute directory');
@@ -41,12 +42,17 @@ function copyTree(from, to, filter = () => true) {
 }
 function writeJson(file, value) { fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { flag: 'wx', mode: 0o600 }); }
 async function provision(destination) {
+  let phase = 'prepare';
+  try {
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Windows x64 build host required');
   fresh(destination);
+  phase = 'select-toolchain';
   const toolchain = selectWindowsToolchain(process.env, destination);
   const downloads = path.join(destination, 'archives'); fs.mkdirSync(downloads);
   const unpack = async (name, target, select) => {
+    phase = 'download-' + name;
     const bytes = await download(name); fs.writeFileSync(path.join(downloads, name + '.zip'), bytes, { flag: 'wx' });
+    phase = 'extract-' + name;
     extractZip(bytes, target, select);
   };
   const jdk = path.join(destination, 'jdk'), pg = path.join(destination, 'postgres-build'), vector = path.join(destination, 'vector-source');
@@ -59,6 +65,7 @@ async function provision(destination) {
   await unpack('garnet', garnet, name => name.startsWith(prefix) ? name.slice(prefix.length) : null);
   const native = path.join(destination, 'garnet-native');
   await unpack('garnetNative', native, name => /^net10\.0\/[^/]+\.dll$/.test(name) ? name.slice(8) : null);
+  phase = 'select-native-assets';
   // Upstream copies all RID folders as Content; retain only the actual target RID.
   for (const relative of ['libs/native/bftree-garnet/runtimes', 'libs/storage/Tsavorite/cs/src/core/Device/runtimes']) {
     const directory = path.join(garnet, relative);
@@ -76,19 +83,24 @@ async function provision(destination) {
   // JDK's legacy UCRT/API-set compatibility copies beside application DLLs.
   const systemLibraries = fs.readdirSync(path.join(jdk, 'bin')).filter(name => systemDll(name.toLowerCase()))
     .map(name => 'glob:**/' + name);
+  phase = 'jre-link';
   command(path.join(jdk, 'bin', 'jlink.exe'), ['--add-modules', 'java.base,java.compiler,java.desktop,java.instrument,java.logging,java.management,java.naming,java.net.http,java.security.jgss,java.sql,jdk.crypto.ec,jdk.net,jdk.unsupported',
     '--strip-debug', '--no-header-files', '--no-man-pages', '--compress=zip-6',
     ...(systemLibraries.length ? ['--exclude-files', systemLibraries.join(',')] : []), '--output', jre], destination, toolchain.env);
   const env = { ...toolchain.env, PGROOT: pg, JAVA_HOME: jdk, DOTNET_ROOT: dotnet, DOTNET_MULTILEVEL_LOOKUP: '0', DOTNET_CLI_TELEMETRY_OPTOUT: '1',
     DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1', DOTNET_CLI_HOME: path.join(destination, 'dotnet-home'), NUGET_PACKAGES: path.join(destination, 'nuget') };
+  phase = 'pgvector-build';
   command(toolchain.make, ['/NOLOGO', '/F', 'Makefile.win'], vector, env);
+  phase = 'pgvector-stage';
   // No global installation, registry writes or service registration.
   copy(path.join(vector, 'vector.dll'), path.join(pg, 'lib', 'vector.dll'));
   copy(path.join(vector, 'vector.control'), path.join(pg, 'share', 'extension', 'vector.control'));
   for (const name of fs.readdirSync(path.join(vector, 'sql')).filter(name => /^vector--.*\.sql$/.test(name))) copy(path.join(vector, 'sql', name), path.join(pg, 'share', 'extension', name));
   const cache = path.join(runtime, 'cache');
+  phase = 'garnet-publish';
   command(path.join(dotnet, 'dotnet.exe'), ['publish', path.join(garnet, 'main', 'GarnetServer', 'GarnetServer.csproj'), '-c', 'Release', '-f', 'net10.0', '-r', 'win-x64', '--self-contained', 'true',
     '-p:PublishSingleFile=false', '-p:PublishReadyToRun=false', '-p:RollForward=Disable', '-p:RuntimeFrameworkVersion=10.0.12', '-p:RestorePackagesWithLockFile=true', '-o', cache], garnet, env);
+  phase = 'garnet-stage';
   // Upstream publishes a test PFX with every build. It must never ship as a usable credential.
   if (fs.existsSync(path.join(cache, 'testcert.pfx'))) fs.unlinkSync(path.join(cache, 'testcert.pfx'));
   // Select one checksummed native asset per basename, including RID copies from NuGet.
@@ -104,6 +116,7 @@ async function provision(destination) {
   const config = JSON.parse(fs.readFileSync(path.join(cache, 'GarnetServer.runtimeconfig.json')));
   if (config.runtimeOptions?.framework || config.runtimeOptions?.frameworks || !config.runtimeOptions?.includedFrameworks?.length) throw new Error('Garnet is not self-contained');
   const sources = Object.fromEntries(Object.entries(SUPPLIES).map(([name, value]) => [name, { ...value, notice: 'notices/' + name + '.txt' }]));
+  phase = 'source-notices';
   const notices = path.join(runtime, 'notices'); fs.mkdirSync(notices);
   const noticeSource = { postgres: path.join(pg, 'doc', 'postgresql', 'html', 'legalnotice.html'), pgvector: path.join(vector, 'LICENSE'),
     jdk: path.join(jdk, 'legal', 'java.base', 'LICENSE'), garnet: path.join(garnet, 'LICENSE'), garnetNative: path.join(garnet, 'LICENSE'), dotnet: path.join(dotnet, 'ThirdPartyNotices.txt') };
@@ -113,6 +126,7 @@ async function provision(destination) {
   copyTree(path.join(pg, 'doc', 'postgresql'), path.join(notices, 'postgresql'));
   // App-local MSVC runtime is redistributed from the same checksummed JDK, not host System32.
   const vc = ['msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'];
+  phase = 'postgres-stage';
   for (const folder of [path.join(runtime, 'postgres', 'bin'), cache]) for (const name of vc) {
     const target = path.join(folder, name); if (!fs.existsSync(target)) copy(path.join(jdk, 'bin', name), target);
   }
@@ -135,6 +149,7 @@ async function provision(destination) {
   const extension = path.join(runtime, 'postgres', 'share', 'extension'); fs.mkdirSync(extension);
   for (const name of fs.readdirSync(path.join(pg, 'share', 'extension')).filter(name => /^(?:vector|pg_trgm|plpgsql)(?:--.*\.sql|\.control)$/.test(name)))
     copy(path.join(pg, 'share', 'extension', name), path.join(extension, name));
+  phase = 'nuget-notices';
   const nuget = [];
   for (const packageName of fs.readdirSync(env.NUGET_PACKAGES)) for (const version of fs.readdirSync(path.join(env.NUGET_PACKAGES, packageName))) {
     const directory = path.join(env.NUGET_PACKAGES, packageName, version), nuspec = fs.readdirSync(directory).find(name => name.endsWith('.nuspec'));
@@ -153,6 +168,7 @@ async function provision(destination) {
     noticeIndex[name] = { url: notice.url, sha256: notice.sha256 };
   }
   writeJson(path.join(notices, 'dependencies', 'index.json'), noticeIndex);
+  phase = 'runtime-inventory';
   const entries = inventory(runtime), files = {};
   for (const [name, item] of entries) {
     if (!item.pe) continue;
@@ -162,12 +178,20 @@ async function provision(destination) {
     files[name] = { sha256: item.hash, sources: origin, method: name.startsWith('cache/') ? 'dotnet-publish-self-contained-and-pinned-native' : name.endsWith('/vector.dll') ? 'msvc-nmake' : 'verified-archive-or-jlink' };
   }
   validateClosure(entries);
+  phase = 'publish-metadata';
   const provenance = { format: 1, sources, files, nuget, recipes: { garnet: 'net10.0/win-x64/self-contained/PublishSingleFile=false/PublishReadyToRun=false/RollForward=Disable', pgvector: 'MSVC x64 nmake Makefile.win PGROOT=pinned-PG16.10', jre: 'Temurin21 jlink' } };
   writeJson(path.join(runtime, 'windows-provenance.json'), provenance);
   writeJson(path.join(destination, 'supply.json'), { format: 1, platform: 'win32', arch: 'x64', jdk, runtime, sources: SUPPLIES, toolchain: toolchain.pin });
   return { jdk, runtime };
+  } catch (error) {
+    // Only fixed build phases and error enums cross the private-log boundary.
+    const codes = ['ENOENT', 'EEXIST', 'EACCES', 'EPERM', 'ENOSPC', 'ETIMEDOUT', 'SUPPLY_BUILD_COMMAND_FAILED'];
+    error.publicSupply = { phase, code: codes.includes(error.code) ? error.code : 'SUPPLY_FAILED' };
+    throw error;
+  }
 }
 if (require.main === module) provision(path.resolve(process.argv[2] || '')).then(() => console.log('Windows runtime supply prepared; native product acceptance still required.')).catch(error => {
+  if (error.publicSupply) console.error('NATIVE_WINDOWS_SUPPLY ' + JSON.stringify(error.publicSupply));
   if (error.publicPolicy) console.error('NATIVE_WINDOWS_POLICY ' + JSON.stringify(error.publicPolicy));
   console.error(error); process.exitCode = 1;
 });

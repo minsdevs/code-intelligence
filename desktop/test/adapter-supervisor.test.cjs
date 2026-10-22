@@ -59,7 +59,7 @@ test('the product worker table has only the TypeScript analyzer, pinned by execu
   assert.deepEqual(Object.keys(adapterSupervisor.workerTable(contents, { testWorkers: true })).sort(), ['node-probe', 'probe', 'ts-analyzer']);
 });
 
-test('the service Info.plist is valid, escapes the requirement and identifies the XPC service', t => {
+test('the service Info.plist is valid, escapes the requirement and identifies the XPC service', { skip: process.platform !== 'darwin' }, t => {
   const file = path.join(temporary(t), 'Info.plist');
   const requirement = 'identifier "dev.example.adapter-bridge" and cdhash H"0123456789abcdef0123456789abcdef01234567"';
   fs.writeFileSync(file, adapterSupervisor.serviceInfo({ appId: 'dev.example', version: '1.2.3', peerRequirement: requirement,
