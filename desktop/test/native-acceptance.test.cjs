@@ -244,9 +244,56 @@ test('private native closure preserves transitive dylibs and runs without the bu
   assert.deepEqual(read('postgres'), read('redis'), 'Closure copies remain byte-identical for the publication collision gate');
 });
 
+test('native profile expectation follows launched metadata and preserves packaged name overrides', () => {
+  const { applicationProfileName } = require('../scripts/native-acceptance-electron.cjs');
+  const source = { name: 'code-intelligence-desktop', productName: 'Code Intelligence' };
+  const bundle = path.join(os.tmpdir(), 'Code Intelligence Validation.app');
+  for (const [metadata, expected] of [
+    [{ name: 'code-intelligence-validation', productName: 'Code Intelligence Validation' }, 'Code Intelligence Validation'],
+    [{ name: 'code-intelligence-validation' }, 'code-intelligence-validation'],
+    [{ name: 'code-intelligence-desktop', productName: 'Code Intelligence' }, 'Code Intelligence'],
+  ]) {
+    let calls = 0;
+    const name = applicationProfileName(source, bundle, (archive, entry) => {
+      calls++;
+      assert.equal(archive, path.join(bundle, 'Contents', 'Resources', 'app.asar'));
+      assert.equal(entry, 'package.json');
+      return Buffer.from(JSON.stringify(metadata));
+    });
+    assert.equal(name, expected); assert.equal(calls, 1);
+  }
+  assert.equal(applicationProfileName(source), 'Code Intelligence');
+  assert.equal(applicationProfileName({ name: ' code-intelligence-desktop ' }), 'code-intelligence-desktop');
+  assert.throws(() => applicationProfileName(source, bundle, () => { throw new Error('MISSING_PACKAGED_METADATA'); }),
+    /MISSING_PACKAGED_METADATA/);
+  for (const productName of ['', '.', '..', '../outside', 'path\\outside', 'invalid\nname'])
+    assert.throws(() => applicationProfileName({ ...source, productName }), /Invalid application profile name/);
+});
+
 test('direct native Electron runner refuses unauthenticated local use before importing or launching Electron', async () => {
   const { runProduct } = require('../scripts/native-acceptance-electron.cjs');
   await assert.rejects(runProduct({ env: { ...hosted(), GITHUB_ACTIONS: 'false' } }), /Hosted workflow required/);
+});
+
+test('native size diagnostics retain constraints and display geometry without titles or labels', () => {
+  const { nativeWindowGeometry, nativeDisplayGeometry } = require('../scripts/native-acceptance-electron.cjs');
+  const bounds = { x: 0, y: 25, width: 980, height: 675, privateValue: 'do-not-record' };
+  const content = { ...bounds, y: 53, height: 647 };
+  const geometry = nativeWindowGeometry({
+    getBounds: () => bounds, getContentBounds: () => content,
+    getMinimumSize: () => [980, 700], getMaximumSize: () => [0, 0],
+    isResizable: () => true, isMaximized: () => false, isFullScreen: () => false,
+    webContents: { getZoomFactor: () => 1, getURL: () => 'do-not-record' },
+    getTitle: () => 'do-not-record',
+  });
+  assert.deepEqual(geometry, { bounds: { x: 0, y: 25, width: 980, height: 675 },
+    contentBounds: { x: 0, y: 53, width: 980, height: 647 }, minimumSize: [980, 700], maximumSize: [0, 0],
+    resizable: true, maximized: false, fullscreen: false, zoomFactor: 1 });
+  const displays = nativeDisplayGeometry({ screen: { getAllDisplays: () => [
+    { id: 'do-not-record', label: 'do-not-record', bounds, workArea: content, scaleFactor: 2 },
+  ] } });
+  assert.deepEqual(displays, [{ bounds: geometry.bounds, workArea: geometry.contentBounds, scaleFactor: 2 }]);
+  assert.equal(JSON.stringify({ geometry, displays }).includes('do-not-record'), false);
 });
 
 test('one product deadline survives successful steps and refuses late mutations', async t => {
@@ -286,6 +333,135 @@ test('startup evidence accepts fragmented static records but no raw details or o
   assert.deepEqual(report.startup, { phase: 'SAFETY', state: 'FAILED', code: 'SAFETY_RECOVERY_REQUIRED' });
   assert.equal(JSON.stringify(report).includes('private'), false);
   stop(); child.stderr.end();
+});
+
+for (const kind of ['restore', 'backup']) test(kind + ' observation retains only the first allowlisted phase and code without private stderr', () => {
+  const { EventEmitter } = require('node:events');
+  const { PassThrough } = require('node:stream');
+  const { observeStartup } = require('../scripts/native-acceptance-electron.cjs');
+  const child = { stderr: new PassThrough() }, report = {}, diagnostics = new EventEmitter(); let failures = 0;
+  diagnostics.on(kind + '-failure', () => { failures++; });
+  const stop = observeStartup(child, report, () => {}, undefined, diagnostics);
+  const prefix = 'DESKTOP_' + kind.toUpperCase();
+  for (const line of [prefix + ' /private/path FAILED UNKNOWN',
+    prefix + ' RESUME FAILED PRIVATE_TOKEN', prefix + ' RESUME FAILED UNKNOWN /private/path',
+    'x'.repeat(1024) + prefix + ' RESUME FAILED UNKNOWN']) child.stderr.write(line + '\n');
+  assert.deepEqual(report, {}); assert.equal(failures, 0);
+  child.stderr.write(prefix + ' RES'); child.stderr.write('UME FAILED UNKNOWN\r\n');
+  child.stderr.write(prefix + ' PAUSE FAILED UNKNOWN\n');
+  assert.deepEqual(report[kind + 'Failure'], { phase: 'RESUME', state: 'FAILED', code: 'UNKNOWN' });
+  assert.equal(report[kind === 'restore' ? 'backupFailure' : 'restoreFailure'], undefined);
+  assert.equal(failures, 1); assert.doesNotMatch(JSON.stringify(report), /private|PRIVATE_TOKEN/);
+  stop(); assert.equal(child.stderr.listenerCount('data'), 0); child.stderr.end();
+});
+
+test('an observed restore failure rejects before navigation timeout and owns late navigation rejection', async () => {
+  const { EventEmitter } = require('node:events');
+  const { PassThrough } = require('node:stream');
+  const { observeStartup, waitForRestoreReload, createDeadline } = require('../scripts/native-acceptance-electron.cjs');
+  const child = { stderr: new PassThrough() }, report = {}, diagnostics = new EventEmitter();
+  const stop = observeStartup(child, report, () => {}, undefined, diagnostics);
+  const budget = createDeadline(1000); let rejectReload; const calls = [];
+  await assert.rejects(waitForRestoreReload({ diagnostics, report,
+    perform(action, maximum, code) {
+      assert.equal(maximum, 120000); assert.equal(code, 'NATIVE_RESTORE_TIMEOUT');
+      return budget.run(action, maximum, code);
+    },
+    reload() { calls.push('reload'); return new Promise((_, reject) => { rejectReload = reject; }); },
+    async confirm() { calls.push('confirm'); child.stderr.write('DESKTOP_RESTORE RESUME FAILED UNKNOWN\n'); },
+  }), /NATIVE_RESTORE_FAILED/);
+  assert.deepEqual(calls, ['reload', 'confirm']);
+  assert.deepEqual(report.restoreFailure, { phase: 'RESUME', state: 'FAILED', code: 'UNKNOWN' });
+  assert.equal(diagnostics.listenerCount('restore-failure'), 0);
+  rejectReload(new Error('synthetic late navigation timeout'));
+  await new Promise(resolve => setImmediate(resolve));
+  stop(); child.stderr.end();
+});
+
+test('restore success still requires real reload and confirmation and removes its failure listener', async () => {
+  const { EventEmitter } = require('node:events');
+  const { waitForRestoreReload } = require('../scripts/native-acceptance-electron.cjs');
+  const diagnostics = new EventEmitter(); let loaded, clicked, settled = false;
+  const result = waitForRestoreReload({ diagnostics, report: {}, perform: action => Promise.resolve().then(action),
+    reload: () => new Promise(resolve => { loaded = resolve; }),
+    confirm: () => new Promise(resolve => { clicked = resolve; }),
+  }).then(() => { settled = true; });
+  await new Promise(resolve => setImmediate(resolve)); loaded(); await Promise.resolve();
+  assert.equal(settled, false); clicked(); await result;
+  assert.equal(diagnostics.listenerCount('restore-failure'), 0);
+  diagnostics.emit('restore-failure');
+});
+
+test('restore product deadline failure removes diagnostics listeners without admitting later work', async () => {
+  const { EventEmitter } = require('node:events');
+  const { waitForRestoreReload, createDeadline } = require('../scripts/native-acceptance-electron.cjs');
+  const diagnostics = new EventEmitter(), budget = createDeadline(10);
+  await assert.rejects(waitForRestoreReload({ diagnostics, report: {},
+    perform: (action, maximum, code) => budget.run(action, maximum, code),
+    reload: () => new Promise(() => {}), confirm: async () => {},
+  }), /NATIVE_PRODUCT_DEADLINE/);
+  assert.equal(diagnostics.listenerCount('restore-failure'), 0);
+  diagnostics.emit('restore-failure');
+});
+
+for (const during of ['start', 'result']) test('observed backup failure during ' + during + ' rejects promptly and owns late rejection', async () => {
+  const { EventEmitter } = require('node:events');
+  const { PassThrough } = require('node:stream');
+  const { observeStartup, waitForBackupResult, createDeadline } = require('../scripts/native-acceptance-electron.cjs');
+  const child = { stderr: new PassThrough() }, report = {}, diagnostics = new EventEmitter();
+  const stop = observeStartup(child, report, () => {}, undefined, diagnostics);
+  const budget = createDeadline(1000); let rejectPending; const calls = [], limits = [];
+  const action = name => () => {
+    calls.push(name);
+    if (name === during) return new Promise((_, reject) => {
+      rejectPending = reject;
+      child.stderr.write('DESKTOP_BACKUP DESTINATION FAILED UNKNOWN\n');
+    });
+  };
+  await assert.rejects(waitForBackupResult({ diagnostics, report,
+    perform(action, maximum, code) { limits.push([maximum, code]); return budget.run(action, maximum, code); },
+    start: action('start'), result: action('result'),
+  }), /NATIVE_BACKUP_FAILED/);
+  assert.deepEqual(calls, during === 'start' ? ['start'] : ['start', 'result']);
+  assert.deepEqual(limits, during === 'start' ? [[undefined, undefined]]
+    : [[undefined, undefined], [120000, 'NATIVE_BACKUP_TIMEOUT']]);
+  assert.deepEqual(report.backupFailure, { phase: 'DESTINATION', state: 'FAILED', code: 'UNKNOWN' });
+  assert.equal(diagnostics.listenerCount('backup-failure'), 0);
+  rejectPending(new Error('synthetic late backup assertion timeout'));
+  await new Promise(resolve => setImmediate(resolve));
+  stop(); child.stderr.end();
+});
+
+test('backup success still waits for the result assertion after starting and removes its failure listener', async () => {
+  const { EventEmitter } = require('node:events');
+  const { waitForBackupResult } = require('../scripts/native-acceptance-electron.cjs');
+  const diagnostics = new EventEmitter(); let started, found, settled = false; const limits = [];
+  const operation = waitForBackupResult({ diagnostics, report: {},
+    perform(action, maximum, code) { limits.push([maximum, code]); return Promise.resolve().then(action); },
+    start: () => new Promise(resolve => { started = resolve; }),
+    result: () => new Promise(resolve => { found = resolve; }),
+  }).then(value => { settled = true; return value; });
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(found, undefined);
+  started(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(settled, false); found('archive-result'); assert.equal(await operation, 'archive-result');
+  assert.deepEqual(limits, [[undefined, undefined], [120000, 'NATIVE_BACKUP_TIMEOUT']]);
+  assert.equal(diagnostics.listenerCount('backup-failure'), 0); diagnostics.emit('backup-failure');
+});
+
+test('backup refuses an already observed failure and preserves the product deadline', async () => {
+  const { EventEmitter } = require('node:events');
+  const { waitForBackupResult, createDeadline } = require('../scripts/native-acceptance-electron.cjs');
+  const diagnostics = new EventEmitter(); let starts = 0;
+  await assert.rejects(waitForBackupResult({ diagnostics, report: { backupFailure: { code: 'UNKNOWN' } },
+    perform: action => Promise.resolve().then(action), start: () => { starts++; }, result: async () => {},
+  }), /NATIVE_BACKUP_FAILED/);
+  assert.equal(starts, 0); assert.equal(diagnostics.listenerCount('backup-failure'), 0);
+  const budget = createDeadline(10);
+  await assert.rejects(waitForBackupResult({ diagnostics, report: {},
+    perform: (action, maximum, code) => budget.run(action, maximum, code),
+    start: async () => {}, result: () => new Promise(() => {}),
+  }), /NATIVE_PRODUCT_DEADLINE/);
+  assert.equal(diagnostics.listenerCount('backup-failure'), 0); diagnostics.emit('backup-failure');
 });
 
 test('shutdown observation records bounded phase timings and preserves the first failure', () => {
@@ -343,6 +519,37 @@ test('Windows policy evidence keeps public binary identity but rejects private o
   assert.equal(JSON.stringify(report).includes('private'), false);
   const many = Array.from({ length: 20 }, (_, i) => ({ code: 'INVALID_PE', file: 'cache/library' + i + '.dll' }));
   assert.deepEqual(buildDiagnostics(many.map(record).join('')).windowsPolicy, many.slice(0, 12));
+});
+
+test('Windows supply failures expose only fixed phases and compiler IDs', () => {
+  const { buildDiagnostics } = require('../scripts/native-acceptance.cjs');
+  const record = value => 'NATIVE_WINDOWS_SUPPLY ' + JSON.stringify(value) + '\n';
+  const failure = { phase: 'garnet-publish', code: 'SUPPLY_BUILD_COMMAND_FAILED' };
+  const rejected = [{ ...failure, phase: 'private-token' }, { ...failure, code: 'PRIVATE_SECRET' },
+    { ...failure, path: 'C:\\private\\secret' }, { phase: 'download-garnet\nprivate', code: 'SUPPLY_FAILED' }];
+  const report = buildDiagnostics(record(failure).repeat(16) + rejected.map(record).join(''),
+    'private-token error NU1301: private-url\nerror NETSDK1045: private-path\nerror MSB1009: private-file\nerror CS0246: private-symbol');
+  assert.deepEqual(report.windowsSupply, [failure]);
+  assert.deepEqual(report.compilerCodes, ['NU1301', 'NETSDK1045', 'MSB1009', 'CS0246']);
+  assert.deepEqual(report.categories, ['dotnet-build']);
+  assert.doesNotMatch(JSON.stringify(report), /private|secret/i);
+  assert.deepEqual(buildDiagnostics('', record(failure).replaceAll('\n', '\r\n')).windowsSupply, [failure]);
+  const wrapper = { phase: 'invoke-provisioner', code: 'SUPPLY_PROCESS_FAILED' };
+  const wrapped = buildDiagnostics(record(wrapper), 'FullyQualifiedErrorId : NativeCommandError\nprivate-token');
+  assert.deepEqual(wrapped.windowsSupply, [wrapper]);
+  assert.deepEqual(wrapped.categories, ['powershell-native-stderr']);
+  assert.doesNotMatch(JSON.stringify(wrapped), /private|secret/i);
+  const compact = buildDiagnostics('prefix NATIVE_WINDOWS_SUPPLY wrapper-publish SUPPLY_WRAPPER_FAILED\r\n'
+    + 'NATIVE_WINDOWS_SUPPLY garnet-publish\r\nSUPPLY_BUILD_COMMAND_FAILED\n'
+    + 'NATIVE_WINDOWS_SUPPLY private-token SUPPLY_FAILED\nNATIVE_WINDOWS_SUPPLY wrapper-acl PRIVATE_SECRET\n'
+    + 'NATIVE_WINDOWS_SUPPLY_LINE 42\nNATIVE_WINDOWS_SUPPLY_LINE 42\nNATIVE_WINDOWS_SUPPLY_LINE -1\n'
+    + 'NATIVE_WINDOWS_SUPPLY_LINE 123456\nNATIVE_WINDOWS_SUPPLY_LINE private\n'
+    + 'NATIVE_WINDOWS_SUPPLY_HRESULT -2147024864\nNATIVE_WINDOWS_SUPPLY_HRESULT 2147483648\n'
+    + 'NATIVE_WINDOWS_SUPPLY_HRESULT -2147483649\nNATIVE_WINDOWS_SUPPLY_HRESULT private');
+  assert.deepEqual(compact.windowsSupply, [{ phase: 'wrapper-publish', code: 'SUPPLY_WRAPPER_FAILED' }, failure]);
+  assert.deepEqual(compact.windowsSupplyLines, [42]);
+  assert.deepEqual(compact.windowsSupplyHResults, [-2147024864]);
+  assert.doesNotMatch(JSON.stringify(compact), /private|secret/i);
 });
 
 test('macOS provisioning failure report bounds log reads and records source versions without raw text', t => {

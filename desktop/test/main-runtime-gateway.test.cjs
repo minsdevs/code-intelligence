@@ -549,6 +549,48 @@ test('existing local data permits first source enrollment without a fresh paid-A
   assert.match(JSON.parse(h.written[0]).source.capability, /^[0-9a-f]{64}$/);
 });
 
+for (const existing of [false, true]) test(`Windows backend prepares protected inheritable repository storage before sources (existing=${existing})`, async t => {
+  const h = await harness(t), calls = [], directories = new Set(existing ? ['data', 'data/repos'] : []);
+  h.context.storageRuntime = { userData: h.paths.userData, windowsBoundary: {}, storage: {
+    async stat(name, options) {
+      calls.push(['stat', name, clone(options)]);
+      return directories.has(name) ? { kind: 'directory' } : null;
+    },
+    async mkdir(name, options) {
+      calls.push(['mkdir', name, clone(options)]); directories.add(name);
+    },
+  } };
+  h.context.sourcesCheckpoint = async () => {
+    assert.equal(directories.has('data/repos'), true);
+    calls.push(['sources']); throw Object.assign(new Error('synthetic source checkpoint'), { code: 'SOURCES_REACHED' });
+  };
+  h.run('runtime = storageRuntime; openProductionSources = sourcesCheckpoint');
+  await assert.rejects(h.run('spawnBackend()'), { code: 'SOURCES_REACHED' });
+  assert.deepEqual(calls, [
+    ['stat', 'data', { directory: true, missing: true }],
+    ...(existing ? [] : [['mkdir', 'data', { inherit: true }]]),
+    ['stat', 'data/repos', { directory: true, missing: true }],
+    ...(existing ? [] : [['mkdir', 'data/repos', { inherit: true }]]),
+    ['sources'],
+  ]);
+  assert.equal(h.children.length, 0);
+});
+
+test('Windows backend refuses invalid existing repository storage before sources or child launch', async t => {
+  const h = await harness(t); let mutations = 0, sources = 0;
+  h.context.storageRuntime = { userData: h.paths.userData, windowsBoundary: {}, storage: {
+    async stat(name) {
+      if (name === 'data/repos') throw Object.assign(new Error('synthetic protected storage refusal'), { code: 'WINDOWS_STORAGE_REFUSED' });
+      return { kind: 'directory' };
+    },
+    async mkdir() { mutations++; },
+  } };
+  h.context.sourcesCheckpoint = async () => { sources++; throw new Error('sources must stay closed'); };
+  h.run('runtime = storageRuntime; openProductionSources = sourcesCheckpoint');
+  await assert.rejects(h.run('spawnBackend()'), { code: 'WINDOWS_STORAGE_REFUSED' });
+  assert.equal(mutations, 0); assert.equal(sources, 0); assert.equal(h.children.length, 0);
+});
+
 test('actual main startup passes fresh enrollment before paths file and private bootstrap only to backend stdin', async t => {
   const h = await harness(t); await h.start(); await Promise.resolve();
   assert.equal(h.run('runtime.ready'), true); assert.equal(h.controls.gatewayOptions.freshEnrollmentAllowed, true);
@@ -943,6 +985,43 @@ test('backup/restore IPC uses the native selection and stays serialized without 
   assert.equal(h.dialogs.filter(item => item.kind === 'open').length, 2);
 });
 
+test('backup IPC diagnoses pre-runtime refusal and selection failure without changing cancellation or rejection', async t => {
+  const h = await harness(t, { backupProtocol: 3 }); await h.start();
+  const logs = []; h.context.console = { ...console, error: line => logs.push(line) };
+  const { parseBackupLine } = require('../src/startup-diagnostics.cjs');
+  assert.equal(await h.handlers.get('data:backup')(h.rendererEvent()), null);
+  assert.deepEqual(logs, []); assert.equal(h.events.includes('backup.selected'), false);
+  const failure = Object.assign(new Error('synthetic-private picker detail'), { code: 'EACCES', path: '/private/source' });
+  Object.defineProperty(h.controls, 'selection', { configurable: true, get() { throw failure; } });
+  await assert.rejects(h.handlers.get('data:backup')(h.rendererEvent()), error => error === failure);
+  assert.deepEqual(logs.map(parseBackupLine), [{ phase: 'SELECTION', state: 'FAILED', code: 'EACCES' }]);
+  delete h.controls.selection;
+  h.run('runtime.recoveryRequired = true');
+  await assert.rejects(h.handlers.get('data:backup')(h.rendererEvent()), { code: 'SAFETY_RECOVERY_REQUIRED' });
+  assert.deepEqual(logs.map(parseBackupLine).at(-1), { phase: 'ADMISSION', state: 'FAILED', code: 'SAFETY_RECOVERY_REQUIRED' });
+  assert.doesNotMatch(JSON.stringify(logs), /synthetic-private|private\/source/);
+  assert.equal(h.events.includes('backup.selected'), false);
+  h.run('runtime.recoveryRequired = false');
+  Object.defineProperty(h.controls, 'selection', { configurable: true, get() { throw failure; } });
+  h.context.console.error = () => { throw new Error('synthetic-private diagnostic sink failure'); };
+  await assert.rejects(h.handlers.get('data:backup')(h.rendererEvent()), error => error === failure);
+  // Cleanup uses the same console, whose failure must not become a test fixture failure.
+  h.context.console = { ...console, error: line => logs.push(line) };
+});
+
+test('backup runtime diagnostics are forwarded once without replacing the runtime rejection', async t => {
+  const failure = new Error('synthetic-private runtime failure');
+  const h = await harness(t, { backupProtocol: 3, selection: '/synthetic/native-selection',
+    performBackup: async options => {
+      options.onBackupDiagnostic({ phase: 'DESTINATION', state: 'FAILED', code: 'WINDOWS_STORAGE_REFUSED' });
+      throw failure;
+    } });
+  await h.start();
+  const logs = []; h.context.console = { ...console, error: line => logs.push(line) };
+  await assert.rejects(h.handlers.get('data:backup')(h.rendererEvent()), error => error === failure);
+  assert.deepEqual(logs, ['DESKTOP_BACKUP DESTINATION FAILED WINDOWS_STORAGE_REFUSED']);
+});
+
 test('restore IPC exposes only the fixed incompatible result after a pre-maintenance refusal', async t => {
   const failure = Object.assign(new Error('synthetic-private-catalog-detail'), {
     code: 'BACKUP_RUNTIME_INCOMPATIBLE', recoveryRequired: false, detail: '/synthetic/private-backup',
@@ -1020,6 +1099,22 @@ for (const phase of ['adapterFailure', 'gatewayFailure']) test(`startup ${phase}
   const h = await harness(t, { [phase]: true }); await h.start(); await h.shutdown();
   assert.equal(h.children.length, 0); assert.equal(h.browser.length, 0); assert.equal(h.run('runtime.recoveryRequired'), true);
   assert.equal(h.dialogs.length > 0, true); if (phase === 'gatewayFailure') assert.equal(h.events.includes('adapter.close'), true);
+});
+for (const code of ['AI_COST_PG_INVALID', 'AI_COST_PG_PRIVATE_SENTINEL']) test(`adapter initialization reports only the reviewed safety failure code: ${code}`, async t => {
+  const h = await harness(t, { modules: { './ai-egress-postgres.cjs': {
+    async createAiEgressPostgres() {
+      throw Object.assign(new Error('private-sentinel /private/secrets'), { code });
+    },
+  } } });
+  const logs = []; h.context.console = { ...console, error: line => logs.push(line) };
+  await h.start(); await h.shutdown();
+  const expectedCode = code === 'AI_COST_PG_INVALID' ? code : 'MAIN_STARTUP_FAILED';
+  const { parseStartupLine } = require('../src/startup-diagnostics.cjs');
+  const trace = logs.map(parseStartupLine).filter(Boolean);
+  assert.deepEqual(trace.at(-1), { phase: 'SAFETY', state: 'FAILED', code: expectedCode });
+  assert.equal(h.events.includes('safety.open'), false);
+  assert.equal(h.children.length, 0); assert.equal(h.browser.length, 0);
+  assert.doesNotMatch(JSON.stringify(logs), /private-sentinel|private\/secrets|PRIVATE_SENTINEL/);
 });
 for (const buildSequence of [undefined, '01', '-1', '9223372036854775808']) test(`invalid build ${String(buildSequence)} stops before secrets/gateway/adapter`, async t => {
   const h = await harness(t, { buildSequence }); await h.start(); await h.shutdown();

@@ -32,7 +32,12 @@ async function harness(t, { metadata, script = [] }) {
   const safety = { updateState: () => state, async recordStartedBuild() { events.push(['started']); return state; },
     async recordAcceptedManifest(verified) { events.push(['accepted', verified.acceptedSerial]); return state; },
     async sanctionRecoveryRollback(verified) { events.push(['sanctioned', verified.acceptedSerial]); return state; } };
-  if (typeof process.getSystemVersion !== 'function') { process.getSystemVersion = () => '14.6'; t.after(() => { delete process.getSystemVersion; }); }
+  // The signed feed exercises the macOS arm64 updater independently of the test host.
+  for (const [name, value] of Object.entries({ platform: 'darwin', arch: 'arm64', getSystemVersion: () => '14.6' })) {
+    const original = Object.getOwnPropertyDescriptor(process, name);
+    Object.defineProperty(process, name, { configurable: true, value });
+    t.after(() => { if (original) Object.defineProperty(process, name, original); else delete process[name]; });
+  }
   const startup = await openUpdateStartup({ electron, safety, userData, runningBuild: '100', runtimeRoot: userData, execPath: '/x/Contents/MacOS/x',
     resourcesPath: userData, stopRuntime: async () => events.push(['stop']), quit: () => events.push(['quit']), metadata });
   assert.equal(await startup.beforeRuntime(), true);

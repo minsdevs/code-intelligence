@@ -385,8 +385,18 @@ public final class RetainedRunWorkspace implements AutoCloseable {
     private void initializeWindows(Budget budget) throws IOException {
         if (nativeLock != null) return;
         Path repos = properties.reposRoot().toAbsolutePath().normalize();
-        nativeStorage = new WindowsStorage(repos, "workspace");
         try {
+            // Main creates the protected data directory before the backend starts;
+            // the first retained job must create its repos child through that authority.
+            try (WindowsStorage data = new WindowsStorage(repos.getParent(), "workspace")) {
+                WindowsStorage.State expected = data.stat(repos, true, true);
+                if (expected == null) expected = data.mkdir(repos);
+                nativeStorage = new WindowsStorage(repos, "workspace");
+                if (!expected.identity().equals(nativeStorage.rootState.identity())
+                        || !expected.volume().equals(nativeStorage.rootState.volume())
+                        || !expected.owner().equals(nativeStorage.rootState.owner()))
+                    throw failure("WORKSPACE_UNAVAILABLE");
+            }
             root = repos.resolve(".analysis-runs");
             if (nativeStorage.stat(root, true, true) == null) nativeStorage.mkdir(root);
             WindowsStorage.State rootState = nativeStorage.stat(root, true, false);

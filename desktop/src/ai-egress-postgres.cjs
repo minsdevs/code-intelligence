@@ -472,7 +472,9 @@ async function openAiEgressPostgres(options, maintenanceParent) {
   const { psqlPath, installationId } = options; install(installationId);
   if (typeof psqlPath !== 'string' || !path.isAbsolute(psqlPath) || path.resolve(psqlPath) !== psqlPath) fail('INVALID');
   let info; try { info = await fs.lstat(psqlPath); } catch { fail('INVALID'); }
-  if (!info.isFile() || info.isSymbolicLink() || !(info.mode & 0o111)) fail('INVALID');
+  // Windows stat has no POSIX executable bits, including for .exe files. Main
+  // supplies this path only after its runtime inventory/PE verification.
+  if (!info.isFile() || info.isSymbolicLink() || process.platform !== 'win32' && !(info.mode & 0o111)) fail('INVALID');
   const connection = options.connection;
   exact(connection, ['host', 'port', 'user', 'database']);
   if (connection.host !== '127.0.0.1' || !Number.isInteger(connection.port) || connection.port < 1 || connection.port > 65535

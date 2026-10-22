@@ -40,15 +40,22 @@ function installAdapterSupervisor(context, metadata = packageMetadata, install =
   return true;
 }
 
-module.exports = async function afterPack(context) {
+async function applyProductFuses(context) {
   const fuses = fusesFor(context.packager.appInfo.id);
   const config = await context.packager.generateFuseConfig({
     ...fuses, resetAdHocDarwinSignature: context.electronPlatformName === 'darwin'
   });
   await context.packager.addElectronFuses(context, config);
+}
+module.exports = async function afterPack(context) {
+  if (context.electronPlatformName === 'win32') {
+    await require('./sign-windows-runtime.cjs').verifyPackagedWindowsRuntime(context);
+  }
+  await applyProductFuses(context);
   installAdapterSupervisor(context);
 };
 module.exports.PRODUCT_FUSES = PRODUCT_FUSES;
 module.exports.VALIDATION_APP_ID = VALIDATION_APP_ID;
 module.exports.fusesFor = fusesFor;
 module.exports.installAdapterSupervisor = installAdapterSupervisor;
+module.exports.applyProductFuses = applyProductFuses;

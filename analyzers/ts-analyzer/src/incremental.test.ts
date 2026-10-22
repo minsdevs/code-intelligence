@@ -90,7 +90,7 @@ describe('incremental whole-manifest extraction', () => {
     const unchanged = refresh(files, first)
     expect(unchanged.reused).toHaveLength(files.length)
     expect(refresh(body, unchanged.result).reused).toContain('alone.ts')
-  })
+  }, 30_000) // Repeated full-program comparisons need headroom on shared CI runners.
 
 
 

@@ -30,6 +30,39 @@ function negativeConnection({ port, ca, command, encrypted, expectErrorReply = f
     socket.once('close', () => finish(expectErrorReply ? new Error('CACHE_NEGATIVE_AUTH_NO_REPLY') : null));
   });
 }
+function cacheStartupEvidence(file, exitStatus) {
+  let text = '', readable = false;
+  try {
+    const stat = fs.lstatSync(file);
+    if (stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1) {
+      const fd = fs.openSync(file, 'r');
+      try {
+        const bytes = Buffer.alloc(Math.min(stat.size, 64 * 1024));
+        const count = fs.readSync(fd, bytes, 0, bytes.length, Math.max(0, stat.size - bytes.length));
+        text = bytes.subarray(0, count).toString('utf8'); bytes.fill(0); readable = true;
+      } finally { fs.closeSync(fd); }
+    }
+  } catch { /* Missing evidence cannot mask the observed process exit. */ }
+  const reasons = [
+    ['server-initialization', /Unable to initialize server due to exception/],
+    ['configuration', /(?:Unknown|Unrecognized|Invalid) (?:option|argument)|Error parsing|Failed to parse|OptionValidation/i],
+    ['tls-certificate', /CryptographicException|AuthenticationException|(?:failed|unable|invalid)[^\r\n]{0,80}certificate|certificate[^\r\n]{0,80}(?:failed|invalid)/i],
+    ['native-library', /DllNotFoundException|BadImageFormatException|Unable to load (?:DLL|shared library)|Failed to load.*(?:hostfxr|hostpolicy)/i],
+    ['dotnet-runtime', /You must install or update \.NET|Failed to create CoreCLR|failed to load coreclr/i],
+    ['permission', /UnauthorizedAccessException|Access is denied|Permission denied/i],
+    ['missing-file', /FileNotFoundException|DirectoryNotFoundException/],
+    ['address-in-use', /Address already in use|Only one usage of each socket address/i],
+    ['memory', /OutOfMemoryException|InsufficientMemoryException/],
+  ].filter(([, pattern]) => pattern.test(text)).map(([reason]) => reason);
+  const exceptions = ['ArgumentException', 'ArgumentNullException', 'ArgumentOutOfRangeException', 'InvalidOperationException',
+    'NotSupportedException', 'PlatformNotSupportedException', 'FormatException', 'JsonException', 'JsonReaderException',
+    'CryptographicException', 'AuthenticationException', 'DllNotFoundException', 'BadImageFormatException',
+    'TypeInitializationException', 'FileNotFoundException', 'DirectoryNotFoundException', 'UnauthorizedAccessException',
+    'IOException', 'SocketException', 'OutOfMemoryException', 'InsufficientMemoryException']
+    .filter(name => new RegExp('\\b' + name + '\\b').test(text));
+  return { status: 'FAIL', exitStatus: Number.isInteger(exitStatus) ? exitStatus : null,
+    signal: null, logReadable: readable, reasons, exceptions };
+}
 async function cacheCompatibility({ source, runtime, owned, env, run, report }) {
   const { createWindowsBoundary } = require(path.join(source, 'desktop', 'src', 'windows-native-boundary.cjs'));
   const { createServiceTransport } = require(path.join(source, 'desktop', 'src', 'service-transport.cjs'));
@@ -40,12 +73,20 @@ async function cacheCompatibility({ source, runtime, owned, env, run, report }) 
   const ports = {}; for (const name of ['postgres', 'redis', 'backend', 'analyzer']) ports[name] = await unusedPort();
   const transport = await createServiceTransport({ userData, ports, getApiToken: () => crypto.randomBytes(32).toString('hex'), windowsBoundary });
   let cache;
+  const logPath = path.join(userData, 'cache-private.log');
   try {
     cache = await spawnManagedProcess({ javaPath: path.join(runtime, 'jre', 'bin', 'java.exe'), jarPath: path.join(runtime, 'backend', 'code-intelligence.jar'),
-      command: path.join(runtime, 'cache', 'GarnetServer.exe'), args: ['--config-import-path', transport.redisConfig, '--config-import-format', 'Garnet'],
-      cwd: userData, env: inheritedEnvironment(env, 'win32'), logPath: path.join(userData, 'cache-private.log') });
+      command: path.join(runtime, 'cache', 'GarnetServer.exe'), args: ['--config-import-path', transport.redisConfig, '--config-import-format', 'GarnetConf'],
+      cwd: userData, env: inheritedEnvironment(env, 'win32'), logPath });
     let ready = false; const deadline = Date.now() + 60000;
-    while (Date.now() < deadline) { if (cache.stopped()) throw new Error('GARNET_EXITED'); if (await transport.redisReady()) { ready = true; break; } await new Promise(resolve => setTimeout(resolve, 200)); }
+    while (Date.now() < deadline) {
+      if (cache.stopped()) {
+        report.cacheStartup = cacheStartupEvidence(logPath, cache.exitCode);
+        throw Object.assign(new Error('GARNET_EXITED'), { exitStatus: report.cacheStartup.exitStatus });
+      }
+      if (await transport.redisReady()) { ready = true; break; }
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
     assert.ok(ready, 'Real TLS+AUTH Garnet startup required');
     const material = transport.materials.redis;
     await negativeConnection({ port: ports.redis, ca: material.caPem, encrypted: true, command: '*1\r\n$4\r\nPING\r\n', expectErrorReply: true });
@@ -108,4 +149,4 @@ async function runWindowsProduct({ source, owned, artifacts, report, env, run, p
   await require('./native-acceptance-electron.cjs').runProduct({ source, owned, artifacts, report, env: buildEnv, phase });
   report.productAcceptance = { status: 'PASS', scope: 'fresh-standard-user-unsigned-development-runtime', signedInstallation: false };
 }
-module.exports = { runWindowsProduct, negativeConnection };
+module.exports = { runWindowsProduct, negativeConnection, cacheStartupEvidence };

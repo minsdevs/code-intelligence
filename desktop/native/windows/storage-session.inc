@@ -94,18 +94,31 @@ void checkStorageLock(StorageFile& entry, bool managed, unsigned char* scratch) 
     SecureZeroMemory(scratch, entry.marker.data.size());
     require(storageState(entry.handle.value, false, true, managed).token() == before.token());
 }
+bool backupOutputName(const std::string& name) {
+    const std::string prefix = "CodeIntelligence-";
+    if (name.size() != prefix.size() + 36 || name.compare(0, prefix.size(), prefix) != 0) return false;
+    for (size_t index = 0; index < 36; ++index) {
+        const char value = name[prefix.size() + index];
+        if (index == 8 || index == 13 || index == 18 || index == 23) { if (value != '-') return false; }
+        else if (!((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f'))) return false;
+    }
+    return true;
+}
 void storageSession() {
     inputMaximum = STORAGE_CHUNK + 65536; inputBytes = 0;
     const auto root = checkedPath(wide(field(16384)));
-    const auto scope = field(16); require(scope == "private" || scope == "workspace" || scope == "source");
-    const bool privateObject = scope != "source", managed = scope == "workspace";
+    const auto scope = field(16); require(scope == "private" || scope == "workspace" || scope == "source" || scope == "backup-output");
+    const bool backupOutput = scope == "backup-output", privateObject = scope != "source" && !backupOutput, managed = scope == "workspace";
     auto rootParents = ancestors(root);
     auto rootHandle = openObject(root, true, READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE);
-    const auto rootIdentity = storageState(rootHandle.value, true, privateObject).identity();
+    const auto rootState = storageState(rootHandle.value, true, privateObject);
+    const auto rootIdentity = rootState.identity();
     if (managed) requirePrivateInheritance(rootHandle.value);
     auto verifyRoot = [&]() {
         for (const auto& parent : rootParents) inspect(parent.value, true, false, true);
-        require(storageState(rootHandle.value, true, privateObject).identity() == rootIdentity);
+        const auto current = storageState(rootHandle.value, true, privateObject);
+        require(current.identity() == rootIdentity);
+        if (backupOutput) require(current.volume == rootState.volume && current.owner == rootState.owner);
         if (managed) requirePrivateInheritance(rootHandle.value);
     };
     auto resolve = [&](const std::string& relative, bool rootAllowed = false) {
@@ -115,6 +128,9 @@ void storageSession() {
         return checkedPath(root + L"\\" + suffix);
     };
     uint32_t sequence = 0, nextHandle = 0;
+    std::wstring outputDirectory;
+    StorageState outputState;
+    bool outputDiscarded = false;
     std::unordered_map<uint32_t, StorageFile> files;
     Secret bytes; bytes.data.resize(STORAGE_CHUNK);
     Secret verification; verification.data.resize(65536);
@@ -125,22 +141,50 @@ void storageSession() {
         require(ungetc(first, stdin) != EOF); inputBytes = 0;
         const auto operation = field(32); const auto request = number();
         require(sequence != UINT32_MAX && request == ++sequence); verifyRoot();
+        // A selected output parent confers only fresh-child allocation authority.
+        // Keep these limits native even if a caller bypasses the JavaScript client.
+        if (backupOutput) require(operation == "close" || operation == "stat" || operation == "capacity"
+            || operation == "mkdir" || operation == "discard-output");
         std::string result = "{\"seq\":" + std::to_string(sequence); size_t outputBytes = 0, usedBytes = 0;
         if (operation == "close") { require(files.empty()); storageJson(result + "}"); return; }
         if (operation == "stat") {
-            const auto file = resolve(field(16384), true); const bool directory = number() != 0, missing = number() != 0;
+            const auto relative = field(16384); const auto directoryFlag = number(), missingFlag = number();
+            if (backupOutput) require(relative.empty() && directoryFlag == 1 && missingFlag == 0);
+            const auto file = resolve(relative, true); const bool directory = directoryFlag != 0, missing = missingFlag != 0;
             auto parents = ancestors(file);
             Handle handle(CreateFileW(filesystemPath(file).c_str(), READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE,
                 nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | (directory ? FILE_FLAG_BACKUP_SEMANTICS : 0), nullptr));
             if (handle.value == INVALID_HANDLE_VALUE) { require(missing && GetLastError() == ERROR_FILE_NOT_FOUND); result += ",\"state\":null"; }
             else { canonicalHandle(handle.value, file); result += ",\"state\":" + storageState(handle.value, directory, privateObject, managed && file != root).jsonValue(); }
         } else if (operation == "mkdir") {
-            require(privateObject); const auto file = resolve(field(16384)); const bool inherit = number() != 0;
+            require(privateObject || backupOutput); const auto relative = field(16384); const auto inheritFlag = number();
+            if (backupOutput) require(outputDirectory.empty() && backupOutputName(relative) && inheritFlag == 1);
+            const auto file = resolve(relative); const bool inherit = inheritFlag != 0;
             auto parents = ancestors(file); PrivateSecurity descriptor(inherit);
             require(CreateDirectoryW(filesystemPath(file).c_str(), &descriptor.attributes) != 0);
             auto handle = openObject(file, true, READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE);
             if (inherit) requirePrivateInheritance(handle.value);
-            result += ",\"state\":" + storageState(handle.value, true, true).jsonValue();
+            const auto created = storageState(handle.value, true, true);
+            if (backupOutput) {
+                require(created.volume == rootState.volume);
+                outputDirectory = file; outputState = created;
+            }
+            result += ",\"state\":" + created.jsonValue();
+        } else if (operation == "discard-output") {
+            require(backupOutput && !outputDirectory.empty() && !outputDiscarded);
+            const auto expected = field(256); require(expected == outputState.identity());
+            auto parents = ancestors(outputDirectory);
+            // A live child workspace must close first. This DELETE-capable handle
+            // then pins the exact child while identity, ACL and emptiness are checked.
+            auto handle = openObject(outputDirectory, true, DELETE | READ_CONTROL | FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE);
+            const auto current = storageState(handle.value, true, true);
+            require(current.identity() == outputState.identity() && current.volume == outputState.volume && current.owner == outputState.owner);
+            requirePrivateInheritance(handle.value);
+            FILE_DISPOSITION_INFO disposition{}; disposition.DeleteFile = TRUE;
+            // NTFS refuses directory disposition when any child entry remains.
+            require(SetFileInformationByHandle(handle.value, FileDispositionInfo, &disposition, sizeof(disposition)) != 0);
+            outputDiscarded = true;
         } else if (operation == "lock") {
             require(privateObject && files.size() < 64 && nextHandle != UINT32_MAX);
             const auto file = resolve(field(16384)); const auto length = number(); require(length > 0 && length <= 4096);

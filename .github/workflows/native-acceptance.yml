@@ -55,6 +55,85 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Prepare disposable native UI display
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          node -e "const context = require('./desktop/scripts/native-acceptance-context.cjs').requireExecutionContext(); if (context.kind !== 'github-hosted') throw new Error('HOSTED_DISPLAY_PREPARATION_REQUIRED');"
+          display_work="$(mktemp -d "$RUNNER_TEMP/native-display.XXXXXX")"
+          trap 'rm -rf "$display_work"' EXIT
+          cat > "$display_work/display.swift" <<'SWIFT'
+          import AppKit
+          import CoreGraphics
+          import Foundation
+
+          let environment = ProcessInfo.processInfo.environment
+          guard environment["GITHUB_ACTIONS"] == "true",
+                environment["RUNNER_ENVIRONMENT"] == "github-hosted",
+                environment["NATIVE_ACCEPTANCE_CONSENT"] == "disposable-hosted-os",
+                environment["NATIVE_ACCEPTANCE_CONTEXT"] == nil else {
+              print("HOSTED_DISPLAY_PREPARATION_REQUIRED")
+              exit(2)
+          }
+          _ = NSApplication.shared
+          let display = CGMainDisplayID()
+          // Reserve frame, menu and Dock space beyond the largest 1440x900 content capture.
+          let minimumWorkWidth = 1460, minimumWorkHeight = 960
+          func geometry() -> [String: Int] {
+              guard let screen = NSScreen.screens.first(where: {
+                  ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == display
+              }) else { return [:] }
+              return ["width": Int(screen.frame.width), "height": Int(screen.frame.height),
+                      "workWidth": Int(screen.visibleFrame.width), "workHeight": Int(screen.visibleFrame.height)]
+          }
+          func sufficient(_ value: [String: Int]) -> Bool {
+              (value["workWidth"] ?? 0) >= minimumWorkWidth && (value["workHeight"] ?? 0) >= minimumWorkHeight
+          }
+          var report: [String: Any] = ["format": 1, "requiredContent": [1440, 900],
+              "minimumWorkArea": [minimumWorkWidth, minimumWorkHeight], "before": geometry(), "changed": false]
+          func finish(_ code: String, _ status: Int32) -> Never {
+              report["status"] = status == 0 ? "PASS" : "FAIL"
+              report["code"] = code
+              report["after"] = geometry()
+              let data = try! JSONSerialization.data(withJSONObject: report, options: [.sortedKeys])
+              print(String(decoding: data, as: UTF8.self))
+              FileHandle.standardError.write(Data((code + "\n").utf8))
+              exit(status)
+          }
+          if sufficient(geometry()) { finish("NATIVE_DISPLAY_ALREADY_SUFFICIENT", 0) }
+          let modes = (CGDisplayCopyAllDisplayModes(display, nil) as? [CGDisplayMode] ?? []).prefix(256)
+          report["availableLogicalSizes"] = modes.map { [$0.width, $0.height] }
+          guard let selected = modes.filter({ $0.width >= 1920 && $0.height >= 1080
+              && $0.width <= 32768 && $0.height <= 32768 && $0.isUsableForDesktopGUI() })
+              .min(by: { $0.width * $0.height < $1.width * $1.height }) else {
+              finish("NATIVE_DISPLAY_SUPPORTED_MODE_UNAVAILABLE", 3)
+          }
+          var configuration: CGDisplayConfigRef?
+          guard CGBeginDisplayConfiguration(&configuration) == .success, let configuration else {
+              finish("NATIVE_DISPLAY_CONFIGURATION_UNAVAILABLE", 3)
+          }
+          let configured = CGConfigureDisplayWithDisplayMode(configuration, display, selected, nil)
+          guard configured == .success else {
+              CGCancelDisplayConfiguration(configuration)
+              finish("NATIVE_DISPLAY_CONFIGURATION_FAILED", 3)
+          }
+          guard CGCompleteDisplayConfiguration(configuration, .forSession) == .success else {
+              finish("NATIVE_DISPLAY_SESSION_APPLY_FAILED", 3)
+          }
+          report["changed"] = true
+          report["selectedLogicalSize"] = [selected.width, selected.height]
+          let deadline = Date().addingTimeInterval(5)
+          while !sufficient(geometry()) && Date() < deadline {
+              RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+          }
+          finish(sufficient(geometry()) ? "NATIVE_DISPLAY_PREPARED" : "NATIVE_DISPLAY_WORK_AREA_INSUFFICIENT",
+                 sufficient(geometry()) ? 0 : 3)
+          SWIFT
+          /usr/bin/xcrun swiftc "$display_work/display.swift" -o "$display_work/display"
+          mkdir -p "$RUNNER_TEMP/native-acceptance-artifacts"
+          "$display_work/display" > "$RUNNER_TEMP/native-acceptance-artifacts/display.json"
       - name: Provision verified native runtime (no background services)
         timeout-minutes: 8
         run: bash desktop/scripts/native-acceptance-macos.sh
@@ -74,7 +153,8 @@ jobs:
   windows:
     if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && inputs.disposable_os_consent && (inputs.platform == 'windows-2025' || inputs.platform == 'both'))
     runs-on: windows-2025
-    timeout-minutes: 20
+    # Keep setup and evidence upload outside the bounded standard-user run.
+    timeout-minutes: 38
     env:
       CODE_INTELLIGENCE_BUILD_SEQUENCE: ${{ inputs.build_sequence || github.run_number }}
       NATIVE_ACCEPTANCE_CONSENT: disposable-hosted-os
@@ -91,7 +171,8 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Run real native boundaries under a new standard-user token
-        timeout-minutes: 18
+        # Allow up to 2 minutes of logon, 30 minutes of work, then owned cleanup.
+        timeout-minutes: 34
         shell: pwsh
         run: ./desktop/scripts/native-acceptance-windows.ps1
       - name: Preserve credential-free diagnostic evidence

@@ -4,8 +4,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { EventEmitter } = require('node:events');
 const { createRequire } = require('node:module');
-const { parseStartupLine, parseShutdownLine, parseIntegrityLine } = require('../src/startup-diagnostics.cjs');
+const { parseStartupLine, parseShutdownLine, parseIntegrityLine, parseRestoreLine, parseBackupLine } = require('../src/startup-diagnostics.cjs');
 const { expectedServices: adapterServices } = require('../../validation/pre-release/adapter-mode.cjs');
 const { withDropConfirmation } = require('../../validation/pre-release/drop-confirmation.cjs');
 
@@ -84,7 +85,43 @@ function createDeadline(timeoutMs = 540000, now = () => performance.now()) {
   } };
 }
 
-function observeStartup(child, report, save, now = () => performance.now()) {
+async function waitForRestoreReload({ diagnostics, report, perform, reload, confirm }) {
+  let rejectFailure;
+  const failure = new Promise((_, reject) => { rejectFailure = reject; });
+  // A diagnostic may arrive before the deadline admits the action. Always own its
+  // rejection, including when the deadline has already stopped subsequent work.
+  failure.catch(() => {});
+  const onFailure = () => rejectFailure(new Error('NATIVE_RESTORE_FAILED'));
+  diagnostics.on('restore-failure', onFailure);
+  try {
+    return await perform(() => {
+      if (report.restoreFailure) throw new Error('NATIVE_RESTORE_FAILED');
+      // Register the real navigation before clicking; diagnostics can only fail
+      // this wait, never replace navigation as the successful restore condition.
+      return Promise.race([Promise.all([Promise.resolve().then(reload), Promise.resolve().then(confirm)]), failure]);
+    }, 120000, 'NATIVE_RESTORE_TIMEOUT');
+  } finally { diagnostics.off('restore-failure', onFailure); }
+}
+
+async function waitForBackupResult({ diagnostics, report, perform, start, result }) {
+  let rejectFailure;
+  const failure = new Promise((_, reject) => { rejectFailure = reject; });
+  failure.catch(() => {});
+  const onFailure = () => rejectFailure(new Error('NATIVE_BACKUP_FAILED'));
+  // Selection and admission can fail during the click, before the result wait.
+  diagnostics.on('backup-failure', onFailure);
+  const raceFailure = action => {
+    if (report.backupFailure) throw new Error('NATIVE_BACKUP_FAILED');
+    return Promise.race([Promise.resolve().then(action), failure]);
+  };
+  try {
+    await perform(() => raceFailure(start));
+    // Keep the original result assertion and its budget as the success gate.
+    return await perform(() => raceFailure(result), 120000, 'NATIVE_BACKUP_TIMEOUT');
+  } finally { diagnostics.off('backup-failure', onFailure); }
+}
+
+function observeStartup(child, report, save, now = () => performance.now(), maintenanceDiagnostics) {
   let line = '', dropping = false, shutdownStarted;
   const data = bytes => {
     for (const character of bytes.toString('utf8')) {
@@ -93,6 +130,14 @@ function observeStartup(child, report, save, now = () => performance.now()) {
         if (value && report.startup?.state !== 'FAILED') { report.startup = value; save(); }
         const integrity = dropping ? null : parseIntegrityLine(line.replace(/\r$/, ''));
         if (integrity && !report.integrityFailure) { report.integrityFailure = integrity; save(); }
+        const restore = dropping ? null : parseRestoreLine(line.replace(/\r$/, ''));
+        if (restore && !report.restoreFailure) {
+          report.restoreFailure = restore; save(); maintenanceDiagnostics?.emit('restore-failure');
+        }
+        const backup = dropping ? null : parseBackupLine(line.replace(/\r$/, ''));
+        if (backup && !report.backupFailure) {
+          report.backupFailure = backup; save(); maintenanceDiagnostics?.emit('backup-failure');
+        }
         const shutdown = dropping ? null : parseShutdownLine(line.replace(/\r$/, ''));
         if (shutdown) {
           shutdownStarted ??= now();
@@ -131,6 +176,35 @@ async function verifyRevokedAuthority({ dataRoot, apiBaseUrl, apiToken, oldToken
   } finally { await client.close(); }
 }
 
+function applicationProfileName(sourceMetadata, appBundle, extractFile) {
+  // Electron initializes app.name from the launched package's productName, then
+  // name. Validation packaging overrides both, so source metadata is insufficient.
+  const metadata = appBundle
+    ? JSON.parse(extractFile(path.join(appBundle, 'Contents', 'Resources', 'app.asar'), 'package.json').toString('utf8'))
+    : sourceMetadata;
+  const value = metadata.productName ?? metadata.name;
+  assert.equal(typeof value, 'string', 'Application profile name must come from launch metadata');
+  const name = value.trim();
+  assert.ok(name && name !== '.' && name !== '..' && !/[\\/\x00-\x1f\x7f]/.test(name), 'Invalid application profile name');
+  return name;
+}
+
+// These callbacks also run inside Electron. Keep evidence numeric/boolean only:
+// never retain a window title, URL, display label or the complete native object.
+function nativeWindowGeometry(win) {
+  const rectangle = value => ({ x: value.x, y: value.y, width: value.width, height: value.height });
+  const size = value => [value[0], value[1]];
+  return { bounds: rectangle(win.getBounds()), contentBounds: rectangle(win.getContentBounds()),
+    minimumSize: size(win.getMinimumSize()), maximumSize: size(win.getMaximumSize()),
+    resizable: win.isResizable(), maximized: win.isMaximized(), fullscreen: win.isFullScreen(),
+    zoomFactor: win.webContents.getZoomFactor() };
+}
+function nativeDisplayGeometry({ screen }) {
+  const rectangle = value => ({ x: value.x, y: value.y, width: value.width, height: value.height });
+  return screen.getAllDisplays().slice(0, 8).map(display => ({ bounds: rectangle(display.bounds),
+    workArea: rectangle(display.workArea), scaleFactor: display.scaleFactor }));
+}
+
 async function runProduct({ source, owned, artifacts, report, env, phase }) {
   // Direct callers must prove the same execution boundary before loading Electron.
   const { recordFailure } = require('./native-acceptance.cjs');
@@ -157,7 +231,8 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   // ADR-01: an xpc-required bundle runs no persistent ts-analyzer child; a development app is legacy-http.
   const expectedServices = packaged ? adapterServices(report.appBundle) : ['backend', 'postgres', 'redis', 'ts-analyzer'];
   const desktopPackage = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8'));
-  const packageName = desktopPackage.name;
+  const packageName = applicationProfileName(desktopPackage, report.appBundle,
+    packaged ? createRequire(path.join(desktop, 'package.json'))('@electron/asar').extractFile : undefined);
   let validationPlan;
   if (context.kind === 'isolated-macos-host') {
     const runs = context.isolatedRunParent;
@@ -190,6 +265,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   const secret = crypto.randomBytes(32).toString('hex');
   const cipherPath = path.join(owned, 'safestorage-probe.enc');
   let app, ownedApplication, page, userData, projectId, snapshotId, stopObserving;
+  const maintenanceDiagnostics = new EventEmitter();
   let pageErrors = 0;
   const step = (name, action, timeoutMs = 30000) => {
     phase(name);
@@ -207,7 +283,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     delete report.startup;
     delete report.integrityFailure;
     delete report.shutdown; delete report.shutdownTrace;
-    stopObserving = observeStartup(ownedChild, report, () => phase(report.phase));
+    stopObserving = observeStartup(ownedChild, report, () => phase(report.phase), undefined, maintenanceDiagnostics);
     phase('electron-first-window');
     const remaining = Math.floor(startupEnds - performance.now());
     if (remaining <= 0) throw new Error('NATIVE_STARTUP_TIMEOUT');
@@ -356,9 +432,17 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     // Captures are only taken on project metadata pages, never source/secret/settings views.
     const window = await step('native-window-handle', () => app.browserWindow(page));
     for (const [width, height] of [[980, 700], [1280, 800], [1440, 900]]) {
+      const geometry = report.windowGeometry = { requested: [width, height],
+        before: await perform(() => window.evaluate(nativeWindowGeometry)),
+        displays: await perform(() => app.evaluate(nativeDisplayGeometry)) };
       await step('native-' + label + '-size-' + width + 'x' + height,
         () => window.evaluate((win, size) => { win.setContentSize(size.width, size.height); win.show(); }, { width, height }));
-      await perform(() => expect.poll(() => perform(() => page.evaluate(() => [innerWidth, innerHeight]))).toEqual([width, height]));
+      geometry.after = await perform(() => window.evaluate(nativeWindowGeometry));
+      await step('native-' + label + '-viewport-' + width + 'x' + height, () => expect.poll(async () => {
+        geometry.viewport = await perform(() => page.evaluate(() => [innerWidth, innerHeight]));
+        phase(report.phase);
+        return geometry.viewport;
+      }).toEqual([width, height]));
       await step('native-window-paint', () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
       assert.equal(await perform(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth)), false, 'Horizontal overflow');
       const image = await step('native-window-capture', () => window.evaluate(async win => (await win.capturePage()).toPNG({ scaleFactor: 1 }).toString('base64')));
@@ -417,6 +501,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     assert.deepEqual([...status.services].sort(), expectedServices);
   };
   const restoreArchive = async (file, expectedSource, expectedSnapshot) => {
+    delete report.restoreFailure;
     const recovery = path.join(report.productDataRoot, 'recovery');
     const before = new Set(fs.readdirSync(recovery));
     const oldToken = await perform(() => page.evaluate(() => window.codeIntelligenceDesktop.apiToken));
@@ -427,10 +512,9 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       // Production resume rotates credentials and reloads the renderer before
       // replying to the old IPC caller. Observe that real navigation, not a
       // substituted restore return value or the now-destroyed JS context.
-      await perform(() => Promise.all([
-        page.waitForEvent('domcontentloaded', { timeout: deadline.limit(120000) }),
-        confirm.click(),
-      ]), 120000, 'NATIVE_RESTORE_TIMEOUT');
+      await waitForRestoreReload({ diagnostics: maintenanceDiagnostics, report, perform,
+        reload: () => page.waitForEvent('domcontentloaded', { timeout: deadline.limit(120000) }),
+        confirm: () => confirm.click() });
       await perform(() => expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible());
       await readyAfterMaintenance();
     });
@@ -551,13 +635,15 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     await sourceContent(first, snapshotId);
     report.checks.push('electron-safeStorage-api-decrypt-after-automation-restart', 'real-database-and-encrypted-source-persistence');
     phase('real-main-backup');
+    delete report.backupFailure;
     report.backupRestore = { status: 'RUNNING', filePicker: 'controlled-single-use-selection', nativePickerInteraction: false };
     const destination = path.join(owned, 'native-backup-destination'); fs.mkdirSync(destination, { mode: 0o700 });
     await navigate('/settings');
     const backupFile = await withArchivePicker('backup', destination, async () => {
-      await perform(() => page.getByRole('button', { name: /^(Create backup|백업 생성)$/ }).click());
       const result = page.locator('dd').filter({ hasText: /\.cibackup$/ });
-      await perform(() => expect(result).toHaveCount(1, { timeout: deadline.limit(120000) }), 120000, 'NATIVE_BACKUP_TIMEOUT');
+      await waitForBackupResult({ diagnostics: maintenanceDiagnostics, report, perform,
+        start: () => page.getByRole('button', { name: /^(Create backup|백업 생성)$/ }).click(),
+        result: () => expect(result).toHaveCount(1, { timeout: deadline.limit(120000) }) });
       await readyAfterMaintenance();
       return selectedArchive((await perform(() => result.textContent())).trim(), [destination]);
     });
@@ -747,4 +833,5 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   }
   if (failure) throw failure;
 }
-module.exports = { runProduct, closeOwnedApplication, closeValidatedApplication, createDeadline, observeStartup, verifyRevokedAuthority };
+module.exports = { runProduct, closeOwnedApplication, closeValidatedApplication, createDeadline, observeStartup, verifyRevokedAuthority,
+  applicationProfileName, nativeWindowGeometry, nativeDisplayGeometry, waitForRestoreReload, waitForBackupResult };

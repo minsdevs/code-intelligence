@@ -1,0 +1,30 @@
+{
+  "postgres": {
+    "version": "16.10",
+    "url": "https://ftp.postgresql.org/pub/source/v16.10/postgresql-16.10.tar.bz2",
+    "sha256": "de8485f4ce9c32e3ddfeef0b7c261eed1cecb54c9bcd170e437ff454cb292b42",
+    "prefix": "postgresql-16.10",
+    "license": "PostgreSQL"
+  },
+  "pgvector": {
+    "version": "0.8.1",
+    "url": "https://codeload.github.com/pgvector/pgvector/tar.gz/refs/tags/v0.8.1",
+    "sha256": "a9094dfb85ccdde3cbb295f1086d4c71a20db1d26bf1d6c39f07a7d164033eb4",
+    "prefix": "pgvector-0.8.1",
+    "license": "PostgreSQL"
+  },
+  "redis": {
+    "version": "7.2.11",
+    "url": "https://download.redis.io/releases/redis-7.2.11.tar.gz",
+    "sha256": "2f9886eca68d30114ad6a01da65631f8007d802fd3e6c9fac711251e6390323d",
+    "prefix": "redis-7.2.11",
+    "license": "BSD-3-Clause"
+  },
+  "jdk": {
+    "version": "21.0.8+9",
+    "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jdk_x64_linux_hotspot_21.0.8_9.tar.gz",
+    "sha256": "f2dc5418092c43003db8f9005c4a286e1c0104fea96ccdd49e8ebd037cac9219",
+    "prefix": "jdk-21.0.8+9",
+    "license": "GPL-2.0-with-classpath-exception and bundled dependency licenses"
+  }
+}

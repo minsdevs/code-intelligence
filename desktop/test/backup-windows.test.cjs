@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const vm = require('node:vm');
 const { createWindowsBoundary } = require('../src/windows-native-boundary.cjs');
 const { writeStorageFile, readStorageFile } = require('../src/windows-storage-files.cjs');
 const { createBackupRecoveryRecords } = require('../src/backup-recovery-records.cjs');
@@ -121,6 +122,23 @@ test('native platform writer creates fresh file and namespace cleanup requires c
   const { bytes } = await readStorageFile(f.storage, 'copy.bin', 32); assert.equal(bytes.toString(), 'copied'); bytes.fill(0);
   await io.lstat(file); await io.unlink(file); assert.equal(await f.storage.stat('copy.bin', { missing: true }), null);
 });
+test('native destination bridge pins an inherited parent only for one output operation', { skip: !enabled }, async t => {
+  const f = await fixture(t), selected = path.join(path.dirname(f.root), 'chosen inherited destination');
+  await fs.mkdir(selected); await fs.writeFile(path.join(selected, 'unrelated.txt'), 'preserved');
+  await assert.rejects(f.windowsBoundary.openStorage(selected, { mode: 'workspace' }));
+  const io = await createBackupPlatformIO(f.windowsBoundary, f.root); f.resources.push(io);
+  await assert.rejects(io.prepareBackupDestination(f.root.toUpperCase(), `CodeIntelligence-${crypto.randomUUID()}`));
+  const first = await io.prepareBackupDestination(selected, `CodeIntelligence-${crypto.randomUUID()}`); f.resources.push(first);
+  assert.match(f.windowsBoundary.inspect(first.root, { directory: true }), /^\d+:\d+:\d+$/);
+  await assert.rejects(fs.rename(selected, selected + '-moved'));
+  await io.rmdir(first.root); await first.close();
+  await assert.rejects(fs.stat(first.root), { code: 'ENOENT' });
+  const second = await io.prepareBackupDestination(selected, `CodeIntelligence-${crypto.randomUUID()}`); f.resources.push(second);
+  await second.close(); await second.close();
+  await fs.rename(selected, selected + '-moved');
+  assert.equal(await fs.readFile(path.join(selected + '-moved', 'unrelated.txt'), 'utf8'), 'preserved');
+  assert.ok((await fs.stat(path.join(selected + '-moved', path.basename(second.root)))).isDirectory());
+});
 test('native marker requires both enrolled slots even when the remaining slot authenticates', { skip: !enabled }, async t => {
   const f = await fixture(t), root = path.join(f.root, 'records');
   const options = { root, windowsBoundary: f.windowsBoundary, installationId: f.installationId, runningBuild: '3', keyProvider: f.keyProvider };
@@ -150,4 +168,116 @@ test('tagged backup identities reject POSIX impostors, mixed schemas and accesso
   let accessed = false; const hostile = { version: 1, identity: 'WI1:1:2:3' };
   Object.defineProperty(hostile, 'platform', { enumerable: true, get() { accessed = true; return 'win32'; } });
   assert.throws(() => checkedIdentity(hostile)); assert.equal(accessed, false);
+});
+
+// Bridge protocol model only; ACLs, native deletion, and pinned handles are tested above/on Windows.
+async function destinationModel(t, options = {}) {
+  const win = path.win32, root = 'C:\\Profile\\Private', selected = 'C:\\Chosen';
+  const states = new Map(), sessions = [], events = []; let nextId = 0;
+  const makeState = file => {
+    const id = ++nextId;
+    return { format: 1, platform: 'win32', kind: 'directory', volume: '1', fileId: `0:${id}`,
+      owner: 'S-1-5-21-123', identity: `WI1:1:0:${id}`, token: `WS1:1:0:${id}:0:0:0:0`, size: '0' };
+  };
+  states.set(root, makeState(root)); states.set(selected, makeState(selected));
+  const same = (a, b) => a?.identity === b?.identity && a?.volume === b?.volume && a?.owner === b?.owner;
+  const boundary = { async openStorage(base, { mode }) {
+    assert.ok(states.has(base));
+    if (base === selected) assert.equal(mode, 'backup-output');
+    else assert.equal(mode, 'workspace');
+    if (base !== root && base !== selected && options.openFailure) throw new Error('synthetic child open failed');
+    if (base !== root && base !== selected && options.replace) {
+      const before = states.get(base), replacement = { ...before, ...options.replace };
+      states.set(base, replacement);
+    }
+    const capability = { root: base, mode, rootState: states.get(base), closed: false, created: null,
+      async stat(file = '', { directory }) {
+        assert.equal(this.closed, false); assert.equal(directory, true);
+        const target = file ? win.resolve(base, file) : base;
+        if (mode === 'backup-output') assert.equal(target, base);
+        assert.ok(states.has(target)); return states.get(target);
+      },
+      async mkdir(file, { inherit } = {}) {
+        assert.equal(this.closed, false); assert.equal(inherit, true);
+        const target = win.resolve(base, file); assert.ok(!states.has(target), 'fresh child required');
+        if (mode === 'backup-output') { assert.equal(this.created, null); assert.equal(win.dirname(target), base); }
+        const created = makeState(target); states.set(target, created);
+        events.push(['mkdir', mode, target]);
+        if (mode === 'backup-output') this.created = { target, state: created };
+        return created;
+      },
+      async remove(file, expected) {
+        assert.equal(mode, 'workspace'); assert.equal(this.closed, false);
+        const target = win.resolve(base, file); assert.notEqual(target, base);
+        assert.equal(states.get(target)?.identity, expected); states.delete(target);
+      },
+      async discardOutput(expected) {
+        assert.equal(mode, 'backup-output'); assert.equal(this.closed, false);
+        assert.ok(this.created); assert.ok(same(expected, this.created.state));
+        assert.ok(same(states.get(this.created.target), this.created.state), 'changed output preserved');
+        assert.ok(sessions.filter(s => s.root === this.created.target).every(s => s.closed), 'child pin must close first');
+        assert.ok(![...states.keys()].some(file => file.startsWith(this.created.target + '\\')), 'nonempty output preserved');
+        events.push(['discard', mode, this.created.target]); states.delete(this.created.target);
+      },
+      async capacity() { assert.equal(this.closed, false); return { available: 1000000000n, total: 2000000000n }; },
+      async close() { this.closed = true; events.push(['close', mode, base]); },
+    };
+    sessions.push(capability); return capability;
+  } };
+  const module = { exports: {} }, filename = path.join(__dirname, '../src/backup-platform-io.cjs');
+  const execute = vm.compileFunction(await fs.readFile(filename, 'utf8'), ['require', 'module'], { filename });
+  execute(id => id === 'node:path' ? win : id === 'node:fs/promises' ? {
+    async lstat(file) {
+      if (!states.has(file)) throw Object.assign(new Error('synthetic missing'), { code: 'ENOENT' });
+      return { isDirectory: () => true };
+    },
+  } : require(id.startsWith('./') ? path.resolve(path.dirname(filename), id) : id), module);
+  const io = await module.exports.createBackupPlatformIO(boundary, root); t.after(() => io.close());
+  return { io, root, selected, states, sessions, events };
+}
+const outputName = suffix => `CodeIntelligence-00000000-0000-0000-0000-${suffix.padStart(12, '0')}`;
+test('destination bridge retains selected parent separately and releases both scopes between backups', async t => {
+  const f = await destinationModel(t), lease = await f.io.prepareBackupDestination(f.selected, outputName('1'));
+  assert.equal(f.sessions[1].mode, 'backup-output'); assert.equal(f.sessions[2].mode, 'workspace');
+  const nested = path.win32.join(lease.root, 'inside'); await f.io.mkdir(nested); await f.io.rmdir(nested);
+  assert.equal(f.events.find(row => row[2] === nested)[1], 'workspace');
+  await lease.close(); await lease.close(); assert.ok(f.sessions.slice(1).every(s => s.closed));
+  assert.ok(f.states.has(lease.root), 'successful encrypted output directory remains');
+  const next = await f.io.prepareBackupDestination(f.selected, outputName('2'));
+  assert.equal(f.sessions.length, 5); await next.close();
+});
+test('destination bridge discards only its empty child after releasing the child workspace', async t => {
+  const f = await destinationModel(t), lease = await f.io.prepareBackupDestination(f.selected, outputName('1'));
+  await f.io.rmdir(lease.root); assert.equal(f.states.has(lease.root), false);
+  assert.ok(f.events.findIndex(row => row[0] === 'close' && row[2] === lease.root)
+    < f.events.findIndex(row => row[0] === 'discard'));
+  assert.equal(f.sessions[1].closed, false); await f.io.syncNamespace(f.selected);
+  await lease.close(); assert.ok(f.sessions.slice(1).every(s => s.closed));
+});
+test('destination bridge refuses profile aliases and unscoped names before acquiring output authority', async t => {
+  const f = await destinationModel(t);
+  for (const selected of [f.root, f.root.toLowerCase(), 'c:\\PROFILE\\private\\recovery', 'C:\\', 'C:\\Chosen\\..\\Chosen'])
+    await assert.rejects(f.io.prepareBackupDestination(selected, outputName('1')));
+  for (const name of ['..', 'arbitrary', outputName('1') + '\\nested', outputName('1').toUpperCase(), null])
+    await assert.rejects(f.io.prepareBackupDestination(f.selected, name));
+  assert.equal(f.sessions.length, 1);
+});
+for (const replacement of [{ identity: 'WI1:1:0:999' }, { volume: '2' }, { owner: 'S-1-5-21-456' }])
+  test(`destination bridge preserves a child whose ${Object.keys(replacement)[0]} changes during handoff`, async t => {
+    const f = await destinationModel(t, { replace: replacement });
+    await assert.rejects(f.io.prepareBackupDestination(f.selected, outputName('1')));
+    assert.ok(f.states.has(path.win32.join(f.selected, outputName('1'))));
+    assert.ok(f.sessions.slice(1).every(s => s.closed));
+  });
+test('destination bridge removes only the fresh empty child when opening its workspace fails', async t => {
+  const f = await destinationModel(t, { openFailure: true });
+  await assert.rejects(f.io.prepareBackupDestination(f.selected, outputName('1')));
+  assert.equal(f.states.has(path.win32.join(f.selected, outputName('1'))), false);
+  assert.ok(f.sessions.slice(1).every(s => s.closed));
+});
+test('destination bridge preserves nonempty output on failed cleanup and still releases the parent', async t => {
+  const f = await destinationModel(t), lease = await f.io.prepareBackupDestination(f.selected, outputName('1'));
+  const nested = path.win32.join(lease.root, 'preserved'); await f.io.mkdir(nested);
+  await assert.rejects(f.io.rmdir(lease.root)); await lease.close();
+  assert.ok(f.states.has(nested)); assert.ok(f.sessions.slice(1).every(s => s.closed));
 });

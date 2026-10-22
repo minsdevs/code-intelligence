@@ -34,6 +34,8 @@ async function main() {
     const apiHeaders = { 'X-Code-Intelligence-Token': args.token };
     const context = await browser.newContext({ viewport: { width: 1500, height: 1000 } });
     await context.addInitScript(({ baseUrl, token }) => {
+      // The source and approval assertions below use the Korean translation contract.
+      window.localStorage.setItem('code-intelligence.lang', 'ko');
       window.codeIntelligenceDesktop = { apiBaseUrl: baseUrl, apiToken: token };
     }, { baseUrl: args.baseUrl, token: args.token });
     const page = await context.newPage();
@@ -46,6 +48,7 @@ async function main() {
     const document = await page.goto(args.baseUrl);
     assert.equal(document.status(), 200, 'Public bootstrap HTML');
     await expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
 
     async function navigate(url) {
       await page.evaluate(url => { history.pushState(null, '', url); window.dispatchEvent(new PopStateEvent('popstate')); }, url);
@@ -159,8 +162,8 @@ async function main() {
 
       const featureListUrl = `${args.baseUrl}/api/projects/${args.project}/features`;
       const featureDetailUrl = `${featureListUrl}/${args.feature}`;
-      const cachedList = await context.request.get(featureListUrl, { headers: apiHeaders });
-      const cachedDetail = await context.request.get(featureDetailUrl, { headers: apiHeaders });
+      const cachedList = await context.request.get(`${featureListUrl}?snapshotId=${args.a}`, { headers: apiHeaders });
+      const cachedDetail = await context.request.get(`${featureDetailUrl}?snapshotId=${args.a}`, { headers: apiHeaders });
       assert.equal(cachedList.status(), 200);
       assert.equal(cachedDetail.status(), 200);
       const detail = await cachedDetail.json();
@@ -176,8 +179,10 @@ async function main() {
 
       // Replay only previously fetched, unmodified feature metadata, as a stale tab/cache would.
       // Every file-content request still reaches the real backend/JGit reader.
-      await page.route(featureListUrl, route => route.fulfill({ response: cachedList }));
-      await page.route(featureDetailUrl, route => route.fulfill({ response: cachedDetail }));
+      const replayListUrl = `${featureListUrl}?snapshotId=${b}`;
+      const replayDetailUrl = `${featureDetailUrl}?snapshotId=${b}`;
+      await page.route(replayListUrl, route => route.fulfill({ response: cachedList }));
+      await page.route(replayDetailUrl, route => route.fulfill({ response: cachedDetail }));
       await navigate(`/projects/${args.project}/features`);
       await page.getByRole('button', { name: /S1 source feature/ }).click();
       const historicalRequest = page.waitForRequest(request => {
@@ -191,8 +196,8 @@ async function main() {
       assert.equal(new URL(page.url()).searchParams.get('snapshotId'), String(args.a));
       assert.equal(new URL(page.url()).searchParams.get('evidenceId'), String(args.evidence));
       await unavailable('SOURCE_UNAVAILABLE'); // Local refresh retired A's object store.
-      await page.unroute(featureListUrl);
-      await page.unroute(featureDetailUrl);
+      await page.unroute(replayListUrl);
+      await page.unroute(replayDetailUrl);
 
       await navigate(`/projects/${args.project}/notes`);
       await page.getByRole('button', { name: 'S1 sentinel', exact: true }).click();

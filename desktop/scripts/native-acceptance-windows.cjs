@@ -6,6 +6,28 @@ const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 const { selectWindowsToolchain, cmakeConfigureArgs, pinKey } = require('./windows-toolchain.cjs');
+const javaProbeCodes = new Set([
+  ...['INPUT', 'STDIN', 'STDOUT', 'STDERR', 'PATH', 'OPEN', 'CONNECT', 'WRITE', 'FIN', 'PREFIX', 'LENGTH', 'BODY', 'EOF', 'OUTPUT', 'PROCESS', 'STARTUP'].map(phase => 'WINDOWS_JAVA_PROBE_' + phase + '_FAILED'),
+  ...['ACCESS_DENIED', 'REFUSED', 'INVALID_ARGUMENT', 'INVALID_PATH', 'PATH_NOT_FOUND', 'ADDRESS_UNAVAILABLE', 'TIMED_OUT', 'OTHER'].map(reason => 'WINDOWS_JAVA_PROBE_CONNECT_' + reason + '_FAILED'),
+  'WINDOWS_JAVA_PROBE_STARTUP_TIMEOUT', 'WINDOWS_JAVA_PROBE_EXCHANGE_TIMEOUT', 'WINDOWS_JAVA_PROBE_ABORTED',
+]);
+
+function tapJavaProbes(output) {
+  // Exact diagnostic comments only; never retain arbitrary JVM output or input.
+  const evidence = [];
+  const pattern = /^# WINDOWS_JAVA_PROBE_RESULT (normal|hold|extra) (STARTUP|EXCHANGE) (null|0|-?[1-9]\d{0,9}) (NONE|SIGTERM|SIGKILL|SIGINT|UNKNOWN) (0|[1-9]\d{0,5}) (0|[1-9]\d{0,5}) (0|[1-9]\d{0,5}) ([A-Z][A-Z0-9_]{0,95})\r?$/gm;
+  for (const match of output.matchAll(pattern)) {
+    const [, mode, phase, exit, signal, startup, exchange, elapsed, code] = match;
+    const exitCode = exit === 'null' ? null : Number(exit);
+    const [startupMs, exchangeMs, elapsedMs] = [startup, exchange, elapsed].map(Number);
+    if ((exitCode !== null && (exitCode < -2147483648 || exitCode > 4294967295))
+        || Math.max(startupMs, exchangeMs, elapsedMs) > 300000
+        || (code !== 'SUCCESS' && !javaProbeCodes.has(code))) continue;
+    evidence.push({ mode, phase, exitCode, signal, startupMs, exchangeMs, elapsedMs, code });
+    if (evidence.length === 8) break;
+  }
+  return evidence;
+}
 
 function tapCounts(output) {
   const counts = {};
@@ -28,11 +50,10 @@ function tapDiagnostics(output) {
     'ERR_INVALID_ARG_TYPE', 'ERR_OUT_OF_RANGE', 'ERR_UNHANDLED_ERROR', 'ERR_TEST_FAILURE',
     ...['ARGUMENT', 'UNSUPPORTED', 'UNSAFE_PATH', 'MISSING', 'EXISTS', 'LIMIT', 'BUSY', 'FORMAT', 'INTEGRITY', 'KEY_UNAVAILABLE', 'SOURCE_CHANGED', 'IO'].map(code => 'BACKUP_ARCHIVE_' + code),
     ...['INVALID', 'UNSAFE', 'CHANGED', 'STATE', 'LIMIT', 'BUSY', 'CLOSED', 'IO', 'TRANSITION'].map(code => 'BACKUP_SOURCE_SWAP_' + code),
-    ...['INPUT', 'STDIN', 'STDOUT', 'STDERR', 'PATH', 'OPEN', 'CONNECT', 'WRITE', 'FIN', 'PREFIX', 'LENGTH', 'BODY', 'EOF', 'OUTPUT', 'PROCESS'].map(phase => 'WINDOWS_JAVA_PROBE_' + phase + '_FAILED'),
+    ...javaProbeCodes,
     ...['WRITE', 'PROCESS'].map(phase => 'WINDOWS_ACL_TAMPER_' + phase + '_FAILED'),
     ...['OPEN', 'IMAGE', 'LIVE', 'TIMEOUT', 'WAIT', 'CLOSE', 'PROCESS'].map(phase => 'WINDOWS_GUARDIAN_WAIT_' + phase + '_FAILED'),
-    ...['VOLUME', 'FILE_ID', 'OWNER', 'SIZE', 'ALLOCATION_SIZE', 'MODIFIED', 'CHANGED'].map(field => 'WINDOWS_STORAGE_COMMIT_' + field + '_CHANGED'),
-    ...['ACCESS_DENIED', 'REFUSED', 'INVALID_ARGUMENT', 'INVALID_PATH', 'PATH_NOT_FOUND', 'ADDRESS_UNAVAILABLE', 'TIMED_OUT', 'OTHER'].map(reason => 'WINDOWS_JAVA_PROBE_CONNECT_' + reason + '_FAILED')]);
+    ...['VOLUME', 'FILE_ID', 'OWNER', 'SIZE', 'ALLOCATION_SIZE', 'MODIFIED', 'CHANGED'].map(field => 'WINDOWS_STORAGE_COMMIT_' + field + '_CHANGED')]);
   const messages = new Map([
     ['Windows protected boundary refused the operation.', 'windows-boundary'],
     ['Windows protected storage refused the operation.', 'windows-storage'],
@@ -128,7 +149,8 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
   const nativeReport = { format: 1, standardUser: true, productAcceptance: false,
     helperSha256: crypto.createHash('sha256').update(fs.readFileSync(helper)).digest('hex'),
     exitStatus: Number.isInteger(result.status) ? result.status : null, status: 'FAIL', counts: null,
-    launchFailure: !!result.error, timedOut: result.error?.code === 'ETIMEDOUT', tests: tapDiagnostics(result.stdout || '') };
+    launchFailure: !!result.error, timedOut: result.error?.code === 'ETIMEDOUT', tests: tapDiagnostics(result.stdout || ''),
+    javaProbes: tapJavaProbes(result.stdout || '') };
   try {
     nativeReport.counts = tapCounts(result.stdout || '');
     requireNativePass(result, nativeReport.counts);
@@ -169,4 +191,4 @@ async function runWindows({ source, owned, artifacts, report, run, env }) {
   report.nativeBoundaryStatus = 'PASS';
   report.productAcceptance = { status: 'NOT_RUN', scope: 'fresh-standard-user-unsigned-development-runtime', signedInstallation: false };
 }
-module.exports = { runWindows, tapCounts, tapDiagnostics, requireNativePass, requireStandardUserToken };
+module.exports = { runWindows, tapCounts, tapDiagnostics, tapJavaProbes, requireNativePass, requireStandardUserToken };

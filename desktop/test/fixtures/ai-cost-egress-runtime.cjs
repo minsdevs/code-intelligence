@@ -264,9 +264,10 @@ async function main() {
     bootstrap = Buffer.from(JSON.stringify({ version: 2, ai,
       source: { socketPath: sourceSocket, capability: sourceCapability } }));
   } finally { aiBytes.fill(0); }
-  try { syncFs.writeFileSync(1, bootstrap); } finally { bootstrap.fill(0); syncFs.closeSync(1); }
   process.stdin.resume();
   process.stdin.once('end', () => { stop().catch(() => { process.exitCode = 1; }); });
+  await fs.writeFile(path.join(root, 'ready'), '', { mode: 0o600, flag: 'wx' });
+  try { syncFs.writeFileSync(1, bootstrap); } finally { bootstrap.fill(0); syncFs.closeSync(1); }
 }
 
 main().catch(async () => {

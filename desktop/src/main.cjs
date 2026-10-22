@@ -38,7 +38,8 @@ const { openAuthenticatedState } = require('./windows-authenticated-state.cjs');
 const { writeStorageFile } = require('./windows-storage-files.cjs');
 const { validateRuntimeManifest } = require('./runtime-manifest.cjs');
 const { RuntimeIntegrityError, integrityError, startupFailureCode,
-  integrityDiagnostic, formatIntegrityDiagnostic } = require('./startup-diagnostics.cjs');
+  integrityDiagnostic, formatIntegrityDiagnostic, formatRestoreDiagnostic,
+  backupDiagnostic, formatBackupDiagnostic } = require('./startup-diagnostics.cjs');
 const { BACKEND_JVM_OPTIONS } = require('./jvm-options.cjs');
 const { TEST_ONLY_MODE, adapterIsolationRuntimeMode, openAdapterIsolation } = require('./adapter-isolation.cjs');
 const { openAdapterControl } = require('./adapter-control.cjs');
@@ -543,7 +544,7 @@ async function startPostgres({ recoveryOnly = false } = {}) {
 async function spawnRedis() {
   const data = await runtimeDirectory('redis', true);
   const args = runtime.windowsBoundary
-    ? ['--config-import-path', runtime.transport.redisConfig, '--config-import-format', 'Garnet']
+    ? ['--config-import-path', runtime.transport.redisConfig, '--config-import-format', 'GarnetConf']
     : [runtime.transport.redisConfig, '--dir', data, '--dbfilename', 'dump.rdb', '--appendonly', 'yes'];
   await spawnManaged('redis', binary('redis', 'bin', 'redis-server'), args, {
     env: {
@@ -692,6 +693,7 @@ async function spawnBackend({ maintenanceId = '', traceStartup = false } = {}) {
   const jar = binary('backend', 'code-intelligence.jar');
   if (traceStartup) noteStartup('BACKEND_SOURCES');
   const dataDir = await runtimeDirectory('data', true);
+  if (runtime.windowsBoundary) await runtimeDirectory('data/repos', true);
   await openProductionSources();
   if (traceStartup) noteStartup('BACKEND_PROCESS');
   await spawnManaged('backend', java, [...BACKEND_JVM_OPTIONS,
@@ -1204,10 +1206,18 @@ function createBackup(selected) {
 }
 
 async function backupWithDialog() {
-  if (!backupRuntime) return createBackup();
-  assertSafetyReady();
-  const selected = await dialog.showOpenDialog(mainWindow, { title: 'Choose where to save an encrypted backup', properties: ['openDirectory'] });
-  return selected.canceled ? null : createBackup(selected.filePaths[0]);
+  let phase = 'ADMISSION';
+  try {
+    if (!backupRuntime) return createBackup();
+    assertSafetyReady(); phase = 'SELECTION';
+    const selected = await dialog.showOpenDialog(mainWindow, { title: 'Choose where to save an encrypted backup', properties: ['openDirectory'] });
+    phase = 'ADMISSION';
+    // Return the admitted promise directly: runtime reports it after its own cleanup.
+    return selected.canceled ? null : createBackup(selected.filePaths[0]);
+  } catch (error) {
+    try { const line = formatBackupDiagnostic(backupDiagnostic(phase, error)); if (line) console.error(line); } catch {}
+    throw error;
+  }
 }
 
 async function restoreWithDialog() {
@@ -1406,13 +1416,13 @@ async function startApplication() {
       onLost: loseRuntimeOwnership
     });
     async function openSafety(recoveryMode) {
+      noteStartup('SAFETY');
       aiPostgres = await createAiEgressPostgres({ psqlPath: binary('postgres', 'bin', 'psql'),
       installationId: secrets.localIdentity,
       connection: { host: '127.0.0.1', port: runtime.ports.postgres, user: 'codeintel', database: 'codeintel' },
       env: postgresEnvironment() });
     const maintenanceVerifier = runtimeManifest.backupProtocol === 3
       ? createMaintenanceVerifier({ installationId: secrets.localIdentity, readProjection: aiPostgres.readProjection }) : undefined;
-      noteStartup('SAFETY');
       safetyLifecycle = await openSafetyLifecycle({ userData, safeStorage, windowsBoundary, electronApp: app,
       installationId: secrets.localIdentity, runningBuild, recoveryMode, ...(ownerLocks ? { ownerLocks } : {}),
       createGateway: async ({ openJournal, freshEnrollmentAllowed, recoveryMode: gatewayRecoveryMode }) => {
@@ -1427,6 +1437,8 @@ async function startApplication() {
         noteStartup('BACKUP');
         backupRuntime = await createDesktopBackupRuntime({ ...hooks, userData,
           installationId: secrets.localIdentity, runningBuild, recoveryMode, windowsBoundary,
+          onDiagnostic: value => { const line = formatRestoreDiagnostic(value); if (line) console.error(line); },
+          onBackupDiagnostic: value => { const line = formatBackupDiagnostic(value); if (line) console.error(line); },
           gateway: aiGateway, adapter: aiPostgres, ports: backupPorts() });
         return backupRuntime;
       } } : {}) });

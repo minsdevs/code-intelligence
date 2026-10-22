@@ -285,7 +285,7 @@ describe('local source approval', () => {
     expect(getLocalPreviewOutcome).toHaveBeenCalledTimes(2)
     expect(createLocalProject).toHaveBeenCalledTimes(1)
     expect(previewLocalProject).toHaveBeenCalledTimes(1)
-    expect(busy).toHaveBeenLastCalledWith(false)
+    await waitFor(() => expect(busy).toHaveBeenLastCalledWith(false))
   })
 
   it('discards a late initial preview after the selected path changes', async () => {

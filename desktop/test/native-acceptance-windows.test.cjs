@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { tapCounts, tapDiagnostics, requireNativePass, requireStandardUserToken } = require('../scripts/native-acceptance-windows.cjs');
+const { tapCounts, tapDiagnostics, tapJavaProbes, requireNativePass, requireStandardUserToken } = require('../scripts/native-acceptance-windows.cjs');
 
 // These are parser/gate regressions, not native acceptance or DPAPI substitutes.
 const successfulCounts = () => ({ tests: 9, pass: 9, fail: 0, cancelled: 0, skipped: 0, todo: 0 });
@@ -94,4 +94,44 @@ test('Windows child attestation requires exact fresh SID, actual nonadmin token,
   assert.throws(() => requireStandardUserToken({ elevated: false, serviceAccount: false, freshLocalUser: true }));
   assert.throws(() => requireStandardUserToken({ ...token, privateProfilePath: 'private' }));
   for (const invalid of [undefined, null, [], 1, true]) assert.throws(() => requireStandardUserToken(invalid));
+});
+
+test('Java probe evidence retains bounded readiness, exchange and exit values without raw output', () => {
+  const lines = [
+    '# WINDOWS_JAVA_PROBE_RESULT hold EXCHANGE 0 NONE 25000 200 25200 SUCCESS',
+    '# WINDOWS_JAVA_PROBE_RESULT extra EXCHANGE null SIGKILL 1000 15000 16000 WINDOWS_JAVA_PROBE_EXCHANGE_TIMEOUT',
+    '# WINDOWS_JAVA_PROBE_RESULT normal STARTUP -2147483648 UNKNOWN 300000 0 300000 WINDOWS_JAVA_PROBE_STARTUP_FAILED',
+    '# WINDOWS_JAVA_PROBE_RESULT normal STARTUP 4294967295 NONE 30000 0 30000 WINDOWS_JAVA_PROBE_STARTUP_TIMEOUT',
+    '# WINDOWS_JAVA_PROBE_RESULT normal EXCHANGE 1 SIGTERM 2 3 5 WINDOWS_JAVA_PROBE_CONNECT_ACCESS_DENIED_FAILED',
+    '# WINDOWS_JAVA_PROBE_RESULT normal EXCHANGE null SIGINT 2 3 5 WINDOWS_JAVA_PROBE_ABORTED',
+  ];
+  const evidence = tapJavaProbes(lines.join('\n') + '\n');
+  assert.equal(evidence.length, 6);
+  assert.deepEqual(evidence[0], { mode: 'hold', phase: 'EXCHANGE', exitCode: 0, signal: 'NONE',
+    startupMs: 25000, exchangeMs: 200, elapsedMs: 25200, code: 'SUCCESS' });
+  assert.equal(evidence[1].exitCode, null);
+  assert.equal(evidence[2].exitCode, -2147483648);
+  assert.equal(evidence[3].exitCode, 4294967295);
+  assert.deepEqual(tapJavaProbes(lines.join('\r\n') + '\r\n'), evidence);
+  for (const code of ['WINDOWS_JAVA_PROBE_STARTUP_FAILED', 'WINDOWS_JAVA_PROBE_STARTUP_TIMEOUT',
+    'WINDOWS_JAVA_PROBE_EXCHANGE_TIMEOUT', 'WINDOWS_JAVA_PROBE_ABORTED']) {
+    assert.equal(tapDiagnostics(`not ok 1 - private\n  code: '${code}'\n`)[0].diagnostic.code, code);
+  }
+});
+
+test('Java probe evidence rejects unbounded numbers, aliases and private text and caps records', () => {
+  const good = '# WINDOWS_JAVA_PROBE_RESULT normal EXCHANGE 0 NONE 2 3 5 SUCCESS';
+  const invalid = [
+    'private ' + good, '  ' + good, good.slice(2), good + ' private', good + ' ',
+    good.replace('normal', 'private'), good.replace('EXCHANGE', 'PRIVATE'), good.replace('NONE', 'PRIVATE'),
+    ...['-2147483649', '4294967296', '-0', '+1', '01', '1.2', '1e3', 'NaN'].map(value => good.replace(' 0 NONE', ` ${value} NONE`)),
+    ...['300001', '-1', '1.5', '1e3', '000001'].flatMap(value => [
+      good.replace(' 2 3 5 ', ` ${value} 3 5 `), good.replace(' 2 3 5 ', ` 2 ${value} 5 `), good.replace(' 2 3 5 ', ` 2 3 ${value} `),
+    ]),
+    good.replace('SUCCESS', 'PRIVATE_SECRET'), good.replace('SUCCESS', 'WINDOWS_JAVA_PROBE_PRIVATE_FAILED'),
+  ];
+  assert.deepEqual(tapJavaProbes(invalid.join('\n') + '\n'), []);
+  const evidence = tapJavaProbes((good + '\n').repeat(20));
+  assert.equal(evidence.length, 8);
+  assert.equal(JSON.stringify(tapJavaProbes(invalid.join('\n') + '\n' + good)).includes('private'), false);
 });

@@ -111,6 +111,26 @@ for (const platform of ['linux', 'win32']) {
     assert.equal(fake.calls.encrypt + fake.calls.decrypt, 0);
   });
 }
+test('Linux accepts only an initialized OS secret store and rechecks it before every operation', () => {
+  const api = loadModule({ platform: 'linux' });
+  const electronApp = { isReady: () => true };
+  for (const backend of ['gnome_libsecret', 'kwallet', 'kwallet5', 'kwallet6']) {
+    let selected = backend;
+    const fake = { ...storage(), getSelectedStorageBackend: () => selected };
+    const adapter = api.createSafeStorageWrapper(fake, { electronApp });
+    const bytes = Buffer.from('synthetic Linux keyring');
+    const wrapped = adapter.wrap(bytes);
+    assert.deepEqual(adapter.unwrap(wrapped), bytes);
+    selected = 'basic_text';
+    assert.throws(() => adapter.wrap(bytes), { code: 'SAFETY_STORAGE_UNAVAILABLE' });
+    assert.throws(() => adapter.unwrap(wrapped), { code: 'SAFETY_STORAGE_UNAVAILABLE' });
+  }
+  for (const backend of ['basic_text', 'unknown', '', undefined, 'future-backend']) {
+    const fake = { ...storage(), getSelectedStorageBackend: () => backend };
+    assert.throws(() => api.createSafeStorageWrapper(fake, { electronApp }), { code: 'SAFETY_STORAGE_UNAVAILABLE' });
+    assert.equal(fake.calls.encrypt + fake.calls.decrypt, 0);
+  }
+});
 test('unavailable or throwing secure storage yields only a static safe error', () => {
   for (const isEncryptionAvailable of [() => false, () => { throw new Error('/private/synthetic/secret'); }]) {
     assert.throws(() => lifecycle.createSafeStorageWrapper({ ...storage(), isEncryptionAvailable }), error => {

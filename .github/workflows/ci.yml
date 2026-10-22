@@ -86,6 +86,7 @@ jobs:
           npm --prefix analyzers/ts-analyzer ci
           npm --prefix analyzers/tree-analyzer ci
       - name: Format check, tests, build
+        id: backend_build
         run: ./gradlew spotlessCheck build
       - name: Summarize failed backend tests
         if: failure()
@@ -107,6 +108,7 @@ jobs:
       - name: Snapshot source contract (real backend and browser)
         run: ./gradlew snapshotSourceTest
       - name: Multi-language quality and performance regression gate
+        if: ${{ !cancelled() && steps.backend_build.outcome == 'success' }}
         run: ../quality-gate
 
   frontend:

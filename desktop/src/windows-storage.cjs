@@ -3,6 +3,7 @@
 const path = require('node:path');
 const { runtimeRelativePath } = require('./runtime-platform.cjs');
 const CHUNK = 1024 * 1024, HEADER = 256 * 1024;
+const BACKUP_OUTPUT_NAME = /^CodeIntelligence-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const STATE_KEYS = ['format', 'platform', 'kind', 'volume', 'fileId', 'owner', 'size', 'allocationSize', 'modified', 'changed', 'identity', 'token'];
 function failure() { return Object.assign(new Error('Windows protected storage refused the operation.'), { code: 'WINDOWS_STORAGE_REFUSED' }); }
 function requireValue(value) { if (!value) throw failure(); }
@@ -33,8 +34,10 @@ async function openWindowsStorage(boundary, root, options = {}) {
   requireValue(typeof root === 'string' && /^[A-Za-z]:\\/.test(root) && path.win32.normalize(root) === root && !root.endsWith('\\'));
   requireValue(Object.keys(options).every(key => ['mode', 'onLost', 'timeoutMs'].includes(key)));
   const mode = options.mode ?? 'private', timeoutMs = options.timeoutMs ?? 15000;
-  requireValue(['private', 'workspace', 'source'].includes(mode) && Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 120000);
+  requireValue(['private', 'workspace', 'source', 'backup-output'].includes(mode) && Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 120000);
   requireValue(options.onLost === undefined || typeof options.onLost === 'function');
+  const backupOutput = mode === 'backup-output';
+  let outputAttempted = false, outputState, outputDiscarded = false;
   function relative(file, allowRoot = false) {
     requireValue(typeof file === 'string');
     let value = path.win32.isAbsolute(file) ? path.win32.relative(root, file) : file;
@@ -103,6 +106,7 @@ async function openWindowsStorage(boundary, root, options = {}) {
     const result = chain.then(execute); chain = result.catch(() => {}); return result;
   }
   async function open(file, selectedMode, { expected, maxBytes = Number.MAX_SAFE_INTEGER } = {}) {
+    requireValue(!backupOutput);
     requireValue(['read', 'directory', 'create', 'append', 'slot'].includes(selectedMode));
     const writing = ['create', 'append', 'slot'].includes(selectedMode);
     requireValue(!writing || mode !== 'source');
@@ -148,7 +152,7 @@ async function openWindowsStorage(boundary, root, options = {}) {
   return Object.freeze({
     root, mode, rootState,
     async lock(file, marker) {
-      requireValue(mode !== 'source' && Buffer.isBuffer(marker) && marker.length > 0 && marker.length <= 4096);
+      requireValue(!backupOutput && mode !== 'source' && Buffer.isBuffer(marker) && marker.length > 0 && marker.length <= 4096);
       const reply = await request('lock', [...field(relative(file)), uint(marker.length), marker]);
       requireValue(Number.isSafeInteger(reply.handle) && reply.handle > 0);
       let active = true; const id = reply.handle;
@@ -159,10 +163,31 @@ async function openWindowsStorage(boundary, root, options = {}) {
       handles.add(lock); return lock;
     },
     async stat(file = '', { directory = false, missing = false } = {}) {
+      if (backupOutput) requireValue((file === '' || file === root) && directory === true && missing === false);
       return state((await request('stat', [...field(relative(file, true)), uint(directory ? 1 : 0), uint(missing ? 1 : 0)])).state);
     },
     async mkdir(file, { inherit = false } = {}) {
-      requireValue(mode !== 'source'); return state((await request('mkdir', [...field(relative(file)), uint(inherit ? 1 : 0)])).state);
+      requireValue(mode !== 'source'); const member = relative(file);
+      if (backupOutput) {
+        requireValue(!outputAttempted && inherit === true && BACKUP_OUTPUT_NAME.test(member)
+          && (file === member || file === path.win32.join(root, member)));
+        outputAttempted = true;
+      }
+      const created = state((await request('mkdir', [...field(member), uint(inherit ? 1 : 0)])).state);
+      if (backupOutput) {
+        requireValue(created?.kind === 'directory' && created.volume === rootState.volume);
+        outputState = created;
+      }
+      return created;
+    },
+    async discardOutput(expectedState) {
+      requireValue(backupOutput && outputState && !outputDiscarded);
+      const expected = state(expectedState);
+      requireValue(expected?.kind === 'directory' && expected.identity === outputState.identity
+        && expected.volume === outputState.volume && expected.owner === outputState.owner);
+      // Deliberately send only the remembered WI1, never a caller-controlled path.
+      outputDiscarded = true;
+      await request('discard-output', field(expected.identity));
     },
     openRead: (file, options) => open(file, 'read', options),
     openWrite: (file, { mode: selectedMode = 'create', ...options } = {}) => open(file, selectedMode, options),
@@ -172,10 +197,10 @@ async function openWindowsStorage(boundary, root, options = {}) {
       finally { await directory.close(); }
     },
     async remove(file, expected, { directory = false } = {}) {
-      requireValue(mode !== 'source'); await request('remove', [...field(relative(file)), uint(directory ? 1 : 0), ...field(expectation(expected, true))]);
+      requireValue(!backupOutput && mode !== 'source'); await request('remove', [...field(relative(file)), uint(directory ? 1 : 0), ...field(expectation(expected, true))]);
     },
     async rename(from, to, expected, { directory = false } = {}) {
-      requireValue(mode !== 'source'); return state((await request('rename', [...field(relative(from)), uint(directory ? 1 : 0),
+      requireValue(!backupOutput && mode !== 'source'); return state((await request('rename', [...field(relative(from)), uint(directory ? 1 : 0),
         ...field(expectation(expected, true)), ...field(relative(to))])).state);
     },
     async capacity() {

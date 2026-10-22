@@ -345,21 +345,29 @@ public final class WindowsStorage implements AutoCloseable {
         }
 
         public State state() {
-            return state;
+            synchronized (WindowsStorage.this) {
+                return state;
+            }
         }
 
-        public synchronized State check() throws IOException {
-            if (released) throw refused();
-            state = WindowsStorage.state(
-                    exchange("check-lock", out -> out.writeInt(handle)).get("state"));
-            return state;
+        public State check() throws IOException {
+            // Locks share the same stream and sequence as stat/read/write. A lock-local
+            // monitor would permit concurrent frames and replies from another operation.
+            synchronized (WindowsStorage.this) {
+                if (released) throw refused();
+                state = WindowsStorage.state(
+                        exchange("check-lock", out -> out.writeInt(handle)).get("state"));
+                return state;
+            }
         }
 
         @Override
-        public synchronized void close() throws IOException {
-            if (!released) {
-                release(handle);
-                released = true;
+        public void close() throws IOException {
+            synchronized (WindowsStorage.this) {
+                if (!released) {
+                    release(handle);
+                    released = true;
+                }
             }
         }
     }

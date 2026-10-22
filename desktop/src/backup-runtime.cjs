@@ -20,6 +20,7 @@ const { createBackupSourceSwap } = require('./backup-source-swap.cjs');
 const { createBackupRetention, validateRetentionManifest, retentionManifestSha256,
   isRetentionTopLevelName } = require('./backup-retention.cjs');
 const { createBackupCapacity, planBackupCapacity, measureBackupTree } = require('./backup-capacity.cjs');
+const { restoreDiagnostic, backupDiagnostic } = require('./startup-diagnostics.cjs');
 const MAX_BYTES = 10 * 1024 * 1024 * 1024 + 1024 * 1024;
 const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]`
   : value && typeof value === 'object'
@@ -40,7 +41,8 @@ function fail(code) { throw new BackupRuntimeError(code); }
 
 
 async function createDesktopBackupRuntime(options) {
-  const { userData, installationId, runningBuild, keyProvider, journal, gateway, adapter, ports, windowsBoundary } = options;
+  const { userData, installationId, runningBuild, keyProvider, journal, gateway, adapter, ports, windowsBoundary,
+    onDiagnostic, onBackupDiagnostic } = options;
   const fs = windowsBoundary ? await createBackupPlatformIO(windowsBoundary, userData) : posixFs;
   try {
 async function missing(file) {
@@ -686,7 +688,14 @@ async function copySelectedFile(selected, destination, created) {
     const transactionId = crypto.randomUUID(); let handle, database, product, dbPlan, sourceSwap, capacity, lease;
     let root, payload, currentExport, archived, liveProjection, prepared = false, sealed = false, swapAttempted = false;
     let maintenanceAttempted = false;
-    let destinationRoot;
+    let phase = 'PREPARE', diagnostic;
+    const observer = kind === 'RESTORE' ? onDiagnostic : onBackupDiagnostic;
+    const diagnose = (failedPhase, error) => {
+      if (!diagnostic && typeof observer === 'function') {
+        diagnostic = (kind === 'RESTORE' ? restoreDiagnostic : backupDiagnostic)(failedPhase, error);
+      }
+    };
+    let destinationRoot, destinationLease;
     const owned = new Map();
     const ownDirectory = async (parent, name) => {
       const result = await fresh(parent, name);
@@ -698,10 +707,12 @@ async function copySelectedFile(selected, destination, created) {
       await directory(recoveryRoot); root = await ownDirectory(recoveryRoot, transactionId);
       await ownDirectory(root, 'verification');
       if (kind === 'RESTORE') {
+        phase = 'INPUT_COPY';
         const input = await ownDirectory(root, 'input'); payload = await ownDirectory(root, 'incoming');
         const selectedCopy = path.join(input, 'archive.cibackup');
         await copySelectedFile(selected, selectedCopy, fileIdentity => owned.set(selectedCopy, { directory: false, identity: fileIdentity }));
         let remainingInput = (await fs.lstat(selectedCopy, { bigint: true })).size;
+        phase = 'INPUT_DECRYPT';
         const decoded = await decryptFile({ windowsBoundary, sourceRoot: input, sourcePath: selectedCopy, destinationRoot: payload,
           destinationPath: path.join(payload, 'payload.bin'), installationId, keyProvider,
           beforeWrite: async bytes => {
@@ -711,35 +722,53 @@ async function copySelectedFile(selected, destination, created) {
         owned.set(path.join(payload, 'payload.bin'), { directory: false,
           identity: identity(await fs.lstat(path.join(payload, 'payload.bin'), { bigint: true })) });
         await freeSpace(root, BigInt(decoded.payloadBytes) * 5n);
+        phase = 'INPUT_INSPECT';
         archived = await inspectPayload(payload);
+        phase = 'COMPATIBILITY';
         await checkRestoreCompatibility(archived.summary);
         if (closed || identity(await fs.lstat(path.join(payload, 'payload.bin'), { bigint: true })) !== archived.payloadIdentity
             || await fileHash(path.join(payload, 'payload.bin')) !== archived.payloadSha256) fail('INPUT');
       } else {
-        const parent = await fs.realpath(selected); await directory(parent, false);
-        // Even an encrypted output must not enter application storage or source staging.
-        if (parent === userData || parent.startsWith(`${userData}${path.sep}`)) fail('INPUT');
-        destinationRoot = path.join(parent, `CodeIntelligence-${transactionId}`);
-        await fs.mkdir(destinationRoot, { mode: 0o700 }); await sync(parent, false); await directory(destinationRoot);
+        phase = 'DESTINATION';
+        if (windowsBoundary) {
+          // The selected parent retains its ACL. The bridge pins it and registers
+          // only this newly created private child as a writable backup workspace.
+          destinationLease = await fs.prepareBackupDestination(selected, `CodeIntelligence-${transactionId}`);
+          destinationRoot = destinationLease.root;
+        } else {
+          const parent = await fs.realpath(selected); await directory(parent, false);
+          // Even an encrypted output must not enter application storage or source staging.
+          if (parent === userData || parent.startsWith(`${userData}${path.sep}`)) fail('INPUT');
+          destinationRoot = path.join(parent, `CodeIntelligence-${transactionId}`);
+          await fs.mkdir(destinationRoot, { mode: 0o700 }); await sync(parent, false); await directory(destinationRoot);
+        }
         owned.set(destinationRoot, { directory: true, identity: identity(await directory(destinationRoot)) });
       }
+      phase = 'MAINTENANCE';
       const before = journal.snapshot();
       if (before.pendingRestore || before.pendingMaintenance || before.recoveryOnly || (await records.read()).active) fail();
       maintenanceAttempted = true;
       handle = await gateway.beginMaintenance({ transactionId, kind });
+      phase = 'PAUSE';
       await ports.pause({ transactionId, kind, waitForAiDrain: () => handle.waitForDrain({ timeoutMs: 120000 }) });
+      phase = 'DATABASE';
       database = await ports.database({ readRetentionAuthority }); await database.verifyQuiescent();
+      phase = 'PRODUCT_ORIGIN';
       product = await ports.productState(); await product.verifyOrigin();
       const originalDatabases = await database.inspect(transactionId);
       const liveDatabaseOid = originalDatabases.databases[originalDatabases.names.live]?.oid;
       if (typeof liveDatabaseOid !== 'string' || !/^[1-9][0-9]{0,9}$/.test(liveDatabaseOid)) fail();
       const originalSources = await sourceIdentities();
+      phase = 'CAPACITY';
       ({ capacity, lease } = await beginCapacity(database, transactionId, { kind, root, destinationRoot, archived }));
       const checkpoint = await fresh(root, 'checkpoint');
+      phase = 'CHECKPOINT_EXPORT';
       currentExport = await exportCurrent(checkpoint, lease);
+      phase = 'CHECKPOINT_ARCHIVE';
       await encrypt(checkpoint, root, 'checkpoint.cibackup', lease, 'checkpointArchive');
       payload ||= checkpoint;
       const payloadSha256 = (archived || currentExport).payloadSha256;
+      phase = 'MERGE';
       liveProjection = await adapter.prepareMaintenanceGate({ ownerUserId: currentExport.summary.ownerUserId,
         legacyLiabilityUnresolved: currentExport.costs.legacyLiabilityUnresolved || Boolean(archived?.costs.legacyLiabilityUnresolved) });
       const mergeInputs = buildMaintenanceMergeInputs({ transactionId, liveProjection,
@@ -759,12 +788,15 @@ async function copySelectedFile(selected, destination, created) {
       for (const mergeInput of mergeInputs) await handle.mergeAndCommit({ mergeInput });
       await records.append({ transactionId, phase: 'MERGED', data: { journalSequence: journal.snapshot().sequence } });
       const pg = await handle.refreshProjection();
+      phase = 'SEAL';
       await journal.sealMaintenance(metadata(transactionId, kind, payloadSha256, pg)); sealed = true;
       await handle.refreshProjection();
       await records.append({ transactionId, phase: 'SEALED', data: { receipt: journal.snapshot().pendingMaintenance } });
       if (kind === 'BACKUP') {
+        phase = 'OUTPUT_ARCHIVE';
         await encrypt(payload, destinationRoot, 'backup.cibackup', lease, 'externalOutput');
       } else {
+        phase = 'STAGE_DATABASE';
         await lease.check();
         const stage = root; await fresh(stage, 'repos'); await fresh(stage, 'sources');
         dbPlan = await database.createStage({ transactionId });
@@ -783,6 +815,7 @@ async function copySelectedFile(selected, destination, created) {
         if (stagedSizes.databases.stage?.oid !== dbPlan.stageOid) fail();
         await lease.consume('stagedDatabase', stagedSizes.databases.stage.bytes);
         await lease.check();
+        phase = 'STAGE_SOURCES';
         await restoreSources(payload, stage, archived.sources);
         const treeBytes = async name => {
           const measured = await measureBackupTree({ root: path.join(stage, name), windowsBoundary });
@@ -791,6 +824,7 @@ async function copySelectedFile(selected, destination, created) {
         };
         await lease.consume('stagedSource', String(await treeBytes('repos') + await treeBytes('sources')));
         await product.rebindClonePaths({ database: dbPlan.stageDatabase, confirmedGitProjectIds: archived.sources.git.map(p => p.projectId) });
+        phase = 'STAGE_PROJECTION';
         const finance = await adapter.createMaintenanceStage({ database: dbPlan.stageDatabase });
         try { await finance.seedMaintenanceProjection({ liveProjection, archivedProjection: archived.costs.projection,
           journalSnapshot: journal.snapshot() }); } finally { await finance.close(); }
@@ -799,21 +833,29 @@ async function copySelectedFile(selected, destination, created) {
         if (BigInt(finalStage.bytes) > BigInt(stagedSizes.databases.stage.bytes)) {
           await lease.consume('stagedDatabase', String(BigInt(finalStage.bytes) - BigInt(stagedSizes.databases.stage.bytes)));
         }
+        phase = 'SOURCE_PLAN';
         sourceSwap = await createBackupSourceSwap({ windowsBoundary, dataRoot, stageRoot: stage, transactionId,
           onTransition: async transition => records.append({ transactionId, phase: 'SOURCES_SWAPPED', data: transition }) });
         const sourcePlan = await sourceSwap.plan();
         await records.append({ transactionId, phase: 'STAGED', data: { database: dbPlan, sources: sourcePlan } });
         await product.verifyOrigin(); await database.verifyQuiescent();
         await lease.check();
+        phase = 'INVALIDATE';
         await ports.invalidateAuthority({ transactionId, checkpointRoot: root });
         swapAttempted = true;
+        phase = 'SWAP_DATABASE';
         await database.swap({ transactionId, liveOid: dbPlan.liveOid, stageOid: dbPlan.stageOid });
         await records.append({ transactionId, phase: 'DATABASE_SWAPPED', data: { liveOid: dbPlan.stageOid } });
+        phase = 'SWAP_SOURCES';
         await sourceSwap.publish();
+        phase = 'REVOKE';
         await product.revokeCredentials({ database: 'codeintel' });
+        phase = 'ROTATE';
         await handle.rotateBackendChannel();
       }
+      phase = 'PREPARE_RESUME';
       await ports.prepareResume({ transactionId, restored: kind === 'RESTORE' });
+      phase = 'COMPLETE';
       await records.append({ transactionId, phase: 'HEALTH_VERIFIED', data: { checked: true } });
       // Only owned scratch plaintext is removed. The encrypted checkpoint and both source/DB
       // images remain available for inspection; failed/incomplete operations keep their inputs.
@@ -822,12 +864,16 @@ async function copySelectedFile(selected, destination, created) {
         if (archived) await removeOwnedPayload(payload, { sha256: archived.payloadSha256, identity: archived.payloadIdentity });
         await records.append({ transactionId, phase: 'RETENTION_READY', data: await retentionManifest(root, transactionId, database) });
       });
+      phase = 'RETENTION';
       await collectCompleted(database, product);
+      phase = 'RELEASE';
       await handle.release();
+      phase = 'RESUME';
       await ports.resume({ transactionId, restored: kind === 'RESTORE' });
       return kind === 'BACKUP' ? path.join(destinationRoot, 'backup.cibackup')
         : { restored: true, recoveryBackup: path.join(root, 'checkpoint.cibackup') };
     } catch (error) {
+      diagnose(phase, error);
       // Failed imports never authorize a rollback of B. A rollback uses the captured DB and inode
       // identities and still revokes old credentials, sessions and folder authority.
       // A health check may already have started fresh child processes. Confirm their real exit
@@ -853,9 +899,16 @@ async function copySelectedFile(selected, destination, created) {
       throw new BackupRuntimeError();
     } finally {
       let failed = false;
-      for (const resource of [sourceSwap, product, database, lease, capacity]) try { await resource?.close(); } catch { failed = true; }
+      for (const resource of [sourceSwap, product, database, lease, capacity, destinationLease]) try { await resource?.close(); }
+      catch (error) { diagnose('CLEANUP', error); failed = true; }
       busy = false;
-      if (failed) { await ports.failure({ transactionId, prepared, sealed }).catch(() => {}); fail(); }
+      try {
+        if (failed) { await ports.failure({ transactionId, prepared, sealed }).catch(() => {}); fail(); }
+      } finally {
+        // Publish only after rollback and resource cleanup. A diagnostic consumer may
+        // request shutdown; it must not interrupt the original failure handling.
+        if (diagnostic) try { Promise.resolve(observer(diagnostic)).catch(() => {}); } catch {}
+      }
     }
   }
   return Object.freeze({

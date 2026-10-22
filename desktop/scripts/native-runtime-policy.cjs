@@ -328,6 +328,7 @@ function verifyPostgresExtensions(root, postgresShare) {
 
 function verifyNativeRuntime({ root, minimumSystemVersion, requiredExecutables, requiredModules, postgresShare, inspect = inspectNative, platform = 'darwin', manifest, provenance }) {
   if (platform === 'win32') return require('./windows-pe-policy.cjs').verifyWindowsRuntime({ root, manifest, provenance, supplies: require('./windows-runtime-supply.json') });
+  if (platform === 'linux') return require('./linux-runtime-policy.cjs').verifyLinuxRuntime({ root, manifest, provenance });
   const required = executablePaths(requiredExecutables);
   const modules = modulePaths(requiredModules);
   const share = relative(postgresShare);

@@ -5,7 +5,7 @@ const { verifyWindowsRuntime } = require('./windows-pe-policy.cjs');
 const supplies = require('./windows-runtime-supply.json');
 // Build/engineering acceptance and release approval are distinct. An unsigned
 // hosted smoke cannot attest interactive Windows 11, power loss or signed updates.
-const blockers = Object.freeze([
+const remainingValidation = Object.freeze([
   'Actual Windows native storage/process and full product acceptance must be reviewed for the current source and runtime manifest.',
   'Signed Windows installer, update, rollback and clean interactive Windows 11 user flows are not validated.',
   'Windows power-loss recovery and provider approval gates remain independently required.',
@@ -18,19 +18,31 @@ function verifyWindowsStage(root) {
 }
 function windowsReadiness(platform = process.platform, arch = process.arch, root) {
   const result = { target: 'win32-x64', status: 'BLOCKED', host: { platform, arch },
-    nativeWindowsValidation: false, blockers: [...blockers], runtimeInventory: { status: 'NOT_CHECKED' } };
+    nativeWindowsValidation: false, releaseValidation: 'NOT_RUN', blockers: [],
+    remainingValidation: [...remainingValidation], runtimeInventory: { status: 'NOT_CHECKED' } };
+  if (platform !== 'win32' || arch !== 'x64') result.blockers.push('Windows x64 native packaging host required.');
   if (root) {
     try { result.runtimeInventory = { status: 'PASS', ...verifyWindowsStage(root) }; }
-    catch (error) { result.runtimeInventory = { status: 'FAIL', code: error.code || 'INVALID_WINDOWS_RUNTIME' }; }
-  }
+    catch (error) {
+      result.runtimeInventory = { status: 'FAIL', code: error.code || 'INVALID_WINDOWS_RUNTIME' };
+      result.blockers.push('A complete verified Windows runtime stage is required.');
+    }
+  } else result.blockers.push('A complete verified Windows runtime stage is required.');
+  if (!result.blockers.length) result.status = 'READY_TO_PACKAGE';
   return result;
 }
-function requireWindowsReadiness() {
-  // No environment switch/evidence JSON can waive the release review.
-  throw new Error('Windows packaging is blocked: ' + blockers.join(' '));
+function requireWindowsReadiness({ root, platform = process.platform, arch = process.arch } = {}) {
+  const result = windowsReadiness(platform, arch, root);
+  if (result.status !== 'READY_TO_PACKAGE') {
+    throw Object.assign(new Error('Windows packaging is blocked: ' + result.blockers.join(' ')), { code: 'WINDOWS_PACKAGING_NOT_READY' });
+  }
+  // Packaging readiness is not native acceptance, Authenticode or release approval.
+  // The packaging hook independently enforces Windows signing requirements.
+  return result;
 }
 if (require.main === module) {
-  console.log(JSON.stringify(windowsReadiness(process.platform, process.arch, path.resolve(__dirname, '..', 'stage', 'runtime')), null, 2));
-  process.exitCode = 1;
+  const result = windowsReadiness(process.platform, process.arch, path.resolve(__dirname, '..', 'stage', 'runtime'));
+  console.log(JSON.stringify(result, null, 2));
+  process.exitCode = result.status === 'READY_TO_PACKAGE' ? 0 : 1;
 }
 module.exports = { windowsReadiness, requireWindowsReadiness, verifyWindowsStage };

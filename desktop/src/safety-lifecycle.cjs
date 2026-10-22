@@ -46,10 +46,15 @@ function identity(value) {
 }
 function requireSecureStorage(storage, electronApp) {
   try {
-    if (!['darwin', 'win32'].includes(process.platform)
-        || process.platform === 'win32' && electronApp?.isReady() !== true
+    if (!['darwin', 'win32', 'linux'].includes(process.platform)
+        || process.platform !== 'darwin' && electronApp?.isReady() !== true
         || !storage || storage.isEncryptionAvailable() !== true
         || typeof storage.encryptString !== 'function' || typeof storage.decryptString !== 'function')
+      fail('SAFETY_STORAGE_UNAVAILABLE');
+    // Electron can report encryption available on Linux while using a hardcoded
+    // password (basic_text). Only an initialized OS secret store may wrap keys.
+    if (process.platform === 'linux' && (typeof storage.getSelectedStorageBackend !== 'function'
+        || !['gnome_libsecret', 'kwallet', 'kwallet5', 'kwallet6'].includes(storage.getSelectedStorageBackend())))
       fail('SAFETY_STORAGE_UNAVAILABLE');
   } catch { fail('SAFETY_STORAGE_UNAVAILABLE'); }
 }

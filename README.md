@@ -2,6 +2,14 @@
 
 # Code Intelligence
 
+Cross-platform build preparation (2026-10-22): native build paths now cover macOS arm64,
+Windows x64 and Linux x64 (Ubuntu 22.04+). See [desktop packaging](#native-desktop-packaging).
+Windows/Linux packages and installation were not executed on the development Mac;
+this source preparation does not change the production release verdict below.
+Hosted Windows native acceptance (unsigned development runtime) passed native boundaries,
+startup, import/analysis and encrypted restart, but the encrypted backup still fails at
+its capacity check (`CAPACITY` / `WINDOWS_STORAGE_REFUSED`); Windows backup/restore is unresolved.
+
 Product update (2026-10-05): repository overview, searchable snapshot results and local relationship/source navigation are implemented. Learning management is removed while stored data is preserved. See [current implementation and scoped native results](docs/multilanguage-plan-2026-10-02/11-first-implementation.md), including the initial native FAIL, resumed PASS, account controls, and reviewed V26-to-V27 backup compatibility. Developer ID/notarization and production release remain pending. The dated audit records below retain their historical scope.
 
 Latest packaged candidate: [release-gate units and candidate LA8ZS9](docs/audit/release-gate-units-la8zs9-2026-10-07.md),
@@ -106,7 +114,7 @@ gated x64 NSIS configuration. Windows native storage/runtime and installation re
 The earlier [backup/restore](docs/audit/backup-restore-integration-2026-10-03.md) and
 [cost integration](docs/audit/strict-ai-cost-integration-2026-10-03.md) records are preserved.
 
-A macOS Apple Silicon analysis tool for understanding an unfamiliar repository,
+A repository analysis tool for understanding an unfamiliar repository,
 finding where a feature is implemented, and identifying code to check before a change.
 Start with a repository overview and searchable structured results, then explore a
 selected file or symbol's relationships and source retained for that analysis snapshot.
@@ -119,7 +127,7 @@ Learning progress, growth reports and learning assignments are removed from prod
 user records and historical migrations are preserved. Existing source encryption,
 backup/recovery, local import approval and AI request approval/cost controls are reused.
 Mind maps, broader languages, model subscription integrations and monetization are follow-ups.
-Windows work is deferred. Local app completion does not imply signed distribution.
+Native packaging targets macOS arm64, Windows x64 and Linux x64. Local app completion does not imply signed distribution.
 
 > **Historical RC record / internal testing.**
 > Phase 1–5 functionality is present, and the current RC adds local-folder
@@ -137,8 +145,8 @@ Windows work is deferred. Local app completion does not imply signed distributio
 
 This repository currently ships a browser-based local workspace with a Spring
 Boot backend and optional analyzer sidecars, plus an Electron desktop runtime
-under `desktop/`. The desktop path is a local macOS arm64 RC surface: it stages
-the backend, analyzer, JRE, PostgreSQL, and Redis, keeps runtime credentials in
+under `desktop/`. The desktop path stages
+the backend, analyzer, JRE, PostgreSQL, and Redis (Garnet on Windows), keeps runtime credentials in
 OS-protected storage, and exposes only the allowlisted renderer bridge. It is
 not a signed/notarized production distribution or an auto-update channel.
 
@@ -193,7 +201,7 @@ before building or replacing files; the value alone is not signed antirollback p
 (cd desktop && npm ci && npm run stage && npm start)
 ```
 
-`desktop/scripts/stage-runtime.mjs` currently verifies macOS arm64, builds the
+On macOS, `desktop/scripts/stage-runtime.mjs` verifies arm64, builds the
 frontend/analyzer/backend, and requires local PostgreSQL with pgvector and
 Redis binaries. `pack:mac` creates a local directory package; signing,
 notarization, fresh-machine install, and real OAuth remain release blockers.
@@ -205,6 +213,75 @@ When the host `pgvector` bottle targets a different PostgreSQL major, set
 `share/postgresql/extension` before staging; the previous stage is replaced after the new manifest is
 complete. The previous stage is retained; an interrupted transaction leaves a lock/recovery
 marker for inspection. Synthetic crash-path tests do not certify signed update recovery.
+
+### Native desktop packaging
+
+Build on the target OS; cross-packaging is refused before staging changes files.
+Install Node.js 24 and the locked frontend, TypeScript analyzer and desktop dependencies:
+
+```sh
+npm --prefix frontend ci
+npm --prefix analyzers/ts-analyzer ci
+npm --prefix desktop ci
+```
+
+Set `CODE_INTELLIGENCE_BUILD_SEQUENCE` to the release owner's assigned sequence first.
+All commands below build current source, stage a verified runtime inventory and use
+`--publish never`. `pack:*` creates a local directory build; `dist:*` creates installers.
+
+| Native build host | Directory build | Distribution artifacts |
+|---|---|---|
+| macOS 13+ Apple Silicon, JDK 21, compatible PostgreSQL/pgvector and Redis as above | `npm --prefix desktop run pack:mac` | `dist:mac`: Developer ID signed/notarized DMG + ZIP |
+| Windows x64, Visual Studio C++ x64 tools/Windows SDK, CMake | `npm --prefix desktop run pack:win` | `dist:win`: Authenticode signed NSIS installer |
+| Ubuntu 22.04 x64, tools listed below | `npm --prefix desktop run pack:linux` | `dist:linux`: AppImage + DEB |
+
+Windows PowerShell, using a fresh absolute supply destination:
+
+```powershell
+./desktop/scripts/provision-windows-runtime.ps1 -Destination "$PWD/desktop/stage/windows-supply"
+$env:CODE_INTELLIGENCE_WINDOWS_SUPPLY = "$PWD/desktop/stage/windows-supply"
+# Set $env:CODE_INTELLIGENCE_BUILD_SEQUENCE to the assigned sequence.
+npm --prefix desktop run pack:win
+```
+
+The destination's parent must exist; create `desktop/stage` if this is a fresh checkout.
+The provisioner downloads checksum-pinned JDK/PostgreSQL/Garnet sources and binaries,
+builds the native helper and pgvector, and installs no services. It also requires network
+access for the pinned .NET dependency restore. `pack:win` does not sign; `dist:win`
+requires the operator's Authenticode configuration. Existing app data is preserved on uninstall.
+
+Linux, on Ubuntu 22.04 x64:
+
+```sh
+sudo apt-get install build-essential pkg-config libssl-dev zlib1g-dev patchelf binutils python3 bison flex
+sudo apt-get install libx11-6 libxext6 libxi6 libxrender1 libxtst6 libfreetype6 libfontconfig1 libasound2 libsecret-1-0
+node desktop/scripts/provision-linux-runtime.cjs "$PWD/desktop/stage/linux-supply"
+export CODE_INTELLIGENCE_LINUX_SUPPLY="$PWD/desktop/stage/linux-supply"
+# Export CODE_INTELLIGENCE_BUILD_SEQUENCE with the assigned sequence.
+npm --prefix desktop run pack:linux
+# Use npm --prefix desktop run dist:linux for AppImage and DEB artifacts.
+```
+
+The Linux provisioner builds checksum-pinned PostgreSQL/pgvector/Redis with TLS and
+bundles Java 21, required libraries and notices. It checks x64 ELF files, library closure
+and a glibc 2.35 baseline; Alpine/musl, Linux arm64, Intel Mac and Windows ARM are not
+package targets. Runtime requires a graphical session and an unlocked Secret Service
+(for example GNOME Keyring) or KWallet. Missing, locked or `basic_text` storage stops
+startup; no plaintext key fallback is allowed. AppImage may require the distribution's
+FUSE compatibility package; DEB is the alternative on Ubuntu.
+
+[Desktop packages](.github/workflows/desktop-package.yml) is a manual GitHub Actions
+workflow for all three native hosts. It provisions runtimes, builds directory packages
+and uploads permission-preserving archives with SHA-256 checksums. It does not launch
+the application, access user accounts, publish a release or provide native acceptance evidence.
+The existing native acceptance workflow remains a separate step.
+
+Windows/Linux use manual updates; the current in-app signed updater and XPC analyzer
+isolation remain macOS-specific. Default `legacy-http` analyzer mode is retained;
+requesting `xpc-required` on other platforms is rejected. Electron's embedded ASAR
+integrity protection is [supported on macOS and Windows](https://www.electronjs.org/docs/latest/tutorial/asar-integrity),
+so Linux must not be described as having equivalent code integrity. Before public release,
+review current dependency security/licences, platform signing and fresh-machine behavior.
 
 For isolated desktop validation, prepare a **new** private parent directory and a
 separate runtime directory, then run this preparation-only command with canonical
@@ -748,8 +825,8 @@ and blockers in [ADDITIONAL_FEATURES.md](./ADDITIONAL_FEATURES.md).
 | Local browser + Spring Boot backend | Supported development path |
 | Docker Compose PostgreSQL/Redis/sidecars | Supported local infrastructure |
 | macOS arm64 Electron runtime | Host-local product/Keychain/backup/recovery/restart and native window sizes verified; ad-hoc package integrity and VM startup verified; signed release acceptance pending |
-| Windows native installer | x64 NSIS/native acceptance path configured; physical-device build and acceptance not verified |
-| Linux native package | Not verified |
+| Windows native installer | x64 staging, unsigned directory and signed NSIS build paths prepared; hosted unsigned-runtime acceptance fails at encrypted backup (`CAPACITY` / `WINDOWS_STORAGE_REFUSED`); fresh-machine installer acceptance remains unverified |
+| Linux native package | Ubuntu 22.04+ x64 runtime supply and AppImage/DEB build paths prepared; native build/install not executed |
 | Production hosted deployment | Deployment-specific; no release workflow is included |
 
 After the internal and operational requirements in the current eight-stage verdict

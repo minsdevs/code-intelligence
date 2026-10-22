@@ -6,6 +6,15 @@ const { requireBuildSequence } = require('./runtime-stage.cjs');
 const { inventory, verifyWindowsRuntime } = require('./windows-pe-policy.cjs');
 const { selectWindowsToolchain, cmakeConfigureArgs, cmakeExecutable, pinKey } = require('./windows-toolchain.cjs');
 const SUPPLIES = require('./windows-runtime-supply.json');
+function stageWindowsBackend(root, incoming) {
+  const libraries = path.join(root, 'backend', 'build', 'libs');
+  // bootJar also builds the POSIX control helper; Windows uses its native boundary.
+  const jars = fs.readdirSync(libraries).filter(name => name.endsWith('.jar')
+    && !name.endsWith('-plain.jar') && name !== 'code-intelligence-control.jar');
+  if (jars.length !== 1) throw new Error('Expected exactly one backend boot jar');
+  copy(path.join(libraries, jars[0]), path.join(incoming, 'backend', 'code-intelligence.jar'));
+  copyTree(path.join(root, 'backend', 'src', 'main', 'resources', 'db', 'migration'), path.join(incoming, 'backend', 'backup-migrations'));
+}
 function stageWindowsRuntime({ desktop = path.resolve(__dirname, '..'), supply = process.env.CODE_INTELLIGENCE_WINDOWS_SUPPLY,
   buildSequence = process.env.CODE_INTELLIGENCE_BUILD_SEQUENCE } = {}) {
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Windows x64 native staging host required');
@@ -27,10 +36,7 @@ function stageWindowsRuntime({ desktop = path.resolve(__dirname, '..'), supply =
   command(process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe', ['/d', '/s', '/c', 'gradlew.bat bootJar --no-daemon'], path.join(root, 'backend'), env);
   copyTree(metadata.runtime, incoming);
   const provenanceFile = path.join(incoming, 'windows-provenance.json'), provenance = JSON.parse(fs.readFileSync(provenanceFile));
-  const jars = fs.readdirSync(path.join(root, 'backend', 'build', 'libs')).filter(name => name.endsWith('.jar') && !name.endsWith('-plain.jar'));
-  if (jars.length !== 1) throw new Error('Expected exactly one backend boot jar');
-  copy(path.join(root, 'backend', 'build', 'libs', jars[0]), path.join(incoming, 'backend', 'code-intelligence.jar'));
-  copyTree(path.join(root, 'backend', 'src', 'main', 'resources', 'db', 'migration'), path.join(incoming, 'backend', 'backup-migrations'));
+  stageWindowsBackend(root, incoming);
   const analyzer = path.join(incoming, 'ts-analyzer');
   copyTree(path.join(root, 'analyzers', 'ts-analyzer', 'dist'), path.join(analyzer, 'dist'));
   for (const name of ['package.json', 'package-lock.json']) copy(path.join(root, 'analyzers', 'ts-analyzer', name), path.join(analyzer, name));
@@ -67,4 +73,4 @@ function stageWindowsRuntime({ desktop = path.resolve(__dirname, '..'), supply =
   console.log(`Staged ${Object.keys(files).length} verified Windows runtime files. Product acceptance and release gates remain separate.`);
   return manifest;
 }
-module.exports = { stageWindowsRuntime };
+module.exports = { stageWindowsRuntime, stageWindowsBackend };

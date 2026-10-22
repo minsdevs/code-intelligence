@@ -445,6 +445,56 @@ test('startup diagnostic vocabulary rejects arbitrary values, suffixes, fields a
   expected('RUNTIME_INTEGRITY_FAILED')(new diagnostics.RuntimeIntegrityError('private-sentinel'));
 });
 
+test('restore failure protocol exposes only reviewed phases and codes', () => {
+  const error = Object.assign(new Error('synthetic-private message'), { code: 'BACKUP_DATABASE_TIMEOUT',
+    stack: 'synthetic-private stack', path: '/synthetic-private/source', cause: 'synthetic-private cause' });
+  const value = diagnostics.restoreDiagnostic('STAGE_DATABASE', error);
+  assert.deepEqual(value, { phase: 'STAGE_DATABASE', state: 'FAILED', code: 'BACKUP_DATABASE_TIMEOUT' });
+  assert.equal(Object.isFrozen(value), true);
+  const line = diagnostics.formatRestoreDiagnostic(value);
+  assert.equal(line, 'DESKTOP_RESTORE STAGE_DATABASE FAILED BACKUP_DATABASE_TIMEOUT');
+  assert.deepEqual(diagnostics.parseRestoreLine(line), value);
+  for (const code of ['MAINTENANCE_REJECTED', 'BACKUP_PG_TIMEOUT', 'BACKUP_RETENTION_CHANGED', 'EIO']) {
+    assert.equal(diagnostics.restoreDiagnostic('COMPLETE', { code }).code, code);
+  }
+  for (const error of [{ code: 'BACKUP_DATABASE_PRIVATE_SENTINEL' },
+    { get code() { throw new Error('synthetic-private getter'); } }, 'synthetic-private thrown value']) {
+    assert.deepEqual(diagnostics.restoreDiagnostic('synthetic-private phase', error),
+      { phase: 'PREPARE', state: 'FAILED', code: 'UNKNOWN' });
+  }
+  for (const line of ['DESKTOP_RESTORE PRIVATE FAILED UNKNOWN',
+    'DESKTOP_RESTORE RESUME FAILED BACKUP_DATABASE_PRIVATE_SENTINEL',
+    'DESKTOP_RESTORE RESUME FAILED UNKNOWN /synthetic-private',
+    'DESKTOP_RESTORE RESUME FAILED UNKNOWN\n', 'DESKTOP_RESTORE RESUME COMPLETE UNKNOWN']) {
+    assert.equal(diagnostics.parseRestoreLine(line), null);
+  }
+  assert.equal(diagnostics.formatRestoreDiagnostic({ ...value, path: '/synthetic-private' }), null);
+  assert.equal(diagnostics.formatRestoreDiagnostic({ get phase() { throw new Error('synthetic-private'); },
+    state: 'FAILED', code: 'UNKNOWN' }), null);
+  let reads = 0;
+  assert.equal(diagnostics.formatRestoreDiagnostic({ phase: 'RESUME', state: 'FAILED',
+    get code() { return ++reads === 1 ? 'UNKNOWN' : 'synthetic-private changed getter'; } }),
+  'DESKTOP_RESTORE RESUME FAILED UNKNOWN');
+  assert.equal(reads, 1);
+});
+
+test('backup diagnostics use their own fixed wire and cover admission, selection and destination failures', () => {
+  for (const phase of ['ADMISSION', 'SELECTION', 'DESTINATION', 'OUTPUT_ARCHIVE', 'CLEANUP']) {
+    const value = diagnostics.backupDiagnostic(phase, { code: 'WINDOWS_STORAGE_REFUSED', message: 'synthetic-private' });
+    assert.deepEqual(value, { phase, state: 'FAILED', code: 'WINDOWS_STORAGE_REFUSED' });
+    const line = diagnostics.formatBackupDiagnostic(value);
+    assert.equal(line, `DESKTOP_BACKUP ${phase} FAILED WINDOWS_STORAGE_REFUSED`);
+    assert.deepEqual(diagnostics.parseBackupLine(line), value);
+    assert.equal(diagnostics.parseRestoreLine(line), null);
+  }
+  assert.equal(diagnostics.parseBackupLine('DESKTOP_RESTORE PAUSE FAILED UNKNOWN'), null);
+  assert.equal(diagnostics.parseBackupLine('DESKTOP_BACKUP DESTINATION FAILED PRIVATE_SENTINEL'), null);
+  assert.equal(diagnostics.parseBackupLine('DESKTOP_BACKUP DESTINATION FAILED UNKNOWN /private'), null);
+  assert.equal(diagnostics.formatBackupDiagnostic({ phase: 'INPUT_COPY', state: 'FAILED', code: 'UNKNOWN' }), null);
+  assert.deepEqual(diagnostics.backupDiagnostic('PRIVATE_SENTINEL', { code: 'PRIVATE_SENTINEL' }),
+    { phase: 'PREPARE', state: 'FAILED', code: 'UNKNOWN' });
+});
+
 test('integrity failure protocol exposes only fixed operation code and kind values', () => {
   const failure = Object.assign(new Error('private /Users/secret'), { code: 'EIO' });
   const value = diagnostics.integrityDiagnostic('STREAM', failure);
