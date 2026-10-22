@@ -153,7 +153,8 @@ jobs:
   windows:
     if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && inputs.disposable_os_consent && (inputs.platform == 'windows-2025' || inputs.platform == 'both'))
     runs-on: windows-2025
-    timeout-minutes: 20
+    # Keep setup and evidence upload outside the bounded standard-user run.
+    timeout-minutes: 38
     env:
       CODE_INTELLIGENCE_BUILD_SEQUENCE: ${{ inputs.build_sequence || github.run_number }}
       NATIVE_ACCEPTANCE_CONSENT: disposable-hosted-os
@@ -170,7 +171,8 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Run real native boundaries under a new standard-user token
-        timeout-minutes: 18
+        # Allow up to 2 minutes of logon, 30 minutes of work, then owned cleanup.
+        timeout-minutes: 34
         shell: pwsh
         run: ./desktop/scripts/native-acceptance-windows.ps1
       - name: Preserve credential-free diagnostic evidence

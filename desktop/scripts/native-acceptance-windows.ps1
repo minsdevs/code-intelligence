@@ -194,7 +194,9 @@ exit $code
     if ([int](Get-Content -Raw -LiteralPath $ready) -ne $child.Id -or [int](Get-Content -Raw -LiteralPath (Join-Path $private 'child-started')) -ne $child.Id) { $outcome = 'STANDARD_USER_PROCESS_IDENTITY_FAILED'; throw 'Unexpected child marker' }
     $phase = 'standard-user-process-execution'
     $outcome = 'STANDARD_USER_EXECUTION_TIMEOUT'
-    if (-not $child.WaitForExit(17 * 60 * 1000)) { throw 'Standard-user acceptance deadline exceeded' }
+    # This includes native build/provisioning; product operation deadlines remain separate.
+    # The workflow reserves startup and owned cleanup time outside this 30-minute cap.
+    if (-not $child.WaitForExit(30 * 60 * 1000)) { throw 'Standard-user acceptance deadline exceeded' }
     $outcome = 'STANDARD_USER_COMPLETION_MISSING'
     if (-not (Test-Path -LiteralPath (Join-Path $private 'exit-code'))) { throw 'Standard-user completion missing' }
     $code = [int](Get-Content -Raw -LiteralPath (Join-Path $private 'exit-code'))
