@@ -23,7 +23,7 @@ public class CodeIntelligenceBackendApplication {
             return;
         }
         if (BackupSourceWorker.requested(args)) {
-            int result = BackupSourceWorker.run(args, System.in, System.out);
+            int result = BackupSourceWorker.run(args, System.in, BackupSourceWorker.claimFrameChannel());
             if (result != 0) System.exit(result);
             return;
         }

@@ -16,8 +16,11 @@ const RECEIPT = ['selectionSha256', 'objectCount', 'totalObjectBytes', 'objectsS
 const OBJECT = ['version', 'kind', 'objectType', 'gitOid', 'rawSha256', 'byteSize', 'bytesBase64'];
 const RETAINED = ['snapshotId', 'commitOid', 'commitEpochSecond', 'policyVersion', 'limitsSha256',
   'manifestSha256', 'fileCount', 'totalBytes', 'entries'];
+// FRAME_TEXT: the helper's stdout carried printable text where a frame prefix belongs (a library
+// log line, never source). FRAME_LIMIT/STDERR_LIMIT/WIRE_LIMIT name the exhausted transport bound.
 const CODES = new Set(['INVALID', 'CLOSED', 'BUSY', 'BINARY_CHANGED', 'PROCESS', 'PROTOCOL', 'INTEGRITY',
-  'LIMIT', 'TIMEOUT', 'TERMINATION', 'SINK', 'SOURCE_ARGUMENT_INVALID', 'SOURCE_PROTOCOL_INVALID',
+  'LIMIT', 'FRAME_LIMIT', 'FRAME_TEXT', 'STDERR_LIMIT', 'WIRE_LIMIT',
+  'TIMEOUT', 'TERMINATION', 'SINK', 'SOURCE_ARGUMENT_INVALID', 'SOURCE_PROTOCOL_INVALID',
   'SOURCE_SELECTION_INVALID', 'SOURCE_UNSAFE_PATH', 'SOURCE_UNSUPPORTED_MODE', 'SOURCE_UNSUPPORTED_ENCODING',
   'SOURCE_SECRET_DETECTED', 'SOURCE_MISSING', 'SOURCE_CHANGED', 'SOURCE_LIMIT', 'SOURCE_INTEGRITY', 'SOURCE_FAILURE']);
 class BackupSourceWorkerError extends Error {
@@ -213,7 +216,7 @@ async function* frames(stream, check) {
     for await (const chunk of stream) {
       check();
       if (!Buffer.isBuffer(chunk)) fail('PROTOCOL');
-      total += chunk.length; number(total, LIMITS.wireBytes);
+      total += chunk.length; if (total > LIMITS.wireBytes) fail('WIRE_LIMIT');
       let offset = 0;
       while (offset < chunk.length) {
         check();
@@ -222,7 +225,10 @@ async function* frames(stream, check) {
           chunk.copy(prefix, prefixUsed, offset, offset + amount); prefixUsed += amount; offset += amount;
           if (prefixUsed !== 4) continue;
           const length = prefix.readUInt32BE();
-          if (!length || length > LIMITS.frameBytes) fail('LIMIT');
+          // Four printable bytes always exceed the frame bound, so text on stdout is distinguishable
+          // from an oversized binary prefix without retaining or reporting the bytes themselves.
+          if (!length || length > LIMITS.frameBytes) fail(prefix.every(byte => byte === 0x09 || byte === 0x0a || byte === 0x0d
+            || byte >= 0x20 && byte < 0x7f) ? 'FRAME_TEXT' : 'FRAME_LIMIT');
           payload = Buffer.alloc(length); used = 0;
         }
         const amount = Math.min(payload.length - used, chunk.length - offset);
@@ -326,7 +332,7 @@ async function createBackupSourceWorker(options) {
           || typeof child.stdout[Symbol.asyncIterator] !== 'function' || typeof child.stderr.on !== 'function') fail('PROCESS');
       child.stdin.on('error', () => abort('PROCESS'));
       child.stderr.on('error', () => abort('PROCESS')); let stderrBytes = 0;
-      child.stderr.on('data', chunk => { stderrBytes += chunk.length; if (stderrBytes > LIMITS.stderrBytes) abort('LIMIT'); });
+      child.stderr.on('data', chunk => { stderrBytes += chunk.length; if (stderrBytes > LIMITS.stderrBytes) abort('STDERR_LIMIT'); });
       timer = setTimeout(() => abort('TIMEOUT'), timeoutMs);
       const sent = send(child.stdin, check);
       const received = receive(frames(child.stdout, check), check);

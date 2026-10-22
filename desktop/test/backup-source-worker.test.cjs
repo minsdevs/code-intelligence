@@ -211,9 +211,21 @@ for (const mutation of ['duplicate-json', 'invalid-utf8', 'oversized-prefix', 't
     if (mutation === 'oversized-prefix') { f.control.rawOutput = Buffer.alloc(4); f.control.rawOutput.writeUInt32BE(LIMITS.frameBytes + 1); }
     if (mutation === 'truncated-prefix') f.control.rawOutput = Buffer.from([0, 0]);
     if (mutation === 'truncated-body') f.control.rawOutput = frame(f.source.output[0]).subarray(0, 10);
-    await failed(f.export());
+    await failed(f.export(), mutation === 'oversized-prefix' ? 'FRAME_LIMIT' : undefined);
   });
 }
+
+test('library text on stdout is reported as FRAME_TEXT without retaining the line', async t => {
+  const f = await fixture(t);
+  const noise = Buffer.from('01:02:03.004 [main] WARN org.eclipse.jgit.util.FS -- private-sentinel /Users/private-sentinel\n');
+  f.control.rawOutput = Buffer.concat([noise, ...f.source.output.map(frame)]);
+  await failed(f.export(), 'FRAME_TEXT'); assert.deepEqual(f.received, []);
+  const g = await fixture(t);
+  g.control.rawOutput = Buffer.concat([...g.source.output.map(frame), noise]);
+  await failed(g.export(), 'FRAME_TEXT'); assert.equal(g.received.at(-1).kind, 'END');
+  const h = await fixture(t); h.control.rawOutput = Buffer.alloc(4);
+  await failed(h.export(), 'FRAME_LIMIT');
+});
 
 test('valid output followed by a nonzero exit is still failure', async t => {
   const f = await fixture(t); f.control.exitCode = 9;
@@ -222,7 +234,7 @@ test('valid output followed by a nonzero exit is still failure', async t => {
 
 test('subprocess stderr is bounded and never returned or logged', async t => {
   const f = await fixture(t); f.control.stderr = Buffer.alloc(LIMITS.stderrBytes + 1, 97);
-  await failed(f.export(), 'LIMIT');
+  await failed(f.export(), 'STDERR_LIMIT');
 });
 
 test('static worker policy failures remain actionable without source disclosure', async t => {
