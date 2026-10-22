@@ -16,7 +16,9 @@ function requireNativePackaging(context, host = process) {
   if (!['win32', 'linux'].includes(platform)) throw new Error('UNSUPPORTED_NATIVE_PACKAGE_TARGET');
   // electron-builder uses builder-util.Arch.x64 = 1.
   if (host.platform !== platform || host.arch !== 'x64' || context.arch !== 1) throw new Error('NATIVE_BUILD_HOST_REQUIRED');
-  if (!Array.isArray(context.targets) || !context.targets.length) throw new Error('NATIVE_BUILD_TARGETS_REQUIRED');
+  // Windows/Linux builder packagers omit the dir target object, so a directory-only
+  // build reaches beforePack with an explicit empty array. Missing targets are invalid.
+  if (!Array.isArray(context.targets)) throw new Error('NATIVE_BUILD_TARGETS_REQUIRED');
   const allowed = platform === 'win32' ? ['dir', 'nsis'] : ['dir', 'appimage', 'deb'];
   // The CLI accepts AppImage, while builder's target object is named appImage.
   if (context.targets.some(target => typeof target?.name !== 'string'

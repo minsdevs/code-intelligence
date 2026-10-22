@@ -58,13 +58,27 @@ test('the installed builder AppImage target passes the native distribution gate'
   assert.doesNotThrow(() => requireNativePackaging(value, { platform: 'linux', arch: 'x64' }));
 });
 
+test('installed Windows and Linux builder directory targets pass without requiring installer signing', () => {
+  require('app-builder-lib');
+  const { createTargets } = require('app-builder-lib/out/targets/targetFactory');
+  const { WinPackager } = require('app-builder-lib/out/winPackager');
+  const { LinuxPackager } = require('app-builder-lib/out/linuxPackager');
+  for (const [platform, Packager] of [['win32', WinPackager], ['linux', LinuxPackager]]) {
+    const value = context(platform, [], { forceCodeSigning: false });
+    value.targets = createTargets(new Map(), ['dir'], path.resolve(__dirname, '..', 'dist'), Object.create(Packager.prototype));
+    assert.deepEqual(value.targets, []);
+    assert.doesNotThrow(() => requireNativePackaging(value, { platform, arch: 'x64' }));
+  }
+});
+
 test('direct builder invocation cannot bypass native target or Windows installer signing guards', () => {
   for (const platform of ['win32', 'linux']) {
     const value = context(platform, ['dir']), host = { platform, arch: 'x64' };
     assert.doesNotThrow(() => requireNativePackaging(value, host));
     assert.throws(() => requireNativePackaging(value, { platform: 'darwin', arch: 'arm64' }), /NATIVE_BUILD_HOST_REQUIRED/);
     assert.throws(() => requireNativePackaging({ ...value, arch: 3 }, host), /NATIVE_BUILD_HOST_REQUIRED/);
-    assert.throws(() => requireNativePackaging(context(platform, []), host), /NATIVE_BUILD_TARGETS_REQUIRED/);
+    for (const targets of [undefined, null, {}])
+      assert.throws(() => requireNativePackaging({ ...value, targets }, host), /NATIVE_BUILD_TARGETS_REQUIRED/);
     assert.throws(() => requireNativePackaging(context(platform, ['dir'], { config: { extraMetadata: { adapterIsolation: 'xpc-required' } } }), host), /ADAPTER_SUPERVISOR_MACOS_ONLY/);
   }
   const host = { platform: 'win32', arch: 'x64' };
