@@ -130,6 +130,24 @@ test('native capacity measures an inherited runtime bundle read-only while writa
     stagedDatabaseLimitBytes: '0', stagedSourceLimitBytes: '0' }));
   await lease.close();
 });
+test('native scratch roots accept plain-IO object files only through the inherited workspace scope', { skip: !enabled }, async t => {
+  // The Java source worker lets JGit write scratch/stage objects with plain file APIs. Under a
+  // private-scope directory those entries carry the token's default, unprotected DACL and are
+  // refused; under an inherited workspace directory they inherit the private ACEs and are accepted.
+  const f = await fixture(t); await f.storage.mkdir('scratch', { inherit: true });
+  const scratch = path.join(f.root, 'scratch');
+  const isolated = await f.windowsBoundary.openStorage(scratch, { mode: 'private' }); f.resources.push(isolated);
+  await isolated.mkdir('7');
+  await fs.mkdir(path.join(scratch, '7', 'objects')); await fs.writeFile(path.join(scratch, '7', 'objects', 'plain.bin'), Buffer.alloc(3, 1));
+  await assert.rejects(isolated.stat('7/objects/plain.bin'), { code: 'WINDOWS_STORAGE_REFUSED' });
+  const managed = await f.windowsBoundary.openStorage(scratch, { mode: 'workspace' }); f.resources.push(managed);
+  await managed.mkdir('8', { inherit: true });
+  await fs.mkdir(path.join(scratch, '8', 'objects')); await fs.writeFile(path.join(scratch, '8', 'objects', 'plain.bin'), Buffer.alloc(3, 2));
+  const file = await managed.stat('8/objects/plain.bin'); assert.equal(file.size, '3'); assert.equal(file.kind, 'file');
+  const objects = await managed.stat('8/objects', { directory: true }); assert.equal(objects.kind, 'directory');
+  await managed.remove('8/objects/plain.bin', file); await managed.remove('8/objects', objects.identity, { directory: true });
+  assert.equal(await managed.stat('8/objects', { directory: true, missing: true }), null);
+});
 test('native platform writer creates fresh file and namespace cleanup requires caller-observed state', { skip: !enabled }, async t => {
   const f = await fixture(t); const io = await createBackupPlatformIO(f.windowsBoundary, f.root); f.resources.push(io);
   const file = path.join(f.root, 'copy.bin'); const writer = await io.open(file, require('node:fs').constants.O_CREAT | require('node:fs').constants.O_EXCL | require('node:fs').constants.O_WRONLY);

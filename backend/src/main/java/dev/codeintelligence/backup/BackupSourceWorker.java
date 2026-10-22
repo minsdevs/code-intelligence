@@ -180,18 +180,22 @@ public final class BackupSourceWorker {
                                     .toAbsolutePath()
                                     .normalize(),
                             "workspace"));
+                // Scratch and stage roots are inherited children of the desktop's recovery
+                // workspace, and JGit writes their object files with plain file APIs. On Windows
+                // only the inherited workspace scope accepts such entries: the private scope
+                // demands a protected DACL on every file, which plain-created objects never carry.
                 if (operation.equals("EXPORT_RETAINED"))
                     scopes.add(SourceAccess.open(
                             Path.of(text(request.get("scratchRoot")))
                                     .toAbsolutePath()
                                     .normalize(),
-                            "private"));
+                            "workspace"));
                 if (operation.equals("IMPORT"))
                     scopes.add(SourceAccess.open(
                             Path.of(text(request.get("stageRoot")))
                                     .toAbsolutePath()
                                     .normalize(),
-                            "private"));
+                            "workspace"));
                 if (operation.equals("EXPORT")) {
                     eof(source);
                     exportSource(text(request.get("reposRoot")), project, selection, target, budget);
