@@ -162,8 +162,8 @@ async function main() {
 
       const featureListUrl = `${args.baseUrl}/api/projects/${args.project}/features`;
       const featureDetailUrl = `${featureListUrl}/${args.feature}`;
-      const cachedList = await context.request.get(featureListUrl, { headers: apiHeaders });
-      const cachedDetail = await context.request.get(featureDetailUrl, { headers: apiHeaders });
+      const cachedList = await context.request.get(`${featureListUrl}?snapshotId=${args.a}`, { headers: apiHeaders });
+      const cachedDetail = await context.request.get(`${featureDetailUrl}?snapshotId=${args.a}`, { headers: apiHeaders });
       assert.equal(cachedList.status(), 200);
       assert.equal(cachedDetail.status(), 200);
       const detail = await cachedDetail.json();
@@ -179,8 +179,10 @@ async function main() {
 
       // Replay only previously fetched, unmodified feature metadata, as a stale tab/cache would.
       // Every file-content request still reaches the real backend/JGit reader.
-      await page.route(featureListUrl, route => route.fulfill({ response: cachedList }));
-      await page.route(featureDetailUrl, route => route.fulfill({ response: cachedDetail }));
+      const replayListUrl = `${featureListUrl}?snapshotId=${b}`;
+      const replayDetailUrl = `${featureDetailUrl}?snapshotId=${b}`;
+      await page.route(replayListUrl, route => route.fulfill({ response: cachedList }));
+      await page.route(replayDetailUrl, route => route.fulfill({ response: cachedDetail }));
       await navigate(`/projects/${args.project}/features`);
       await page.getByRole('button', { name: /S1 source feature/ }).click();
       const historicalRequest = page.waitForRequest(request => {
@@ -194,8 +196,8 @@ async function main() {
       assert.equal(new URL(page.url()).searchParams.get('snapshotId'), String(args.a));
       assert.equal(new URL(page.url()).searchParams.get('evidenceId'), String(args.evidence));
       await unavailable('SOURCE_UNAVAILABLE'); // Local refresh retired A's object store.
-      await page.unroute(featureListUrl);
-      await page.unroute(featureDetailUrl);
+      await page.unroute(replayListUrl);
+      await page.unroute(replayDetailUrl);
 
       await navigate(`/projects/${args.project}/notes`);
       await page.getByRole('button', { name: 'S1 sentinel', exact: true }).click();
