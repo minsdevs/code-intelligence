@@ -7,9 +7,9 @@
 [플랫폼별 패키징](#플랫폼별-데스크톱-패키징)을 참고하십시오.
 개발 맥에서 Windows/Linux 빌드·설치는 실행하지 않았으며, 아래 정식 릴리스 판정은 유지합니다.
 GitHub 호스트 Windows 네이티브 수용 검사(unsigned 개발 런타임)는 native 경계, 시작,
-가져오기·분석, 암호화 재시작까지 통과했습니다. 암호화 백업은 용량 확인을 통과하지만
-소스 내보내기 단계(`CHECKPOINT_EXPORT` / `BACKUP_SOURCE_LIMIT`)에서 실패합니다.
-Windows 백업·복원은 미해결입니다.
+가져오기·분석, 암호화 재시작까지 통과했습니다. 암호화 백업은 용량 확인을 통과하고
+Java 소스 워커까지 도달하지만, 소스 내보내기 단계(`CHECKPOINT_EXPORT` /
+`BACKUP_SOURCE_SOURCE_FAILURE`)에서 실패합니다. Windows 백업·복원은 미해결입니다.
 
 2026-10-05 제품 개편: 레포 개요·분석 시점별 검색 표·선택 주변 관계·보관 소스 탐색을 구현했습니다. 학습 관리는 제거하고 기존 데이터는 보존했습니다. [현재 구현과 실제 앱 검증 범위](docs/multilanguage-plan-2026-10-02/11-first-implementation.md)에 최초 native FAIL/후속 PASS, 계정 연결 관리, 검토된 V26→V27 백업 호환성을 구분했습니다. Developer ID 서명·공증·정식 배포는 아직 완료하지 않았습니다. 아래 날짜별 감사 기록은 과거 범위를 유지합니다.
 
@@ -475,7 +475,7 @@ AI 컨텍스트를 구성하기 전에 secret을 마스킹하지만, 사용자�
 | 로컬 브라우저 + Spring Boot backend | 지원되는 개발 경로 |
 | Docker Compose PostgreSQL/Redis/sidecar | 지원되는 로컬 인프라 |
 | macOS arm64 Electron runtime | 로컬 staging/package RC; unsigned/notarized acceptance 대기 |
-| Windows 네이티브 설치 프로그램 | x64 staging·unsigned directory·서명 NSIS 빌드 경로 준비; 호스트 unsigned 런타임 수용 검사는 암호화 백업 소스 내보내기(`CHECKPOINT_EXPORT` / `BACKUP_SOURCE_LIMIT`)에서 실패; 새 기기 설치 프로그램 수용 검증 미완료 |
+| Windows 네이티브 설치 프로그램 | x64 staging·unsigned directory·서명 NSIS 빌드 경로 준비; 호스트 unsigned 런타임 수용 검사는 암호화 백업 소스 내보내기(`CHECKPOINT_EXPORT` / `BACKUP_SOURCE_SOURCE_FAILURE`)에서 실패; 새 기기 설치 프로그램 수용 검증 미완료 |
 | Linux 네이티브 패키지 | Ubuntu 22.04+ x64 공급품·AppImage/DEB 빌드 경로 준비; native 빌드·설치 미실행 |
 | 프로덕션 호스팅 배포 | 배포별로 다름; 릴리스 워크플로가 포함되지 않음 |
 

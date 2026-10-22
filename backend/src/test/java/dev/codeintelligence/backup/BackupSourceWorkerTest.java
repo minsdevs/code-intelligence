@@ -7,6 +7,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -1442,5 +1443,74 @@ class BackupSourceWorkerTest {
         assertThat(exported.frames().getFirst().get("objectsSha256").stringValue())
                 .isEqualTo(SourceGraph.digest(expected));
         assertThat(exported.frames().getFirst().get("objectCount").intValue()).isEqualTo(expected.size());
+    }
+
+    @Test
+    void isolatedSystemReaderFixesFileStoreAttributesAndNeverTouchesConfiguration() throws Exception {
+        org.eclipse.jgit.util.SystemReader previous = org.eclipse.jgit.util.SystemReader.getInstance();
+        BackupSourceWorker.IsolatedSystemReader reader = new BackupSourceWorker.IsolatedSystemReader(previous);
+        Path home = directory("isolated-home-");
+        long undefined = -1L;
+        for (org.eclipse.jgit.lib.StoredConfig config :
+                List.of(reader.getUserConfig(), reader.getSystemConfig(), reader.getJGitConfig())) {
+            assertThat(config.getTimeUnit(
+                            "filesystem",
+                            "Synthetic|21|" + home,
+                            "timestampResolution",
+                            undefined,
+                            java.util.concurrent.TimeUnit.NANOSECONDS))
+                    .isEqualTo(FS.FileStoreAttributes.FALLBACK_TIMESTAMP_RESOLUTION.toNanos());
+            assertThat(config.getTimeUnit(
+                            "filesystem",
+                            "Synthetic|21|" + home,
+                            "minRacyThreshold",
+                            undefined,
+                            java.util.concurrent.TimeUnit.NANOSECONDS))
+                    .isEqualTo(FS.FileStoreAttributes.FALLBACK_FILESTORE_ATTRIBUTES
+                            .getMinimalRacyInterval()
+                            .toNanos());
+            assertThat(config.getTimeUnit(
+                            "core", null, "timestampResolution", undefined, java.util.concurrent.TimeUnit.NANOSECONDS))
+                    .isEqualTo(undefined);
+            config.setString("filesystem", "synthetic", "timestampResolution", "1 second");
+            config.save();
+            assertThat(config).isInstanceOf(org.eclipse.jgit.storage.file.FileBasedConfig.class);
+            assertThat(((org.eclipse.jgit.storage.file.FileBasedConfig) config).isOutdated())
+                    .isFalse();
+        }
+        assertThat(Files.list(home)).isEmpty();
+        assertThat(Path.of("code-intelligence-worker-config.never-read")).doesNotExist();
+        assertThat(org.eclipse.jgit.util.SystemReader.getInstance()).isSameAs(previous);
+    }
+
+    @Test
+    void runRestoresThePreviousSystemReaderAfterEveryOutcome() throws Exception {
+        org.eclipse.jgit.util.SystemReader previous = org.eclipse.jgit.util.SystemReader.getInstance();
+        Fixture f = fixture();
+        assertThat(invoke(List.of(exportRequest(f))).status()).isZero();
+        assertThat(org.eclipse.jgit.util.SystemReader.getInstance()).isSameAs(previous);
+        assertThat(invokeBytes(new byte[0], "--private-flag").status()).isEqualTo(2);
+        assertThat(org.eclipse.jgit.util.SystemReader.getInstance()).isSameAs(previous);
+    }
+
+    @Test
+    void claimedFrameChannelExcludesLibraryLoggingAndStrayPrints() throws Exception {
+        PrintStream original = System.out;
+        ByteArrayOutputStream channel = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(channel, true, StandardCharsets.UTF_8));
+        try {
+            PrintStream frames = BackupSourceWorker.claimFrameChannel();
+            org.slf4j.LoggerFactory.getLogger("org.eclipse.jgit.util.FS").warn("synthetic library noise");
+            org.slf4j.LoggerFactory.getLogger("org.eclipse.jgit.util.FS")
+                    .error("synthetic library failure", new java.io.IOException("synthetic"));
+            System.out.print("synthetic stray print");
+            System.out.flush();
+            assertThat(channel.size()).isZero();
+            frames.print("frame");
+            frames.flush();
+            assertThat(channel.toString(StandardCharsets.UTF_8)).isEqualTo("frame");
+        } finally {
+            System.setOut(original);
+        }
     }
 }

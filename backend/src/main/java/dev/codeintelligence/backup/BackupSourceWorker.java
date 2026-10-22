@@ -5,15 +5,18 @@ import static dev.codeintelligence.backup.SourceProtocol.*;
 import dev.codeintelligence.common.SourceAccess;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
@@ -26,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import org.eclipse.jgit.dircache.DirCache;
 import org.eclipse.jgit.dircache.DirCacheEntry;
 import org.eclipse.jgit.errors.MissingObjectException;
@@ -38,7 +42,9 @@ import org.eclipse.jgit.lib.ObjectDatabase;
 import org.eclipse.jgit.lib.ObjectInserter;
 import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.PersonIdent;
+import org.eclipse.jgit.storage.file.FileBasedConfig;
 import org.eclipse.jgit.util.FS;
+import org.eclipse.jgit.util.SystemReader;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -54,8 +60,89 @@ public final class BackupSourceWorker {
         return Arrays.stream(args).anyMatch(value -> value.startsWith(FLAG));
     }
 
+    /**
+     * The frame channel is the process's original standard output. Library logging (the bundled
+     * SLF4J console appender, which Spring Boot leaves at INFO) also writes to {@code System.out}, so
+     * one JGit warning would corrupt a frame prefix. Claim the stream before any library initializes
+     * and leave {@code System.out} disconnected; nothing this worker prints is ever a frame.
+     */
+    public static PrintStream claimFrameChannel() {
+        PrintStream frames = System.out;
+        System.setOut(new PrintStream(OutputStream.nullOutputStream(), true));
+        return frames;
+    }
+
+    /**
+     * JGit normally discovers a git executable for the system configuration, reads and writes the
+     * user's configuration, and measures each file store's timestamp resolution by writing probe
+     * files into the repository's object directory. This worker must do none of that: a probe file
+     * trips its own change detection, and a fresh or read-only user profile makes JGit log and
+     * re-measure on every run. Fixed, conservative attributes replace discovery entirely.
+     */
+    static final class IsolatedSystemReader extends SystemReader.Delegate {
+        private static final Duration RACY_INTERVAL =
+                FS.FileStoreAttributes.FALLBACK_FILESTORE_ATTRIBUTES.getMinimalRacyInterval();
+
+        IsolatedSystemReader(SystemReader delegate) {
+            super(delegate);
+        }
+
+        private static FileBasedConfig fixed(Config parent, FS fs) {
+            return new FileBasedConfig(parent, new File("code-intelligence-worker-config.never-read"), fs) {
+                @Override
+                public void load() {}
+
+                @Override
+                public void save() {}
+
+                @Override
+                public boolean isOutdated() {
+                    return false;
+                }
+
+                @Override
+                public long getTimeUnit(
+                        String section, String subsection, String name, long defaultValue, TimeUnit wantUnit) {
+                    Duration value = !"filesystem".equals(section)
+                            ? null
+                            : "timestampResolution".equals(name)
+                                    ? FS.FileStoreAttributes.FALLBACK_TIMESTAMP_RESOLUTION
+                                    : "minRacyThreshold".equals(name) ? RACY_INTERVAL : null;
+                    return value == null
+                            ? super.getTimeUnit(section, subsection, name, defaultValue, wantUnit)
+                            : wantUnit.convert(value.toNanos(), TimeUnit.NANOSECONDS);
+                }
+            };
+        }
+
+        @Override
+        public FileBasedConfig openSystemConfig(Config parent, FS fs) {
+            return fixed(parent, fs);
+        }
+
+        @Override
+        public FileBasedConfig openUserConfig(Config parent, FS fs) {
+            return fixed(parent, fs);
+        }
+
+        @Override
+        public FileBasedConfig openJGitConfig(Config parent, FS fs) {
+            return fixed(parent, fs);
+        }
+    }
+
     /** Static framed errors only; never print an exception, path, source text or submitted JSON. */
     public static int run(String[] args, InputStream input, OutputStream output) {
+        SystemReader previous = SystemReader.getInstance();
+        SystemReader.setInstance(new IsolatedSystemReader(previous));
+        try {
+            return execute(args, input, output);
+        } finally {
+            SystemReader.setInstance(previous);
+        }
+    }
+
+    private static int execute(String[] args, InputStream input, OutputStream output) {
         DataOutputStream target = new DataOutputStream(output);
         try {
             if (args.length != 1 || !FLAG.equals(args[0])) throw failure("SOURCE_ARGUMENT_INVALID");
