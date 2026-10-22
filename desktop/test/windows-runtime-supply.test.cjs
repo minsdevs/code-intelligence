@@ -7,7 +7,7 @@ const crypto = require('node:crypto');
 const { parsePe, validateClosure, inventory, systemDll, verifyWindowsRuntime, REQUIRED } = require('../scripts/windows-pe-policy.cjs');
 const { zipEntries, extractZip, crc32 } = require('../scripts/windows-runtime-archive.cjs');
 const { validateRuntimeManifest } = require('../src/runtime-manifest.cjs');
-const { runWindowsProduct } = require('../scripts/native-acceptance-windows-product.cjs');
+const { runWindowsProduct, cacheStartupEvidence } = require('../scripts/native-acceptance-windows-product.cjs');
 const { stageWindowsBackend, stageWindowsRuntime } = require('../scripts/stage-windows-runtime.cjs');
 const { windowsReadiness, requireWindowsReadiness } = require('../scripts/windows-readiness.cjs');
 const supplies = require('../scripts/windows-runtime-supply.json');
@@ -16,6 +16,18 @@ function temporary(t) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root;
 }
 function put(root, file, bytes) { const target = path.join(root, file); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, bytes); return target; }
+test('Garnet startup evidence keeps only fixed failure types and actual exit status', t => {
+  const root = temporary(t);
+  const file = put(root, 'cache-private.log', 'private-token\n'.repeat(10000)
+    + 'Unable to initialize server due to exception: System.TypeInitializationException\n'
+    + 'System.DllNotFoundException: C:\\private\\library.dll\nPassword=private-secret\n');
+  const evidence = cacheStartupEvidence(file, 0);
+  assert.deepEqual(evidence, { status: 'FAIL', exitStatus: 0, signal: null, logReadable: true,
+    reasons: ['server-initialization', 'native-library'], exceptions: ['DllNotFoundException', 'TypeInitializationException'] });
+  assert.doesNotMatch(JSON.stringify(evidence), /private|secret|Password/);
+  assert.deepEqual(cacheStartupEvidence(path.join(root, 'missing'), undefined),
+    { status: 'FAIL', exitStatus: null, signal: null, logReadable: false, reasons: [], exceptions: [] });
+});
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 function image({ imports = ['KERNEL32.dll'], delayed = [], machine = 0x8664, dll = false } = {}) {
   const bytes = Buffer.alloc(0xa00); bytes.writeUInt16LE(0x5a4d); bytes.writeUInt32LE(0x80, 0x3c); bytes.writeUInt32LE(0x4550, 0x80);

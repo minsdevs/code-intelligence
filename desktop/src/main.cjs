@@ -543,7 +543,7 @@ async function startPostgres({ recoveryOnly = false } = {}) {
 async function spawnRedis() {
   const data = await runtimeDirectory('redis', true);
   const args = runtime.windowsBoundary
-    ? ['--config-import-path', runtime.transport.redisConfig, '--config-import-format', 'Garnet']
+    ? ['--config-import-path', runtime.transport.redisConfig, '--config-import-format', 'GarnetConf']
     : [runtime.transport.redisConfig, '--dir', data, '--dbfilename', 'dump.rdb', '--appendonly', 'yes'];
   await spawnManaged('redis', binary('redis', 'bin', 'redis-server'), args, {
     env: {

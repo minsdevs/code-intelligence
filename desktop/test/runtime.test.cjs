@@ -192,6 +192,29 @@ test('child spawn errors are handled and reported instead of crashing Electron',
   assert.equal(h.run('runtime.ready'), false);
 });
 
+test('Windows cache launch uses the pinned Garnet configuration enum and waits for TLS AUTH readiness', async () => {
+  const h = harness();
+  h.context.cacheLaunches = [];
+  h.context.cacheRoot = 'C:\\synthetic runtime';
+  h.context.cacheConfig = 'C:\\synthetic profile\\transport\\garnet.json';
+  h.context.cacheExecutable = 'C:\\synthetic runtime\\cache\\GarnetServer.exe';
+  h.run(`process.platform = 'win32'; runtime.windowsBoundary = {};
+    runtime.transport = { redisConfig: cacheConfig, redisReady: async () => { readinessProbes++; return true; } };
+    var readinessProbes = 0;
+    runtimeRoot = () => cacheRoot; runtimeDirectory = async () => 'C:\\\\synthetic profile\\\\redis';
+    binary = () => cacheExecutable;
+    spawnManaged = async (name, command, args, options) => cacheLaunches.push({ name, command, args, options });`);
+  const ready = await h.run('spawnRedis()');
+  assert.equal(h.context.cacheLaunches.length, 1);
+  const launch = h.context.cacheLaunches[0];
+  assert.equal(launch.name, 'redis'); assert.equal(launch.command, h.context.cacheExecutable);
+  // ConfigFileType in pinned Garnet 2.2.0 is GarnetConf/RedisConf; "Garnet" is rejected before startup.
+  assert.deepEqual(Array.from(launch.args), ['--config-import-path', h.context.cacheConfig, '--config-import-format', 'GarnetConf']);
+  assert.equal(h.run('readinessProbes'), 0);
+  await ready();
+  assert.equal(h.run('readinessProbes'), 1);
+});
+
 
 test('runtime mutations run sequentially even after a failed operation', async () => {
   const h = harness();
