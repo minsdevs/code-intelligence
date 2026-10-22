@@ -92,7 +92,19 @@ const EXPECTED_STEP = {
 };
 
 const serialized = install => vm.runInNewContext('(' + install.toString() + ')', { process, Buffer });
-const pending = promise => Promise.race([promise.then(() => 'DONE'), new Promise(resolve => setTimeout(resolve, 100, 'PENDING'))]);
+async function operationState(promise, hook) {
+  let poll, deadline;
+  try {
+    return await Promise.race([promise.then(() => 'DONE'), new Promise((resolve, reject) => {
+      const inspect = () => {
+        if (hook.inspect().hit) resolve('PENDING');
+        else poll = setTimeout(inspect, 10);
+      };
+      deadline = setTimeout(() => reject(new Error('Operation neither completed nor reached its owned boundary')), 10000);
+      inspect();
+    })]);
+  } finally { clearTimeout(poll); clearTimeout(deadline); }
+}
 
 test('every boundary pauses at exactly its product operation and earlier operations pass through unchanged', async t => {
   assert.deepEqual(Object.keys(EXPECTED_STEP).sort(), Object.keys(BOUNDARIES).sort());
@@ -101,18 +113,22 @@ test('every boundary pauses at exactly its product operation and earlier operati
       const f = await profileFixture(t), original = { open: fs.promises.open, rename: fs.promises.rename, unlink: fs.promises.unlink };
       const hook = await serialized(installOwnedBoundary)({ app: f.app }, { profile: f.profile, parent: f.parent, point });
       let held, label;
-      for (const [name, step] of restoreSteps(f.profile, f.log)) {
-        const operation = step(); operation.catch(() => {});
-        if (await pending(operation) === 'PENDING') { held = operation; label = name; break; }
-      }
-      const observed = hook.inspect();
-      assert.equal(observed.mismatch, null); assert.equal(label, EXPECTED_STEP[point]);
-      assert.equal(observed.hit.point, point); assert.equal(observed.hit.count, 1);
-      const before = /_BEFORE$/.test(point);
-      assert.equal(observed.hit.operationCompleted, !before);
-      if (label === 'unlink:active') assert.equal(fs.existsSync(path.join(f.profile, 'backup-maintenance/active.enc')), before);
-      if (label === 'rename:SAVE_REPOS') assert.equal(fs.existsSync(path.join(f.profile, 'recovery', TX, 'previous-repos')), true);
-      hook.restore();
+      try {
+        for (const [name, step] of restoreSteps(f.profile, f.log)) {
+          // Ordinary I/O may exceed the old 100 ms heuristic without reaching a pause boundary.
+          const operation = point === 'COMPLETE_BEFORE' && name === 'journal:LATCH'
+            ? new Promise(resolve => setTimeout(resolve, 150)).then(step) : step();
+          operation.catch(() => {});
+          if (await operationState(operation, hook) === 'PENDING') { held = operation; label = name; break; }
+        }
+        const observed = hook.inspect();
+        assert.equal(observed.mismatch, null); assert.equal(label, EXPECTED_STEP[point]);
+        assert.equal(observed.hit.point, point); assert.equal(observed.hit.count, 1);
+        const before = /_BEFORE$/.test(point);
+        assert.equal(observed.hit.operationCompleted, !before);
+        if (label === 'unlink:active') assert.equal(fs.existsSync(path.join(f.profile, 'backup-maintenance/active.enc')), before);
+        if (label === 'rename:SAVE_REPOS') assert.equal(fs.existsSync(path.join(f.profile, 'recovery', TX, 'previous-repos')), true);
+      } finally { hook.restore(); }
       await assert.rejects(held, { code: 'EIO' });
       assert.equal(fs.promises.open, original.open); assert.equal(fs.promises.rename, original.rename); assert.equal(fs.promises.unlink, original.unlink);
     });
@@ -122,11 +138,12 @@ test('every boundary pauses at exactly its product operation and earlier operati
 test('an out-of-order operation sequence is reported as a mismatch and never pauses', async t => {
   const f = await profileFixture(t);
   const hook = await serialized(installOwnedBoundary)({ app: f.app }, { profile: f.profile, parent: f.parent, point: 'STAGED_AFTER' });
-  const steps = restoreSteps(f.profile, f.log).filter(([name]) => name !== 'journal:MAINTENANCE_SEALED');
-  for (const [, step] of steps.slice(0, 14)) assert.equal(await pending(step()), 'DONE');
-  const observed = hook.inspect();
-  assert.equal(observed.hit, null); assert.equal(observed.mismatch.reason, 'RECORD_SEALED');
-  hook.restore();
+  try {
+    const steps = restoreSteps(f.profile, f.log).filter(([name]) => name !== 'journal:MAINTENANCE_SEALED');
+    for (const [, step] of steps.slice(0, 14)) assert.equal(await operationState(step(), hook), 'DONE');
+    const observed = hook.inspect();
+    assert.equal(observed.hit, null); assert.equal(observed.mismatch.reason, 'RECORD_SEALED');
+  } finally { hook.restore(); }
 });
 
 test('boundary hooks refuse ordinary profiles, other claims and unknown points before patching', async t => {
