@@ -2,11 +2,11 @@
 
 const crypto = require('node:crypto');
 
-// Reviewed 2026-10-03. The gateway rejects this catalog after 30 days; no runtime refresh or alias.
+// Reviewed 2026-11-21. The gateway rejects this catalog after 30 days; no runtime refresh or alias.
 // https://developers.openai.com/api/docs/models/gpt-4o-mini
 // https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
 const MODEL = 'gpt-4o-mini-2024-07-18';
-const VERIFIED_AT = Date.parse('2026-10-03T00:00:00Z');
+const VERIFIED_AT = Date.parse('2026-11-21T00:00:00Z');
 const rates = Object.freeze({ inputMicroUsdPerMillion: '150000', cachedInputMicroUsdPerMillion: '75000',
   outputMicroUsdPerMillion: '600000', embeddingMicroUsdPerMillion: '0', fixedMicroUsd: '0' });
 const sha = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -64,7 +64,7 @@ function readUsage(response) {
 }
 const metadata = Object.freeze({ provider: 'openai', model: MODEL, operation: 'CHAT', endpointId: 'openai.chat',
   adapterVersion: 'openai-chat-text-v1', tokenizerId: 'provider-context-ceiling', tokenizerVersion: 'gpt4omini-128000-v1',
-  priceVersion: 'openai-gpt4omini-standard-2026-10-03', verifiedAtEpochMs: VERIFIED_AT,
+  priceVersion: 'openai-gpt4omini-standard-2026-11-21', verifiedAtEpochMs: VERIFIED_AT,
   inputTokenLimit: '128000', embeddingTokenLimit: '0', outputTokenLimit: '16384', rates });
 const contract = Object.freeze({ ...metadata, priceSha256: sha({ model: MODEL, verifiedAt: VERIFIED_AT, rates }),
   costContractSha256: sha({ ...metadata, schema: 'text-only-exact-usage-v1', cache: 'subset-of-input', serviceTier: 'default' }),

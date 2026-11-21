@@ -24,7 +24,7 @@ function unavailable(error) {
   return true;
 }
 
-// Public model documentation was checked on 2026-10-03. This test performs no network calls.
+// Public model documentation was checked on 2026-11-21. This test performs no network calls.
 // https://developers.openai.com/api/docs/models/gpt-4o-mini
 // https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
 test('reviewed snapshot has explicit standard rates, limits and immutable metadata', () => {
@@ -33,7 +33,7 @@ test('reviewed snapshot has explicit standard rates, limits and immutable metada
   assert.equal(value.provider, 'openai');
   assert.equal(value.endpointId, 'openai.chat');
   assert.equal(value.operation, 'CHAT');
-  assert.equal(value.verifiedAtEpochMs, Date.parse('2026-10-03T00:00:00Z'));
+  assert.equal(value.verifiedAtEpochMs, Date.parse('2026-11-21T00:00:00Z'));
   assert.equal(value.inputTokenLimit, '128000');
   assert.equal(value.outputTokenLimit, '16384');
   assert.equal(value.embeddingTokenLimit, '0');
