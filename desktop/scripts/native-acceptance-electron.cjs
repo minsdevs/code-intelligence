@@ -95,7 +95,9 @@ function createDeadline(timeoutMs = PRODUCT_DEADLINE_MS, now = () => performance
 const WINDOWS = process.platform === 'win32';
 const OPERATION_SCALE = WINDOWS ? 3 : 1;
 const PRODUCT_DEADLINE_MS = WINDOWS ? 1500000 : 540000;
-const RESTORE_BUDGET_MS = 120000;
+// Restore stops and restarts every owned service twice. On hosted Windows the two restores in one run
+// took 303 s and about 410 s (SEAL and REVOKE vary most), so the scaled 360 s wait was too short.
+const RESTORE_BUDGET_MS = WINDOWS ? 240000 : 120000;
 const BACKUP_BUDGET_MS = 120000;
 
 async function waitForRestoreReload({ diagnostics, report, perform, reload, confirm }) {
