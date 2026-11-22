@@ -98,9 +98,10 @@ const OPERATION_SCALE = WINDOWS ? 3 : 1;
 // RETENTION and RELEASE phases took 130 s and 235 s, leaving the final relaunch past the 1500 s total.
 // The 60-minute standard-user wait in native-acceptance-windows.ps1 still covers 2100 s + 60 s.
 const PRODUCT_DEADLINE_MS = WINDOWS ? 2100000 : 540000;
-// Restore stops and restarts every owned service twice. On hosted Windows the two restores in one run
-// took 303 s and about 410 s (SEAL and REVOKE vary most), so the scaled 360 s wait was too short.
-const RESTORE_BUDGET_MS = WINDOWS ? 240000 : 120000;
+// Restore stops and restarts every owned service twice. On hosted Windows the second restore in one run
+// took about 410 s, then about 736 s (run 45021573993: RETENTION 140 s, RELEASE 265 s), so the scaled wait
+// is 1080 s. The product total stays within PRODUCT_DEADLINE_MS.
+const RESTORE_BUDGET_MS = WINDOWS ? 360000 : 120000;
 const BACKUP_BUDGET_MS = 120000;
 
 async function waitForRestoreReload({ diagnostics, report, perform, reload, confirm }) {
