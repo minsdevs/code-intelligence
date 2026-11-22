@@ -6,7 +6,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
 const { createRequire } = require('node:module');
-const { parseStartupLine, parseShutdownLine, parseIntegrityLine, parseRestoreLine, parseBackupLine } = require('../src/startup-diagnostics.cjs');
+const { parseStartupLine, parseShutdownLine, parseIntegrityLine, parseRestoreLine, parseBackupLine,
+  parseMaintenanceProgressLine } = require('../src/startup-diagnostics.cjs');
 const { expectedServices: adapterServices } = require('../../validation/pre-release/adapter-mode.cjs');
 const { withDropConfirmation } = require('../../validation/pre-release/drop-confirmation.cjs');
 
@@ -66,24 +67,43 @@ async function closeValidatedApplication(current, report, options = {}) {
     || report.shutdown.phase !== 'COMPLETE') throw new Error('NATIVE_SHUTDOWN_UNCONFIRMED');
 }
 
-function createDeadline(timeoutMs = 540000, now = () => performance.now()) {
-  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 540000);
+function createDeadline(timeoutMs = PRODUCT_DEADLINE_MS, now = () => performance.now(), scale = OPERATION_SCALE) {
+  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= PRODUCT_DEADLINE_MS);
+  assert.ok(Number.isSafeInteger(scale) && scale >= 1 && scale <= 3);
   const expires = now() + timeoutMs;
   let failure;
   const limit = (maximum = 30000) => {
     if (failure) throw failure;
     const remaining = Math.floor(expires - now());
     if (remaining <= 0) throw new Error('NATIVE_PRODUCT_DEADLINE');
-    return Math.min(maximum, remaining);
+    return Math.min(maximum * scale, remaining);
   };
   return { limit, async run(action, maximum = 30000, code = 'NATIVE_ELECTRON_OPERATION_TIMEOUT') {
     const duration = limit(maximum);
     try {
       return await bounded(Promise.resolve().then(() => { limit(maximum); return action(); }), duration,
-        duration < maximum ? 'NATIVE_PRODUCT_DEADLINE' : code);
+        duration < maximum * scale ? 'NATIVE_PRODUCT_DEADLINE' : code);
     } catch (error) { failure = error; throw error; }
   } };
 }
+
+// Hosted Windows runners are roughly 2.5x slower than macOS here (service launch 35-50 s vs 15-19 s),
+// and a restore stops and restarts every owned service. Budgets scale with the platform; the gates
+// themselves are unchanged.
+// The hosted Windows maintenance trace showed a complete backup (DESTINATION through RESUME)
+// taking 122 s against a 120 s wait, so every per-operation budget scales by the same factor.
+const WINDOWS = process.platform === 'win32';
+const OPERATION_SCALE = WINDOWS ? 3 : 1;
+// Run 45005615178 passed backup and both restores on hosted Windows, but the second restore's
+// RETENTION and RELEASE phases took 130 s and 235 s, leaving the final relaunch past the 1500 s total.
+// The 60-minute standard-user wait in native-acceptance-windows.ps1 still covers 2100 s + 60 s.
+// Run 45039402039 reached the representative analysis at about 1500 s; its Windows wait is 1500 s.
+const PRODUCT_DEADLINE_MS = WINDOWS ? 3300000 : 540000;
+// Restore stops and restarts every owned service twice. On hosted Windows the second restore in one run
+// took about 410 s, then about 736 s (run 45021573993: RETENTION 140 s, RELEASE 265 s), so the scaled wait
+// is 1080 s. The product total stays within PRODUCT_DEADLINE_MS.
+const RESTORE_BUDGET_MS = WINDOWS ? 360000 : 120000;
+const BACKUP_BUDGET_MS = 120000;
 
 async function waitForRestoreReload({ diagnostics, report, perform, reload, confirm }) {
   let rejectFailure;
@@ -99,7 +119,7 @@ async function waitForRestoreReload({ diagnostics, report, perform, reload, conf
       // Register the real navigation before clicking; diagnostics can only fail
       // this wait, never replace navigation as the successful restore condition.
       return Promise.race([Promise.all([Promise.resolve().then(reload), Promise.resolve().then(confirm)]), failure]);
-    }, 120000, 'NATIVE_RESTORE_TIMEOUT');
+    }, RESTORE_BUDGET_MS, 'NATIVE_RESTORE_TIMEOUT');
   } finally { diagnostics.off('restore-failure', onFailure); }
 }
 
@@ -117,12 +137,13 @@ async function waitForBackupResult({ diagnostics, report, perform, start, result
   try {
     await perform(() => raceFailure(start));
     // Keep the original result assertion and its budget as the success gate.
-    return await perform(() => raceFailure(result), 120000, 'NATIVE_BACKUP_TIMEOUT');
+    return await perform(() => raceFailure(result), BACKUP_BUDGET_MS, 'NATIVE_BACKUP_TIMEOUT');
   } finally { diagnostics.off('backup-failure', onFailure); }
 }
 
 function observeStartup(child, report, save, now = () => performance.now(), maintenanceDiagnostics) {
   let line = '', dropping = false, shutdownStarted;
+  const observed = now();
   const data = bytes => {
     for (const character of bytes.toString('utf8')) {
       if (character === '\n') {
@@ -133,6 +154,13 @@ function observeStartup(child, report, save, now = () => performance.now(), main
         const restore = dropping ? null : parseRestoreLine(line.replace(/\r$/, ''));
         if (restore && !report.restoreFailure) {
           report.restoreFailure = restore; save(); maintenanceDiagnostics?.emit('restore-failure');
+        }
+        const progress = dropping ? null : parseMaintenanceProgressLine(line.replace(/\r$/, ''));
+        if (progress) {
+          report.maintenanceTrace ??= [];
+          if (report.maintenanceTrace.length < 96) {
+            report.maintenanceTrace.push({ ...progress, elapsedMs: Math.max(0, Math.round(now() - observed)) }); save();
+          }
         }
         const backup = dropping ? null : parseBackupLine(line.replace(/\r$/, ''));
         if (backup && !report.backupFailure) {
@@ -215,7 +243,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   report.executionContext = context.evidence;
   const deadline = createDeadline();
   const perform = (action, timeoutMs, code) => deadline.run(action, timeoutMs, code);
-  report.executionLimitMs = 600000;
+  report.executionLimitMs = PRODUCT_DEADLINE_MS + 60000;
   report.shutdownDiagnostics = { version: 1, required: true, pipeDrainTimeoutMs: 1000 };
   const executionStarted = performance.now();
   const frontendRequire = createRequire(path.join(source, 'frontend', 'package.json'));
@@ -288,7 +316,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     const remaining = Math.floor(startupEnds - performance.now());
     if (remaining <= 0) throw new Error('NATIVE_STARTUP_TIMEOUT');
     page = await app.firstWindow({ timeout: deadline.limit(remaining) });
-    page.setDefaultTimeout(30000);
+    page.setDefaultTimeout(30000 * OPERATION_SCALE);
     page.on('pageerror', () => pageErrors++);
     userData = await step('native-profile-path', () => app.evaluate(({ app }) => app.getPath('userData')));
     assert.equal(userData, expectedUserData);
@@ -360,18 +388,26 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   }, route), 30000, 'NATIVE_RENDERER_TIMEOUT');
   const awaitJob = async id => {
     assert.ok(Number.isSafeInteger(id) && id > 0);
-    const deadline = Date.now() + 180000;
+    // Hosted Windows run 45039402039 was still analysing the 1,165-file sample after 540 s
+    // (macOS finishes import to overview in about 72 s), so Windows waits up to 1500 s.
+    const deadline = Date.now() + (WINDOWS ? 1500000 : 180000);
+    let job;
     while (Date.now() < deadline) {
-      const job = await api(`/api/jobs/${id}`);
+      job = await api(`/api/jobs/${id}`);
       if (job.status === 'DONE') return;
       if (['FAILED', 'CANCELLED'].includes(job.status)) {
         const publicCode = value => typeof value === 'string' && /^[A-Z_]{1,80}$/.test(value) ? value : null;
-        report.failedAnalysis = { status: job.status, failureCode: publicCode(job.failureCode),
+        // Only the fixed policy sentence in parentheses is exported; it never contains a path.
+        const reason = typeof job.error === 'string' ? job.error.match(/\((Local [A-Za-z0-9 ]{1,100}\.)\)/)?.[1] ?? null : null;
+        report.failedAnalysis = { status: job.status, failureCode: publicCode(job.failureCode), reason,
           steps: Array.isArray(job.steps) ? job.steps.slice(0,50).map(s => ({ key: publicCode(s.stepKey), status: publicCode(s.status) })) : [] };
         throw new Error('NATIVE_ANALYSIS_FAILED');
       }
       await new Promise(resolve => setTimeout(resolve, 500));
     }
+    const publicCode = value => typeof value === 'string' && /^[A-Z_]{1,80}$/.test(value) ? value : null;
+    report.timedOutAnalysis = { status: publicCode(job?.status),
+      steps: Array.isArray(job?.steps) ? job.steps.slice(0, 50).map(s => ({ key: publicCode(s.stepKey), status: publicCode(s.status) })) : [] };
     throw new Error('NATIVE_ANALYSIS_TIMEOUT');
   };
   const verifySnapshotContract = async (snapshot, label) => {
@@ -513,7 +549,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       // replying to the old IPC caller. Observe that real navigation, not a
       // substituted restore return value or the now-destroyed JS context.
       await waitForRestoreReload({ diagnostics: maintenanceDiagnostics, report, perform,
-        reload: () => page.waitForEvent('domcontentloaded', { timeout: deadline.limit(120000) }),
+        reload: () => page.waitForEvent('domcontentloaded', { timeout: deadline.limit(RESTORE_BUDGET_MS) }),
         confirm: () => confirm.click() });
       await perform(() => expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible());
       await readyAfterMaintenance();
@@ -643,7 +679,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       const result = page.locator('dd').filter({ hasText: /\.cibackup$/ });
       await waitForBackupResult({ diagnostics: maintenanceDiagnostics, report, perform,
         start: () => page.getByRole('button', { name: /^(Create backup|백업 생성)$/ }).click(),
-        result: () => expect(result).toHaveCount(1, { timeout: deadline.limit(120000) }) });
+        result: () => expect(result).toHaveCount(1, { timeout: deadline.limit(BACKUP_BUDGET_MS) }) });
       await readyAfterMaintenance();
       return selectedArchive((await perform(() => result.textContent())).trim(), [destination]);
     });

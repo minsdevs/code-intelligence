@@ -30,7 +30,31 @@ public class LocalSourceApprovalException extends ErrorResponseException impleme
 
     public static LocalSourceApprovalException sourceChanged() {
         return new LocalSourceApprovalException(
-                "LOCAL_SOURCE_CHANGED", "The approved local source changed. Create and confirm a new preview.");
+                "LOCAL_SOURCE_CHANGED",
+                "The approved local source changed. Create and confirm a new preview. (Local check at " + checkSite()
+                        + ".)");
+    }
+
+    /** Class and line of the refusing check (no paths or values), so a failed import is diagnosable. */
+    private static String checkSite() {
+        return StackWalker.getInstance()
+                .walk(frames -> frames.filter(
+                                frame -> !frame.getClassName().equals(LocalSourceApprovalException.class.getName())
+                                        && !frame.getMethodName().equals("changed"))
+                        .findFirst()
+                        .map(frame -> frame.getClassName()
+                                        .substring(frame.getClassName().lastIndexOf('.') + 1)
+                                        .split("\\$")[0]
+                                + " line "
+                                + frame.getLineNumber())
+                        .orElse("unknown"));
+    }
+
+    /** Keeps the fixed policy reason (never a path) so a failed import says which check refused it. */
+    static LocalSourceApprovalException sourceChanged(LocalSourcePolicy.Rejection reason) {
+        return new LocalSourceApprovalException(
+                "LOCAL_SOURCE_CHANGED",
+                "The approved local source changed. Create and confirm a new preview. (" + reason.getMessage() + ")");
     }
 
     public static LocalSourceApprovalException invalid() {

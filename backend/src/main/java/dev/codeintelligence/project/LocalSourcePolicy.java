@@ -317,7 +317,11 @@ final class LocalSourcePolicy {
                         entry.getKey(),
                         bytes.length,
                         LocalSourceManifest.sha256().digest(bytes));
+                // The time limit bounds reading the source, as in LocalStagingVerifier. Product-owned
+                // writes in the sink (staging files, retained source) are not source inspection time.
+                long consumerStarted = clock.getAsLong();
                 sink.accept(accepted, bytes);
+                state.consumerNanos += clock.getAsLong() - consumerStarted;
                 selected.put(entry.getKey(), accepted);
                 state.check();
             }
@@ -553,7 +557,14 @@ final class LocalSourcePolicy {
     }
 
     private static IOException rejected(String message) {
-        return new IOException(message);
+        return new Rejection(message);
+    }
+
+    /** A policy refusal whose message is fixed text with no paths, safe to show in job errors. */
+    static final class Rejection extends IOException {
+        Rejection(String message) {
+            super(message);
+        }
     }
 
     private record Stamp(Object key, long size, Object changed) {}
@@ -578,6 +589,7 @@ final class LocalSourcePolicy {
         int ignoreRules;
         long ignoreTotal;
         long bytesRead;
+        long consumerNanos;
 
         State(Path root) throws IOException {
             this.root = root;
@@ -586,7 +598,8 @@ final class LocalSourcePolicy {
 
         void check() throws IOException {
             JobCancellation.checkpoint();
-            if (Thread.currentThread().isInterrupted() || clock.getAsLong() - started > limits.nanos()) {
+            if (Thread.currentThread().isInterrupted()
+                    || clock.getAsLong() - started - consumerNanos > limits.nanos()) {
                 throw rejected("Local source inspection was cancelled or exceeded its time limit.");
             }
         }

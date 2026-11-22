@@ -168,10 +168,15 @@ final class LocalStagingVerifier {
         requireSingleLink(path);
     }
 
+    // The verifier rescans and rereads the product's own staged copy, which already passed the source
+    // policy's count and byte limits. Freshly written files are slow to read on some hosts (hosted
+    // Windows needed more than the 30 s source budget), so staging gets a wider bound than inspection.
+    private static final long STAGING_TIME_FACTOR = 4;
+
     private void check() {
         JobCancellation.checkpoint();
-        if (Thread.currentThread().isInterrupted() || clock.getAsLong() - started - consumerNanos > limits.nanos())
-            throw changed();
+        if (Thread.currentThread().isInterrupted()
+                || clock.getAsLong() - started - consumerNanos > limits.nanos() * STAGING_TIME_FACTOR) throw changed();
     }
 
     private static Stamp directory(Path path) throws IOException {
