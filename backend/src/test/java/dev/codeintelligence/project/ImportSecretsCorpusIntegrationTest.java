@@ -1591,7 +1591,9 @@ class ImportSecretsCorpusIntegrationTest {
         if (error instanceof LocalSourceApprovalException approval) return code(approval);
         assertThat(error).isInstanceOf(LocalImportException.class);
         Throwable cause = error.getCause();
-        if (cause instanceof IOException io && io.getClass() == IOException.class) return io.getMessage();
+        if (cause instanceof IOException io
+                && (io instanceof LocalSourcePolicy.Rejection || io.getClass() == IOException.class))
+            return io.getMessage();
         return error.getMessage();
     }
 

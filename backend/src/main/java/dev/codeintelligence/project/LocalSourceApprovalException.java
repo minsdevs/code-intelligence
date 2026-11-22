@@ -33,6 +33,13 @@ public class LocalSourceApprovalException extends ErrorResponseException impleme
                 "LOCAL_SOURCE_CHANGED", "The approved local source changed. Create and confirm a new preview.");
     }
 
+    /** Keeps the fixed policy reason (never a path) so a failed import says which check refused it. */
+    static LocalSourceApprovalException sourceChanged(LocalSourcePolicy.Rejection reason) {
+        return new LocalSourceApprovalException(
+                "LOCAL_SOURCE_CHANGED",
+                "The approved local source changed. Create and confirm a new preview. (" + reason.getMessage() + ")");
+    }
+
     public static LocalSourceApprovalException invalid() {
         return new LocalSourceApprovalException(
                 "LOCAL_PREVIEW_INVALID", "This local preview cannot authorize the operation. Create a new preview.");

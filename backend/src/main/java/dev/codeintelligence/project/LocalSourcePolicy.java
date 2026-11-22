@@ -557,7 +557,14 @@ final class LocalSourcePolicy {
     }
 
     private static IOException rejected(String message) {
-        return new IOException(message);
+        return new Rejection(message);
+    }
+
+    /** A policy refusal whose message is fixed text with no paths, safe to show in job errors. */
+    static final class Rejection extends IOException {
+        Rejection(String message) {
+            super(message);
+        }
     }
 
     private record Stamp(Object key, long size, Object changed) {}

@@ -346,11 +346,16 @@ public class LocalImportService {
         } catch (StagingWriteException e) {
             throw e;
         } catch (IOException e) {
-            if (expected != null) throw LocalSourceApprovalException.sourceChanged();
+            if (expected != null) {
+                if (e instanceof LocalSourcePolicy.Rejection rejection)
+                    throw LocalSourceApprovalException.sourceChanged(rejection);
+                throw LocalSourceApprovalException.sourceChanged();
+            }
             throw e;
         }
         if (expected != null && !expected.equals(selection.binding()))
-            throw LocalSourceApprovalException.sourceChanged();
+            throw LocalSourceApprovalException.sourceChanged(
+                    new LocalSourcePolicy.Rejection("Local source selection differs from the approved preview."));
         stagingObserver.afterStaged(staging);
         LocalStagingVerifier verifier;
         try {
