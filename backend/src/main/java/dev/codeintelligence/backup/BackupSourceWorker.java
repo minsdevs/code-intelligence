@@ -407,6 +407,7 @@ public final class BackupSourceWorker {
             stage.set("SCRATCH");
             SourceFiles.mkdir(temporary);
             Object key = SourceFiles.directory(temporary).fileKey();
+            Throwable primary = null;
             try {
                 Path git = temporary.resolve(".git");
                 SourceFiles.mkdir(git);
@@ -482,14 +483,22 @@ public final class BackupSourceWorker {
                         write(output, receipt.wire("END", project));
                     }
                 }
+            } catch (Throwable error) {
+                primary = error;
+                throw error;
             } finally {
                 // Preserve cancellation while allowing the owned-root cleanup fsync to finish.
                 boolean interrupted = Thread.interrupted();
-                stage.set("CLEANUP");
+                // A cleanup failure must not replace the failure that started it: the reported
+                // stage stays the one that threw first and the cleanup failure is suppressed.
+                if (primary == null) stage.set("CLEANUP");
                 try {
                     if (!scratchKey.equals(SourceFiles.directory(scratch).fileKey()))
                         throw failure("SOURCE_UNSAFE_PATH");
                     SourceFiles.removeOwned(temporary, key);
+                } catch (IOException | RuntimeException cleanup) {
+                    if (primary == null) throw cleanup;
+                    primary.addSuppressed(cleanup);
                 } finally {
                     if (interrupted) Thread.currentThread().interrupt();
                 }
@@ -648,6 +657,7 @@ public final class BackupSourceWorker {
         SourceFiles.mkdir(repo);
         Object key = SourceFiles.directory(repo).fileKey();
         boolean completed = false;
+        Throwable primary = null;
         try {
             Path git = repo.resolve(".git");
             SourceFiles.mkdir(git);
@@ -750,10 +760,21 @@ public final class BackupSourceWorker {
             SourceFiles.finish(repo, key, budget);
             completed = true;
             write(output, expected.wire("RESTORED", project));
+        } catch (Throwable error) {
+            primary = error;
+            throw error;
         } finally {
             if (!completed) {
-                stage.set("CLEANUP");
-                SourceFiles.removeOwned(repo, key);
+                // Keep the stage and exception that failed first; a cleanup failure is suppressed.
+                try {
+                    SourceFiles.removeOwned(repo, key);
+                } catch (IOException | RuntimeException cleanup) {
+                    if (primary == null) {
+                        stage.set("CLEANUP");
+                        throw cleanup;
+                    }
+                    primary.addSuppressed(cleanup);
+                }
             }
         }
     }
