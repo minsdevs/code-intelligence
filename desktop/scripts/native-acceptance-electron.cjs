@@ -97,7 +97,8 @@ const OPERATION_SCALE = WINDOWS ? 3 : 1;
 // Run 45005615178 passed backup and both restores on hosted Windows, but the second restore's
 // RETENTION and RELEASE phases took 130 s and 235 s, leaving the final relaunch past the 1500 s total.
 // The 60-minute standard-user wait in native-acceptance-windows.ps1 still covers 2100 s + 60 s.
-const PRODUCT_DEADLINE_MS = WINDOWS ? 2100000 : 540000;
+// Run 45039402039 reached the representative analysis at about 1500 s; its Windows wait is 1500 s.
+const PRODUCT_DEADLINE_MS = WINDOWS ? 3300000 : 540000;
 // Restore stops and restarts every owned service twice. On hosted Windows the second restore in one run
 // took about 410 s, then about 736 s (run 45021573993: RETENTION 140 s, RELEASE 265 s), so the scaled wait
 // is 1080 s. The product total stays within PRODUCT_DEADLINE_MS.
@@ -387,9 +388,12 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   }, route), 30000, 'NATIVE_RENDERER_TIMEOUT');
   const awaitJob = async id => {
     assert.ok(Number.isSafeInteger(id) && id > 0);
-    const deadline = Date.now() + 180000 * OPERATION_SCALE;
+    // Hosted Windows run 45039402039 was still analysing the 1,165-file sample after 540 s
+    // (macOS finishes import to overview in about 72 s), so Windows waits up to 1500 s.
+    const deadline = Date.now() + (WINDOWS ? 1500000 : 180000);
+    let job;
     while (Date.now() < deadline) {
-      const job = await api(`/api/jobs/${id}`);
+      job = await api(`/api/jobs/${id}`);
       if (job.status === 'DONE') return;
       if (['FAILED', 'CANCELLED'].includes(job.status)) {
         const publicCode = value => typeof value === 'string' && /^[A-Z_]{1,80}$/.test(value) ? value : null;
@@ -401,6 +405,9 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       }
       await new Promise(resolve => setTimeout(resolve, 500));
     }
+    const publicCode = value => typeof value === 'string' && /^[A-Z_]{1,80}$/.test(value) ? value : null;
+    report.timedOutAnalysis = { status: publicCode(job?.status),
+      steps: Array.isArray(job?.steps) ? job.steps.slice(0, 50).map(s => ({ key: publicCode(s.stepKey), status: publicCode(s.status) })) : [] };
     throw new Error('NATIVE_ANALYSIS_TIMEOUT');
   };
   const verifySnapshotContract = async (snapshot, label) => {

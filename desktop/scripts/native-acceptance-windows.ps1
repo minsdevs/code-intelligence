@@ -196,7 +196,7 @@ exit $code
     $outcome = 'STANDARD_USER_EXECUTION_TIMEOUT'
     # This includes native build/provisioning; product operation deadlines remain separate.
     # The workflow reserves startup and owned cleanup time outside this 30-minute cap.
-    if (-not $child.WaitForExit(60 * 60 * 1000)) { throw 'Standard-user acceptance deadline exceeded' }
+    if (-not $child.WaitForExit(70 * 60 * 1000)) { throw 'Standard-user acceptance deadline exceeded' }
     $outcome = 'STANDARD_USER_COMPLETION_MISSING'
     if (-not (Test-Path -LiteralPath (Join-Path $private 'exit-code'))) { throw 'Standard-user completion missing' }
     $code = [int](Get-Content -Raw -LiteralPath (Join-Path $private 'exit-code'))
