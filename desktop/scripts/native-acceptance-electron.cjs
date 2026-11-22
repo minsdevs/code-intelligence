@@ -394,7 +394,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       if (['FAILED', 'CANCELLED'].includes(job.status)) {
         const publicCode = value => typeof value === 'string' && /^[A-Z_]{1,80}$/.test(value) ? value : null;
         // Only the fixed policy sentence in parentheses is exported; it never contains a path.
-        const reason = typeof job.error === 'string' ? job.error.match(/\((Local [A-Za-z ]{1,100}\.)\)/)?.[1] ?? null : null;
+        const reason = typeof job.error === 'string' ? job.error.match(/\((Local [A-Za-z0-9 ]{1,100}\.)\)/)?.[1] ?? null : null;
         report.failedAnalysis = { status: job.status, failureCode: publicCode(job.failureCode), reason,
           steps: Array.isArray(job.steps) ? job.steps.slice(0,50).map(s => ({ key: publicCode(s.stepKey), status: publicCode(s.status) })) : [] };
         throw new Error('NATIVE_ANALYSIS_FAILED');
