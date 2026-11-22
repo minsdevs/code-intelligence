@@ -583,6 +583,24 @@ class LocalIngestPolicyTest {
     }
 
     @Test
+    void timeSpentInTheSinkDoesNotCountAgainstTheInspectionBudget() throws Exception {
+        Path source = source("a.txt", "one");
+        Files.writeString(source.resolve("b.txt"), "two");
+        Files.writeString(source.resolve("c.txt"), "three");
+        AtomicLong clock = new AtomicLong();
+        var policy = new LocalSourcePolicy(limits(10, 8192, 1024), clock::get, path -> {});
+        // Each staging write takes longer than the whole one-second inspection budget.
+        var selection = policy.select(source, (file, bytes) -> clock.addAndGet(5 * SECOND));
+        assertThat(selection.files()).containsOnlyKeys("a.txt", "b.txt", "c.txt");
+
+        var slowReads = new LocalSourcePolicy(
+                limits(10, 8192, 1024), clock::get, path -> clock.addAndGet(SECOND));
+        assertThatThrownBy(() -> slowReads.select(source, (file, bytes) -> {}))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("time limit");
+    }
+
+    @Test
     void anInterruptedInspectionDoesNotPublish() throws Exception {
         Path source = source("a.txt", "safe");
         Thread.currentThread().interrupt();

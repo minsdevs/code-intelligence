@@ -317,7 +317,11 @@ final class LocalSourcePolicy {
                         entry.getKey(),
                         bytes.length,
                         LocalSourceManifest.sha256().digest(bytes));
+                // The time limit bounds reading the source, as in LocalStagingVerifier. Product-owned
+                // writes in the sink (staging files, retained source) are not source inspection time.
+                long consumerStarted = clock.getAsLong();
                 sink.accept(accepted, bytes);
+                state.consumerNanos += clock.getAsLong() - consumerStarted;
                 selected.put(entry.getKey(), accepted);
                 state.check();
             }
@@ -578,6 +582,7 @@ final class LocalSourcePolicy {
         int ignoreRules;
         long ignoreTotal;
         long bytesRead;
+        long consumerNanos;
 
         State(Path root) throws IOException {
             this.root = root;
@@ -586,7 +591,7 @@ final class LocalSourcePolicy {
 
         void check() throws IOException {
             JobCancellation.checkpoint();
-            if (Thread.currentThread().isInterrupted() || clock.getAsLong() - started > limits.nanos()) {
+            if (Thread.currentThread().isInterrupted() || clock.getAsLong() - started - consumerNanos > limits.nanos()) {
                 throw rejected("Local source inspection was cancelled or exceeded its time limit.");
             }
         }
