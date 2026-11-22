@@ -6,7 +6,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
 const { createRequire } = require('node:module');
-const { parseStartupLine, parseShutdownLine, parseIntegrityLine, parseRestoreLine, parseBackupLine } = require('../src/startup-diagnostics.cjs');
+const { parseStartupLine, parseShutdownLine, parseIntegrityLine, parseRestoreLine, parseBackupLine,
+  parseMaintenanceProgressLine } = require('../src/startup-diagnostics.cjs');
 const { expectedServices: adapterServices } = require('../../validation/pre-release/adapter-mode.cjs');
 const { withDropConfirmation } = require('../../validation/pre-release/drop-confirmation.cjs');
 
@@ -66,8 +67,8 @@ async function closeValidatedApplication(current, report, options = {}) {
     || report.shutdown.phase !== 'COMPLETE') throw new Error('NATIVE_SHUTDOWN_UNCONFIRMED');
 }
 
-function createDeadline(timeoutMs = 540000, now = () => performance.now()) {
-  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 540000);
+function createDeadline(timeoutMs = PRODUCT_DEADLINE_MS, now = () => performance.now()) {
+  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= PRODUCT_DEADLINE_MS);
   const expires = now() + timeoutMs;
   let failure;
   const limit = (maximum = 30000) => {
@@ -85,6 +86,13 @@ function createDeadline(timeoutMs = 540000, now = () => performance.now()) {
   } };
 }
 
+// Hosted Windows runners are roughly 2.5x slower than macOS here (service launch 35-50 s vs 15-19 s),
+// and a restore stops and restarts every owned service. Budgets scale with the platform; the gates
+// themselves are unchanged.
+const WINDOWS = process.platform === 'win32';
+const PRODUCT_DEADLINE_MS = WINDOWS ? 1500000 : 540000;
+const RESTORE_BUDGET_MS = WINDOWS ? 600000 : 120000;
+
 async function waitForRestoreReload({ diagnostics, report, perform, reload, confirm }) {
   let rejectFailure;
   const failure = new Promise((_, reject) => { rejectFailure = reject; });
@@ -99,7 +107,7 @@ async function waitForRestoreReload({ diagnostics, report, perform, reload, conf
       // Register the real navigation before clicking; diagnostics can only fail
       // this wait, never replace navigation as the successful restore condition.
       return Promise.race([Promise.all([Promise.resolve().then(reload), Promise.resolve().then(confirm)]), failure]);
-    }, 120000, 'NATIVE_RESTORE_TIMEOUT');
+    }, RESTORE_BUDGET_MS, 'NATIVE_RESTORE_TIMEOUT');
   } finally { diagnostics.off('restore-failure', onFailure); }
 }
 
@@ -123,6 +131,7 @@ async function waitForBackupResult({ diagnostics, report, perform, start, result
 
 function observeStartup(child, report, save, now = () => performance.now(), maintenanceDiagnostics) {
   let line = '', dropping = false, shutdownStarted;
+  const observed = now();
   const data = bytes => {
     for (const character of bytes.toString('utf8')) {
       if (character === '\n') {
@@ -133,6 +142,13 @@ function observeStartup(child, report, save, now = () => performance.now(), main
         const restore = dropping ? null : parseRestoreLine(line.replace(/\r$/, ''));
         if (restore && !report.restoreFailure) {
           report.restoreFailure = restore; save(); maintenanceDiagnostics?.emit('restore-failure');
+        }
+        const progress = dropping ? null : parseMaintenanceProgressLine(line.replace(/\r$/, ''));
+        if (progress) {
+          report.maintenanceTrace ??= [];
+          if (report.maintenanceTrace.length < 96) {
+            report.maintenanceTrace.push({ ...progress, elapsedMs: Math.max(0, Math.round(now() - observed)) }); save();
+          }
         }
         const backup = dropping ? null : parseBackupLine(line.replace(/\r$/, ''));
         if (backup && !report.backupFailure) {
@@ -215,7 +231,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   report.executionContext = context.evidence;
   const deadline = createDeadline();
   const perform = (action, timeoutMs, code) => deadline.run(action, timeoutMs, code);
-  report.executionLimitMs = 600000;
+  report.executionLimitMs = PRODUCT_DEADLINE_MS + 60000;
   report.shutdownDiagnostics = { version: 1, required: true, pipeDrainTimeoutMs: 1000 };
   const executionStarted = performance.now();
   const frontendRequire = createRequire(path.join(source, 'frontend', 'package.json'));
@@ -513,7 +529,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       // replying to the old IPC caller. Observe that real navigation, not a
       // substituted restore return value or the now-destroyed JS context.
       await waitForRestoreReload({ diagnostics: maintenanceDiagnostics, report, perform,
-        reload: () => page.waitForEvent('domcontentloaded', { timeout: deadline.limit(120000) }),
+        reload: () => page.waitForEvent('domcontentloaded', { timeout: deadline.limit(RESTORE_BUDGET_MS) }),
         confirm: () => confirm.click() });
       await perform(() => expect(page.getByRole('link', { name: 'Code Intelligence home' })).toBeVisible());
       await readyAfterMaintenance();

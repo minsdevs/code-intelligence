@@ -215,6 +215,18 @@ function parseIntegrityLine(line) {
   }
   return { operation, code, kind };
 }
+function formatMaintenanceProgress(kind, phase) {
+  if (kind === 'RESTORE' && restorePhases.has(phase)) return `DESKTOP_MAINTENANCE RESTORE ${phase}`;
+  if (kind === 'BACKUP' && backupPhases.has(phase)) return `DESKTOP_MAINTENANCE BACKUP ${phase}`;
+  return null;
+}
+function parseMaintenanceProgressLine(line) {
+  if (typeof line !== 'string' || line.length > 256) return null;
+  const parts = line.split(' ');
+  if (parts.length !== 3 || parts[0] !== 'DESKTOP_MAINTENANCE') return null;
+  if (parts[1] === 'RESTORE' ? !restorePhases.has(parts[2]) : parts[1] !== 'BACKUP' || !backupPhases.has(parts[2])) return null;
+  return { kind: parts[1], phase: parts[2] };
+}
 function parseStartupLine(line) {
   if (typeof line !== 'string' || line.length > 256) return null;
   const parts = line.split(' ');
@@ -240,4 +252,5 @@ function parseShutdownLine(line) {
 module.exports = Object.freeze({ RuntimeIntegrityError, integrityError, startupFailureCode, integrityDiagnostic,
   formatIntegrityDiagnostic, parseIntegrityLine, parseStartupLine, parseShutdownLine, restoreDiagnostic,
   formatRestoreDiagnostic, parseRestoreLine, backupDiagnostic, formatBackupDiagnostic, parseBackupLine,
+  formatMaintenanceProgress, parseMaintenanceProgressLine,
   INTEGRITY_CODES, INTEGRITY_OPERATIONS });
