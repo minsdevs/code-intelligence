@@ -67,21 +67,22 @@ async function closeValidatedApplication(current, report, options = {}) {
     || report.shutdown.phase !== 'COMPLETE') throw new Error('NATIVE_SHUTDOWN_UNCONFIRMED');
 }
 
-function createDeadline(timeoutMs = PRODUCT_DEADLINE_MS, now = () => performance.now()) {
+function createDeadline(timeoutMs = PRODUCT_DEADLINE_MS, now = () => performance.now(), scale = OPERATION_SCALE) {
   assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= PRODUCT_DEADLINE_MS);
+  assert.ok(Number.isSafeInteger(scale) && scale >= 1 && scale <= 3);
   const expires = now() + timeoutMs;
   let failure;
   const limit = (maximum = 30000) => {
     if (failure) throw failure;
     const remaining = Math.floor(expires - now());
     if (remaining <= 0) throw new Error('NATIVE_PRODUCT_DEADLINE');
-    return Math.min(maximum, remaining);
+    return Math.min(maximum * scale, remaining);
   };
   return { limit, async run(action, maximum = 30000, code = 'NATIVE_ELECTRON_OPERATION_TIMEOUT') {
     const duration = limit(maximum);
     try {
       return await bounded(Promise.resolve().then(() => { limit(maximum); return action(); }), duration,
-        duration < maximum ? 'NATIVE_PRODUCT_DEADLINE' : code);
+        duration < maximum * scale ? 'NATIVE_PRODUCT_DEADLINE' : code);
     } catch (error) { failure = error; throw error; }
   } };
 }
@@ -89,9 +90,13 @@ function createDeadline(timeoutMs = PRODUCT_DEADLINE_MS, now = () => performance
 // Hosted Windows runners are roughly 2.5x slower than macOS here (service launch 35-50 s vs 15-19 s),
 // and a restore stops and restarts every owned service. Budgets scale with the platform; the gates
 // themselves are unchanged.
+// The hosted Windows maintenance trace showed a complete backup (DESTINATION through RESUME)
+// taking 122 s against a 120 s wait, so every per-operation budget scales by the same factor.
 const WINDOWS = process.platform === 'win32';
+const OPERATION_SCALE = WINDOWS ? 3 : 1;
 const PRODUCT_DEADLINE_MS = WINDOWS ? 1500000 : 540000;
-const RESTORE_BUDGET_MS = WINDOWS ? 600000 : 120000;
+const RESTORE_BUDGET_MS = 120000;
+const BACKUP_BUDGET_MS = 120000;
 
 async function waitForRestoreReload({ diagnostics, report, perform, reload, confirm }) {
   let rejectFailure;
@@ -125,7 +130,7 @@ async function waitForBackupResult({ diagnostics, report, perform, start, result
   try {
     await perform(() => raceFailure(start));
     // Keep the original result assertion and its budget as the success gate.
-    return await perform(() => raceFailure(result), 120000, 'NATIVE_BACKUP_TIMEOUT');
+    return await perform(() => raceFailure(result), BACKUP_BUDGET_MS, 'NATIVE_BACKUP_TIMEOUT');
   } finally { diagnostics.off('backup-failure', onFailure); }
 }
 
@@ -304,7 +309,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
     const remaining = Math.floor(startupEnds - performance.now());
     if (remaining <= 0) throw new Error('NATIVE_STARTUP_TIMEOUT');
     page = await app.firstWindow({ timeout: deadline.limit(remaining) });
-    page.setDefaultTimeout(30000);
+    page.setDefaultTimeout(30000 * OPERATION_SCALE);
     page.on('pageerror', () => pageErrors++);
     userData = await step('native-profile-path', () => app.evaluate(({ app }) => app.getPath('userData')));
     assert.equal(userData, expectedUserData);
@@ -376,7 +381,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
   }, route), 30000, 'NATIVE_RENDERER_TIMEOUT');
   const awaitJob = async id => {
     assert.ok(Number.isSafeInteger(id) && id > 0);
-    const deadline = Date.now() + 180000;
+    const deadline = Date.now() + 180000 * OPERATION_SCALE;
     while (Date.now() < deadline) {
       const job = await api(`/api/jobs/${id}`);
       if (job.status === 'DONE') return;
@@ -659,7 +664,7 @@ async function runProduct({ source, owned, artifacts, report, env, phase }) {
       const result = page.locator('dd').filter({ hasText: /\.cibackup$/ });
       await waitForBackupResult({ diagnostics: maintenanceDiagnostics, report, perform,
         start: () => page.getByRole('button', { name: /^(Create backup|백업 생성)$/ }).click(),
-        result: () => expect(result).toHaveCount(1, { timeout: deadline.limit(120000) }) });
+        result: () => expect(result).toHaveCount(1, { timeout: deadline.limit(BACKUP_BUDGET_MS) }) });
       await readyAfterMaintenance();
       return selectedArchive((await perform(() => result.textContent())).trim(), [destination]);
     });
