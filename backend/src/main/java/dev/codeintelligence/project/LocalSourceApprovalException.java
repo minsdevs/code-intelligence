@@ -43,7 +43,9 @@ public class LocalSourceApprovalException extends ErrorResponseException impleme
                                         && !frame.getMethodName().equals("changed"))
                         .findFirst()
                         .map(frame -> frame.getClassName()
-                                        .substring(frame.getClassName().lastIndexOf('.') + 1) + " line "
+                                        .substring(frame.getClassName().lastIndexOf('.') + 1)
+                                        .split("\\$")[0]
+                                + " line "
                                 + frame.getLineNumber())
                         .orElse("unknown"));
     }
