@@ -272,7 +272,9 @@ public class LocalSnapshotStore {
         if (lower.contains("%2e") || lower.contains("%2f") || lower.contains("%5c")) return false;
         try {
             java.nio.file.Path relative = java.nio.file.Path.of(path);
-            if (relative.isAbsolute() || !relative.normalize().toString().equals(path)) return false;
+            // Selected paths always use '/', but Path renders the platform separator ('\\' on Windows).
+            String rendered = relative.normalize().toString().replace(java.io.File.separatorChar, '/');
+            if (relative.isAbsolute() || !rendered.equals(path)) return false;
             for (java.nio.file.Path part : relative) {
                 if (part.toString().equals("..") || part.toString().equalsIgnoreCase(".git")) return false;
             }
