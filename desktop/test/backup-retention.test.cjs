@@ -54,6 +54,16 @@ test('keeps the newest two authenticated checkpoints and removes only older comp
   assert.deepEqual(f.calls.map(([operation]) => operation), ['begin', 'end', 'begin', 'end']);
   const retry = await f.retention.collect(); assert.deepEqual(retry.collected, []); assert.equal(f.calls.length, 4);
 });
+test('the inspection limit bounds each scan or deletion pass, not the whole collection', async t => {
+  // Slow hosted disks: every authority read costs 30 s, so the whole collection takes far longer than
+  // inspectMs while each individual scan and deletion pass stays within it.
+  const f = await fixture(t), original = performance.now, real = performance.now.bind(performance); let offset = 0;
+  performance.now = () => real() + offset; t.after(() => { performance.now = original; });
+  f.controls.authority = async () => { offset += 30000; };
+  const result = await f.retention.collect();
+  assert.deepEqual(result.collected, [f.authority.completed[0].transactionId, f.authority.completed[1].transactionId]);
+  assert.ok(offset > 120000);
+});
 test('two or fewer completed transactions are always retained', async t => {
   const f = await fixture(t, 2); assert.deepEqual((await f.retention.collect()).collected, []); assert.equal(f.calls.length, 0);
 });

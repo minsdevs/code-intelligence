@@ -591,7 +591,8 @@ final class LocalSourcePolicy {
 
         void check() throws IOException {
             JobCancellation.checkpoint();
-            if (Thread.currentThread().isInterrupted() || clock.getAsLong() - started - consumerNanos > limits.nanos()) {
+            if (Thread.currentThread().isInterrupted()
+                    || clock.getAsLong() - started - consumerNanos > limits.nanos()) {
                 throw rejected("Local source inspection was cancelled or exceeded its time limit.");
             }
         }

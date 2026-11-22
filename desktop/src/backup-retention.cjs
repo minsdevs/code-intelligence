@@ -170,7 +170,10 @@ async function checkpoint(root, manifest, optional, started) {
     if (next.sequence !== candidate.sequence || next.manifestSha256 !== candidate.manifestSha256) fail('CHANGED');
     if (expectedState !== null && next.tombstone?.state !== expectedState) fail('AUTHORITY'); return next;
   }
-  async function scan(candidate, partial, started) {
+  // inspectMs bounds one inspection (a scan with its checkpoint hash) or one deletion pass, not the whole
+  // collection: on slow disks the kept-checkpoint checks, rescans and deletions together can exceed it.
+  async function scan(candidate, partial) {
+    const started = performance.now();
     const root = path.join(recoveryRoot, candidate.transactionId), manifest = candidate.manifest;
     const initial = await maybeStat(root);
     if (initial === null) { if (partial) return null; fail('CHANGED'); }
@@ -196,16 +199,16 @@ async function checkpoint(root, manifest, optional, started) {
     }
     await directory(root, manifest.root, true); return entries;
   }
-  async function verifyKept(checked, started) {
-    for (const entry of checked.completed.slice(0, 2)) await scan(entry, false, started);
+  async function verifyKept(checked) {
+    for (const entry of checked.completed.slice(0, 2)) await scan(entry, false);
   }
   return Object.freeze({
     async collect() {
       if (closed) fail('CLOSED'); if (busy) fail('BUSY'); busy = true;
       try {
-        const started = performance.now(), initial = await authority();
+        const initial = await authority();
         if (initial.active !== null || initial.pendingMaintenance !== null) fail('ACTIVE');
-        await directory(recoveryRoot, parent, true); await verifyKept(initial, started);
+        await directory(recoveryRoot, parent, true); await verifyKept(initial);
         const collected = [];
         for (const item of initial.completed.slice(2).reverse()) {
           let candidate = retentionCandidate(await authority(), item.transactionId, false);
@@ -214,7 +217,7 @@ async function checkpoint(root, manifest, optional, started) {
           if (candidate.tombstone?.state === 'COMPLETED') {
             if (await maybeStat(root)) fail('CHANGED'); continue;
           }
-          let entries = await scan(candidate, !!candidate.tombstone, started);
+          let entries = await scan(candidate, !!candidate.tombstone);
           if (candidate.manifest.databases.length && !dropDatabase) fail('DATABASE');
           await fault?.('before-begin', { transactionId: item.transactionId });
           candidate = await unchanged(candidate, false);
@@ -224,12 +227,13 @@ async function checkpoint(root, manifest, optional, started) {
           }
           if (candidate.tombstone.state !== 'BEGUN') fail('AUTHORITY');
           // Re-scan after durable begin: callback time must not create a deletion authorization gap.
-          entries = await scan(candidate, true, started);
+          entries = await scan(candidate, true);
           for (const db of candidate.manifest.databases) {
             await fault?.('before-database', { transactionId: item.transactionId, slot: db.slot }); await unchanged(candidate, true);
             await dropDatabase({ transactionId: item.transactionId, databaseOid: db.oid, slot: db.slot });
           }
           if (entries !== null) {
+            const started = performance.now();
             for (const entry of entries.reverse()) {
               if (performance.now() - started > LIMITS.inspectMs) fail('LIMIT');
               await fault?.('before-entry', { transactionId: item.transactionId, name: path.relative(root, entry.file) });

@@ -593,8 +593,7 @@ class LocalIngestPolicyTest {
         var selection = policy.select(source, (file, bytes) -> clock.addAndGet(5 * SECOND));
         assertThat(selection.files()).containsOnlyKeys("a.txt", "b.txt", "c.txt");
 
-        var slowReads = new LocalSourcePolicy(
-                limits(10, 8192, 1024), clock::get, path -> clock.addAndGet(SECOND));
+        var slowReads = new LocalSourcePolicy(limits(10, 8192, 1024), clock::get, path -> clock.addAndGet(SECOND));
         assertThatThrownBy(() -> slowReads.select(source, (file, bytes) -> {}))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("time limit");
