@@ -24,7 +24,7 @@
     "reflect-metadata": "0.2.2"
   },
   "devDependencies": {
-    "electron": "44.4.5",
+    "electron": "44.9.1",
     "electron-builder": "26.15.3"
   },
   "overrides": {
@@ -48,13 +48,25 @@
         "from": "stage/runtime",
         "to": "runtime"
       },
-      { "from": "node_modules/electron/dist/LICENSE", "to": "legal/electron/LICENSE" },
-      { "from": "node_modules/electron/dist/LICENSES.chromium.html", "to": "legal/electron/LICENSES.chromium.html" },
-      { "from": "build/third-party-notices", "to": "legal/third-party" }
+      {
+        "from": "node_modules/electron/dist/LICENSE",
+        "to": "legal/electron/LICENSE"
+      },
+      {
+        "from": "node_modules/electron/dist/LICENSES.chromium.html",
+        "to": "legal/electron/LICENSES.chromium.html"
+      },
+      {
+        "from": "build/third-party-notices",
+        "to": "legal/third-party"
+      }
     ],
     "mac": {
       "minimumSystemVersion": "13.0",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.developer-tools",
       "hardenedRuntime": true,
       "type": "distribution",
@@ -69,12 +81,21 @@
       "sign": true
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "requestedExecutionLevel": "asInvoker",
       "forceCodeSigning": true,
       "signtoolOptions": {
         "sign": "./scripts/sign-windows-runtime.cjs",
-        "signingHashAlgorithms": ["sha256"]
+        "signingHashAlgorithms": [
+          "sha256"
+        ]
       }
     },
     "nsis": {
@@ -85,13 +106,39 @@
       "deleteAppDataOnUninstall": false
     },
     "linux": {
-      "target": [{ "target": "AppImage", "arch": ["x64"] }, { "target": "deb", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "executableName": "code-intelligence",
       "category": "Development",
       "maintainer": "minsdevs <154256470+minsdevs@users.noreply.github.com>"
     },
     "deb": {
-      "depends": ["libc6 (>= 2.35)", "libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1", "libsecret-1-0", "libgbm1", "libasound2"]
+      "depends": [
+        "libc6 (>= 2.35)",
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "libgbm1",
+        "libasound2"
+      ]
     },
     "artifactName": "${productName}-${version}-${arch}-${os}.${ext}"
   }

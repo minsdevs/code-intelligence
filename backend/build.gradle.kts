@@ -5,9 +5,9 @@ import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 plugins {
     java
-    id("org.springframework.boot") version "4.1.0"
+    id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
-    id("com.diffplug.spotless") version "8.9.0"
+    id("com.diffplug.spotless") version "8.10.0"
 }
 
 group = "dev.codeintelligence"
@@ -55,7 +55,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-session-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
-    implementation("org.eclipse.jgit:org.eclipse.jgit:7.3.0.202506031305-r")
+    implementation("org.eclipse.jgit:org.eclipse.jgit:7.7.1.202607240634-r")
     implementation("com.github.javaparser:javaparser-symbol-solver-core:3.28.2")
     // jsqlparser 5.3 declares its JMH benchmark harness (and with it jopt-simple and commons-math3)
     // in compile scope; no parser class references it, so it stays out of the product runtime.
@@ -79,7 +79,7 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("org.awaitility:awaitility")
-    testImplementation("com.tngtech.archunit:archunit-junit5:1.4.1")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
