@@ -11,6 +11,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -1491,6 +1492,45 @@ class BackupSourceWorkerTest {
         assertThat(org.eclipse.jgit.util.SystemReader.getInstance()).isSameAs(previous);
         assertThat(invokeBytes(new byte[0], "--private-flag").status()).isEqualTo(2);
         assertThat(org.eclipse.jgit.util.SystemReader.getInstance()).isSameAs(previous);
+    }
+
+    @Test
+    void sourceFailureFramesCarryOnlyAFixedStageAndExceptionCategory() throws Exception {
+        Fixture f = fixture();
+        Path objects = f.repo().resolve(".git").resolve("objects");
+        Set<PosixFilePermission> original = Files.getPosixFilePermissions(objects);
+        Files.setPosixFilePermissions(objects, PosixFilePermissions.fromString("---------"));
+        try {
+            Result result = invoke(List.of(exportRequest(f)));
+            assertThat(result.status()).isEqualTo(2);
+            assertThat(mutable(result.last()))
+                    .isEqualTo(map(
+                            "version",
+                            1,
+                            "kind",
+                            "ERROR",
+                            "code",
+                            "SOURCE_FAILURE",
+                            "stage",
+                            "INSPECT",
+                            "cause",
+                            "ACCESS_DENIED"));
+            assertThat(new String(result.bytes(), StandardCharsets.UTF_8))
+                    .doesNotContain(f.root().toString());
+        } finally {
+            Files.setPosixFilePermissions(objects, original);
+        }
+        assertThat(BackupSourceWorker.causeOf(new dev.codeintelligence.common.WindowsStorage.Refused()))
+                .isEqualTo("STORAGE_REFUSED");
+        assertThat(BackupSourceWorker.causeOf(new org.eclipse.jgit.errors.CorruptObjectException("synthetic")))
+                .isEqualTo("JGIT");
+        assertThat(BackupSourceWorker.causeOf(new java.io.IOException("synthetic")))
+                .isEqualTo("IO");
+        assertThat(BackupSourceWorker.causeOf(new IllegalStateException("synthetic")))
+                .isEqualTo("RUNTIME");
+        assertThat(BackupSourceWorker.causeOf(new AssertionError("synthetic"))).isEqualTo("OTHER");
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class, () -> new BackupSourceWorker.Stage().set("private-sentinel"));
     }
 
     @Test

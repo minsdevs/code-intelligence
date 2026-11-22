@@ -104,6 +104,44 @@ bool backupOutputName(const std::string& name) {
     }
     return true;
 }
+// JGit marks every loose object it writes read-only (File.setReadOnly). On NTFS that is
+// FILE_ATTRIBUTE_READONLY, which makes GENERIC_WRITE opens and plain delete dispositions
+// fail with access denied. POSIX resets the equivalent 0444 mode before syncing and never
+// needs it for unlink, so these two helpers give Windows the same outcome without loosening
+// the expected-token check: the attribute is cleared only on the exact object the caller
+// named, and the WS1 token (size, allocation, write and change time) must stay identical.
+constexpr ULONG CODEINTEL_DISPOSITION_DELETE = 0x1;
+constexpr ULONG CODEINTEL_DISPOSITION_IGNORE_READONLY = 0x10;
+struct CodeintelDispositionEx { ULONG Flags; };
+void clearReadOnlyForWrite(const std::wstring& file, const std::string& expected, bool privateObject, bool managed) {
+    auto handle = openObject(file, false, READ_CONTROL | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE);
+    const auto before = storageState(handle.value, false, privateObject, managed);
+    expectedState(before, expected, true);
+    FILE_BASIC_INFO basic{}; require(GetFileInformationByHandleEx(handle.value, FileBasicInfo, &basic, sizeof(basic)) != 0);
+    if (!(basic.FileAttributes & FILE_ATTRIBUTE_READONLY)) return;
+    FILE_BASIC_INFO suspend{};
+    suspend.LastAccessTime.QuadPart = suspend.LastWriteTime.QuadPart = suspend.ChangeTime.QuadPart = -1;
+    require(SetFileInformationByHandle(handle.value, FileBasicInfo, &suspend, sizeof(suspend)) != 0);
+    FILE_BASIC_INFO writable{};
+    writable.FileAttributes = basic.FileAttributes & ~FILE_ATTRIBUTE_READONLY;
+    if (!writable.FileAttributes) writable.FileAttributes = FILE_ATTRIBUTE_NORMAL;
+    require(SetFileInformationByHandle(handle.value, FileBasicInfo, &writable, sizeof(writable)) != 0);
+    if (storageState(handle.value, false, privateObject, managed).token() != before.token()) {
+        FILE_BASIC_INFO restore{};
+        restore.LastWriteTime = basic.LastWriteTime; restore.ChangeTime = basic.ChangeTime;
+        require(SetFileInformationByHandle(handle.value, FileBasicInfo, &restore, sizeof(restore)) != 0);
+    }
+    require(storageState(handle.value, false, privateObject, managed).token() == before.token());
+}
+void deleteDisposition(HANDLE handle) {
+    CodeintelDispositionEx extended{CODEINTEL_DISPOSITION_DELETE | CODEINTEL_DISPOSITION_IGNORE_READONLY};
+    if (SetFileInformationByHandle(handle, static_cast<FILE_INFO_BY_HANDLE_CLASS>(21), &extended, sizeof(extended)) != 0) return;
+    const auto error = GetLastError();
+    require(error == ERROR_INVALID_PARAMETER || error == ERROR_NOT_SUPPORTED || error == ERROR_INVALID_FUNCTION);
+    FILE_DISPOSITION_INFO disposition{}; disposition.DeleteFile = TRUE;
+    require(SetFileInformationByHandle(handle, FileDispositionInfo, &disposition, sizeof(disposition)) != 0);
+}
 void storageSession() {
     inputMaximum = STORAGE_CHUNK + 65536; inputBytes = 0;
     const auto root = checkedPath(wide(field(16384)));
@@ -209,6 +247,7 @@ void storageSession() {
             require(mode == "create" ? expected.empty() : !writing || !expected.empty());
             require(!writing || mode == "create" || expected.rfind("WS1:", 0) == 0);
             StorageFile entry; entry.parents = ancestors(file); entry.mode = mode; entry.maximum = maximum;
+            if (mode == "append") clearReadOnlyForWrite(file, expected, privateObject, managed && file != root);
             PrivateSecurity descriptor;
             entry.handle = Handle(CreateFileW(filesystemPath(file).c_str(), READ_CONTROL | GENERIC_READ | (writing ? GENERIC_WRITE : 0),
                 FILE_SHARE_READ, mode == "create" ? &descriptor.attributes : nullptr, mode == "create" ? CREATE_NEW : OPEN_EXISTING,
@@ -307,8 +346,7 @@ void storageSession() {
             auto handle = openObject(file, directory, DELETE | READ_CONTROL | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE);
             expectedState(storageState(handle.value, directory, true, managed), expected, true);
             if (operation == "remove") {
-                FILE_DISPOSITION_INFO disposition{}; disposition.DeleteFile = TRUE;
-                require(SetFileInformationByHandle(handle.value, FileDispositionInfo, &disposition, sizeof(disposition)) != 0);
+                deleteDisposition(handle.value);
             } else {
                 const auto destination = resolve(field(16384)); auto destinationParents = ancestors(destination);
                 const auto destinationPath = filesystemPath(destination);
