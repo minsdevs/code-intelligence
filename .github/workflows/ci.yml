@@ -61,7 +61,9 @@ jobs:
 
   backend:
     name: Backend (Gradle)
-    runs-on: ubuntu-latest
+    # The cost-egress fixture uses the reviewed PostgreSQL 16 psql at /usr/lib/postgresql/16/bin/psql.
+    # ubuntu-latest moved to 26.04, which ships PostgreSQL 18 only, so the main channel never came up.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: backend

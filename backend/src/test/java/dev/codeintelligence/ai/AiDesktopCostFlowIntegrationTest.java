@@ -177,7 +177,7 @@ class AiDesktopCostFlowIntegrationTest {
                 .containsEntry("reservedMicroUsd", Long.toString(RESERVATION))
                 .containsEntry("inputTokenUpperBound", "128000")
                 .containsEntry("outputTokenMax", "2048")
-                .containsEntry("priceVersion", "openai-gpt4omini-standard-2026-10-03")
+                .containsEntry("priceVersion", "openai-gpt4omini-standard-2026-11-21")
                 .containsEntry("policyRevision", readyBudget.get("policyRevision"));
         assertThat(Instant.parse((String) cost.get("validUntil"))).isAfter(Instant.now());
         assertThat(plan.get("userPrompt")).asString().contains("approved-desktop-source", "SOURCE:");
