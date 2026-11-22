@@ -94,7 +94,10 @@ function createDeadline(timeoutMs = PRODUCT_DEADLINE_MS, now = () => performance
 // taking 122 s against a 120 s wait, so every per-operation budget scales by the same factor.
 const WINDOWS = process.platform === 'win32';
 const OPERATION_SCALE = WINDOWS ? 3 : 1;
-const PRODUCT_DEADLINE_MS = WINDOWS ? 1500000 : 540000;
+// Run 45005615178 passed backup and both restores on hosted Windows, but the second restore's
+// RETENTION and RELEASE phases took 130 s and 235 s, leaving the final relaunch past the 1500 s total.
+// The 60-minute standard-user wait in native-acceptance-windows.ps1 still covers 2100 s + 60 s.
+const PRODUCT_DEADLINE_MS = WINDOWS ? 2100000 : 540000;
 // Restore stops and restarts every owned service twice. On hosted Windows the two restores in one run
 // took 303 s and about 410 s (SEAL and REVOKE vary most), so the scaled 360 s wait was too short.
 const RESTORE_BUDGET_MS = WINDOWS ? 240000 : 120000;
