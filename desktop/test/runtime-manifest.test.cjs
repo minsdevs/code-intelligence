@@ -487,7 +487,8 @@ test('backup diagnostics use their own fixed wire and cover admission, selection
     assert.deepEqual(diagnostics.parseBackupLine(line), value);
     assert.equal(diagnostics.parseRestoreLine(line), null);
   }
-  for (const code of ['BACKUP_SOURCE_FRAME_TEXT', 'BACKUP_SOURCE_FRAME_LIMIT', 'BACKUP_SOURCE_STDERR_LIMIT', 'BACKUP_SOURCE_WIRE_LIMIT']) {
+  for (const code of ['BACKUP_SOURCE_FRAME_TEXT', 'BACKUP_SOURCE_FRAME_LIMIT', 'BACKUP_SOURCE_STDERR_LIMIT', 'BACKUP_SOURCE_WIRE_LIMIT',
+    'BACKUP_SOURCE_SOURCE_FAILURE_FINISH_STORAGE_REFUSED', 'BACKUP_SOURCE_SOURCE_FAILURE_CLEANUP_OTHER']) {
     const value = diagnostics.backupDiagnostic('CHECKPOINT_EXPORT', { code, message: 'synthetic-private' });
     assert.equal(diagnostics.formatBackupDiagnostic(value), `DESKTOP_BACKUP CHECKPOINT_EXPORT FAILED ${code}`);
     assert.deepEqual(diagnostics.parseBackupLine(`DESKTOP_BACKUP CHECKPOINT_EXPORT FAILED ${code}`), value);

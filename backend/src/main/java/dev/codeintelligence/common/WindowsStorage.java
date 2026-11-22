@@ -491,7 +491,14 @@ public final class WindowsStorage implements AutoCloseable {
         }
     }
 
+    /** Fixed-text refusal from the native boundary. Callers classify it by type, never by message. */
+    public static final class Refused extends IOException {
+        public Refused() {
+            super("Windows protected source storage refused the operation.");
+        }
+    }
+
     private static IOException refused() {
-        return new IOException("Windows protected source storage refused the operation.");
+        return new Refused();
     }
 }

@@ -18,11 +18,28 @@ const RETAINED = ['snapshotId', 'commitOid', 'commitEpochSecond', 'policyVersion
   'manifestSha256', 'fileCount', 'totalBytes', 'entries'];
 // FRAME_TEXT: the helper's stdout carried printable text where a frame prefix belongs (a library
 // log line, never source). FRAME_LIMIT/STDERR_LIMIT/WIRE_LIMIT name the exhausted transport bound.
+// A SOURCE_FAILURE frame may add the worker's fixed stage and exception category; both are
+// allowlisted here and in startup-diagnostics.cjs, so the composed code carries no free text.
+const FAILURE_STAGES = Object.freeze(['SCOPE', 'EXISTING', 'INSPECT', 'SCRATCH', 'RECONSTRUCT', 'FINISH', 'GRAPH', 'STAGE', 'CLEANUP']);
+const FAILURE_CAUSES = Object.freeze(['STORAGE_REFUSED', 'ACCESS_DENIED', 'JGIT', 'IO', 'RUNTIME', 'OTHER']);
 const CODES = new Set(['INVALID', 'CLOSED', 'BUSY', 'BINARY_CHANGED', 'PROCESS', 'PROTOCOL', 'INTEGRITY',
   'LIMIT', 'FRAME_LIMIT', 'FRAME_TEXT', 'STDERR_LIMIT', 'WIRE_LIMIT',
   'TIMEOUT', 'TERMINATION', 'SINK', 'SOURCE_ARGUMENT_INVALID', 'SOURCE_PROTOCOL_INVALID',
   'SOURCE_SELECTION_INVALID', 'SOURCE_UNSAFE_PATH', 'SOURCE_UNSUPPORTED_MODE', 'SOURCE_UNSUPPORTED_ENCODING',
-  'SOURCE_SECRET_DETECTED', 'SOURCE_MISSING', 'SOURCE_CHANGED', 'SOURCE_LIMIT', 'SOURCE_INTEGRITY', 'SOURCE_FAILURE']);
+  'SOURCE_SECRET_DETECTED', 'SOURCE_MISSING', 'SOURCE_CHANGED', 'SOURCE_LIMIT', 'SOURCE_INTEGRITY', 'SOURCE_FAILURE',
+  ...FAILURE_STAGES.flatMap(stage => FAILURE_CAUSES.map(cause => `SOURCE_FAILURE_${stage}_${cause}`))]);
+function errorCode(item) {
+  const keys = Reflect.ownKeys(item);
+  if (keys.length === 5) {
+    exact(item, ['version', 'kind', 'code', 'stage', 'cause']);
+    if (item.version !== 1 || item.code !== 'SOURCE_FAILURE' || !FAILURE_STAGES.includes(item.stage)
+        || !FAILURE_CAUSES.includes(item.cause)) fail('PROTOCOL');
+    return `SOURCE_FAILURE_${item.stage}_${item.cause}`;
+  }
+  if (keys.length !== 3) fail('PROTOCOL');
+  exact(item, ['version', 'kind', 'code']); if (item.version !== 1) fail('PROTOCOL');
+  return item.code;
+}
 class BackupSourceWorkerError extends Error {
   constructor(code = 'PROCESS') {
     const safe = CODES.has(code) ? code : 'PROCESS';
@@ -391,7 +408,7 @@ async function createBackupSourceWorker(options) {
         let expected = null, ended = false; const objects = inventory();
         for await (const item of input) {
           check();
-          if (item?.kind === 'ERROR') { exact(item, ['version', 'kind', 'code']); if (item.version !== 1) fail('PROTOCOL'); fail(item.code); }
+          if (item?.kind === 'ERROR') fail(errorCode(item));
           if (ended) fail('PROTOCOL');
           let record;
           if (!expected) {
@@ -424,7 +441,7 @@ async function createBackupSourceWorker(options) {
         let result;
         for await (const item of input) {
           check();
-          if (item?.kind === 'ERROR') { exact(item, ['version', 'kind', 'code']); if (item.version !== 1) fail('PROTOCOL'); fail(item.code); }
+          if (item?.kind === 'ERROR') fail(errorCode(item));
           if (result) fail('PROTOCOL'); result = position(item, 'RESTORED', projectId);
           if (!same(result, expected)) fail('INTEGRITY');
         }
