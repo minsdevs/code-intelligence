@@ -59,7 +59,7 @@ dependencies {
     implementation("com.github.javaparser:javaparser-symbol-solver-core:3.28.2")
     // jsqlparser 5.3 declares its JMH benchmark harness (and with it jopt-simple and commons-math3)
     // in compile scope; no parser class references it, so it stays out of the product runtime.
-    implementation("com.github.jsqlparser:jsqlparser:5.3") {
+    implementation("com.github.jsqlparser:jsqlparser:5.4") {
         exclude(group = "org.openjdk.jmh")
     }
     implementation("org.flywaydb:flyway-database-postgresql")
