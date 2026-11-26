@@ -31,7 +31,7 @@ dependencyManagement {
         mavenBom("org.springframework:spring-framework-bom:7.0.9")
         mavenBom("com.fasterxml.jackson:jackson-bom:2.21.7")
         mavenBom("tools.jackson:jackson-bom:3.1.7")
-        mavenBom("io.netty:netty-bom:4.2.17.Final")
+        mavenBom("io.netty:netty-bom:4.2.21.Final")
         mavenBom("org.apache.logging.log4j:log4j-bom:2.25.5")
     }
     dependencies {
